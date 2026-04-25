@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { StatusPill, toneForStatus } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
-import * as M from "@/services/mockData";
+import type { ActiveCall, Call } from "@/types/domain";
 import { Activity, Bot, CheckCircle2, FileBadge2, Phone, PhoneCall, ShieldCheck, UserSquare2, Volume2 } from "lucide-react";
 
 const WORKFLOW = [
@@ -13,9 +13,16 @@ const WORKFLOW = [
 ];
 
 export default function Calling() {
-  const [calls, setCalls] = useState<any[]>([]);
-  const live = M.ACTIVE_CALL;
-  useEffect(() => { api.getCalls().then(setCalls); }, []);
+  const [calls, setCalls] = useState<Call[]>([]);
+  const [live, setLive] = useState<ActiveCall | null>(null);
+  useEffect(() => {
+    Promise.all([api.getCalls(), api.getActiveCall()]).then(([callRows, activeCall]) => {
+      setCalls(callRows);
+      setLive(activeCall);
+    });
+  }, []);
+
+  if (!live) return <div className="h-96 grid place-items-center text-muted-foreground">Loading calling console...</div>;
 
   return (
     <>

@@ -1,13 +1,19 @@
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
-import * as M from "@/services/mockData";
+import { api } from "@/services/api";
+import type { RewardPenalty } from "@/types/domain";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Award, Minus, Plus, Trophy } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const REWARDS = ["Delivered order", "Net delivered profit", "Advance payment", "Customer satisfaction", "Reorder potential", "Compliance safety"];
 const PENALTIES = ["Bad lead quality", "Weak closing", "Wrong address", "Missed delivery reminder", "Risky claim", "RTO risk ignored", "Over-discount"];
 
 export default function Rewards() {
+  const [leaderboard, setLeaderboard] = useState<RewardPenalty[]>([]);
+
+  useEffect(() => { api.getRewardPenaltyScores().then(setLeaderboard); }, []);
+
   return (
     <>
       <PageHeader eyebrow="Governance" title="Reward & Penalty Engine"
@@ -40,7 +46,7 @@ export default function Rewards() {
         <div className="surface-card p-6">
           <h3 className="font-display text-lg font-semibold mb-3">Agent leaderboard</h3>
           <ResponsiveContainer width="100%" height={340}>
-            <BarChart data={M.REWARD_LEADERBOARD.slice(0, 8)} layout="vertical" margin={{ left: 4 }}>
+            <BarChart data={leaderboard.slice(0, 8)} layout="vertical" margin={{ left: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
               <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} />
               <YAxis type="category" dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} width={170} />
@@ -76,7 +82,7 @@ export default function Rewards() {
               </tr>
             </thead>
             <tbody>
-              {M.REWARD_LEADERBOARD.map((r) => (
+              {leaderboard.map((r) => (
                 <tr key={r.name} className="border-t border-border/60 hover:bg-muted/20">
                   <td className="px-6 py-3 font-medium">{r.name}</td>
                   <td className="py-3 text-right text-success font-semibold tabular-nums">+{r.reward}</td>

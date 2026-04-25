@@ -6,13 +6,14 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { MetricCard } from "@/components/MetricCard";
 import { StatusPill } from "@/components/StatusPill";
+import { WorkflowMap } from "@/components/WorkflowMap";
 import { Button } from "@/components/ui/button";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend,
   Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "@/services/api";
-import * as M from "@/services/mockData";
+import type { Agent, CaioAudit, CeoBriefing } from "@/types/domain";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,27 @@ const ACTIVITY_TONES: Record<string, string> = {
   danger: "text-destructive bg-destructive/10",
 };
 
+const DASHBOARD_WORKFLOWS = [
+  {
+    title: "Lead to order workflow",
+    description: "Meta or inbound intent becomes a compliant order only after discovery, approved pitch, discount policy and advance-payment attempt.",
+    activeIndex: 5,
+    steps: ["Meta Lead / Inbound Call", "Lead Captured", "AI Calling", "Problem Discovery", "Product Explanation", "Price / Discount", "Advance Payment", "Order Punched"],
+  },
+  {
+    title: "Delivery and RTO rescue workflow",
+    description: "Confirmed orders move through Delhivery tracking, reminder calls and rescue when delivery risk rises.",
+    activeIndex: 5,
+    steps: ["Confirmed", "AWB Generated", "Pickup Scheduled", "In Transit", "Out for Delivery", "Delivery Reminder", "Delivered / RTO Rescue"],
+  },
+  {
+    title: "CEO AI and CAIO monitoring loop",
+    description: "CAIO audits and improves. CEO AI owns approval flow before execution changes affect live business.",
+    activeIndex: 3,
+    steps: ["Live Data", "Agent Review", "Reward / Penalty", "Learning Gap", "Playbook Improvement", "Approved Update", "Better Performance"],
+  },
+];
+
 export default function Index() {
   const [m, setM] = useState<any>(null);
   const [funnel, setFunnel] = useState<any[]>([]);
@@ -34,17 +56,22 @@ export default function Index() {
   const [stateRto, setStateRto] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
+  const [ceo, setCeo] = useState<CeoBriefing | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [audits, setAudits] = useState<CaioAudit[]>([]);
 
   useEffect(() => {
     Promise.all([
       api.getDashboardMetrics(), api.getFunnel(), api.getRevenueTrend(),
       api.getStateRto(), api.getProductPerformance(), api.getLiveActivityFeed(),
-    ]).then(([mm, f, r, s, p, a]) => {
+      api.getCeoBriefing(), api.getAgentStatus(), api.getCaioAudits(),
+    ]).then(([mm, f, r, s, p, a, c, ag, au]) => {
       setM(mm); setFunnel(f); setRevenue(r); setStateRto(s); setProducts(p); setActivity(a);
+      setCeo(c); setAgents(ag); setAudits(au);
     });
   }, []);
 
-  if (!m) return <div className="h-96 grid place-items-center text-muted-foreground">Loading command center…</div>;
+  if (!m || !ceo) return <div className="h-96 grid place-items-center text-muted-foreground">Loading command center...</div>;
 
   return (
     <>
@@ -74,18 +101,18 @@ export default function Index() {
         <div className="relative p-6 lg:p-9 grid lg:grid-cols-[1fr_auto] gap-6 items-center text-primary-foreground">
           <div>
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/10 ring-1 ring-white/15 backdrop-blur-sm text-[10.5px] uppercase tracking-[0.22em] font-semibold text-accent mb-4">
-              <Sparkles className="h-3 w-3" /> CEO AI · {M.CEO_BRIEFING.date}
+              <Sparkles className="h-3 w-3" /> CEO AI · {ceo.date}
             </div>
             <h2 className="font-display text-[26px] lg:text-[34px] font-semibold text-balance leading-[1.12]">
-              {M.CEO_BRIEFING.headline}
+              {ceo.headline}
             </h2>
             <p className="mt-3 text-primary-foreground/75 text-[14.5px] max-w-2xl leading-relaxed text-pretty">
-              {M.CEO_BRIEFING.summary}
+              {ceo.summary}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" className="bg-white/10 hover:bg-white/15 border border-white/15 text-primary-foreground backdrop-blur-sm" asChild>
-              <Link to="/ceo-ai">Review {M.CEO_BRIEFING.recommendations.length} actions <ArrowRight className="h-4 w-4 ml-1" /></Link>
+              <Link to="/ceo-ai">Review {ceo.recommendations.length} actions <ArrowRight className="h-4 w-4 ml-1" /></Link>
             </Button>
             <Button className="bg-gradient-gold text-accent-foreground hover:opacity-95 border-0 shadow-glow" asChild>
               <Link to="/caio">CAIO Audit</Link>
@@ -109,7 +136,7 @@ export default function Index() {
       </div>
 
       {/* Supporting KPI grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-8 animate-rise-stagger">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-8 gap-3 mb-8 animate-rise-stagger">
         <MetricCard icon={Users} label="Leads" value={m.leadsToday.value.toLocaleString()} delta={m.leadsToday.deltaPct} tone="info" sublabel="today" />
         <MetricCard icon={Phone} label="Calls Live · Done" value={`${m.callsRunning.value} · ${m.callsRunning.completed}`} tone="accent" />
         <MetricCard icon={Workflow} label="Orders Punched" value={m.ordersPunched.value} delta={m.ordersPunched.deltaPct} tone="primary" />
@@ -198,7 +225,7 @@ export default function Index() {
             <Button variant="ghost" size="sm" asChild><Link to="/agents">All agents <ArrowRight className="h-3 w-3 ml-1" /></Link></Button>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {M.AGENTS.filter((a) => ["ceo", "caio", "calling-tl", "rto", "compliance", "cfo"].includes(a.id)).map((a) => (
+            {agents.filter((a) => ["ceo", "caio", "calling-tl", "rto", "compliance", "cfo"].includes(a.id)).map((a) => (
               <div key={a.id} className="rounded-xl border border-border/60 bg-gradient-emerald-soft/40 p-4 hover:shadow-soft transition">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-semibold text-foreground">{a.name}</div>
@@ -305,6 +332,12 @@ export default function Index() {
         </div>
       </div>
 
+      <div className="grid xl:grid-cols-3 gap-6 mb-8">
+        {DASHBOARD_WORKFLOWS.map((workflow) => (
+          <WorkflowMap key={workflow.title} {...workflow} compact />
+        ))}
+      </div>
+
       {/* CAIO + Reward */}
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="surface-card p-6 border-l-4 border-l-warning">
@@ -314,7 +347,7 @@ export default function Index() {
           </div>
           <p className="text-sm text-muted-foreground mb-4">Governance & training observations — never executes business actions.</p>
           <ul className="space-y-3">
-            {M.CAIO_AUDITS.slice(0, 3).map((a, i) => (
+            {audits.slice(0, 3).map((a, i) => (
               <li key={i} className="flex gap-3">
                 <StatusPill tone={a.severity === "Critical" ? "danger" : a.severity === "High" ? "warning" : "info"}>{a.severity}</StatusPill>
                 <div className="text-sm">

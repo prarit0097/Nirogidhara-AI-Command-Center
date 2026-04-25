@@ -5,7 +5,6 @@ import {
   GraduationCap, FileBadge2, BarChart3, Settings2, Leaf, ChevronLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
 
 const NAV = [
   { to: "/", label: "Command Center", icon: LayoutDashboard, group: "Overview" },
@@ -30,10 +29,11 @@ const NAV = [
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 }
 
-export function Sidebar({ open, onClose }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
+export function Sidebar({ open, onClose, collapsed, onCollapsedChange }: SidebarProps) {
   const location = useLocation();
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
 
@@ -144,7 +144,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           )}
           <div className="hidden lg:flex items-center justify-end">
           <button
-            onClick={() => setCollapsed((c) => !c)}
+            onClick={() => onCollapsedChange(!collapsed)}
             className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/55 hover:text-sidebar-foreground transition"
             aria-label="Collapse sidebar"
           >

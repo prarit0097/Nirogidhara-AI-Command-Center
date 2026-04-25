@@ -1,11 +1,18 @@
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
-import * as M from "@/services/mockData";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Calendar, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { api } from "@/services/api";
+import { useEffect, useState } from "react";
 
 export default function Analytics() {
+  const [data, setData] = useState<any>(null);
+
+  useEffect(() => { api.getAnalyticsData().then(setData); }, []);
+
+  if (!data) return <div className="h-96 grid place-items-center text-muted-foreground">Loading analytics...</div>;
+
   return (
     <>
       <PageHeader eyebrow="Insights" title="Analytics"
@@ -22,7 +29,7 @@ export default function Analytics() {
         <div className="surface-card p-6">
           <h3 className="font-display text-lg font-semibold mb-3">Revenue & Profit (₹K)</h3>
           <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={M.REVENUE_TREND}>
+            <AreaChart data={data.revenueTrend}>
               <defs>
                 <linearGradient id="r" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
@@ -42,7 +49,7 @@ export default function Analytics() {
         <div className="surface-card p-6">
           <h3 className="font-display text-lg font-semibold mb-3">Funnel volumes</h3>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={M.FUNNEL}>
+            <BarChart data={data.funnel}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="stage" fontSize={10} stroke="hsl(var(--muted-foreground))" interval={0} angle={-15} textAnchor="end" height={60} />
               <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" />
@@ -55,13 +62,13 @@ export default function Analytics() {
         <div className="surface-card p-6">
           <h3 className="font-display text-lg font-semibold mb-3">RTO % by state</h3>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={M.STATE_RTO}>
+            <BarChart data={data.stateRto}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="state" fontSize={11} stroke="hsl(var(--muted-foreground))" />
               <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" />
               <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid hsl(var(--border))', fontSize: 12 }} />
               <Bar dataKey="rto" radius={[6, 6, 0, 0]}>
-                {M.STATE_RTO.map((s, i) => <Cell key={i} fill={s.rto > 25 ? "hsl(var(--destructive))" : s.rto > 15 ? "hsl(var(--warning))" : "hsl(var(--success))"} />)}
+                {data.stateRto.map((s: any, i: number) => <Cell key={i} fill={s.rto > 25 ? "hsl(var(--destructive))" : s.rto > 15 ? "hsl(var(--warning))" : "hsl(var(--success))"} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -70,14 +77,7 @@ export default function Analytics() {
         <div className="surface-card p-6">
           <h3 className="font-display text-lg font-semibold mb-3">Discount impact on delivered orders</h3>
           <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={[
-              { discount: "0%", delivered: 62, rto: 18 },
-              { discount: "10%", delivered: 71, rto: 14 },
-              { discount: "15%", delivered: 78, rto: 12 },
-              { discount: "20%", delivered: 81, rto: 14 },
-              { discount: "25%", delivered: 76, rto: 22 },
-              { discount: "30%", delivered: 64, rto: 31 },
-            ]}>
+            <LineChart data={data.discountImpact}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="discount" fontSize={11} stroke="hsl(var(--muted-foreground))" />
               <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" />
@@ -108,7 +108,7 @@ export default function Analytics() {
               </tr>
             </thead>
             <tbody>
-              {M.PRODUCT_PERFORMANCE.map((p) => (
+              {data.productPerformance.map((p: any) => (
                 <tr key={p.product} className="border-t border-border/60 hover:bg-muted/20">
                   <td className="px-6 py-3 font-medium">{p.product}</td>
                   <td className="py-3 text-right tabular-nums">{p.leads}</td>

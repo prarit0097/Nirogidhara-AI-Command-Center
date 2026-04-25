@@ -1,13 +1,19 @@
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill, toneForStatus } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
-import * as M from "@/services/mockData";
+import { api } from "@/services/api";
+import type { LearningRecording } from "@/types/domain";
 import { AlertTriangle, FileAudio, Mic, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
 
 const STAGES = ["Recording", "Transcript", "Speaker Separation", "QA Scoring", "Compliance Review", "CAIO Audit", "Approved Learning", "Prompt Update", "Sandbox Test", "CEO Approval", "Live Update"];
 
 export default function Learning() {
+  const [recordings, setRecordings] = useState<LearningRecording[]>([]);
+
+  useEffect(() => { api.getHumanCallLearningItems().then(setRecordings); }, []);
+
   return (
     <>
       <PageHeader eyebrow="Governance" title="Human Call Learning Studio"
@@ -66,7 +72,7 @@ export default function Learning() {
               </tr>
             </thead>
             <tbody>
-              {M.LEARNING_RECORDINGS.map((r) => (
+              {recordings.map((r) => (
                 <tr key={r.id} className="border-t border-border/60 hover:bg-muted/20">
                   <td className="px-6 py-3 font-mono text-xs"><FileAudio className="h-3.5 w-3.5 inline mr-1.5 text-muted-foreground" />{r.id}</td>
                   <td className="py-3">{r.agent}</td>

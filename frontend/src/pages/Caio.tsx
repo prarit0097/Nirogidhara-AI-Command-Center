@@ -1,11 +1,17 @@
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill, toneForStatus } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
-import * as M from "@/services/mockData";
+import { api } from "@/services/api";
+import type { CaioAudit } from "@/types/domain";
 import { AlertTriangle, BookOpen, Gavel, ShieldAlert, Wand2 } from "lucide-react";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
 
 export default function Caio() {
+  const [audits, setAudits] = useState<CaioAudit[]>([]);
+
+  useEffect(() => { api.getCaioAudits().then(setAudits); }, []);
+
   return (
     <>
       <PageHeader eyebrow="AI Layer" title="CAIO Audit Center"
@@ -27,9 +33,9 @@ export default function Caio() {
 
       <div className="grid sm:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Open audits", value: M.CAIO_AUDITS.length, tone: "warning" },
-          { label: "Critical", value: M.CAIO_AUDITS.filter((a) => a.severity === "Critical").length, tone: "danger" },
-          { label: "High", value: M.CAIO_AUDITS.filter((a) => a.severity === "High").length, tone: "warning" },
+          { label: "Open audits", value: audits.length, tone: "warning" },
+          { label: "Critical", value: audits.filter((a) => a.severity === "Critical").length, tone: "danger" },
+          { label: "High", value: audits.filter((a) => a.severity === "High").length, tone: "warning" },
           { label: "Approved this week", value: 7, tone: "success" },
         ].map((s) => (
           <div key={s.label} className="surface-card p-5">
@@ -45,7 +51,7 @@ export default function Caio() {
           <StatusPill tone="info">Updated live</StatusPill>
         </div>
         <div className="divide-y divide-border">
-          {M.CAIO_AUDITS.map((a, i) => (
+          {audits.map((a, i) => (
             <div key={i} className="p-5 hover:bg-muted/30 grid lg:grid-cols-[1fr_auto] gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">

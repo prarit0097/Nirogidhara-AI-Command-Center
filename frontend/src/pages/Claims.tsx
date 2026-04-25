@@ -1,11 +1,17 @@
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
-import * as M from "@/services/mockData";
+import { api } from "@/services/api";
+import type { Claim } from "@/types/domain";
 import { ShieldCheck, ShieldAlert, Stethoscope, FileBadge2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const RED_FLAGS = ["Guaranteed cure", "Permanent solution", "No side effects for everyone", "Emergency medical advice", "Works for everyone universally", "Doctor ki zarurat nahi"];
 
 export default function Claims() {
+  const [claims, setClaims] = useState<Claim[]>([]);
+
+  useEffect(() => { api.getClaimVault().then(setClaims); }, []);
+
   return (
     <>
       <PageHeader eyebrow="Governance" title="Claim Vault & Compliance"
@@ -33,7 +39,7 @@ export default function Claims() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        {M.CLAIM_VAULT.map((c) => (
+        {claims.map((c) => (
           <div key={c.product} className="surface-card p-6">
             <div className="flex items-start justify-between mb-3">
               <div>

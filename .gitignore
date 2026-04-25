@@ -1,24 +1,30 @@
+﻿# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# Python / Django future
+venv/
+.env
+.env.*
+__pycache__/
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
 # Logs
-logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Local agent/runtime state
+.omx/
