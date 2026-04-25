@@ -10,7 +10,7 @@ export function AppLayout() {
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className="lg:pl-[260px] transition-[padding] duration-300">
         <Topbar onMenu={() => setOpen(true)} />
-        <main className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto animate-fade-in">
+        <main className="p-4 sm:p-6 lg:p-10 max-w-[1600px] mx-auto animate-fade-in">
           <Outlet />
         </main>
       </div>

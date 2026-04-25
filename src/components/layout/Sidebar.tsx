@@ -57,22 +57,28 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         )}
         style={{
           background:
-            "linear-gradient(180deg, hsl(158 42% 9%) 0%, hsl(158 38% 11%) 60%, hsl(168 38% 13%) 100%)",
+            "linear-gradient(180deg, hsl(162 46% 6%) 0%, hsl(162 40% 9%) 55%, hsl(168 38% 12%) 100%)",
         }}
       >
+        {/* subtle ambient glow */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-24 -left-16 h-56 w-56 rounded-full bg-accent/10 blur-3xl" />
+          <div className="absolute bottom-12 -right-20 h-64 w-64 rounded-full bg-primary-glow/10 blur-3xl" />
+        </div>
         {/* Brand */}
-        <div className="flex items-center gap-3 px-5 h-16 border-b border-sidebar-border/70">
+        <div className="relative flex items-center gap-3 px-5 h-[68px] border-b border-sidebar-border/60">
           <div className="relative">
-            <div className="h-9 w-9 rounded-xl bg-gradient-gold grid place-items-center shadow-glow">
-              <Leaf className="h-5 w-5 text-sidebar-primary-foreground" strokeWidth={2.4} />
+            <div className="h-10 w-10 rounded-2xl bg-gradient-gold grid place-items-center shadow-glow ring-1 ring-accent/40">
+              <Leaf className="h-[20px] w-[20px] text-sidebar-primary-foreground" strokeWidth={2.4} />
             </div>
+            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-sidebar" />
           </div>
           {!collapsed && (
             <div className="leading-tight">
-              <div className="font-display text-[15px] font-semibold tracking-tight text-sidebar-foreground">
+              <div className="font-display text-[16px] font-semibold tracking-tight text-sidebar-foreground">
                 Nirogidhara
               </div>
-              <div className="text-[10px] uppercase tracking-[0.18em] text-sidebar-foreground/60">
+              <div className="text-[10px] uppercase tracking-[0.22em] text-sidebar-foreground/55 font-medium">
                 AI Command Center
               </div>
             </div>
@@ -80,15 +86,15 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto scrollbar-thin py-4 px-2">
+        <nav className="relative flex-1 overflow-y-auto scrollbar-thin py-4 px-2.5">
           {groups.map((g) => (
-            <div key={g} className="mb-4">
+            <div key={g} className="mb-5">
               {!collapsed && (
-                <div className="px-3 pb-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-sidebar-foreground/45">
+                <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/40">
                   {g}
                 </div>
               )}
-              <ul className="space-y-0.5">
+              <ul className="space-y-[3px]">
                 {NAV.filter((n) => n.group === g).map((item) => {
                   const active = location.pathname === item.to;
                   const Icon = item.icon;
@@ -98,17 +104,26 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                         to={item.to}
                         onClick={onClose}
                         className={cn(
-                          "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200",
+                          "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-[13.5px] transition-all duration-200",
                           active
-                            ? "bg-sidebar-accent text-sidebar-foreground shadow-soft"
-                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                            ? "bg-sidebar-accent text-sidebar-foreground shadow-soft font-medium"
+                            : "text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                         )}
                       >
                         {active && (
-                          <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-gradient-gold" />
+                          <>
+                            <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-gradient-gold shadow-glow" />
+                            <span className="absolute inset-0 rounded-xl bg-gradient-to-r from-accent/[0.08] to-transparent pointer-events-none" />
+                          </>
                         )}
-                        <Icon className={cn("h-[18px] w-[18px] shrink-0", active && "text-sidebar-primary")} />
-                        {!collapsed && <span className="truncate">{item.label}</span>}
+                        <Icon
+                          className={cn(
+                            "h-[17px] w-[17px] shrink-0 transition-colors",
+                            active ? "text-sidebar-primary" : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/85",
+                          )}
+                          strokeWidth={active ? 2.2 : 1.8}
+                        />
+                        {!collapsed && <span className="truncate relative">{item.label}</span>}
                       </NavLink>
                     </li>
                   );
@@ -118,15 +133,24 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        {/* Collapse */}
-        <div className="hidden lg:flex items-center justify-end p-2 border-t border-sidebar-border/70">
+        {/* Footer — system + collapse */}
+        <div className="relative border-t border-sidebar-border/60 p-3">
+          {!collapsed && (
+            <div className="mb-2 px-2 flex items-center gap-2 text-[11px] text-sidebar-foreground/55">
+              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+              <span>All systems normal</span>
+              <span className="ml-auto font-mono text-[10px] text-sidebar-foreground/40">v2.4</span>
+            </div>
+          )}
+          <div className="hidden lg:flex items-center justify-end">
           <button
             onClick={() => setCollapsed((c) => !c)}
-            className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-sidebar-foreground transition"
+            className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/55 hover:text-sidebar-foreground transition"
             aria-label="Collapse sidebar"
           >
             <ChevronLeft className={cn("h-4 w-4 transition-transform", collapsed && "rotate-180")} />
           </button>
+          </div>
         </div>
       </aside>
     </>
