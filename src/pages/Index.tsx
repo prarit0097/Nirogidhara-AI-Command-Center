@@ -63,47 +63,61 @@ export default function Index() {
       />
 
       {/* CEO AI hero strip */}
-      <div className="surface-elevated overflow-hidden mb-8 relative">
-        <div className="absolute inset-0 bg-gradient-hero opacity-[0.97]" />
-        <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-accent/30 blur-3xl" />
-        <div className="absolute right-1/3 -bottom-24 h-60 w-60 rounded-full bg-primary-glow/40 blur-3xl" />
-        <div className="relative p-6 lg:p-8 grid lg:grid-cols-[1fr_auto] gap-6 items-center text-primary-foreground">
+      <div className="surface-elevated overflow-hidden mb-8 relative noise-overlay">
+        <div className="absolute inset-0 bg-gradient-hero" />
+        <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-accent/35 blur-3xl" />
+        <div className="absolute right-1/3 -bottom-28 h-72 w-72 rounded-full bg-primary-glow/40 blur-3xl" />
+        <div className="absolute inset-0 opacity-[0.07]" style={{
+          backgroundImage: "linear-gradient(hsl(0 0% 100% / 0.5) 1px, transparent 1px), linear-gradient(90deg, hsl(0 0% 100% / 0.5) 1px, transparent 1px)",
+          backgroundSize: "40px 40px",
+        }} />
+        <div className="relative p-6 lg:p-9 grid lg:grid-cols-[1fr_auto] gap-6 items-center text-primary-foreground">
           <div>
-            <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] font-semibold text-accent mb-3">
-              <Sparkles className="h-3.5 w-3.5" /> CEO AI · {M.CEO_BRIEFING.date}
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/10 ring-1 ring-white/15 backdrop-blur-sm text-[10.5px] uppercase tracking-[0.22em] font-semibold text-accent mb-4">
+              <Sparkles className="h-3 w-3" /> CEO AI · {M.CEO_BRIEFING.date}
             </div>
-            <h2 className="font-display text-2xl lg:text-3xl font-semibold text-balance leading-tight">
+            <h2 className="font-display text-[26px] lg:text-[34px] font-semibold text-balance leading-[1.12]">
               {M.CEO_BRIEFING.headline}
             </h2>
-            <p className="mt-2 text-primary-foreground/75 text-[15px] max-w-2xl leading-relaxed">
+            <p className="mt-3 text-primary-foreground/75 text-[14.5px] max-w-2xl leading-relaxed text-pretty">
               {M.CEO_BRIEFING.summary}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" className="bg-background/10 hover:bg-background/20 border border-background/20 text-primary-foreground" asChild>
+            <Button variant="secondary" className="bg-white/10 hover:bg-white/15 border border-white/15 text-primary-foreground backdrop-blur-sm" asChild>
               <Link to="/ceo-ai">Review {M.CEO_BRIEFING.recommendations.length} actions <ArrowRight className="h-4 w-4 ml-1" /></Link>
             </Button>
-            <Button className="bg-gradient-gold text-accent-foreground hover:opacity-95 border-0" asChild>
+            <Button className="bg-gradient-gold text-accent-foreground hover:opacity-95 border-0 shadow-glow" asChild>
               <Link to="/caio">CAIO Audit</Link>
             </Button>
           </div>
         </div>
       </div>
 
-      {/* KPI grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
-        <MetricCard icon={Users} label="Leads Today" value={m.leadsToday.value.toLocaleString()} delta={m.leadsToday.deltaPct} tone="info" sublabel="across Meta, Google & inbound" />
-        <MetricCard icon={Phone} label="Calls Live · Done" value={`${m.callsRunning.value} · ${m.callsRunning.completed}`} tone="accent" sublabel="AI + human callers" />
-        <MetricCard icon={Workflow} label="Orders Punched" value={m.ordersPunched.value} delta={m.ordersPunched.deltaPct} tone="primary" sublabel="last 24 hours" />
-        <MetricCard icon={CheckCircle2} label="Confirmed Orders" value={m.ordersConfirmed.value} delta={m.ordersConfirmed.deltaPct} tone="success" />
-        <MetricCard icon={Truck} label="In Transit" value={m.inTransit.value} delta={m.inTransit.deltaPct} tone="info" sublabel="via Delhivery" />
-        <MetricCard icon={PackageCheck} label="Delivered" value={m.delivered.value} delta={m.delivered.deltaPct} tone="success" />
-        <MetricCard icon={ShieldAlert} label="RTO Risk Orders" value={m.rtoRisk.value} delta={m.rtoRisk.deltaPct} tone="warning" sublabel="rescue queue" />
-        <MetricCard icon={CreditCard} label="Payments Paid · Pending" value={`${m.paymentsPaid.value} · ${m.paymentsPaid.pending}`} tone="accent" />
-        <MetricCard icon={IndianRupee} label="Net Delivered Profit" value={`₹${(m.netProfit.value/1000).toFixed(0)}K`} delta={m.netProfit.deltaPct} tone="success" sublabel="last 7 days" />
-        <MetricCard icon={Bot} label="AI Agents Health" value={`${m.agentHealth.value}%`} tone="primary" sublabel={`${m.agentHealth.alerts} alerts`} />
-        <MetricCard icon={Sparkles} label="CEO AI Alerts" value={m.ceoAlerts.value} tone="accent" sublabel="awaiting your nod" />
-        <MetricCard icon={AlertTriangle} label="CAIO Audit Alerts" value={m.caioAlerts.value} tone="danger" sublabel="governance flags" />
+      {/* Hero KPIs — most important */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4 animate-rise-stagger">
+        <MetricCard emphasis icon={IndianRupee} label="Net Delivered Profit · 7d" value={`₹${(m.netProfit.value/1000).toFixed(0)}K`} delta={m.netProfit.deltaPct} tone="success" sublabel="after ad, RTO & gateway costs" />
+        <MetricCard emphasis icon={PackageCheck} label="Delivered Today" value={m.delivered.value} delta={m.delivered.deltaPct} tone="primary" sublabel="signed & accepted" />
+        <MetricCard emphasis icon={ShieldAlert} label="RTO Risk Queue" value={m.rtoRisk.value} delta={m.rtoRisk.deltaPct} tone="warning" sublabel="awaiting rescue call" />
+        <MetricCard emphasis icon={Sparkles} label="CEO AI Approvals" value={m.ceoAlerts.value} tone="accent" sublabel="awaiting your nod" />
+      </div>
+
+      {/* Section divider */}
+      <div className="flex items-center gap-3 mb-4 mt-6">
+        <div className="text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground font-semibold">Operational pulse</div>
+        <div className="flex-1 divider-soft" />
+      </div>
+
+      {/* Supporting KPI grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-8 animate-rise-stagger">
+        <MetricCard icon={Users} label="Leads" value={m.leadsToday.value.toLocaleString()} delta={m.leadsToday.deltaPct} tone="info" sublabel="today" />
+        <MetricCard icon={Phone} label="Calls Live · Done" value={`${m.callsRunning.value} · ${m.callsRunning.completed}`} tone="accent" />
+        <MetricCard icon={Workflow} label="Orders Punched" value={m.ordersPunched.value} delta={m.ordersPunched.deltaPct} tone="primary" />
+        <MetricCard icon={CheckCircle2} label="Confirmed" value={m.ordersConfirmed.value} delta={m.ordersConfirmed.deltaPct} tone="success" />
+        <MetricCard icon={Truck} label="In Transit" value={m.inTransit.value} delta={m.inTransit.deltaPct} tone="info" />
+        <MetricCard icon={CreditCard} label="Paid · Pending" value={`${m.paymentsPaid.value}·${m.paymentsPaid.pending}`} tone="accent" />
+        <MetricCard icon={Bot} label="Agents Health" value={`${m.agentHealth.value}%`} tone="primary" sublabel={`${m.agentHealth.alerts} alerts`} />
+        <MetricCard icon={AlertTriangle} label="CAIO Flags" value={m.caioAlerts.value} tone="danger" />
       </div>
 
       {/* Funnel + Revenue */}
