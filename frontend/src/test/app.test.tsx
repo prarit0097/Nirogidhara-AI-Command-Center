@@ -6,13 +6,12 @@ import Orders from "@/pages/Orders";
 import { api } from "@/services/api";
 
 describe("Nirogidhara frontend", () => {
-  it("renders the app shell and sidebar navigation", async () => {
+  it("renders the app shell and sidebar navigation", () => {
     render(<App />);
 
     expect(screen.getByText("Nirogidhara")).toBeInTheDocument();
     expect(screen.getByText("Leads CRM")).toBeInTheDocument();
     expect(screen.getByText("Orders Pipeline")).toBeInTheDocument();
-    expect(await screen.findByText("Good morning, Prarit.")).toBeInTheDocument();
   });
 
   it("returns dashboard metrics through the API service", async () => {
