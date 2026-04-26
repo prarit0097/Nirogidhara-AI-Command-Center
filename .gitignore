@@ -4,15 +4,23 @@ dist/
 build/
 .vite/
 
-# Python / Django future
+# Python / Django
+.venv/
 venv/
 .env
 .env.*
+!.env.example
 __pycache__/
 *.pyc
+*.pyo
 db.sqlite3
+db.sqlite3-journal
 media/
 staticfiles/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
 # OS / Editor
 .DS_Store
