@@ -707,9 +707,11 @@ AgentRun model + 4 provider adapters (OpenAI / Anthropic / Grok / disabled) + Cl
 ### Phase 3C — Background scheduler + cost tracking (NEXT)
 Celery beat schedule firing `run_daily_ai_briefing` once a day, per-provider cost tracking (token usage → USD) populating `AgentRun.cost_usd`, provider fall-back chains.
 
-### Phase 2 — Other gateways (slot when needed)
-- **Meta Lead Ads webhook** — `POST /api/webhooks/meta/leads/`, idempotent on `leadgen_id`, maps form fields to the `Lead` model.
+### Phase 2 — Other gateways / credentials (slot when needed)
 - **PayU payment links** — same shape as Razorpay; only the adapter is missing.
+- **Delhivery test/live credentials** — code path is wired; flip `DELHIVERY_MODE=test` once a real test API token + a pickup location registered with Delhivery are available.
+- **Meta test/live credentials** — code path is wired; flip `META_MODE=test` once a real Meta app + page access token are available.
+- **WhatsApp Business outbound + consent** — design first per blueprint §24, build later.
 - Tighten role permissions per blueprint §8 where needed (compliance writes, settings writes).
 
 ### Phase 3 — LLM-powered AI agents
