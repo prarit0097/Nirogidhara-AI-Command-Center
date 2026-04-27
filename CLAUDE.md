@@ -9,7 +9,7 @@
 
 Full-stack AI Business Operating System for Nirogidhara Private Limited (Ayurvedic medicine D2C). React 18 + Vite + TS frontend talks to Django 5 + DRF backend. Director: Prarit Sidana — final authority for high-risk decisions. Reference: *Nirogidhara AI Command Center — Master Blueprint v1.0* (PDF in repo).
 
-Status: Phase 1 + Phase 2A + Phase 2B + Phase 2C + Phase 2D + Phase 2E + Phase 3A + Phase 3B complete (CRM data layer, write APIs with workflow state machine, Razorpay/Delhivery/Vapi/Meta Lead Ads gateway integrations, AgentRun foundation with provider adapters and Approved-Claim-Vault-grounded prompt builder, 7 per-agent runtime services with 8 admin-only `/api/ai/agent-runtime/*` endpoints, `run_daily_ai_briefing` management command). **158 backend tests + 8 frontend tests**, all green. Next: Phase 3C — Celery beat schedule + per-provider cost tracking.
+Status: Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C complete (CRM data layer, write APIs with workflow state machine, Razorpay/Delhivery/Vapi/Meta Lead Ads gateway integrations, AgentRun foundation, 7 per-agent runtime services, Celery beat at 09:00 + 18:00 IST, provider fallback chain OpenAI → Anthropic, model-wise USD cost tracking, frontend Scheduler Status page). **175 backend tests + 8 frontend tests**, all green. Next: Phase 3D — sandbox mode + prompt rollback + per-agent cost budgets.
 
 GitHub: https://github.com/prarit0097/Nirogidhara-AI-Command-Center
 
@@ -104,7 +104,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 158 tests today
+python -m pytest -q                    # 175 tests today
 
 # Frontend
 cd frontend
@@ -142,6 +142,11 @@ git push origin main
 | AgentRun services (CAIO hard stop) | `backend/apps/ai_governance/services/__init__.py` |
 | Per-agent runtime modules (Phase 3B) | `backend/apps/ai_governance/services/agents/{ceo,caio,ads,rto,sales_growth,cfo,compliance}.py` |
 | Daily AI briefing management command | `backend/apps/ai_governance/management/commands/run_daily_ai_briefing.py` |
+| Celery app + beat schedule (Phase 3C) | `backend/config/celery.py` |
+| Celery task wrapping CEO + CAIO sweeps | `backend/apps/ai_governance/tasks.py` |
+| Model-wise USD pricing (OpenAI + Anthropic) | `backend/apps/integrations/ai/pricing.py` |
+| Local Redis (dev only) | `docker-compose.dev.yml` (root) |
+| Frontend Scheduler Status page | `frontend/src/pages/Scheduler.tsx` (`/ai-scheduler`) |
 | Master Event Ledger receivers | `backend/apps/audit/signals.py` |
 | Permissions (role-based) | `backend/apps/accounts/permissions.py` |
 | Order state machine | `backend/apps/orders/services.py` (`ALLOWED_TRANSITIONS`) |

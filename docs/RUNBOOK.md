@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 158 tests (Phase 1 → 3B)
+python -m pytest -q                     # 175 tests (Phase 1 → 3C)
 
 # Frontend
 cd ../frontend
@@ -78,6 +78,40 @@ npm test                                # ~8 vitest tests
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
+
+## Phase 3C — Celery scheduler (optional in development)
+
+Local development runs in **Celery eager mode** by default
+(`CELERY_TASK_ALWAYS_EAGER=true`), so calling `.delay()` runs synchronously
+without Redis. Tests don't need Redis. Day-to-day dev doesn't need Redis.
+
+Spin Redis + a worker up only when you actually want the cron schedule
+to fire on the wall clock:
+
+```bash
+# Terminal 1 — local Redis (root of repo)
+docker compose -f docker-compose.dev.yml up -d redis
+
+# Terminal 2 — Celery worker + beat
+cd backend
+celery -A config worker -B --loglevel=info
+```
+
+Beat schedule fires `apps.ai_governance.tasks.run_daily_ai_briefing_task`
+at **09:00 IST** (morning) and **18:00 IST** (evening) by default. Hours
+and minutes are env-driven (`AI_DAILY_BRIEFING_*`). VPS Redis is **never**
+used in development — local dev only uses the Docker Redis above.
+
+Manual trigger (no Redis required):
+
+```bash
+python manage.py run_daily_ai_briefing
+python manage.py run_daily_ai_briefing --skip-caio
+python manage.py run_daily_ai_briefing --skip-ceo
+```
+
+Frontend Scheduler Status page lives at `http://localhost:8080/ai-scheduler`
+(admin/director only) — pulls `GET /api/ai/scheduler/status/`.
 
 ## Database
 

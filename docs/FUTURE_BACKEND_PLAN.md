@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -174,13 +174,60 @@ Shipped via `feat: add per-agent runtime services`.
   / director allowed), the status endpoint, the management command (with
   `--skip-caio` variant), and the audit-event firing.
 
-## Phase 3C — Background scheduler + cost tracking (NEXT)
+## ✅ Phase 3C — Celery scheduler + cost tracking + fallback (DONE)
 
-- Celery beat schedule that fires the management command once a day.
-- Per-provider cost tracking (token usage → USD) populating
-  `AgentRun.cost_usd`.
-- Provider fall-back chains (e.g. OpenAI → Anthropic on rate-limit).
-- Sandbox mode toggle (Section 12.2) and prompt version rollback (12.3).
+Shipped via `feat: add ai scheduler and cost tracking`.
+
+- **Celery app** at `backend/config/celery.py`. Local dev uses
+  `CELERY_TASK_ALWAYS_EAGER=true` (the default) so tasks run synchronously
+  without Redis. Production cron runs `celery -A config worker -B`.
+- **Beat schedule** fires `apps.ai_governance.tasks.run_daily_ai_briefing_task`
+  at **09:00 IST** (morning) and **18:00 IST** (evening). Hours / minutes
+  are env-driven so ops can shift them without code changes.
+- **Local Redis dev** via `docker-compose.dev.yml` (Redis 7 alpine on
+  6379). VPS Redis is **never** used in development.
+- **Model-wise pricing table** at
+  `backend/apps/integrations/ai/pricing.py` covering OpenAI gpt-5.x /
+  gpt-4.1 family + Anthropic Claude Sonnet / Opus 4.5+. `cost_usd` is
+  computed per-run via `Decimal` math; the rate sheet used at the time
+  of the call is stored on every AgentRun in `pricing_snapshot`.
+- **Provider fallback** in `apps/integrations/ai/dispatch.py`. The
+  dispatcher walks `AI_PROVIDER_FALLBACKS` (default: `openai → anthropic`)
+  left → right. ClaimVaultMissing **never** triggers a fallback — it
+  fails closed before any adapter is invoked. `provider_attempts`
+  records every attempt (provider / model / status / error / latency /
+  tokens / cost). `fallback_used=True` whenever a non-first provider
+  answered.
+- **AgentRun model** extended (migration `0003_agentrun_cost_tracking`)
+  with `prompt_tokens`, `completion_tokens`, `total_tokens`,
+  `provider_attempts`, `fallback_used`, `pricing_snapshot`.
+- **OpenAI + Anthropic adapters** extract token usage (including
+  cached-input / cache-creation / cache-read variants) and compute
+  `cost_usd` via the pricing table.
+- **`GET /api/ai/scheduler/status/`** (admin/director only) returns the
+  Celery / Redis / schedule / fallback / last-cost snapshot. Broker
+  credentials are redacted before the response leaves the server.
+- **5 new audit kinds**: `ai.scheduler.daily_briefing.started` /
+  `.completed` / `.failed`, `ai.provider.fallback_used`, `ai.cost_tracked`.
+- **Frontend Scheduler Status page** at `/ai-scheduler` (under "AI Layer"
+  in the sidebar). Premium Ayurveda + AI SaaS theme. Pure read; no
+  business logic; never receives a provider API key.
+- 17 new pytest tests cover Celery eager mode, beat schedule env-var
+  parsing, scheduler-status perms (admin allowed; viewer / operations /
+  anonymous blocked), broker URL credential redaction, disabled-provider
+  no-network path, cost tracking persistence, OpenAI + Anthropic
+  pricing math (including cached-input / cache-write / cache-read),
+  fallback triggered when OpenAI fails, no fallback when first provider
+  succeeds, ClaimVaultMissing not-triggering-fallback, and CAIO hard-stop
+  surviving the dispatcher refactor.
+
+## Phase 3D — Sandbox + prompt rollback (NEXT)
+
+- Sandbox mode toggle (Section 12.2) — staged AgentRuns that don't write
+  CeoBriefing or count toward reward / penalty.
+- Prompt version rollback (Section 12.3) — versioned prompt artifacts +
+  one-click revert.
+- Provider cost budget guard rails — daily / monthly cap per agent.
 
 ## Phase 4 — Real-Time
 

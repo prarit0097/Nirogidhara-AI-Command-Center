@@ -57,28 +57,51 @@ def current_config() -> AIConfig:
     when no key is configured.
     """
     provider = (getattr(settings, "AI_PROVIDER", "disabled") or "disabled").lower()
+    return config_for_provider(provider)
+
+
+def config_for_provider(provider: str) -> AIConfig:
+    """Phase 3C — return an ``AIConfig`` for an arbitrary provider.
+
+    The fallback dispatcher uses this to resolve each provider in
+    ``settings.AI_PROVIDER_FALLBACKS`` independently of ``AI_PROVIDER``.
+    Unknown providers collapse to ``disabled``.
+    """
+    provider = (provider or "").lower()
     if provider not in SUPPORTED_PROVIDERS:
         provider = "disabled"
 
     api_key = ""
     base_url = ""
     extra: dict[str, str] = {}
+    model = getattr(settings, "AI_MODEL", "") or ""
 
     if provider == "openai":
         api_key = settings.OPENAI_API_KEY
         base_url = settings.OPENAI_BASE_URL
+        model = (
+            getattr(settings, "OPENAI_FALLBACK_MODEL", "")
+            or model
+            or "gpt-5.1"
+        )
         if settings.OPENAI_ORG_ID:
             extra["org_id"] = settings.OPENAI_ORG_ID
     elif provider == "anthropic":
         api_key = settings.ANTHROPIC_API_KEY
         base_url = settings.ANTHROPIC_BASE_URL
+        model = (
+            getattr(settings, "ANTHROPIC_MODEL", "")
+            or model
+            or "claude-sonnet-4-6"
+        )
     elif provider == "grok":
         api_key = settings.GROK_API_KEY
         base_url = settings.GROK_BASE_URL
+        model = getattr(settings, "GROK_MODEL", "") or model or "grok-2-latest"
 
     return AIConfig(
         provider=provider,
-        model=getattr(settings, "AI_MODEL", "") or "",
+        model=model,
         api_key=api_key,
         base_url=base_url,
         extra=extra,
@@ -88,4 +111,9 @@ def current_config() -> AIConfig:
     )
 
 
-__all__ = ("AIConfig", "SUPPORTED_PROVIDERS", "current_config")
+__all__ = (
+    "AIConfig",
+    "SUPPORTED_PROVIDERS",
+    "current_config",
+    "config_for_provider",
+)

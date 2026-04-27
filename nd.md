@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B done):** All 14 Django apps scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (Phase 3A) + 8 per-agent runtime endpoints (Phase 3B)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay / Delhivery / Vapi / Meta Lead Ads gateway integrations all with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **Phase 3A AgentRun foundation + Phase 3B per-agent runtime: 7 agent service modules (CEO/CAIO/Ads/RTO/Sales Growth/CFO/Compliance) each pulling a safe DB slice and dispatching via `run_readonly_agent_analysis`, the CEO success path refreshes the `CeoBriefing` row, the management command `run_daily_ai_briefing` wires CEO + CAIO into cron without Redis**, seed command, frontend wired with **automatic mock fallback**. **158 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 3C+):** Background scheduler (Celery beat) + per-provider cost tracking + provider fall-back chains, WebSockets, governance UI write paths (kill switch / sandbox / rollback), reward/penalty engine, learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C done):** All 14 Django apps scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status endpoint (3C)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay / Delhivery / Vapi / Meta Lead Ads gateway integrations all with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat scheduler firing CEO + CAIO at 09:00 + 18:00 IST + provider fallback chain (OpenAI → Anthropic) + model-wise USD cost tracking via frozen pricing snapshots + frontend Scheduler Status page**, seed command, frontend wired with **automatic mock fallback** (18 pages). **175 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 3D+):** Sandbox mode + prompt rollback, governance UI write paths (kill switch / approval matrix), WebSockets, reward/penalty engine, learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -335,7 +335,7 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far — Phase 1 to Phase 3B — every checkpoint we shipped
+## 8. What's done so far — Phase 1 to Phase 3C — every checkpoint we shipped
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
 - 17 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.**
@@ -471,7 +471,29 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
-### ✅ Phase 3B — Per-agent Runtime Services (built this session)
+### ✅ Phase 3C — Celery Scheduler + Cost Tracking + Fallback (built this session)
+
+- **Celery app** at `backend/config/celery.py` autoloads via `config/__init__.py`. Local dev runs in eager mode (`CELERY_TASK_ALWAYS_EAGER=true`) — Redis is not required for `pytest` / `manage.py check` / day-to-day development. Production cron starts `celery -A config worker -B`.
+- **Beat schedule** fires `apps.ai_governance.tasks.run_daily_ai_briefing_task` at **09:00 IST** (morning) and **18:00 IST** (evening). Hours / minutes are env-driven (`AI_DAILY_BRIEFING_*`). The task wraps the existing Phase 3B `ceo.run` + `caio.run` services, so the scheduler shares the same compliance and CAIO hard-stops.
+- **Local Redis** via `docker-compose.dev.yml` (Redis 7 alpine on 6379). VPS Redis is **never** used in development.
+- **Model-wise pricing table** at `backend/apps/integrations/ai/pricing.py` covering OpenAI (gpt-5.2 / 5.1 / 5 / 5-mini / 5-nano / 4.1 family) and Anthropic (Claude Sonnet 4.5/4.6 + Opus 4.5/4.6). Costs are computed in `Decimal` (per-1M-token rates) and the rate sheet used at the time of the call is stored on every AgentRun in `pricing_snapshot`. Pricing must be reviewed periodically against the official provider pages — the file documents this and the source.
+- **Provider fallback chain** in `apps/integrations/ai/dispatch.py`. The dispatcher walks `AI_PROVIDER_FALLBACKS` (default `openai → anthropic`) left → right; the first provider whose adapter returns `success` wins. Adapters are looked up at call time so `mock.patch` continues to work for tests. Every attempt — successful, failed, or skipped — is recorded in `provider_attempts` (provider / model / status / error / latency / tokens / cost). `fallback_used=True` whenever a non-first provider answered.
+- **AgentRun model** extended (migration `0003_agentrun_cost_tracking`) with `prompt_tokens`, `completion_tokens`, `total_tokens`, `provider_attempts`, `fallback_used`, `pricing_snapshot`. The Phase 3A `cost_usd` decimal column is preserved.
+- **OpenAI + Anthropic adapters** extract token usage (including OpenAI cached-input + Anthropic cache-creation/cache-read variants) and compute `cost_usd` via the pricing table. Lazy SDK imports kept; disabled / no-key path still returns `skipped` without any network.
+- **`GET /api/ai/scheduler/status/`** (admin/director only) returns the Celery / Redis / schedule / fallback / last-cost snapshot. Broker credentials are redacted (`redis://***@host`) before the response leaves the server.
+- **5 new audit kinds**: `ai.scheduler.daily_briefing.started` / `.completed` / `.failed`, `ai.provider.fallback_used`, `ai.cost_tracked`. The fallback + cost events fire from `complete_agent_run` so every dispatched run leaves a paper trail.
+- **Frontend Scheduler Status page** at `/ai-scheduler` (under "AI Layer" in the sidebar). Premium Ayurveda + AI SaaS theme. Pure read; no business logic. Surfaces Celery + Redis state, both schedule slots, primary provider + model, fallback order, last CEO briefing run, last CAIO sweep, last cost in USD, last fallback flag. The frontend never receives any provider API key.
+- **`AgentRun` TypeScript type widened** with `promptTokens`, `completionTokens`, `totalTokens`, `providerAttempts`, `fallbackUsed`, `pricingSnapshot` (all optional for backward compat).
+- **17 new pytest tests** cover Celery eager mode (task runs synchronously and writes the started/completed audit events), beat schedule env-var parsing, scheduler-status perms (admin allowed; viewer / operations / anonymous all blocked), broker URL credential redaction, the disabled-provider no-network path, cost tracking persistence on AgentRun, OpenAI + Anthropic pricing math (including cached-input / cache-write / cache-read variants and unknown-model `None` cost), the fallback path triggered when OpenAI fails, the no-fallback path when first provider succeeds, ClaimVaultMissing **not** triggering a fallback (failure logged before any adapter is called), and the CAIO hard stop surviving the dispatcher refactor.
+
+**Compliance hard stop (Master Blueprint §26 #4):** ClaimVaultMissing fails closed before any adapter is invoked — fallback chains do **not** mask compliance refusals. CAIO never executes; the runtime payload contains no execution intents and the existing `CAIO_FORBIDDEN_INTENTS` guard refuses any leaked intent before the LLM is called. Phase 3C remains dry-run by construction; the only path that will ever turn an AgentRun suggestion into a business write is the Phase 5 approval-matrix middleware.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **175 passed** (158 + 17 phase3c) |
+| `python manage.py check` | 0 issues |
+
+### ✅ Phase 3B — Per-agent Runtime Services (built earlier this session)
 
 - **Per-agent service modules** under `apps/ai_governance/services/agents/`: `ceo.py`, `caio.py`, `ads.py`, `rto.py`, `sales_growth.py`, `cfo.py`, `compliance.py`. Each exposes `build_input_payload()` (safe read-only DB slice — counts, aggregations, recent rows) and `run(triggered_by="")` that dispatches through the existing `run_readonly_agent_analysis`.
 - **Package conversion**: `apps/ai_governance/services.py` → `apps/ai_governance/services/__init__.py` to host the new `services/agents/` subpackage. Existing imports (`from apps.ai_governance.services import run_readonly_agent_analysis`) keep working.
@@ -612,7 +634,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 158 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b)
+cd backend && python -m pytest -q   # 175 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -704,8 +726,11 @@ AgentRun model + 4 provider adapters (OpenAI / Anthropic / Grok / disabled) + Cl
 ### ✅ Phase 3B — Per-agent runtime services (DONE)
 7 agent modules (CEO / CAIO / Ads / RTO / Sales Growth / CFO / Compliance) + 8 admin-only runtime endpoints + `run_daily_ai_briefing` management command + `CeoBriefing` refresh on CEO success, 26 new tests. See §8.
 
-### Phase 3C — Background scheduler + cost tracking (NEXT)
-Celery beat schedule firing `run_daily_ai_briefing` once a day, per-provider cost tracking (token usage → USD) populating `AgentRun.cost_usd`, provider fall-back chains.
+### ✅ Phase 3C — Celery scheduler + cost tracking + fallback (DONE)
+Celery beat at 09:00 + 18:00 IST + provider fallback chain (OpenAI → Anthropic) + model-wise USD cost tracking + frontend Scheduler Status page, 17 new tests. See §8.
+
+### Phase 3D — Sandbox + prompt rollback (NEXT)
+Sandbox toggle (Section 12.2), versioned prompt artifacts + rollback (12.3), per-agent cost budget guards.
 
 ### Phase 2 — Other gateways / credentials (slot when needed)
 - **PayU payment links** — same shape as Razorpay; only the adapter is missing.
@@ -851,4 +876,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 3B per-agent runtime services._
+_End of `nd.md`. Last updated after Phase 3C Celery scheduler + cost tracking._

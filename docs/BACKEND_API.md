@@ -73,6 +73,7 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 | GET | `/api/ai/agent-runs/` | `AgentRun[]` (Phase 3A — admin/director only) |
 | GET | `/api/ai/agent-runs/{id}/` | `AgentRun` (admin/director only) |
 | GET | `/api/ai/agent-runtime/status/` | `{phase, dryRunOnly, agents, lastRuns}` (Phase 3B — admin/director only) |
+| GET | `/api/ai/scheduler/status/` | `{celeryConfigured, celeryEagerMode, redisConfigured, brokerUrl (redacted), timezone, morningSchedule, eveningSchedule, lastDailyBriefingRun, lastCaioSweepRun, aiProvider, primaryModel, fallbacks, lastCostUsd, lastFallbackUsed}` (Phase 3C — admin/director only) |
 
 ## Compliance / Rewards / Learning
 
@@ -126,6 +127,9 @@ Receivers in `apps/audit/signals.py` write rows on:
 - `ai.ceo_brief.generated` — explicit, on CEO daily briefing run when the LLM returns usable content (Phase 3B)
 - `ai.caio_sweep.completed` — explicit, on CAIO audit-sweep success (Phase 3B)
 - `ai.agent_runtime.completed` / `ai.agent_runtime.failed` — explicit, on every per-agent runtime endpoint (Phase 3B)
+- `ai.scheduler.daily_briefing.started` / `.completed` / `.failed` — explicit, on the Celery beat task wrapping CEO + CAIO sweeps (Phase 3C)
+- `ai.provider.fallback_used` — explicit, when the dispatcher answered with a fallback provider after the primary failed (Phase 3C)
+- `ai.cost_tracked` — explicit, on every successful AgentRun whose adapter reported token usage (Phase 3C)
 
 Phase 4+ will add: reward/penalty assigned, prompt updated, rollback
 performed, CAIO audit completed, CEO approval recorded.
@@ -218,6 +222,19 @@ Every endpoint is admin/director only and dry-run by construction. Each call dis
 | POST | `/api/ai/agent-runtime/compliance/analyze/` | Claim Vault coverage + handoff flags + critical CAIO audits. Fails closed when the vault is empty (`ClaimVaultMissing` → `failed` AgentRun). |
 
 Cron / Windows Task Scheduler can also call `python manage.py run_daily_ai_briefing` to fire the CEO + CAIO sweeps in one shot (`--skip-ceo` / `--skip-caio` to run just one).
+
+### AI scheduler + cost tracking (Phase 3C)
+
+Celery beat schedules the daily CEO briefing + CAIO sweep at **09:00 IST** (morning) and **18:00 IST** (evening). The dispatcher walks the provider chain in `AI_PROVIDER_FALLBACKS` (default: `openai → anthropic`); the first provider whose adapter returns `success` wins. Every AgentRun row stores `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_usd`, `provider_attempts` (full attempt log), `fallback_used`, and `pricing_snapshot` (model-wise rates from `apps/integrations/ai/pricing.py` frozen at run time).
+
+Local dev never needs Redis: `CELERY_TASK_ALWAYS_EAGER=true` (the default) makes `.delay()` run synchronously. To run the beat schedule for real:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d redis
+celery -A config worker -B --loglevel=info
+```
+
+Pricing fallback for `ClaimVaultMissing`: never. The prompt builder fails closed before any adapter is invoked, so a compliance refusal does not trigger a fallback to a different provider.
 
 ### Webhooks (gateway → backend, public)
 

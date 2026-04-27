@@ -1,0 +1,22 @@
+# Local-only Redis for the Phase 3C Celery worker / beat.
+#
+# Bring Redis up only when you actually want to run a Celery worker or
+# Celery beat — for normal dev / pytest you don't need this at all because
+# CELERY_TASK_ALWAYS_EAGER=true makes `.delay()` run synchronously.
+#
+#   docker compose -f docker-compose.dev.yml up -d redis
+#   celery -A config worker -B --loglevel=info
+#
+# Production / staging Redis lives elsewhere — never use this file there.
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: nirogidhara-redis-dev
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped

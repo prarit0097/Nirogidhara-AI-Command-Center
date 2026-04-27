@@ -54,6 +54,12 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.caio_sweep.completed": "shield-check",
     "ai.agent_runtime.completed": "play-circle",
     "ai.agent_runtime.failed": "alert-octagon",
+    # Phase 3C — Celery scheduler + cost / fallback tracking.
+    "ai.scheduler.daily_briefing.started": "alarm-clock",
+    "ai.scheduler.daily_briefing.completed": "alarm-check",
+    "ai.scheduler.daily_briefing.failed": "alarm-clock-off",
+    "ai.provider.fallback_used": "shuffle",
+    "ai.cost_tracked": "indian-rupee",
 }
 
 

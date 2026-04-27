@@ -46,6 +46,7 @@ import type {
   AgentRun,
   AgentRunCreatePayload,
   AgentRuntimeStatus,
+  AiSchedulerStatus,
   CaioAudit,
   Call,
   CallTranscriptLine,
@@ -395,6 +396,15 @@ export const api = {
       {},
       () => optimisticAgentRun({ agent: "compliance" }),
     ),
+
+  // ---------- PHASE 3C — Scheduler / cost / fallback snapshot ----------
+  // Admin/director only; pure read endpoint. Frontend never receives any
+  // provider API key — only redacted broker URL + last cost figure.
+
+  getAiSchedulerStatus: () =>
+    safeFetch<AiSchedulerStatus>("/ai/scheduler/status/", () =>
+      optimisticSchedulerStatus(),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -544,6 +554,12 @@ function optimisticAgentRun(payload: AgentRunCreatePayload): AgentRun {
     triggeredBy: "",
     createdAt: new Date().toISOString(),
     completedAt: null,
+    promptTokens: null,
+    completionTokens: null,
+    totalTokens: null,
+    providerAttempts: [],
+    fallbackUsed: false,
+    pricingSnapshot: {},
   };
 }
 
@@ -570,6 +586,25 @@ function optimisticRuntimeStatus(): AgentRuntimeStatus {
       compliance: null,
       marketing: null,
     },
+  };
+}
+
+function optimisticSchedulerStatus(): AiSchedulerStatus {
+  return {
+    celeryConfigured: true,
+    celeryEagerMode: true,
+    redisConfigured: false,
+    brokerUrl: "redis://localhost:6379/0",
+    timezone: "Asia/Kolkata",
+    morningSchedule: { hour: 9, minute: 0 },
+    eveningSchedule: { hour: 18, minute: 0 },
+    lastDailyBriefingRun: null,
+    lastCaioSweepRun: null,
+    aiProvider: "disabled",
+    primaryModel: "",
+    fallbacks: ["openai", "anthropic"],
+    lastCostUsd: null,
+    lastFallbackUsed: false,
   };
 }
 

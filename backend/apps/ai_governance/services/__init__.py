@@ -111,7 +111,12 @@ def _coerce_cost(value: float | None) -> Any:
 
 @transaction.atomic
 def complete_agent_run(run: AgentRun, *, result: AdapterResult) -> AgentRun:
-    """Persist a successful (or skipped) adapter result on the run row."""
+    """Persist a successful (or skipped) adapter result on the run row.
+
+    Phase 3C also stores token usage, the per-provider attempt log, the
+    pricing snapshot used for cost calculation, and a ``fallback_used``
+    flag so audit can replay every dispatch.
+    """
     run.status = (
         AgentRun.Status.SUCCESS
         if result.status == AdapterStatus.SUCCESS
@@ -122,6 +127,12 @@ def complete_agent_run(run: AgentRun, *, result: AdapterResult) -> AgentRun:
     run.output_payload = dict(result.output or {})
     run.latency_ms = result.latency_ms
     run.cost_usd = _coerce_cost(result.cost_usd)
+    run.prompt_tokens = result.prompt_tokens
+    run.completion_tokens = result.completion_tokens
+    run.total_tokens = result.total_tokens
+    run.pricing_snapshot = dict(result.pricing_snapshot or {})
+    run.provider_attempts = list((result.raw or {}).get("provider_attempts") or [])
+    run.fallback_used = bool((result.raw or {}).get("fallback_used") or False)
     run.completed_at = timezone.now()
     if result.error_message:
         run.error_message = result.error_message
@@ -133,10 +144,53 @@ def complete_agent_run(run: AgentRun, *, result: AdapterResult) -> AgentRun:
             "output_payload",
             "latency_ms",
             "cost_usd",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "pricing_snapshot",
+            "provider_attempts",
+            "fallback_used",
             "completed_at",
             "error_message",
         ]
     )
+
+    if run.fallback_used and run.status == AgentRun.Status.SUCCESS:
+        write_event(
+            kind="ai.provider.fallback_used",
+            text=(
+                f"AgentRun {run.id} succeeded after fallback · "
+                f"provider={run.provider}"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "run_id": run.id,
+                "agent": run.agent,
+                "winning_provider": run.provider,
+                "attempts": run.provider_attempts,
+            },
+        )
+
+    if run.cost_usd is not None and run.status == AgentRun.Status.SUCCESS:
+        write_event(
+            kind="ai.cost_tracked",
+            text=(
+                f"AgentRun {run.id} cost ${run.cost_usd} · "
+                f"{run.total_tokens or 0} tokens · model={run.model}"
+            ),
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "run_id": run.id,
+                "agent": run.agent,
+                "provider": run.provider,
+                "model": run.model,
+                "cost_usd": str(run.cost_usd),
+                "prompt_tokens": run.prompt_tokens,
+                "completion_tokens": run.completion_tokens,
+                "total_tokens": run.total_tokens,
+            },
+        )
+
     write_event(
         kind="ai.agent_run.completed",
         text=(
@@ -152,6 +206,8 @@ def complete_agent_run(run: AgentRun, *, result: AdapterResult) -> AgentRun:
             "status": run.status,
             "provider": run.provider,
             "latency_ms": run.latency_ms,
+            "fallback_used": run.fallback_used,
+            "cost_usd": str(run.cost_usd) if run.cost_usd is not None else None,
         },
     )
     return run

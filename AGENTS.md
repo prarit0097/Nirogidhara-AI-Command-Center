@@ -102,7 +102,11 @@ backend/apps/ai_governance/prompting.py ← System policy + Approved Claim Vault
 backend/apps/ai_governance/services/__init__.py ← AgentRun lifecycle + CAIO hard stop (refuses execute/apply/create_order/transition intents)
 backend/apps/ai_governance/services/agents/ ← Phase 3B per-agent runtime modules: ceo, caio, ads, rto, sales_growth, cfo, compliance
 backend/apps/ai_governance/management/commands/run_daily_ai_briefing.py ← cron-friendly CEO + CAIO daily runner
-backend/apps/ai_governance/models.py ← AgentRun model (id, agent, prompt_version, input/output payload, status, provider, latency_ms, cost_usd)
+backend/apps/ai_governance/tasks.py ← Phase 3C Celery task wrapping CEO + CAIO daily sweeps (eager-mode safe)
+backend/apps/ai_governance/models.py ← AgentRun (id, agent, prompt_version, input/output payload, status, provider, latency_ms, cost_usd, prompt_tokens, completion_tokens, total_tokens, provider_attempts, fallback_used, pricing_snapshot)
+backend/apps/integrations/ai/pricing.py ← Model-wise OpenAI + Anthropic per-1M-token rates (review periodically)
+backend/config/celery.py            ← Celery app + 09:00 + 18:00 IST beat schedule (CELERY_TASK_ALWAYS_EAGER=true in dev)
+docker-compose.dev.yml              ← Local Redis only — VPS Redis NEVER used in development
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -162,7 +166,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 158 tests today
+python -m pytest -q                 # 175 tests today
 
 # Frontend
 cd frontend

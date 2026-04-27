@@ -15,6 +15,7 @@ from .views import (
     ComplianceAnalyzeView,
     RtoAnalyzeView,
     SalesGrowthAnalyzeView,
+    SchedulerStatusView,
 )
 
 router = DefaultRouter()
@@ -63,5 +64,11 @@ urlpatterns = [
         "agent-runtime/compliance/analyze/",
         ComplianceAnalyzeView.as_view(),
         name="agent-runtime-compliance",
+    ),
+    # Phase 3C — Celery / scheduler / cost snapshot.
+    path(
+        "scheduler/status/",
+        SchedulerStatusView.as_view(),
+        name="ai-scheduler-status",
     ),
 ] + router.urls

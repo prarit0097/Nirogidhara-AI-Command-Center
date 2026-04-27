@@ -43,6 +43,17 @@ class AgentRunSerializer(serializers.ModelSerializer):
     triggeredBy = serializers.CharField(source="triggered_by", read_only=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     completedAt = serializers.DateTimeField(source="completed_at", read_only=True)
+    # Phase 3C — token usage + fallback bookkeeping.
+    promptTokens = serializers.IntegerField(source="prompt_tokens", read_only=True)
+    completionTokens = serializers.IntegerField(
+        source="completion_tokens", read_only=True
+    )
+    totalTokens = serializers.IntegerField(source="total_tokens", read_only=True)
+    providerAttempts = serializers.JSONField(
+        source="provider_attempts", read_only=True
+    )
+    fallbackUsed = serializers.BooleanField(source="fallback_used", read_only=True)
+    pricingSnapshot = serializers.JSONField(source="pricing_snapshot", read_only=True)
 
     class Meta:
         model = AgentRun
@@ -62,6 +73,12 @@ class AgentRunSerializer(serializers.ModelSerializer):
             "triggeredBy",
             "createdAt",
             "completedAt",
+            "promptTokens",
+            "completionTokens",
+            "totalTokens",
+            "providerAttempts",
+            "fallbackUsed",
+            "pricingSnapshot",
         )
 
 

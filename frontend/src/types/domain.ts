@@ -155,6 +155,18 @@ export type AgentName =
 
 export type AgentRunStatus = "pending" | "success" | "failed" | "skipped";
 
+export interface ProviderAttempt {
+  provider: string;
+  model: string;
+  status: AgentRunStatus | string;
+  error?: string;
+  latencyMs?: number;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+  costUsd?: number | null;
+}
+
 export interface AgentRun {
   id: string;
   agent: AgentName;
@@ -171,6 +183,13 @@ export interface AgentRun {
   triggeredBy: string;
   createdAt: string;
   completedAt: string | null;
+  /** Phase 3C — token usage + fallback bookkeeping. */
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+  providerAttempts?: ProviderAttempt[];
+  fallbackUsed?: boolean;
+  pricingSnapshot?: Record<string, unknown>;
 }
 
 export interface AgentRunCreatePayload {
@@ -188,6 +207,32 @@ export interface AgentRuntimeStatus {
   agents: AgentName[];
   /** Last AgentRun per agent (null when an agent has never been run). */
   lastRuns: Record<AgentName, AgentRun | null>;
+}
+
+// ----- Phase 3C — Celery scheduler + cost tracking status -----
+
+export interface AiSchedulerSlot {
+  hour: number;
+  minute: number;
+}
+
+export interface AiSchedulerStatus {
+  celeryConfigured: boolean;
+  celeryEagerMode: boolean;
+  redisConfigured: boolean;
+  /** Broker URL with credentials redacted. */
+  brokerUrl: string;
+  timezone: string;
+  morningSchedule: AiSchedulerSlot;
+  eveningSchedule: AiSchedulerSlot;
+  lastDailyBriefingRun: AgentRun | null;
+  lastCaioSweepRun: AgentRun | null;
+  aiProvider: string;
+  primaryModel: string;
+  fallbacks: string[];
+  /** Latest successful AgentRun's cost_usd (string from DecimalField). */
+  lastCostUsd: string | null;
+  lastFallbackUsed: boolean;
 }
 
 export interface ActiveCall {

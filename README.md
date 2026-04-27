@@ -60,7 +60,7 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 ## Tests
 
 ```bash
-# Backend (pytest, 158 tests)
+# Backend (pytest, 175 tests)
 cd backend && python -m pytest -q
 
 # Frontend (vitest, 8 tests)
@@ -79,11 +79,12 @@ cd frontend && npm test
 - ✅ **Phase 2E** — Meta Lead Ads ingest with `GET /api/webhooks/meta/leads/` (subscription handshake) + `POST /api/webhooks/meta/leads/` (signed delivery). Three-mode adapter (`apps/crm/integrations/meta_client.py`) with mock-mode default, leadgen_id idempotency, and Lead refresh-not-duplicate semantics.
 - ✅ **Phase 3A** — AgentRun foundation + AI provider adapters (`apps/integrations/ai/`). Approved-Claim-Vault-grounded prompt builder, CAIO hard stop, admin/director-only `POST /api/ai/agent-runs/` (always dry-run in Phase 3A). Disabled / no-key path returns `skipped` AgentRuns without any network call.
 - ✅ **Phase 3B** — Per-agent runtime services for CEO / CAIO / Ads / RTO / Sales Growth / CFO / Compliance. 8 new admin-only `/api/ai/agent-runtime/*` endpoints, CEO success refreshes the `CeoBriefing` row, management command `run_daily_ai_briefing` for cron / Windows Task Scheduler.
+- ✅ **Phase 3C** — Celery beat scheduler firing CEO + CAIO at 09:00 + 18:00 IST (`apps/ai_governance/tasks.py`), provider fallback chain (OpenAI → Anthropic) in `apps/integrations/ai/dispatch.py`, model-wise USD cost tracking via `apps/integrations/ai/pricing.py`, frontend Scheduler Status page at `/ai-scheduler`. Local dev runs in Celery eager mode; `docker-compose.dev.yml` brings up Redis only when you want the real beat schedule.
 
 **Next:**
 
-- ⏭ **Phase 3C** — Background scheduler (Celery beat) + per-provider cost tracking + provider fall-back chains.
-- Phase 3 (real LLM agents), Phase 4 (WebSockets), Phase 5 (governance UI write paths), Phase 6 (learning loop), Phase 7 (multi-tenant SaaS).
+- ⏭ **Phase 3D** — Sandbox mode + prompt rollback + per-agent cost budget guards.
+- Phase 4 (WebSockets), Phase 5 (governance UI write paths + approval matrix), Phase 6 (learning loop), Phase 7 (multi-tenant SaaS).
 
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
 Detailed handoff: [`nd.md`](nd.md).

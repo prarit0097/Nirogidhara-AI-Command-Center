@@ -96,6 +96,13 @@ class AgentRun(models.Model):
     cost_usd = models.DecimalField(
         max_digits=10, decimal_places=6, null=True, blank=True
     )
+    # Phase 3C — token usage + provider fallback bookkeeping.
+    prompt_tokens = models.IntegerField(null=True, blank=True)
+    completion_tokens = models.IntegerField(null=True, blank=True)
+    total_tokens = models.IntegerField(null=True, blank=True)
+    provider_attempts = models.JSONField(default=list, blank=True)
+    fallback_used = models.BooleanField(default=False)
+    pricing_snapshot = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True, default="")
     dry_run = models.BooleanField(default=True)
     triggered_by = models.CharField(max_length=80, blank=True, default="")

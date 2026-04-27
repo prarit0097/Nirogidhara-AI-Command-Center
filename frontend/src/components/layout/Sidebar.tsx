@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Users, UserCircle2, PhoneCall, Workflow, ClipboardCheck,
   CreditCard, Truck, ShieldAlert, Bot, Sparkles, Gavel, Trophy,
   GraduationCap, FileBadge2, BarChart3, Settings2, Leaf, ChevronLeft,
+  AlarmClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ const NAV = [
   { to: "/agents", label: "AI Agents Center", icon: Bot, group: "AI Layer" },
   { to: "/ceo-ai", label: "CEO AI Briefing", icon: Sparkles, group: "AI Layer" },
   { to: "/caio", label: "CAIO Audit Center", icon: Gavel, group: "AI Layer" },
+  { to: "/ai-scheduler", label: "AI Scheduler & Cost", icon: AlarmClock, group: "AI Layer" },
   { to: "/rewards", label: "Reward & Penalty", icon: Trophy, group: "Governance" },
   { to: "/learning", label: "Call Learning Studio", icon: GraduationCap, group: "Governance" },
   { to: "/claims", label: "Claim Vault", icon: FileBadge2, group: "Governance" },

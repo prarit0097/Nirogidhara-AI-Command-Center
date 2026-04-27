@@ -217,3 +217,96 @@ class AgentRuntimeStatusView(APIView):
                 "lastRuns": last_runs,
             }
         )
+
+
+def _redact_broker_url(broker_url: str) -> str:
+    """Hide credentials in a redis:// URL before sending it to the frontend."""
+    if not broker_url or "@" not in broker_url:
+        return broker_url or ""
+    scheme, _, rest = broker_url.partition("://")
+    _, _, host_part = rest.partition("@")
+    return f"{scheme}://***@{host_part}"
+
+
+class SchedulerStatusView(APIView):
+    """Phase 3C — read-only Celery + AI fallback + cost snapshot.
+
+    Admin/director only. Surfaces the state the Scheduler Status page
+    needs to show: Celery configured, Redis URL configured, IST schedule,
+    primary provider + model, fallback chain, last daily briefing run,
+    last CAIO sweep, last cost in USD, last fallback flag.
+    """
+
+    permission_classes = [_AdminAndUpAlways]
+
+    def get(self, _request):
+        from django.conf import settings
+
+        celery_eager = bool(getattr(settings, "CELERY_TASK_ALWAYS_EAGER", True))
+        broker = getattr(settings, "CELERY_BROKER_URL", "") or ""
+        redis_configured = bool(
+            broker and broker.startswith(("redis://", "rediss://"))
+        )
+        timezone_name = getattr(settings, "AI_TIMEZONE", "Asia/Kolkata")
+        provider = (
+            getattr(settings, "AI_PROVIDER", "disabled") or "disabled"
+        ).lower()
+        primary_model = getattr(settings, "AI_MODEL", "") or ""
+        fallbacks = list(getattr(settings, "AI_PROVIDER_FALLBACKS", []) or [])
+        if not fallbacks:
+            fallbacks = [provider]
+
+        last_ceo = (
+            AgentRun.objects.filter(agent="ceo").order_by("-created_at").first()
+        )
+        last_caio = (
+            AgentRun.objects.filter(agent="caio").order_by("-created_at").first()
+        )
+        last_cost_run = (
+            AgentRun.objects.filter(status=AgentRun.Status.SUCCESS)
+            .order_by("-completed_at")
+            .first()
+        )
+
+        return Response(
+            {
+                "celeryConfigured": True,
+                "celeryEagerMode": celery_eager,
+                "redisConfigured": redis_configured,
+                "brokerUrl": _redact_broker_url(broker),
+                "timezone": timezone_name,
+                "morningSchedule": {
+                    "hour": int(
+                        getattr(settings, "AI_DAILY_BRIEFING_MORNING_HOUR", 9)
+                    ),
+                    "minute": int(
+                        getattr(settings, "AI_DAILY_BRIEFING_MORNING_MINUTE", 0)
+                    ),
+                },
+                "eveningSchedule": {
+                    "hour": int(
+                        getattr(settings, "AI_DAILY_BRIEFING_EVENING_HOUR", 18)
+                    ),
+                    "minute": int(
+                        getattr(settings, "AI_DAILY_BRIEFING_EVENING_MINUTE", 0)
+                    ),
+                },
+                "lastDailyBriefingRun": (
+                    AgentRunSerializer(last_ceo).data if last_ceo else None
+                ),
+                "lastCaioSweepRun": (
+                    AgentRunSerializer(last_caio).data if last_caio else None
+                ),
+                "aiProvider": provider,
+                "primaryModel": primary_model,
+                "fallbacks": fallbacks,
+                "lastCostUsd": (
+                    str(last_cost_run.cost_usd)
+                    if last_cost_run and last_cost_run.cost_usd is not None
+                    else None
+                ),
+                "lastFallbackUsed": (
+                    bool(last_cost_run.fallback_used) if last_cost_run else False
+                ),
+            }
+        )

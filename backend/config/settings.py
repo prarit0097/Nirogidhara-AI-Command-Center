@@ -247,6 +247,53 @@ ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
 GROK_API_KEY = os.environ.get("GROK_API_KEY", "")
 GROK_BASE_URL = os.environ.get("GROK_BASE_URL", "")
 
+
+# ----- Phase 3C — Celery scheduler + AI fallback chain + cost tracking -----
+# Local dev / CI runs in eager mode by default so neither Redis nor a worker
+# needs to be running. Production cron flips ``CELERY_TASK_ALWAYS_EAGER=false``
+# and starts ``celery -A config worker -B`` against the real Redis broker.
+CELERY_BROKER_URL = os.environ.get(
+    "CELERY_BROKER_URL", "redis://localhost:6379/0"
+)
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND", "redis://localhost:6379/1"
+)
+CELERY_TASK_ALWAYS_EAGER = _bool(
+    os.environ.get("CELERY_TASK_ALWAYS_EAGER"), default=True
+)
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TIMEZONE = os.environ.get("AI_TIMEZONE", "Asia/Kolkata")
+CELERY_TASK_TRACK_STARTED = True
+CELERY_RESULT_EXTENDED = True
+
+# Daily briefing slots — 09:00 + 18:00 IST by default per locked Phase 3C
+# decisions. Hours and minutes are env-driven so ops can shift them.
+AI_DAILY_BRIEFING_MORNING_HOUR = _safe_int(
+    os.environ.get("AI_DAILY_BRIEFING_MORNING_HOUR"), default=9
+)
+AI_DAILY_BRIEFING_MORNING_MINUTE = _safe_int(
+    os.environ.get("AI_DAILY_BRIEFING_MORNING_MINUTE"), default=0
+)
+AI_DAILY_BRIEFING_EVENING_HOUR = _safe_int(
+    os.environ.get("AI_DAILY_BRIEFING_EVENING_HOUR"), default=18
+)
+AI_DAILY_BRIEFING_EVENING_MINUTE = _safe_int(
+    os.environ.get("AI_DAILY_BRIEFING_EVENING_MINUTE"), default=0
+)
+AI_TIMEZONE = os.environ.get("AI_TIMEZONE", "Asia/Kolkata")
+
+# Provider fallback chain — `dispatch_messages` walks this list in order.
+# Empty / missing → falls back to ``[AI_PROVIDER]`` (single-provider behaviour
+# preserved for Phase 3A/3B test fixtures).
+AI_PROVIDER_FALLBACKS = _csv(os.environ.get("AI_PROVIDER_FALLBACKS"))
+
+# Per-provider model overrides used by the fallback chain. The first
+# OpenAI attempt uses ``OPENAI_FALLBACK_MODEL`` (or ``AI_MODEL``); the
+# Anthropic fallback uses ``ANTHROPIC_MODEL``.
+OPENAI_FALLBACK_MODEL = os.environ.get("OPENAI_FALLBACK_MODEL", "")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "")
+GROK_MODEL = os.environ.get("GROK_MODEL", "")
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
