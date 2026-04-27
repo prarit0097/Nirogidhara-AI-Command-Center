@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -68,11 +68,34 @@ event, idempotency, signature verification, audit firing.
 medical text is configured server-side in Vapi's dashboard. Any future
 prompt-builder MUST pull from `apps.compliance.Claim` only.
 
-## ⏭ Phase 2E — Meta Lead Ads Webhook (NEXT)
+## ✅ Phase 2E — Meta Lead Ads Webhook (DONE)
 
-- `POST /api/webhooks/meta/leads/` — ingest leads from Meta forms.
-- Idempotent on Meta's `leadgen_id`.
-- Maps form fields to the `Lead` model.
+Shipped via `feat: add meta lead ads webhook`. Three-mode adapter
+(`apps/crm/integrations/meta_client.py`): `mock` (default — parses the
+inbound webhook body directly, no network), `test` (Graph API
+expansion of each `leadgen_id`), `live` (production). The `_fetch_lead_via_graph`
+path lazy-imports `requests` so mock dev works without the dependency.
+
+`GET /api/webhooks/meta/leads/` answers Meta's subscription handshake when
+`hub.mode == "subscribe"` and `hub.verify_token == META_VERIFY_TOKEN`.
+`POST /api/webhooks/meta/leads/` verifies `X-Hub-Signature-256` against
+`META_WEBHOOK_SECRET` (falls back to `META_APP_SECRET`); empty secret →
+signature check skipped so dev fixtures stay simple. Each delivered lead
+upserts a `Lead` row and writes a `lead.meta_ingested` AuditEvent.
+Idempotency uses `crm.MetaLeadEvent` (PK = `leadgen_id`); duplicate
+deliveries return 200 with `action: duplicate` and never duplicate the
+Lead. Existing leads with the same `leadgen_id` are refreshed in place.
+
+`Lead` model gains `meta_leadgen_id`, `meta_page_id`, `meta_form_id`,
+`meta_ad_id`, `meta_campaign_id`, `source_detail`, `raw_source_payload`
+(migration `0002_phase2e_meta_fields`). Frontend `Lead` type widened with
+those same fields, all optional.
+
+13 new pytest tests cover GET handshake (pass / wrong token / unset
+token), POST mock create, idempotency, signature verification (good /
+bad / missing / app-secret fallback), AuditEvent firing, test-mode
+Graph API expansion (patched), refresh-not-duplicate, signature helper
+round-trip, empty payload.
 
 ## Phase 2 — Other gateways (slot when needed)
 
@@ -80,6 +103,7 @@ prompt-builder MUST pull from `apps.compliance.Claim` only.
 | --- | --- |
 | PayU payment links | Same shape as Razorpay; `gateway` flag in `PaymentLinkSerializer` already accepts it — only the adapter is missing. |
 | Delhivery test-mode credentials | Code path is wired; just needs a real test API token + a pickup location registered with Delhivery to flip `DELHIVERY_MODE=test`. |
+| Meta test-mode credentials | Code path is wired; just needs a real Meta app + page access token to flip `META_MODE=test`. |
 | WhatsApp Business outbound + consent | Blueprint §24 lists this as a clarification — design first, build later. |
 
 ## Phase 3 — AI Agents (LLM-powered)

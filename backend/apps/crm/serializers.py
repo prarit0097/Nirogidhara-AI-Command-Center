@@ -9,6 +9,12 @@ class LeadSerializer(serializers.ModelSerializer):
     productInterest = serializers.CharField(source="product_interest")
     qualityScore = serializers.IntegerField(source="quality_score")
     createdAt = serializers.CharField(source="created_at_label")
+    metaLeadgenId = serializers.CharField(source="meta_leadgen_id", read_only=True)
+    metaPageId = serializers.CharField(source="meta_page_id", read_only=True)
+    metaFormId = serializers.CharField(source="meta_form_id", read_only=True)
+    metaAdId = serializers.CharField(source="meta_ad_id", read_only=True)
+    metaCampaignId = serializers.CharField(source="meta_campaign_id", read_only=True)
+    sourceDetail = serializers.CharField(source="source_detail", read_only=True)
 
     class Meta:
         model = Lead
@@ -28,6 +34,12 @@ class LeadSerializer(serializers.ModelSerializer):
             "assignee",
             "duplicate",
             "createdAt",
+            "metaLeadgenId",
+            "metaPageId",
+            "metaFormId",
+            "metaAdId",
+            "metaCampaignId",
+            "sourceDetail",
         )
 
 

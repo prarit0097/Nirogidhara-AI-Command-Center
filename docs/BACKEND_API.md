@@ -33,7 +33,7 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 
 | Method | Path | Returns |
 | --- | --- | --- |
-| GET | `/api/leads/` | `Lead[]` |
+| GET | `/api/leads/` | `Lead[]` (now exposes optional `metaLeadgenId`, `metaPageId`, `metaFormId`, `metaAdId`, `metaCampaignId`, `sourceDetail` — all populated when ingested via the Meta webhook) |
 | GET | `/api/leads/{id}/` | `Lead` |
 | GET | `/api/customers/` | `Customer[]` |
 | GET | `/api/customers/{id}/` | `Customer` |
@@ -118,9 +118,10 @@ Receivers in `apps/audit/signals.py` write rows on:
 - `call.started` / `call.completed` / `call.failed` — explicit, on Vapi webhook
 - `call.transcript` — explicit, on Vapi `transcript.updated` / `transcript.final`
 - `call.analysis` / `call.handoff_flagged` — explicit, on Vapi `analysis.completed` (handoff_flagged fires only when one of the 6 safety triggers is present)
+- `lead.meta_ingested` — explicit, on Meta Lead Ads webhook delivery (created or refreshed)
 
-Phase 2E+ will add: Meta Lead Ads ingest, reward/penalty assigned, prompt
-updated, rollback performed, CAIO audit completed, CEO approval recorded.
+Phase 3+ will add: reward/penalty assigned, prompt updated, rollback
+performed, CAIO audit completed, CEO approval recorded.
 
 ---
 
@@ -193,6 +194,8 @@ Invalid transitions return HTTP 400 with a `detail` message.
 | POST | `/api/webhooks/razorpay/` | Razorpay payment events (Phase 2B). HMAC-verified via `RAZORPAY_WEBHOOK_SECRET`; idempotent on `event.id`. |
 | POST | `/api/webhooks/delhivery/` | Delhivery tracking events (Phase 2C). HMAC-verified via `DELHIVERY_WEBHOOK_SECRET` (`X-Delhivery-Signature`); idempotent on `event.id`. Status mapping: `pickup_scheduled` / `picked_up` / `in_transit` / `out_for_delivery` / `delivered` / `ndr` / `rto_initiated` / `rto_delivered`. NDR + RTO events bump parent order's `rto_risk` and write danger-tone `AuditEvent` rows. |
 | POST | `/api/webhooks/vapi/` | Vapi voice events (Phase 2D). HMAC-verified via `VAPI_WEBHOOK_SECRET` (`X-Vapi-Signature`) when configured; signature is skipped when the secret is empty so dev/test fixtures stay simple. Idempotent on `event.id` via `calls.WebhookEvent`. Event types handled: `call.started` / `call.ended` / `transcript.updated` / `transcript.final` / `analysis.completed` / `call.failed`. `analysis.completed` records `handoff_flags` (medical_emergency, side_effect_complaint, very_angry_customer, human_requested, low_confidence, legal_or_refund_threat); the service falls back to keyword matching on the transcript when Vapi omits the explicit flags. |
+| GET | `/api/webhooks/meta/leads/` | Meta Lead Ads subscription handshake (Phase 2E). Echoes `hub.challenge` only when `hub.mode == "subscribe"` and `hub.verify_token == META_VERIFY_TOKEN`; otherwise 403. |
+| POST | `/api/webhooks/meta/leads/` | Meta Lead Ads delivery (Phase 2E). HMAC-verified via `META_WEBHOOK_SECRET` (or `META_APP_SECRET` as fallback) on `X-Hub-Signature-256` when configured. Idempotent on `leadgen_id` via `crm.MetaLeadEvent`. `META_MODE=mock` (default) parses the inbound body directly; `test`/`live` expand each `leadgen_id` via the Graph API (`v20.0` by default). Each accepted leadgen creates or refreshes a `Lead` and writes a `lead.meta_ingested` AuditEvent. |
 
 ### Permissions
 

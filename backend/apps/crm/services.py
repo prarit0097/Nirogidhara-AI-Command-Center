@@ -14,7 +14,8 @@ from apps._id import next_id
 from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 
-from .models import Customer, Lead
+from .integrations.meta_client import MetaLead, expand_lead
+from .models import Customer, Lead, MetaLeadEvent
 
 # Cross-app import only for the by_user type hint; runtime never imports User
 # here so Django app loading order stays unaffected.
@@ -172,3 +173,116 @@ def upsert_customer(
         payload={"customer_id": customer.id, "action": action, "by": getattr(by_user, "username", "")},
     )
     return customer
+
+
+# ----- Phase 2E — Meta Lead Ads ingestion -----
+
+
+@transaction.atomic
+def ingest_meta_lead(meta_lead: MetaLead) -> tuple[Lead, str]:
+    """Idempotently turn a parsed ``MetaLead`` into a ``Lead`` row.
+
+    Returns ``(lead, action)`` where ``action`` is one of:
+
+    - ``"created"`` — new Lead row written
+    - ``"updated"`` — existing Lead refreshed with the latest Meta data
+    - ``"duplicate"`` — same ``leadgen_id`` already processed; no-op
+
+    Idempotency is enforced two ways:
+    1. ``MetaLeadEvent`` (PK = ``leadgen_id``). Duplicate inserts raise
+       ``IntegrityError`` — the webhook view catches that earlier.
+    2. ``Lead.meta_leadgen_id`` lookup as a defensive belt-and-braces check
+       in case the event row got cleaned up but the Lead remains.
+
+    The function is also resilient to webhook fixtures that omit fields the
+    real Meta delivery would carry — missing values fall back to safe
+    defaults (``Hinglish`` language, ``Meta Ads`` source, etc.).
+    """
+    expanded = expand_lead(meta_lead)
+
+    # Belt + braces: even if the WebhookEvent row was wiped, never overwrite
+    # an existing Lead with a duplicate insert.
+    existing = Lead.objects.filter(meta_leadgen_id=expanded.leadgen_id).first()
+
+    fields = {
+        "name": expanded.name or (existing.name if existing else "Meta Lead"),
+        "phone": expanded.phone or (existing.phone if existing else ""),
+        "state": expanded.state or (existing.state if existing else ""),
+        "city": expanded.city or (existing.city if existing else ""),
+        "language": expanded.language or "Hinglish",
+        "source": "Meta Ads",
+        "campaign": expanded.campaign_id or (existing.campaign if existing else ""),
+        "product_interest": expanded.product_interest
+        or (existing.product_interest if existing else ""),
+        "meta_leadgen_id": expanded.leadgen_id,
+        "meta_page_id": expanded.page_id,
+        "meta_form_id": expanded.form_id,
+        "meta_ad_id": expanded.ad_id,
+        "meta_campaign_id": expanded.campaign_id,
+        "source_detail": expanded.source_detail or "Meta Ads",
+        "raw_source_payload": dict(expanded.raw or {}),
+    }
+
+    if existing is not None:
+        # Refresh attribution metadata + any newly-discovered field. Don't
+        # downgrade existing values to blanks if the webhook is sparse.
+        for key, value in fields.items():
+            if value:
+                setattr(existing, key, value)
+        existing.save()
+        action = "updated"
+        lead = existing
+    else:
+        lead = Lead.objects.create(
+            id=next_id("LD", Lead, base=10300),
+            status=Lead.Status.NEW,
+            quality=Lead.Quality.WARM,
+            quality_score=50,
+            assignee="",
+            duplicate=False,
+            created_at_label="just now",
+            **fields,
+        )
+        action = "created"
+
+    write_event(
+        kind="lead.meta_ingested",
+        text=f"Lead {lead.id} {action} from Meta Ads (leadgen {expanded.leadgen_id})",
+        tone=AuditEvent.Tone.INFO,
+        payload={
+            "lead_id": lead.id,
+            "action": action,
+            "leadgen_id": expanded.leadgen_id,
+            "page_id": expanded.page_id,
+            "form_id": expanded.form_id,
+            "ad_id": expanded.ad_id,
+            "campaign_id": expanded.campaign_id,
+        },
+    )
+    return lead, action
+
+
+def record_meta_event(
+    *,
+    meta_lead: MetaLead,
+    lead: Lead | None,
+    error_message: str = "",
+    payload: dict | None = None,
+) -> MetaLeadEvent:
+    """Persist the per-leadgen idempotency row.
+
+    The webhook view is responsible for wrapping this in the same
+    transaction as ``ingest_meta_lead`` so a failed ingest doesn't leave a
+    stale ``ok`` event behind.
+    """
+    return MetaLeadEvent.objects.create(
+        leadgen_id=meta_lead.leadgen_id,
+        page_id=meta_lead.page_id,
+        form_id=meta_lead.form_id,
+        ad_id=meta_lead.ad_id,
+        campaign_id=meta_lead.campaign_id,
+        lead_id=getattr(lead, "id", "") or "",
+        status=MetaLeadEvent.Status.ERROR if error_message else MetaLeadEvent.Status.OK,
+        error_message=error_message[:5000] if error_message else "",
+        payload=dict(payload or meta_lead.raw or {}),
+    )

@@ -209,6 +209,22 @@ VAPI_DEFAULT_LANGUAGE = os.environ.get("VAPI_DEFAULT_LANGUAGE", "hi-IN")
 VAPI_CALLBACK_URL = os.environ.get("VAPI_CALLBACK_URL", "")
 
 
+# ----- Meta Lead Ads (Phase 2E) -----
+# Same three-mode dispatch: ``mock`` (default, no network — parses the
+# inbound webhook payload directly), ``test`` (Meta Graph API expansion of
+# ids returned in the webhook), ``live`` (production). Webhook verification
+# uses META_VERIFY_TOKEN for the GET handshake and signs POST bodies with
+# META_WEBHOOK_SECRET (falls back to META_APP_SECRET when not set). Frontend
+# never sees any of these — secrets stay server-side.
+META_MODE = (os.environ.get("META_MODE") or "mock").lower()
+META_APP_ID = os.environ.get("META_APP_ID", "")
+META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
+META_VERIFY_TOKEN = os.environ.get("META_VERIFY_TOKEN", "")
+META_PAGE_ACCESS_TOKEN = os.environ.get("META_PAGE_ACCESS_TOKEN", "")
+META_GRAPH_API_VERSION = os.environ.get("META_GRAPH_API_VERSION", "v20.0")
+META_WEBHOOK_SECRET = os.environ.get("META_WEBHOOK_SECRET", "")
+
+
 # ----- AI provider (Phase 3+ scaffolding) -----
 # Today no LLM call is dispatched. ``apps/_ai_config.py`` reads these and
 # Phase 3 adapters in ``apps/integrations/ai/`` will consume them.

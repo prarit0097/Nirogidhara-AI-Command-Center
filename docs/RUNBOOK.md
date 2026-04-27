@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 93 tests (Phase 1 → 2D)
+python -m pytest -q                     # 107 tests (Phase 1 → 2E)
 
 # Frontend
 cd ../frontend

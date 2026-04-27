@@ -94,6 +94,8 @@ backend/apps/shipments/webhooks.py  ← Delhivery tracking webhook receiver (HMA
 backend/apps/calls/integrations/vapi_client.py ← Vapi mock/test/live adapter
 backend/apps/calls/webhooks.py      ← Vapi voice webhook receiver (HMAC when secret set + idempotent)
 backend/apps/calls/services.py      ← trigger_call_for_lead + persist_vapi_webhook
+backend/apps/crm/integrations/meta_client.py ← Meta Lead Ads mock/test/live adapter + signature/handshake helpers
+backend/apps/crm/webhooks.py        ← Meta Lead Ads webhook (GET handshake + POST ingest, idempotent on leadgen_id)
 backend/apps/_ai_config.py          ← AI provider config helper (Phase 3+ scaffold)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
@@ -154,7 +156,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 93 tests today
+python -m pytest -q                 # 107 tests today
 
 # Frontend
 cd frontend
@@ -193,7 +195,7 @@ cd frontend && npm run lint && npm test && npm run build
 - Don't add Supabase, Firebase, or any other backend service. Backend is Django + DRF, period.
 - Don't hard-code medical claims in any file. They live in `apps.compliance.Claim`.
 - Don't write to the database from CAIO endpoints. CAIO is read/audit only.
-- Don't add a real third-party integration without confirming credentials & sandbox setup with Prarit first. **Razorpay (2B), Delhivery (2C), and Vapi (2D) are shipped** — `RAZORPAY_MODE`, `DELHIVERY_MODE`, and `VAPI_MODE` each accept `mock|test|live` and flip to test/live once real credentials are in `backend/.env`. Meta Lead Ads (2E, next), PayU, and WhatsApp still need creds before any wiring lands.
+- Don't add a real third-party integration without confirming credentials & sandbox setup with Prarit first. **Razorpay (2B), Delhivery (2C), Vapi (2D), and Meta Lead Ads (2E) are shipped** — `RAZORPAY_MODE`, `DELHIVERY_MODE`, `VAPI_MODE`, and `META_MODE` each accept `mock|test|live` and flip to test/live once real credentials are in `backend/.env`. PayU and WhatsApp still need creds before any wiring lands.
 - Don't push to `main` without running tests + build + lint locally first.
 - Don't `git push --force`. Don't skip hooks. Don't amend pushed commits.
 

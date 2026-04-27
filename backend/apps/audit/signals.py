@@ -43,6 +43,8 @@ ICON_BY_KIND: dict[str, str] = {
     "call.transcript": "file-text",
     "call.analysis": "sparkles",
     "call.handoff_flagged": "alert-triangle",
+    # Phase 2E — Meta Lead Ads ingestion.
+    "lead.meta_ingested": "facebook",
 }
 
 

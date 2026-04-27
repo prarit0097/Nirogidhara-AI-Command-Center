@@ -60,7 +60,7 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 ## Tests
 
 ```bash
-# Backend (pytest, 93 tests)
+# Backend (pytest, 107 tests)
 cd backend && python -m pytest -q
 
 # Frontend (vitest, 8 tests)
@@ -76,11 +76,12 @@ cd frontend && npm test
 - ✅ **Phase 2B** — Razorpay payment-link integration with mock / test / live modes (`apps/payments/integrations/razorpay_client.py`) and HMAC-verified, idempotent webhook receiver at `/api/webhooks/razorpay/`.
 - ✅ **Phase 2C** — Delhivery courier integration with the same three-mode adapter (`apps/shipments/integrations/delhivery_client.py`) and an HMAC-verified, idempotent tracking webhook at `/api/webhooks/delhivery/` (handles delivered / NDR / RTO transitions and bumps order risk accordingly).
 - ✅ **Phase 2D** — Vapi voice trigger (`POST /api/calls/trigger/`) + transcript ingest webhook (`/api/webhooks/vapi/`) with the same three-mode adapter (`apps/calls/integrations/vapi_client.py`). Persists transcripts, post-call summaries, and handoff flags (medical / side-effect / angry / human-requested / low-confidence / legal-threat).
+- ✅ **Phase 2E** — Meta Lead Ads ingest with `GET /api/webhooks/meta/leads/` (subscription handshake) + `POST /api/webhooks/meta/leads/` (signed delivery). Three-mode adapter (`apps/crm/integrations/meta_client.py`) with mock-mode default, leadgen_id idempotency, and Lead refresh-not-duplicate semantics.
 - ✅ **Phase 3 prep** — AI provider env scaffolding (OpenAI / Anthropic / Grok) via `apps/_ai_config.py`. No LLM calls dispatched yet; `AI_PROVIDER=disabled` is the default.
 
 **Next:**
 
-- ⏭ **Phase 2E** — Meta Lead Ads webhook.
+- ⏭ **Phase 3** — LLM-powered AI agent reasoning (CEO / CAIO / department agents pulling from the Approved Claim Vault).
 - Phase 3 (real LLM agents), Phase 4 (WebSockets), Phase 5 (governance UI write paths), Phase 6 (learning loop), Phase 7 (multi-tenant SaaS).
 
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).

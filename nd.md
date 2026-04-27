@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D done; Phase 3 env scaffolded):** All 14 Django apps scaffolded, **25 read + 15 write endpoints + Razorpay webhook + Delhivery webhook + Vapi webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, **Delhivery courier integration with mock/test/live modes + HMAC-verified tracking webhook handling delivered/NDR/RTO**, **Vapi voice trigger + transcript ingest with mock/test/live modes + HMAC-verified webhook handling six handoff flags (medical / side-effect / angry / human-requested / low-confidence / legal-threat)**, **AI provider env scaffolding (OpenAI / Anthropic / Grok — disabled by default, no SDK calls yet)**, seed command, frontend wired with **automatic mock fallback**. **93 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 2E+):** Meta Lead Ads webhook, LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E done; Phase 3 env scaffolded):** All 14 Django apps scaffolded, **25 read + 15 write endpoints + Razorpay webhook + Delhivery webhook + Vapi webhook + Meta Lead Ads webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, **Delhivery courier integration with mock/test/live modes + HMAC-verified tracking webhook handling delivered/NDR/RTO**, **Vapi voice trigger + transcript ingest with mock/test/live modes + HMAC-verified webhook handling six handoff flags**, **Meta Lead Ads ingest with mock/test/live modes + GET subscription handshake + signed POST webhook + leadgen_id idempotency**, **AI provider env scaffolding (OpenAI / Anthropic / Grok — disabled by default, no SDK calls yet)**, seed command, frontend wired with **automatic mock fallback**. **107 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 3+):** LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -335,7 +335,7 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far — Phase 1 to Phase 2D — every checkpoint we shipped
+## 8. What's done so far — Phase 1 to Phase 2E — every checkpoint we shipped
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
 - 17 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.**
@@ -471,7 +471,25 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
-### ✅ Phase 2D — Vapi Voice Trigger + Transcript Ingest (built this session)
+### ✅ Phase 2E — Meta Lead Ads Webhook (built this session)
+
+- Three-mode adapter at `backend/apps/crm/integrations/meta_client.py` (`mock` | `test` | `live`). Mock parses the inbound payload as-is (no network); `test` / `live` lazy-import `requests` and call Meta's Graph API to expand each `leadgen_id`.
+- New endpoint `GET /api/webhooks/meta/leads/` answers Meta's subscription handshake when `hub.mode == "subscribe"` and `hub.verify_token == META_VERIFY_TOKEN`. Mismatch / missing token → 403.
+- New endpoint `POST /api/webhooks/meta/leads/` verifies `X-Hub-Signature-256` (HMAC-SHA256 of the raw body) against `META_WEBHOOK_SECRET` (or `META_APP_SECRET` as fallback). Empty secret → signature check skipped so dev fixtures stay simple. Each delivered leadgen upserts a `Lead` row, writes a `lead.meta_ingested` AuditEvent, and inserts a `crm.MetaLeadEvent` row keyed on `leadgen_id` for idempotency. Re-deliveries of the same `leadgen_id` return 200 with `action: duplicate` and never duplicate the Lead.
+- `Lead` model gains optional `meta_leadgen_id` (db_indexed), `meta_page_id`, `meta_form_id`, `meta_ad_id`, `meta_campaign_id`, `source_detail`, `raw_source_payload` via migration `0002_phase2e_meta_fields`. New `MetaLeadEvent` model holds the per-leadgen idempotency log + raw payload + status (ok / error).
+- LeadSerializer now exposes the camelCase Meta fields (read-only) so the frontend can show attribution. Frontend `Lead` type widened with the same optional fields; no page changes needed.
+- 13 new pytest tests cover GET handshake (correct token / wrong token / unset token), POST mock create with full Meta-shaped payload, idempotency on `leadgen_id`, signature verification (good / bad / missing / app-secret fallback / no-secret-skipped), AuditEvent firing, test-mode Graph API expansion (`_fetch_lead_via_graph` patched), refresh-not-duplicate, signature helper round-trip, empty payload.
+- New env vars: `META_MODE`, `META_APP_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`, `META_GRAPH_API_VERSION` (default `v20.0`), `META_WEBHOOK_SECRET`. All secrets stay server-side.
+- `audit.signals.ICON_BY_KIND` extended with `lead.meta_ingested`.
+
+**Compliance hard stop (Master Blueprint §26 #4):** the Meta payload is persisted verbatim into `Lead.raw_source_payload` for attribution but never injected into AI prompts. Any future prompt-builder MUST pull medical content only from `apps.compliance.Claim`. CAIO never executes business actions; nothing in this pipeline routes through CAIO.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **107 passed** (93 + 14 meta) |
+| `python manage.py check` | 0 issues |
+
+### ✅ Phase 2D — Vapi Voice Trigger + Transcript Ingest (built earlier this session)
 
 - Three-mode adapter at `backend/apps/calls/integrations/vapi_client.py` (`mock` | `test` | `live`). `requests` is imported lazily so mock works without the package. Mock mode returns a deterministic provider call id (`call_mock_<lead>_<purpose>`).
 - `Call` model gains `provider`, `provider_call_id`, `summary`, `recording_url`, `handoff_flags` (JSON list), `ended_at`, `error_message`, `raw_response`, `updated_at`. Status enum widened with `Failed`. Migration `0002_phase2d_vapi_fields`.
@@ -554,7 +572,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 93 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi)
+cd backend && python -m pytest -q   # 107 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -637,7 +655,10 @@ Three-mode adapter, HMAC-verified tracking webhook, NDR / RTO risk handling, 13 
 ### ✅ Phase 2D — Vapi voice trigger + transcript ingest (DONE)
 Three-mode adapter, `POST /api/calls/trigger/`, HMAC-verified webhook, six handoff flags, keyword fallback, 14 new tests. See §8.
 
-### Phase 2E — Other gateways (NEXT)
+### ✅ Phase 2E — Meta Lead Ads webhook (DONE)
+Three-mode adapter, GET subscription handshake, signed POST webhook, idempotent leadgen ingest, 13 new tests. See §8.
+
+### Phase 2 — Other gateways (slot when needed)
 - **Meta Lead Ads webhook** — `POST /api/webhooks/meta/leads/`, idempotent on `leadgen_id`, maps form fields to the `Lead` model.
 - **PayU payment links** — same shape as Razorpay; only the adapter is missing.
 - Tighten role permissions per blueprint §8 where needed (compliance writes, settings writes).
@@ -779,4 +800,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 2D Vapi voice trigger + transcript ingest._
+_End of `nd.md`. Last updated after Phase 2E Meta Lead Ads webhook._

@@ -38,6 +38,14 @@ export interface Lead {
   assignee: string;
   duplicate: boolean;
   createdAt: string;
+  /** Meta Lead Ads provenance — populated when ingested via /api/webhooks/meta/leads/. */
+  metaLeadgenId?: string;
+  metaPageId?: string;
+  metaFormId?: string;
+  metaAdId?: string;
+  metaCampaignId?: string;
+  /** Free-text breadcrumb (e.g. ad id or form id) used for attribution. */
+  sourceDetail?: string;
 }
 
 export interface Customer {

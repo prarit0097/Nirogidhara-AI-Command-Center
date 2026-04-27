@@ -30,6 +30,7 @@ api_patterns = [
     path("webhooks/", include("apps.payments.webhook_urls")),
     path("webhooks/", include("apps.shipments.webhook_urls")),
     path("webhooks/", include("apps.calls.webhook_urls")),
+    path("webhooks/", include("apps.crm.webhook_urls")),
 ]
 
 urlpatterns = [
