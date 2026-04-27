@@ -335,7 +335,7 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far (Phase 1) — every checkpoint we shipped
+## 8. What's done so far — Phase 1 to Phase 2D — every checkpoint we shipped
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
 - 17 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.**
@@ -779,4 +779,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated by the Phase 1 build session._
+_End of `nd.md`. Last updated after Phase 2D Vapi voice trigger + transcript ingest._
