@@ -68,6 +68,20 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.sandbox.disabled": "shield-off",
     "ai.budget.warning": "gauge",
     "ai.budget.blocked": "ban",
+    # Phase 3E — catalog admin + business policy events.
+    "catalog.category.created": "folder-plus",
+    "catalog.category.updated": "folder-edit",
+    "catalog.product.created": "package-plus",
+    "catalog.product.updated": "package-edit",
+    "catalog.sku.created": "tag",
+    "catalog.sku.updated": "tag-edit",
+    "discount.requested": "percent",
+    "discount.approved": "badge-check",
+    "discount.blocked": "ban",
+    "approval.required": "user-check",
+    "whatsapp.message_queued": "message-circle",
+    "whatsapp.broadcast.requested": "megaphone",
+    "whatsapp.escalation.requested": "alert-triangle",
 }
 
 

@@ -110,6 +110,12 @@ docker-compose.dev.yml              ← Local Redis only — VPS Redis NEVER use
 backend/apps/ai_governance/sandbox.py ← Phase 3D SandboxState singleton (skips CeoBriefing refresh when ON)
 backend/apps/ai_governance/prompt_versions.py ← Phase 3D PromptVersion lifecycle (one active per agent + rollback)
 backend/apps/ai_governance/budgets.py ← Phase 3D per-agent USD budget guard (warning + block, no provider fallback)
+backend/apps/catalog/{models,serializers,views,urls,admin}.py ← Phase 3E product catalog (ProductCategory / Product / ProductSKU + admin)
+backend/apps/orders/discounts.py ← Phase 3E discount policy (validate_discount: 10% auto / 20% approval / above-20 director-override)
+backend/apps/payments/policies.py ← Phase 3E advance payment policy (FIXED_ADVANCE_AMOUNT_INR = 499)
+backend/apps/rewards/scoring.py ← Phase 3E reward/penalty deterministic formula (caps: +100 / -100 per order)
+backend/apps/ai_governance/approval_matrix.py ← Phase 3E approval-matrix policy table (22 actions); read at /api/ai/approval-matrix/
+backend/apps/crm/whatsapp_design.py ← Phase 3E WhatsApp sales/support design scaffold (no live integration yet)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -118,7 +124,7 @@ docs/FUTURE_BACKEND_PLAN.md         ← Phase 2+ roadmap
 nd.md                               ← full project handoff (read this if you need depth)
 ```
 
-14 Django apps: `accounts`, `audit`, `crm`, `calls`, `orders`, `payments`, `shipments`, `agents`, `ai_governance`, `compliance`, `rewards`, `learning_engine`, `analytics`, `dashboards`.
+15 Django apps: `accounts`, `audit`, `crm`, `calls`, `orders`, `payments`, `shipments`, `agents`, `ai_governance`, `compliance`, `rewards`, `learning_engine`, `analytics`, `dashboards`, `catalog` (Phase 3E).
 
 19 frontend pages: Dashboard, Leads CRM, Customer 360, AI Calling, Orders Pipeline, Confirmation Queue, Payments, Delhivery Tracking, RTO Rescue, AI Agents Center, CEO AI Briefing, CAIO Audit, AI Scheduler & Cost (Phase 3C), AI Governance (Phase 3D), Reward & Penalty, Human Call Learning, Claim Vault, Analytics, Settings.
 
@@ -169,7 +175,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 190 tests today
+python -m pytest -q                 # 219 tests today
 
 # Frontend
 cd frontend
@@ -208,7 +214,8 @@ cd frontend && npm run lint && npm test && npm run build
 - Don't add Supabase, Firebase, or any other backend service. Backend is Django + DRF, period.
 - Don't hard-code medical claims in any file. They live in `apps.compliance.Claim`.
 - Don't write to the database from CAIO endpoints. CAIO is read/audit only.
-- Don't add a real third-party integration without confirming credentials & sandbox setup with Prarit first. **Razorpay (2B), Delhivery (2C), Vapi (2D), and Meta Lead Ads (2E) are shipped** — `RAZORPAY_MODE`, `DELHIVERY_MODE`, `VAPI_MODE`, and `META_MODE` each accept `mock|test|live` and flip to test/live once real credentials are in `backend/.env`. PayU and WhatsApp still need creds before any wiring lands.
+- Don't add a real third-party integration without confirming credentials & sandbox setup with Prarit first. **Razorpay (2B), Delhivery (2C), Vapi (2D), and Meta Lead Ads (2E) are shipped** — `RAZORPAY_MODE`, `DELHIVERY_MODE`, `VAPI_MODE`, and `META_MODE` each accept `mock|test|live` and flip to test/live once real credentials are in `backend/.env`. **WhatsApp** has a design scaffold only (`apps/crm/whatsapp_design.py`, Phase 3E) — no live sender; Phase 4+ wires it once Business API credentials + consent flow are confirmed. PayU still needs creds before any wiring lands.
+- Don't bypass the Phase 3E policies: `apps/orders/discounts.py` is the discount source of truth (10% auto / 20% approval / above-20 director-override), `apps/payments/policies.py` defines the ₹499 fixed advance, `apps/rewards/scoring.py` is the reward/penalty formula (do not invent missing data), and `apps/ai_governance/approval_matrix.py` is the action → approver table. The Phase 4C middleware will enforce the matrix; until then, keep the policy modules as the single source.
 - Don't push to `main` without running tests + build + lint locally first.
 - Don't `git push --force`. Don't skip hooks. Don't amend pushed commits.
 

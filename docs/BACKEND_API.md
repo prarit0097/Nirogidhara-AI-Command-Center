@@ -264,6 +264,35 @@ Behavior of the budget guard inside `run_readonly_agent_analysis`:
 3. Else if spend ≥ `alert_threshold_pct`% of either cap → write `ai.budget.warning` and continue.
 4. Snapshot of the budget check is stamped onto every `AgentRun.budget_snapshot`.
 
+### Catalog (Phase 3E)
+
+Reads stay public; writes are admin/director-only via `RoleBasedPermission` (anonymous → 401, viewer/operations → 403).
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/catalog/categories/` | List all `ProductCategory` rows (camelCase: `id`, `name`, `slug`, `description`, `isActive`, `sortOrder`, `createdAt`, `updatedAt`). |
+| POST/PUT/PATCH/DELETE | `/api/catalog/categories/[{id}/]` | Admin/director only. Each successful write fires `catalog.category.{created,updated}`. |
+| GET | `/api/catalog/products/` | List products with nested `skus`. Camel: `id`, `categoryId`, `name`, `slug`, `description`, `defaultPriceInr`, `defaultQuantityLabel`, `productCostInr`, `defaultUsageInstructions`, `activeClaimProducts`, `isActive`, `metadata`, `createdAt`, `updatedAt`, `skus[]`. |
+| GET | `/api/catalog/products/{id}/` | Single product detail. |
+| POST/PUT/PATCH/DELETE | `/api/catalog/products/[{id}/]` | Admin/director only. Fires `catalog.product.{created,updated}`. |
+| GET | `/api/catalog/skus/?productId={id}` | List SKUs (optionally filtered by `productId`). Camel: `id`, `productId`, `skuCode`, `title`, `quantityLabel`, `mrpInr`, `sellingPriceInr`, `productCostInr`, `stockQuantity`, `isActive`, `metadata`, `createdAt`, `updatedAt`. |
+| POST/PUT/PATCH/DELETE | `/api/catalog/skus/[{id}/]` | Admin/director only. Fires `catalog.sku.{created,updated}`. |
+
+### Approval matrix (Phase 3E — public read)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/ai/approval-matrix/` | Returns the policy table from `apps.ai_governance.approval_matrix.APPROVAL_MATRIX`: `{ version, actions: [{ action, approver, mode, description }] }`. **Public read** — the data is policy, not secret. Phase 4C middleware enforces it. |
+
+### Phase 3E — Business policy modules (no endpoints; service-layer policies)
+
+These shape behaviour but expose no new HTTP endpoints. They are imported by services and (in Phase 4) the approval-matrix middleware:
+
+- **Discount policy** (`apps/orders/discounts.py`): `validate_discount(discount_pct, actor_role, approval_context=None) → DiscountValidationResult`. Bands: 0–10% auto, 11–20% approval (CEO AI / admin / director), > 20% blocked unless `actor_role='director'` AND `approval_context['director_override']=True`. Director ceiling: 50%.
+- **Advance payment policy** (`apps/payments/policies.py`): `FIXED_ADVANCE_AMOUNT_INR = 499`. `POST /api/payments/links/` with `type="Advance"` and no `amount` (or `amount=0`) defaults to ₹499. Other types still require an explicit positive amount.
+- **Reward / penalty scoring** (`apps/rewards/scoring.py`): `calculate_order_reward_penalty(order, context=None) → OrderRewardPenaltyResult`. 7 reward components (max +100), 10 penalty components (max -100). Missing data is recorded explicitly — never invented. Phase 4B wires this into the engine.
+- **WhatsApp design scaffold** (`apps/crm/whatsapp_design.py`): 9 supported message types, consent + admin-approval flags. NO live sender yet — Phase 4+ ships the actual integration.
+
 ### Webhooks (gateway → backend, public)
 
 | Method | Path | Purpose |

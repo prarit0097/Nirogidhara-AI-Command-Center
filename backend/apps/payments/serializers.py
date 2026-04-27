@@ -35,7 +35,10 @@ class PaymentLinkSerializer(serializers.Serializer):
     """
 
     orderId = serializers.CharField(max_length=32)
-    amount = serializers.IntegerField(min_value=1)
+    # Phase 3E — Advance payments default to FIXED_ADVANCE_AMOUNT_INR (₹499)
+    # when the caller omits ``amount`` or sends 0. Other types still require
+    # an explicit positive amount.
+    amount = serializers.IntegerField(min_value=0, required=False, default=0)
     gateway = serializers.ChoiceField(
         choices=Payment.Gateway.choices, default=Payment.Gateway.RAZORPAY
     )

@@ -10,8 +10,8 @@ reward/penalty engine, and the human-call learning loop.
 
 ```
 nirogidhara-command/
-  frontend/   # React 18 + Vite + TS + shadcn UI (current Lovable app)
-  backend/    # Django 5 + DRF — implements the api.ts contract
+  frontend/   # React 18 + Vite + TS + shadcn UI (19 pages)
+  backend/    # Django 5 + DRF — 15 apps, implements the api.ts contract
   docs/       # RUNBOOK, BACKEND_API, FRONTEND_AUDIT, FUTURE_BACKEND_PLAN
 ```
 
@@ -60,7 +60,7 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 ## Tests
 
 ```bash
-# Backend (pytest, 190 tests)
+# Backend (pytest, 219 tests)
 cd backend && python -m pytest -q
 
 # Frontend (vitest, 8 tests)
@@ -81,10 +81,13 @@ cd frontend && npm test
 - ✅ **Phase 3B** — Per-agent runtime services for CEO / CAIO / Ads / RTO / Sales Growth / CFO / Compliance. 8 new admin-only `/api/ai/agent-runtime/*` endpoints, CEO success refreshes the `CeoBriefing` row, management command `run_daily_ai_briefing` for cron / Windows Task Scheduler.
 - ✅ **Phase 3C** — Celery beat scheduler firing CEO + CAIO at 09:00 + 18:00 IST (`apps/ai_governance/tasks.py`), provider fallback chain (OpenAI → Anthropic) in `apps/integrations/ai/dispatch.py`, model-wise USD cost tracking via `apps/integrations/ai/pricing.py`, frontend Scheduler Status page at `/ai-scheduler`. Local dev runs in Celery eager mode; `docker-compose.dev.yml` brings up Redis only when you want the real beat schedule.
 - ✅ **Phase 3D** — AI sandbox toggle + versioned prompts (one-click rollback) + per-agent USD budget guards (warning + block, never triggers fallback) + frontend Governance page at `/ai-governance`. PromptVersion content cannot bypass the Approved Claim Vault.
+- ✅ **Phase 3E** — Business configuration foundation: `apps.catalog` (ProductCategory / Product / ProductSKU + admin/director-managed CRUD) + discount policy with locked 10/20% bands (`apps/orders/discounts.py`) + ₹499 fixed advance (`apps/payments/policies.py`) + reward/penalty deterministic scoring (`apps/rewards/scoring.py`) capped at +100/-100 + approval matrix policy table (`apps/ai_governance/approval_matrix.py`) with read endpoint at `/api/ai/approval-matrix/` + WhatsApp sales/support design scaffold (`apps/crm/whatsapp_design.py` — design only, live integration is Phase 4+) + production infra targets (Postgres / Redis / Celery worker+beat / Channels / domain / SSL) documented in RUNBOOK.
 
 **Next:**
 
-- ⏭ **Phase 4** — Real-time WebSockets + reward / penalty engine + approval-matrix middleware that finally turns dry-run AgentRun suggestions into business writes.
+- ⏭ **Phase 4A** — Real-time WebSockets (Django Channels pushing AuditEvent rows live).
+- ⏭ **Phase 4B** — Reward/Penalty Engine that wires the Phase 3E scoring formula into a sweep + leaderboard rollup.
+- ⏭ **Phase 4C** — Approval-matrix middleware that enforces the Phase 3E table so dry-run AgentRun suggestions can finally turn into business writes after the right approver signs off.
 
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
 Detailed handoff: [`nd.md`](nd.md).

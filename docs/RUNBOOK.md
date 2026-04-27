@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 190 tests (Phase 1 → 3D)
+python -m pytest -q                     # 219 tests (Phase 1 → 3E)
 
 # Frontend
 cd ../frontend
@@ -200,6 +200,55 @@ without `Authorization` returns 401 on every step.
   - `GET /api/auth/me/` — requires `Authorization: Bearer <access>`
 - Frontend reads any token from `localStorage["nirogidhara.jwt"]` and attaches
   it as `Authorization: Bearer …`. No login page yet — Phase 2.
+
+## Phase 3E — Business configuration foundation
+
+Phase 3E ships the policy + catalog layer **before** Phase 4 turns AgentRun
+suggestions into business writes. No new frontend pages — this is a
+backend-only phase. Highlights:
+
+- **Product catalog** (`apps.catalog`): admin/director-managed via Django
+  admin (`/admin/catalog/`). Read APIs at `/api/catalog/{categories,products,skus}/`
+  are public; writes are admin/director-only.
+- **Discount policy** (`apps.orders.discounts`): import
+  `validate_discount(discount_pct, actor_role, approval_context=None)` from
+  any service that needs to gate a discount. Bands are 0–10% auto, 11–20%
+  approval, > 20% director-override only.
+- **Advance payment** (`apps.payments.policies`): `FIXED_ADVANCE_AMOUNT_INR = 499`.
+  `POST /api/payments/links/` with no `amount` defaults to ₹499 for type
+  `Advance`. Existing callers that pass an explicit amount keep working.
+- **Reward / penalty scoring** (`apps.rewards.scoring`): pure formula —
+  Phase 4B will sweep delivered orders and roll up the leaderboard.
+- **Approval matrix** (`apps.ai_governance.approval_matrix`): policy table
+  read via `GET /api/ai/approval-matrix/`. Phase 4C middleware enforces it.
+- **WhatsApp design scaffold** (`apps.crm.whatsapp_design`): no live sender;
+  the constants drive the future Phase 4+ integration.
+
+## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
+
+The repo currently runs on SQLite + Celery eager mode + no Redis. The
+target production topology is:
+
+| Component | Target | Notes |
+| --- | --- | --- |
+| Database | **Postgres 15+** | Set `DATABASE_URL=postgres://...` in `backend/.env` and `pip install "psycopg[binary]"`. Run `python manage.py migrate`. |
+| Cache + broker | **Redis 7+** | `CELERY_BROKER_URL` + `CELERY_RESULT_BACKEND`. Use a managed Redis on the prod VPS. **Never** point dev at production Redis. |
+| Worker | `celery -A config worker --loglevel=info` | One systemd unit per worker. |
+| Scheduler | `celery -A config beat --loglevel=info` | One systemd unit. Fires `run_daily_ai_briefing_task` at 09:00 + 18:00 IST. |
+| Real-time (Phase 4A) | **Django Channels** + `daphne` ASGI worker | WebSocket channel layer backed by Redis. |
+| Reverse proxy | **Nginx** | Terminates TLS, proxies HTTP + WebSocket upgrades. |
+| TLS | **Let's Encrypt** via certbot | Auto-renew via systemd timer. |
+| Domain | Bound by ops in `DJANGO_ALLOWED_HOSTS` + `CORS_ALLOWED_ORIGINS` | |
+| Static / media | Local volume now; S3 / Cloudflare R2 in Phase 7 multi-tenant. | `python manage.py collectstatic`. |
+| Backups | Daily `pg_dump` + offsite copy | Plus periodic test restore. |
+| Logs | Standard `LOGGING` to stdout; Nginx access log | Aggregate to Loki / Datadog when ops decides. |
+| Health checks | `/api/healthz/` | Used by load balancer / uptime monitor. |
+| Secrets | `backend/.env` (gitignored) | All gateway + AI keys live here. **Never** commit. |
+
+Deployment automation is intentionally **not implemented** in Phase 3E —
+this section documents the target so the ops handoff is unambiguous.
+Phase 4+ may add a `docker-compose.prod.yml` and an Ansible / Fabric
+playbook once the VPS is provisioned.
 
 ## Common issues
 

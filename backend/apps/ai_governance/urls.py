@@ -8,6 +8,7 @@ from .views import (
     AgentBudgetViewSet,
     AgentRunViewSet,
     AgentRuntimeStatusView,
+    ApprovalMatrixView,
     CaioAuditSweepView,
     CaioAuditViewSet,
     CeoBriefingView,
@@ -93,5 +94,11 @@ urlpatterns = [
         "prompt-versions/<str:pk>/rollback/",
         PromptVersionRollbackView.as_view(),
         name="prompt-version-rollback",
+    ),
+    # Phase 3E — approval matrix policy snapshot.
+    path(
+        "approval-matrix/",
+        ApprovalMatrixView.as_view(),
+        name="ai-approval-matrix",
     ),
 ] + router.urls

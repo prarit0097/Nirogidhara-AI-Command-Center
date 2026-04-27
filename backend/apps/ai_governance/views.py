@@ -12,6 +12,7 @@ from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 
 from . import prompt_versions, sandbox, services
+from .approval_matrix import APPROVAL_MATRIX
 from .budgets import calculate_agent_spend, get_agent_budget
 from .models import (
     AgentBudget,
@@ -482,6 +483,25 @@ class AgentBudgetViewSet(
             calculate_agent_spend(agent=instance.agent, period="monthly")
         )
         return Response(body)
+
+
+class ApprovalMatrixView(APIView):
+    """Phase 3E — read-only approval matrix policy snapshot.
+
+    Reads only. Returns the ``apps.ai_governance.approval_matrix`` table
+    as JSON. Public so the frontend Settings page can render it without
+    auth — the data is policy, not secrets.
+    """
+
+    permission_classes: list = []  # public read
+
+    def get(self, _request):
+        return Response(
+            {
+                "version": "phase-3e",
+                "actions": [dict(row) for row in APPROVAL_MATRIX],
+            }
+        )
 
 
 class SandboxStatusView(APIView):

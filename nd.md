@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D done):** All 14 Django apps scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page**, seed command, frontend wired with **automatic mock fallback** (19 pages). **190 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 4+):** Real-time WebSockets, reward / penalty engine, governance UI write paths (kill switch / approval matrix), learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E done):** **15 Django apps** scaffolded (catalog added in 3E), **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D) + product catalog read/write + approval matrix read endpoint (3E)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + WhatsApp sales/support design scaffold**, seed command, frontend wired with **automatic mock fallback** (19 pages). **219 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 4+):** Real-time WebSockets (4A), reward / penalty engine wiring on top of Phase 3E scoring (4B), approval-matrix middleware enforcement (4C) — then learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -156,7 +156,7 @@ nirogidhara-command/
 │   │   ├── urls.py                # mounts every app under /api/
 │   │   ├── asgi.py
 │   │   └── wsgi.py
-│   ├── apps/                      # 14 Django apps — see §5 below
+│   ├── apps/                      # 15 Django apps — see §5 below (catalog added in Phase 3E)
 │   │   ├── accounts/              # Custom User + JWT auth + /api/settings/
 │   │   ├── audit/                 # AuditEvent + cross-app signal receivers (Master Event Ledger)
 │   │   ├── crm/                   # Lead, Customer
@@ -232,6 +232,7 @@ nirogidhara-command/
 | `learning_engine` | Human call learning recordings | `LearningRecording` | `/api/learning/recordings/` |
 | `analytics` | KPI rollups (funnel/revenue/state/product) | `KPITrend` | `/api/analytics/`, `/api/analytics/funnel/`, `/api/analytics/revenue-trend/`, `/api/analytics/state-rto/`, `/api/analytics/product-performance/` |
 | `dashboards` | Top KPI cards + live activity feed + seed command | `DashboardMetric` | `/api/dashboard/metrics/`, `/api/dashboard/activity/`, `/api/healthz/` |
+| `catalog` (Phase 3E) | Product catalog admin (categories / products / SKUs) | `ProductCategory`, `Product`, `ProductSKU` | `/api/catalog/categories/`, `/api/catalog/products/`, `/api/catalog/skus/` |
 
 ### How the Master Event Ledger works
 
@@ -249,7 +250,7 @@ The seed command intentionally **disconnects the signal receivers** during bulk 
 
 ---
 
-## 6. Frontend pages (17)
+## 6. Frontend pages (19)
 
 All under `frontend/src/pages/`. Each one calls **only** `import { api } from "@/services/api"` — never `mockData.ts`.
 
@@ -267,11 +268,13 @@ All under `frontend/src/pages/`. Each one calls **only** `import { api } from "@
 | 10 | AI Agents Center | `/agents` | `getAgentStatus`, `getAgentHierarchy` |
 | 11 | CEO AI Briefing | `/ceo-ai` | `getCeoBriefing` |
 | 12 | CAIO Audit Center | `/caio` | `getCaioAudits` |
-| 13 | Reward & Penalty Engine | `/rewards` | `getRewardPenaltyScores` |
-| 14 | Human Call Learning Studio | `/learning` | `getHumanCallLearningItems` |
-| 15 | Claim Vault & Compliance | `/claims` | `getClaimVault` |
-| 16 | Analytics | `/analytics` | `getAnalyticsData` |
-| 17 | Settings & Control Center | `/settings` | `getSettingsMock` |
+| 13 | AI Scheduler & Cost (Phase 3C) | `/ai-scheduler` | `getSchedulerStatus` |
+| 14 | AI Governance (Phase 3D) | `/ai-governance` | sandbox + prompt-version + budget endpoints |
+| 15 | Reward & Penalty Engine | `/rewards` | `getRewardPenaltyScores` |
+| 16 | Human Call Learning Studio | `/learning` | `getHumanCallLearningItems` |
+| 17 | Claim Vault & Compliance | `/claims` | `getClaimVault` |
+| 18 | Analytics | `/analytics` | `getAnalyticsData` |
+| 19 | Settings & Control Center | `/settings` | `getSettingsMock` |
 
 **Premium Ayurveda + AI SaaS theme:** deep green / emerald / teal / saffron-gold / ivory / charcoal. Rounded cards, soft shadows, clean typography, strong hierarchy. Director should grok business health in 30 seconds. Not an admin template.
 
@@ -471,6 +474,26 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
+### ✅ Phase 3E — Business Configuration Foundation (built this session)
+
+- **New `apps.catalog` Django app** — `ProductCategory`, `Product`, `ProductSKU` models with admin/director-managed CRUD via Django admin (`ProductSKUInline` under Product), public read endpoints + admin/director-gated write endpoints under `/api/catalog/`. Migration `0001_initial`.
+- **Read endpoints**: `GET /api/catalog/categories/`, `GET /api/catalog/products/` (with nested `skus`), `GET /api/catalog/products/{id}/`, `GET /api/catalog/skus/?productId=...`. Reads stay public; writes are admin/director-only via `RoleBasedPermission` (anonymous → 401, viewer/operations → 403).
+- **Write endpoints**: `POST/PATCH/PUT/DELETE` on the same routes. Each successful write fires a `catalog.{category,product,sku}.{created,updated}` audit event.
+- **Discount policy** at `apps/orders/discounts.py`: `validate_discount(discount_pct, actor_role, approval_context=None) → DiscountValidationResult`. **Locked bands**: 0–10% auto, 11–20% requires CEO AI / admin / director approval, > 20% blocked unless director override (`actor_role='director'` + `approval_context['director_override']=True`). Director ceiling 50%. Negative / unknown role / over-100% → blocked.
+- **Advance payment policy** at `apps/payments/policies.py`: `FIXED_ADVANCE_AMOUNT_INR = 499` + `resolve_advance_amount()`. The `Advance` payment type now defaults to ₹499 when the caller omits `amount` (or sends 0). Non-Advance types still require an explicit positive value. The `PaymentLinkSerializer` was widened to accept missing `amount`.
+- **Reward / Penalty deterministic scoring** at `apps/rewards/scoring.py`: `calculate_order_reward_penalty(order, context=None)` returns an `OrderRewardPenaltyResult` dataclass with capped totals (+100 reward / -100 penalty). 7 reward components (delivered, healthy_net_profit, advance_paid, customer_satisfaction_positive, reorder_potential_high, clean_data, compliance_safe) and 10 penalty components (rto_after_dispatch, cancelled_after_punch, wrong_or_incomplete_address, no_advance_high_risk_cod, discount_leakage_11_to_20_without_reason, unauthorized_discount_above_20, risky_claim, side_effect_legal_refund_mishandled, ignored_rto_warning, bad_fake_lead_quality). Missing data is recorded explicitly — never invented. Phase 4B will wire this into the engine + leaderboard rollup.
+- **Approval matrix** at `apps/ai_governance/approval_matrix.py`: 22-row policy table mapping every action (lead create, payment-link advance, order punch, every discount band, dispatch, RTO rescue, all WhatsApp message types, refund, ad budget change, prompt activation, sandbox disable, production live-mode switch, medical / side-effect / legal escalations) to its `approver` + `mode` (`auto`, `auto_with_consent`, `approval_required`, `director_override`, `human_escalation`). Public read endpoint `GET /api/ai/approval-matrix/`. Phase 4C middleware will enforce the table.
+- **WhatsApp design scaffold** at `apps/crm/whatsapp_design.py`: 9 supported message types (follow-up / payment_reminder / confirmation_reminder / delivery_reminder / rto_rescue / usage_explanation / support_complaint / reorder_reminder / broadcast_campaign), consent + admin-approval flags, audit kinds. Live integration intentionally NOT implemented in Phase 3E — Phase 4+ wires the actual sender / receiver. The scaffold encodes the policy reminders: consent required, no medical claims outside the Approved Claim Vault, mandatory human escalation for refund / legal / side-effect threats, every send writes an `AuditEvent`.
+- **12 new audit kinds**: `catalog.category.{created,updated}`, `catalog.product.{created,updated}`, `catalog.sku.{created,updated}`, `discount.{requested,approved,blocked}`, `approval.required`, `whatsapp.{message_queued,broadcast.requested,escalation.requested}`.
+- **29 new pytest tests** (`tests/test_phase3e.py`) cover catalog read endpoints (camelCase) + admin/director write gate (anonymous 401, viewer 403, operations 403, admin 201) + audit firing on every catalog write, discount policy across all bands (auto / approval / director-override / blocked / negative / over-100 / unknown role), the `₹499 default` resolved by `POST /api/payments/links/` when amount is omitted, reward/penalty cap math (sum > 100 capped at 100 for both), missing-data recording, simple delivered-order success path, approval matrix endpoint shape, director-override mapping for above-20 discount, WhatsApp scaffold contracts, and **the compliance hard stops still hold** (CAIO `intent: execute` → `failed`, ClaimVaultMissing for medical agents → `failed` before any LLM dispatch).
+
+**Compliance hard stop (Master Blueprint §26 #4):** Phase 3E adds policy and config — it never relaxes the §26 hard stops. Catalog rows are metadata only; AI medical content still flows from `apps.compliance.Claim`. The discount policy never speaks medical claims. The reward/penalty scoring never invents missing data. The approval matrix encodes who can do what but does NOT execute anything (Phase 4C middleware will). The WhatsApp scaffold is design-only — no live sends. CAIO is still hard-stopped.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **219 passed** (190 + 29 phase3e) |
+| `python manage.py check` | 0 issues |
+
 ### ✅ Phase 3D — Sandbox + Prompt Rollback + Budget Guards (built this session)
 
 - **PromptVersion model** (`apps.ai_governance.models.PromptVersion`) — versioned prompt content per agent: `id`, `agent`, `version`, `title`, `system_policy`, `role_prompt`, `instruction_payload`, `is_active`, `status` (draft/sandbox/active/rolled_back/archived), `created_by`, `metadata`, `created_at`, `activated_at`, `rolled_back_at`, `rollback_reason`. DB partial-unique constraint enforces "one active per agent".
@@ -658,7 +681,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 190 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 15 phase3d)
+cd backend && python -m pytest -q   # 219 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 15 phase3d + 29 phase3e)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -756,8 +779,13 @@ Celery beat at 09:00 + 18:00 IST + provider fallback chain (OpenAI → Anthropic
 ### ✅ Phase 3D — Sandbox + prompt rollback + budget guards (DONE)
 SandboxState singleton + versioned PromptVersion (one active per agent + rollback) + per-agent USD budget caps with warning + block + Governance page, 15 new tests. See §8.
 
-### Phase 4 — Real-time + reward / penalty (NEXT)
-Django Channels for live AuditEvent push + the actual reward / penalty engine (Master Blueprint §10.2) + the approval-matrix middleware that finally turns dry-run AgentRun suggestions into business writes.
+### ✅ Phase 3E — Business configuration foundation (DONE)
+Product Catalog admin (`apps.catalog`) + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty deterministic scoring (capped at +100/-100) + approval matrix policy table + WhatsApp sales/support design scaffold + production infra targets documented, 29 new tests. See §8.
+
+### Phase 4 — Real-time + reward / penalty + approval middleware (NEXT)
+- **Phase 4A — Real-time WebSockets**: Django Channels for live AuditEvent push.
+- **Phase 4B — Reward/Penalty Engine**: wire `apps.rewards.scoring` (Phase 3E) into a sweep that evaluates delivered orders + writes to `RewardPenalty` leaderboard.
+- **Phase 4C — Approval Matrix Middleware**: enforce `apps.ai_governance.approval_matrix` (Phase 3E) so dry-run AgentRun suggestions can finally turn into business writes after the right approver signs off.
 
 ### Phase 2 — Other gateways / credentials (slot when needed)
 - **PayU payment links** — same shape as Razorpay; only the adapter is missing.
@@ -903,4 +931,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 3D AI sandbox + prompt rollback + budget guards._
+_End of `nd.md`. Last updated after Phase 3E business configuration foundation (catalog + discount + advance + scoring + approval matrix + WhatsApp scaffold)._

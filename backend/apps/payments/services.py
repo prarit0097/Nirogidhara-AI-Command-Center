@@ -22,6 +22,7 @@ from .integrations.razorpay_client import (
     create_payment_link as _gateway_create_payment_link,
 )
 from .models import Payment
+from .policies import FIXED_ADVANCE_AMOUNT_INR, resolve_advance_amount
 
 try:  # pragma: no cover - typing only
     from apps.accounts.models import User
@@ -50,6 +51,10 @@ def create_payment_link(
         raise ValueError(f"Unknown gateway: {gateway!r}")
     if type not in Payment.Type.values:
         raise ValueError(f"Unknown payment type: {type!r}")
+    # Phase 3E — Advance payments default to ₹499 when amount is omitted/0.
+    # Non-Advance types still require an explicit positive amount.
+    if type == Payment.Type.ADVANCE:
+        amount = resolve_advance_amount(amount)
     if amount <= 0:
         raise ValueError("amount must be positive")
 

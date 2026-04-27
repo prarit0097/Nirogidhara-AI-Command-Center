@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -262,22 +262,71 @@ Shipped via `feat: add ai sandbox prompt rollback and budget guards`.
   closed, CAIO still hard-stopped, and admin/viewer permission gates
   on every new endpoint.
 
-## Phase 4 — Real-time + reward / penalty engine (NEXT)
+## ✅ Phase 3E — Business Configuration Foundation (DONE)
 
-## Phase 4 — Real-Time
+Shipped via `feat: add business configuration foundation`.
+
+- **`apps.catalog`** Django app: `ProductCategory`, `Product`, `ProductSKU` +
+  Django admin (with SKU inline) + `/api/catalog/` read+write endpoints.
+  Reads public; writes admin/director only. Each write fires an audit
+  event (`catalog.{category,product,sku}.{created,updated}`).
+- **Discount policy** at `apps/orders/discounts.py`. `validate_discount`
+  encodes the locked bands: 0–10% auto, 11–20% requires CEO AI / admin /
+  director approval, > 20% blocked unless director override. Director
+  ceiling 50%. Negative / over-100 / unknown role → blocked.
+- **Advance payment policy** at `apps/payments/policies.py`:
+  `FIXED_ADVANCE_AMOUNT_INR = 499`. The `Advance` payment-link path now
+  defaults to ₹499 when the caller omits `amount`.
+- **Reward / Penalty scoring** at `apps/rewards/scoring.py`:
+  `calculate_order_reward_penalty(order, context=None)` returns a
+  capped (+100 / -100) deterministic result. Missing data is recorded
+  explicitly, never invented.
+- **Approval matrix** at `apps/ai_governance/approval_matrix.py`. 22-row
+  policy table with read endpoint at `GET /api/ai/approval-matrix/`.
+- **WhatsApp design scaffold** at `apps/crm/whatsapp_design.py` — 9
+  message types, consent + admin-approval flags, audit kinds. No live
+  integration in Phase 3E; Phase 4+ wires the actual sender.
+- 12 new audit kinds + 29 new pytest tests covering catalog camelCase
+  + admin/operations/viewer gating + audit firing + discount bands +
+  ₹499 default + reward/penalty caps + approval matrix shape +
+  WhatsApp scaffold contracts + compliance hard stops still hold.
+
+**Compliance:** Phase 3E is policy + config only. CAIO is still
+read-only, the Approved Claim Vault still gates every medical AI call,
+no live messaging or order writes are executed by the Phase 3E modules.
+
+## Phase 4 — Real-time + reward / penalty + approval middleware (NEXT)
+
+### Phase 4A — Real-time WebSockets
 
 - Django Channels + WebSockets to push `AuditEvent` rows to subscribed
   dashboards.
 - Replace polling on the dashboard's activity feed.
 - Frontend already polls via React Query — adding push is purely additive.
 
+### Phase 4B — Reward/Penalty Engine
+
+- Wire `apps.rewards.scoring.calculate_order_reward_penalty` (Phase 3E)
+  into a Celery sweep that walks delivered orders + writes leaderboard
+  rollup rows to `apps.rewards.RewardPenalty`.
+- Master Blueprint §10.2 is now encoded in the scoring module; the engine
+  is the call-and-persist layer.
+- Audit kinds: `ai.reward.calculated`, `ai.penalty.applied`.
+
+### Phase 4C — Approval Matrix Middleware
+
+- Read `apps.ai_governance.approval_matrix.APPROVAL_MATRIX` (Phase 3E)
+  before every business write. Block / queue / route to approver per
+  the matrix `mode`.
+- This is the layer that finally turns dry-run AgentRun suggestions into
+  business writes after CEO AI / admin / director approval.
+
 ## Phase 5 — Governance UI write paths
 
 - Kill switch toggle endpoints (Section 12.1).
-- Prompt rollback (Section 12.3).
-- Reward/penalty engine — actually compute Section 10.2 from event ledger.
-- Approval matrix enforcement — middleware that blocks risky actions until
-  CEO AI / Prarit approves.
+- Prompt rollback (already shipped in Phase 3D — frontend page exists).
+- Reward/penalty leaderboard sweep UI on top of Phase 4B engine.
+- Approval-matrix UI on top of Phase 4C middleware.
 
 ## Phase 6 — Learning loop
 
