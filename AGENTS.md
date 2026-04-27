@@ -6,6 +6,27 @@
 
 ---
 
+## Working agreement (binding rule)
+
+**Every meaningful change to this project MUST be followed by:**
+
+1. **Update `nd.md`** — adjust the relevant section so the project handoff stays the source of truth.
+2. **Update `AGENTS.md`** — if a convention, hard stop, or "where things live" pointer changed.
+3. **Run the full verification suite** before committing:
+   - `cd backend && python -m pytest -q && python manage.py check`
+   - `cd frontend && npm run lint && npm test && npm run build`
+4. **Commit with a Conventional Commit message** (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`).
+5. **Push to `origin/main`** at https://github.com/prarit0097/Nirogidhara-AI-Command-Center.
+
+The remote on GitHub must mirror local state at the end of every working session. Non-negotiable.
+
+**Meaningful change** = any code edit, new endpoint/model/migration/service/page, env var, dependency, or onboarding-doc change.
+**Not meaningful** = read-only exploration or reverted experiments.
+
+**Never without explicit user authorization**: force-push to `main`, rewrite pushed history (`commit --amend`, `rebase -i`), skip hooks (`--no-verify`), commit secrets.
+
+---
+
 ## Hard stops (compliance — never bypass)
 
 This codebase serves an Ayurvedic medicine business. Some rules are non-negotiable:

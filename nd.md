@@ -12,9 +12,25 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 done):** All 14 Django apps scaffolded, **25 read endpoints live**, Master Event Ledger via signals, JWT auth, CORS configured, seed command that mirrors the frontend's mock fixtures (42 leads / 60 orders / 19 agents / etc.), frontend wired to backend with **automatic mock fallback**, 26 backend tests + 8 frontend tests all green.
-- **What's next (Phase 2+):** Real third-party integrations (Vapi voice / Razorpay / PayU / Delhivery / Meta Ads), LLM-powered AI agent reasoning, WebSockets, governance UI write paths, learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B done):** All 14 Django apps scaffolded, **25 read + 14 write endpoints + Razorpay webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, mock shipment/RTO rescue adapters, seed command, frontend wired with **automatic mock fallback**. **57 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 2C+):** Delhivery courier API + tracking webhook, Vapi voice trigger + transcript ingest, Meta Lead Ads webhook, LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
+
+---
+
+## 0.5 Working agreement (binding rule for all contributors / agents)
+
+**Every meaningful change to this project MUST be followed by:**
+
+1. **Update `nd.md`** — adjust the relevant section (TL;DR §0, what's done §8, phase roadmap §11, etc.) so the handoff stays the source of truth.
+2. **Update `AGENTS.md`** — if a convention, hard stop, or pointer changed.
+3. **Run verification** — `pytest -q` (backend), `npm run lint && npm test && npm run build` (frontend).
+4. **Commit** with a Conventional Commit message (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`).
+5. **Push to `origin/main`** at https://github.com/prarit0097/Nirogidhara-AI-Command-Center.
+
+The GitHub remote must mirror local state at the end of every working session. Non-negotiable. AI agents (Claude Code, Cursor, etc.) inherit this rule via `CLAUDE.md` and `AGENTS.md`.
+
+**Never without explicit user authorization**: force-push to `main`, rewrite pushed history, skip hooks, commit secrets.
 
 ---
 
@@ -384,6 +400,58 @@ Final Reward Score =
 | Live curl across all 25 endpoints (both servers up) | All 200 with seeded data |
 | CORS preflight for `localhost:8080` | 200 |
 
+### ✅ Phase 2A — Core Write APIs + Workflow State Machine (built this session)
+
+**Permissions (Checkpoint 1):**
+- New `apps/accounts/permissions.py` with `RoleBasedPermission` + role-set constants (`OPERATIONS_AND_UP`, `COMPLIANCE_AND_UP`, `ADMIN_AND_UP`, `DIRECTOR_ONLY`).
+- Global DRF default flipped to `IsAuthenticatedOrReadOnly` — reads stay public, writes need auth.
+- CAIO is intentionally absent from every role-set (AI agent, not user role).
+
+**Schema (Checkpoint 2):**
+- `Order.Stage.CANCELLED` added; `confirmation_outcome` + `confirmation_notes` fields on Order.
+- New `shipments.RescueAttempt` model (id, order_id, channel, outcome, notes, attempted_at).
+- 2 migrations applied cleanly.
+
+**Service layer (Checkpoint 3):**
+- `apps/crm/services.py` — create/update/assign lead, upsert customer.
+- `apps/orders/services.py` — `ALLOWED_TRANSITIONS` state-machine dict + `transition_order` / `move_to_confirmation` / `record_confirmation_outcome` / `create_order`.
+- `apps/payments/services.py` — `create_payment_link` (mock URL).
+- `apps/shipments/services.py` — `create_mock_shipment` (DLH AWB + 5-step timeline) + `create_rescue_attempt` + `update_rescue_outcome`.
+- All services run inside `transaction.atomic()`. Invalid transitions raise `OrderTransitionError` → HTTP 400.
+
+**Audit ledger (Checkpoint 4):**
+- `ICON_BY_KIND` extended with `lead.updated`, `lead.assigned`, `customer.upserted`, `confirmation.outcome`, `payment.link_created`, `shipment.created`, `rescue.attempted`, `rescue.updated`.
+- Existing post-save signals still cover `lead.created`, `order.created`, `order.status_changed`, `payment.received`, `shipment.status_changed`.
+
+**13 new write endpoints (Checkpoint 5):**
+- `POST /api/leads/`, `PATCH /api/leads/{id}/`, `POST /api/leads/{id}/assign/`
+- `POST /api/customers/`, `PATCH /api/customers/{id}/`
+- `POST /api/orders/`, `POST /api/orders/{id}/transition/`, `POST /api/orders/{id}/move-to-confirmation/`, `POST /api/orders/{id}/confirm/`
+- `POST /api/payments/links/`
+- `POST /api/shipments/`
+- `POST /api/rto/rescue/`, `PATCH /api/rto/rescue/{id}/`
+
+**Tests (Checkpoint 6):**
+- New `tests/test_writes.py` with **18 tests** covering: anonymous → 401, viewer → 403, all 13 endpoints happy path, invalid state-machine transition blocked, audit ledger growth across the full workflow.
+- New conftest fixtures: `operations_user`, `viewer_user`, `admin_user`, `auth_client(user)` factory.
+
+**Frontend (Checkpoint 7):**
+- `frontend/src/services/api.ts` gained `safeMutate<T>(path, method, body, fallback)` + 13 new typed methods (`createLead`, `updateLead`, `assignLead`, `createCustomer`, `updateCustomer`, `createOrder`, `transitionOrder`, `moveOrderToConfirmation`, `confirmOrder`, `createPaymentLink`, `createShipment`, `createRescueAttempt`, `updateRescueAttempt`).
+- New types in `frontend/src/types/domain.ts`: `RescueAttempt`, `ConfirmationOutcome`, `PaymentLinkResponse`, `*Payload` interfaces for every write.
+- **No page files modified.** Existing 8 frontend tests stay green.
+
+**Verification (Checkpoint 8):**
+| Command | Result |
+| --- | --- |
+| `python manage.py makemigrations` | 2 new migrations (orders, shipments) |
+| `python manage.py migrate` | all OK |
+| `python manage.py check` | 0 issues |
+| `python -m pytest -q` | **44 passed** (26 + 18) |
+| `npm test` | **8 passed** |
+| `npm run lint` | 0 errors, 8 pre-existing shadcn warnings |
+| `npm run build` | OK |
+| Live curl chain (lead → order → confirm → pay → ship → rescue) | every step 200/201, ledger grew by 7+ events |
+
 ---
 
 ## 9. How to run it (full quickstart)
@@ -431,7 +499,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 26 tests
+cd backend && python -m pytest -q   # 44 tests (26 reads + 18 writes)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -502,13 +570,16 @@ CRM → Workflow → Integrations → Voice AI → Agents → Governance → Lea
 ### ✅ Phase 0 + 1 — Foundation (DONE)
 14 apps · 25 endpoints · seed · audit ledger · auth · CORS · tests. See §8.
 
-### Phase 2 — Real integrations & write paths
-- **Razorpay payment links** (`POST /api/payments/links/` + webhook).
-- **PayU payment links** (same shape, gateway flag).
-- **Delhivery AWB creation + tracking webhook** (`POST /api/shipments/`, `POST /api/webhooks/delhivery/`).
-- **Vapi voice trigger + transcript ingest** (`POST /api/calls/trigger/`, `POST /api/webhooks/vapi/`).
-- **Meta Lead Ads webhook** (`POST /api/webhooks/meta/leads/`, idempotent).
-- Add `IsAuthenticated` permission on writes.
+### ✅ Phase 2A — Core Write APIs + Workflow State Machine (DONE)
+13 write endpoints · service layer · order state machine · `RoleBasedPermission` · 18 new tests · mock payment + shipment + RTO rescue. See §8.
+
+### Phase 2B — Real integrations
+- **Razorpay payment links** — replace the mock URL in `payments/services.py` with a real Razorpay client call. Add `POST /api/webhooks/razorpay/` for paid-event ingest.
+- **PayU payment links** — same shape, gateway flag.
+- **Delhivery AWB creation + tracking webhook** — replace `_mint_awb()` mock with real Delhivery API call. Add `POST /api/webhooks/delhivery/`.
+- **Vapi voice trigger + transcript ingest** — `POST /api/calls/trigger/`, `POST /api/webhooks/vapi/`.
+- **Meta Lead Ads webhook** — `POST /api/webhooks/meta/leads/`, idempotent.
+- Tighten role permissions per blueprint §8 where needed (compliance writes, settings writes).
 
 ### Phase 3 — LLM-powered AI agents
 - `AgentRun` model (agent · prompt_version · input · output · latency · cost).

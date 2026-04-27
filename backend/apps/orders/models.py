@@ -17,6 +17,13 @@ class Order(models.Model):
         OUT_FOR_DELIVERY = "Out for Delivery", "Out for Delivery"
         DELIVERED = "Delivered", "Delivered"
         RTO = "RTO", "RTO"
+        CANCELLED = "Cancelled", "Cancelled"
+
+    class ConfirmationOutcome(models.TextChoices):
+        PENDING = "", "Pending"
+        CONFIRMED = "confirmed", "Confirmed"
+        RESCUE_NEEDED = "rescue_needed", "Rescue Needed"
+        CANCELLED = "cancelled", "Cancelled"
 
     class PaymentStatus(models.TextChoices):
         PAID = "Paid", "Paid"
@@ -57,6 +64,15 @@ class Order(models.Model):
     # RTO board annotations.
     risk_reasons = models.JSONField(default=list, blank=True)
     rescue_status = models.CharField(max_length=40, default="")
+
+    # Confirmation outcome (Phase 2A).
+    confirmation_outcome = models.CharField(
+        max_length=20,
+        choices=ConfirmationOutcome.choices,
+        default=ConfirmationOutcome.PENDING,
+        blank=True,
+    )
+    confirmation_notes = models.TextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -12,6 +12,7 @@ from django.dispatch import receiver
 from .models import AuditEvent
 
 ICON_BY_KIND: dict[str, str] = {
+    # Existing (Phase 1).
     "lead.created": "user-plus",
     "order.created": "shopping-bag",
     "order.status_changed": "refresh-cw",
@@ -20,6 +21,15 @@ ICON_BY_KIND: dict[str, str] = {
     "rto.flagged": "alert-triangle",
     "reward.assigned": "award",
     "compliance.flagged": "shield-alert",
+    # Phase 2A — explicit writes from the service layer.
+    "lead.updated": "user-cog",
+    "lead.assigned": "user-check",
+    "customer.upserted": "users",
+    "confirmation.outcome": "check-circle-2",
+    "payment.link_created": "link",
+    "shipment.created": "package",
+    "rescue.attempted": "phone-call",
+    "rescue.updated": "phone-forwarded",
 }
 
 

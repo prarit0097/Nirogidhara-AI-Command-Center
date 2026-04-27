@@ -125,7 +125,9 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ),
-    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.AllowAny",),
+    # Reads stay public; writes require auth (Phase 2A onwards).
+    # Per-view permission classes can override this where stricter role checks apply.
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticatedOrReadOnly",),
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
     "DEFAULT_PAGINATION_CLASS": None,
@@ -144,6 +146,16 @@ CORS_ALLOWED_ORIGINS = _csv(os.environ.get("CORS_ALLOWED_ORIGINS")) or [
     "http://127.0.0.1:8080",
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# ----- Razorpay (Phase 2B) -----
+# Three modes: ``mock`` (default, deterministic fake link, no network),
+# ``test`` (Razorpay sandbox), ``live`` (real production). Frontend never sees
+# any of these — secrets stay server-side.
+RAZORPAY_MODE = (os.environ.get("RAZORPAY_MODE") or "mock").lower()
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
+RAZORPAY_CALLBACK_URL = os.environ.get("RAZORPAY_CALLBACK_URL", "")
 
 LOGGING = {
     "version": 1,

@@ -121,9 +121,11 @@ export interface Payment {
   customer: string;
   amount: number;
   gateway: "Razorpay" | "PayU";
-  status: "Paid" | "Pending" | "Failed" | "Refunded";
+  status: "Paid" | "Pending" | "Failed" | "Refunded" | "Cancelled" | "Expired" | "Partial";
   type: "Advance" | "Full";
   time: string;
+  gatewayReferenceId?: string;
+  paymentUrl?: string;
 }
 
 export interface Shipment {
@@ -239,4 +241,132 @@ export interface KPITrend {
   rtoPct?: number;
   rto?: number;
   netProfit?: number;
+}
+
+// ----- Phase 2A — write payloads + extra response shapes -----
+
+export type RescueChannel = "AI Call" | "Human Call" | "WhatsApp" | "SMS";
+export type RescueOutcome =
+  | "Pending"
+  | "Rescue Call Done"
+  | "Convinced"
+  | "Returning"
+  | "No Response";
+
+export interface RescueAttempt {
+  id: string;
+  orderId: string;
+  channel: RescueChannel;
+  outcome: RescueOutcome;
+  notes: string;
+  attemptedAt: string;
+}
+
+export type ConfirmationOutcome = "confirmed" | "rescue_needed" | "cancelled";
+
+export interface PaymentLinkResponse {
+  /** Razorpay/PayU plink id stored as Payment.gatewayReferenceId. */
+  gatewayReferenceId: string;
+  /** Short URL the customer opens to pay. */
+  paymentUrl: string;
+  /** New flat fields (Phase 2B). */
+  paymentId: string;
+  gateway: string;
+  status: string;
+  /** Phase 2A backwards-compat — full Payment row. */
+  payment: Payment;
+}
+
+export interface CreateLeadPayload {
+  name: string;
+  phone: string;
+  state: string;
+  city: string;
+  language?: string;
+  source?: string;
+  campaign?: string;
+  productInterest?: string;
+  quality?: "Hot" | "Warm" | "Cold";
+  qualityScore?: number;
+  assignee?: string;
+  duplicate?: boolean;
+}
+
+export interface UpdateLeadPayload {
+  name?: string;
+  phone?: string;
+  state?: string;
+  city?: string;
+  language?: string;
+  source?: string;
+  campaign?: string;
+  productInterest?: string;
+  status?: LeadStatus;
+  quality?: "Hot" | "Warm" | "Cold";
+  qualityScore?: number;
+  assignee?: string;
+  duplicate?: boolean;
+}
+
+export interface CustomerWritePayload {
+  leadId?: string;
+  name?: string;
+  phone?: string;
+  state?: string;
+  city?: string;
+  language?: string;
+  productInterest?: string;
+  diseaseCategory?: string;
+  lifestyleNotes?: string;
+  objections?: string[];
+  aiSummary?: string;
+  riskFlags?: string[];
+  reorderProbability?: number;
+  satisfaction?: number;
+  consent?: { call?: boolean; whatsapp?: boolean; marketing?: boolean };
+}
+
+export interface CreateOrderPayload {
+  customerName: string;
+  phone: string;
+  product: string;
+  quantity?: number;
+  amount?: number;
+  discountPct?: number;
+  advancePaid?: boolean;
+  advanceAmount?: number;
+  paymentStatus?: "Paid" | "Partial" | "Pending" | "Failed";
+  state: string;
+  city: string;
+  rtoRisk?: "Low" | "Medium" | "High";
+  rtoScore?: number;
+  agent?: string;
+  stage?: OrderStage;
+}
+
+export interface PaymentLinkPayload {
+  orderId: string;
+  amount: number;
+  /** Defaults to "Razorpay" if omitted. */
+  gateway?: "Razorpay" | "PayU";
+  /** Defaults to "Advance" if omitted. */
+  type?: "Advance" | "Full";
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+}
+
+export interface ShipmentCreatePayload {
+  orderId: string;
+}
+
+export interface RescueAttemptCreatePayload {
+  orderId: string;
+  channel: RescueChannel;
+  notes?: string;
+}
+
+export interface RescueAttemptUpdatePayload {
+  outcome: RescueOutcome;
+  notes?: string;
 }
