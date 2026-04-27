@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -144,17 +144,42 @@ Shipped via `feat: add agent run foundation`.
   CAIO no-execute, prompt-builder Claim Vault enforcement, audit firing,
   and the dry-run guard.
 
-## Phase 3B — Agent runtime expansion (NEXT)
+## ✅ Phase 3B — Per-agent runtime services (DONE)
 
-Build on the AgentRun foundation:
+Shipped via `feat: add per-agent runtime services`.
 
-- Per-agent service modules: `services/agents/{ceo,caio,ads,rto,...}.py`
-  that pull the right DB slice and call `run_readonly_agent_analysis`.
-- Background scheduler (Celery beat) regenerates the daily CEO briefing
-  and CAIO sweep. Generated briefings replace the seeded
-  `CeoBriefing` row.
-- Cost tracking + provider fall-back chains (e.g. OpenAI → Anthropic on
-  rate-limit).
+- Per-agent service modules under `apps/ai_governance/services/agents/`:
+  `ceo.py`, `caio.py`, `ads.py`, `rto.py`, `sales_growth.py`, `cfo.py`,
+  `compliance.py`. Each exposes `build_input_payload()` (safe DB read)
+  and `run(triggered_by="")` that dispatches through
+  `run_readonly_agent_analysis`. None of them write to business state —
+  the only side effects are `AgentRun` rows + audit ledger entries +
+  `CeoBriefing` refresh on the CEO success path.
+- 8 new endpoints under `/api/ai/agent-runtime/*` (admin/director only):
+  status snapshot + 7 POST routes (one per agent). Every call returns
+  the persisted `AgentRun`.
+- Management command `python manage.py run_daily_ai_briefing` calls the
+  CEO + CAIO sweeps in one shot (`--skip-ceo` / `--skip-caio` flags).
+  No Redis / Celery dependency — wire to cron or Windows Task Scheduler
+  directly. Phase 3C upgrades to a Celery beat schedule once Redis is
+  available in the ops environment.
+- 4 new audit kinds: `ai.ceo_brief.generated`, `ai.caio_sweep.completed`,
+  `ai.agent_runtime.completed`, `ai.agent_runtime.failed`.
+- Frontend `AgentRuntimeStatus` type + `api.getAgentRuntimeStatus()` and
+  one method per agent runtime endpoint with offline-safe optimistic stubs.
+- 26 new pytest tests cover each agent's payload shape, the success path
+  for CEO refreshing the CeoBriefing row, the skipped path leaving it
+  unchanged, the compliance fail-closed when the vault is empty, the
+  permission gates (anonymous / viewer / operations all blocked, admin
+  / director allowed), the status endpoint, the management command (with
+  `--skip-caio` variant), and the audit-event firing.
+
+## Phase 3C — Background scheduler + cost tracking (NEXT)
+
+- Celery beat schedule that fires the management command once a day.
+- Per-provider cost tracking (token usage → USD) populating
+  `AgentRun.cost_usd`.
+- Provider fall-back chains (e.g. OpenAI → Anthropic on rate-limit).
 - Sandbox mode toggle (Section 12.2) and prompt version rollback (12.3).
 
 ## Phase 4 — Real-Time

@@ -35,8 +35,8 @@ from apps.audit.signals import write_event
 from apps.integrations.ai.base import AdapterResult, AdapterStatus
 from apps.integrations.ai.dispatch import dispatch_messages
 
-from .models import AgentRun
-from .prompting import ClaimVaultMissing, build_messages
+from apps.ai_governance.models import AgentRun
+from apps.ai_governance.prompting import ClaimVaultMissing, build_messages
 
 
 # CAIO is read-only. If the payload includes any of these keys we refuse to

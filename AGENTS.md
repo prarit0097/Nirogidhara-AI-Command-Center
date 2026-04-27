@@ -99,7 +99,9 @@ backend/apps/crm/webhooks.py        ← Meta Lead Ads webhook (GET handshake + P
 backend/apps/_ai_config.py          ← AI provider config helper
 backend/apps/integrations/ai/       ← Phase 3A provider adapters: base.py, openai_client.py, anthropic_client.py, grok_client.py, dispatch.py
 backend/apps/ai_governance/prompting.py ← System policy + Approved Claim Vault enforced prompt builder (raises ClaimVaultMissing when ungrounded)
-backend/apps/ai_governance/services.py ← AgentRun lifecycle + CAIO hard stop (refuses execute/apply/create_order/transition intents)
+backend/apps/ai_governance/services/__init__.py ← AgentRun lifecycle + CAIO hard stop (refuses execute/apply/create_order/transition intents)
+backend/apps/ai_governance/services/agents/ ← Phase 3B per-agent runtime modules: ceo, caio, ads, rto, sales_growth, cfo, compliance
+backend/apps/ai_governance/management/commands/run_daily_ai_briefing.py ← cron-friendly CEO + CAIO daily runner
 backend/apps/ai_governance/models.py ← AgentRun model (id, agent, prompt_version, input/output payload, status, provider, latency_ms, cost_usd)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
@@ -160,7 +162,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 132 tests today
+python -m pytest -q                 # 158 tests today
 
 # Frontend
 cd frontend

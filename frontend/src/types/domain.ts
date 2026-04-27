@@ -180,6 +180,16 @@ export interface AgentRunCreatePayload {
   dryRun?: boolean;
 }
 
+// ----- Phase 3B — Agent runtime status -----
+
+export interface AgentRuntimeStatus {
+  phase: "3B";
+  dryRunOnly: true;
+  agents: AgentName[];
+  /** Last AgentRun per agent (null when an agent has never been run). */
+  lastRuns: Record<AgentName, AgentRun | null>;
+}
+
 export interface ActiveCall {
   id: string;
   customer: string;

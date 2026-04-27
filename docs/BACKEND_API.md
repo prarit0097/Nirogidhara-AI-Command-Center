@@ -72,6 +72,7 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 | GET | `/api/ai/caio-audits/` | `CaioAudit[]` |
 | GET | `/api/ai/agent-runs/` | `AgentRun[]` (Phase 3A — admin/director only) |
 | GET | `/api/ai/agent-runs/{id}/` | `AgentRun` (admin/director only) |
+| GET | `/api/ai/agent-runtime/status/` | `{phase, dryRunOnly, agents, lastRuns}` (Phase 3B — admin/director only) |
 
 ## Compliance / Rewards / Learning
 
@@ -122,8 +123,11 @@ Receivers in `apps/audit/signals.py` write rows on:
 - `call.analysis` / `call.handoff_flagged` — explicit, on Vapi `analysis.completed` (handoff_flagged fires only when one of the 6 safety triggers is present)
 - `lead.meta_ingested` — explicit, on Meta Lead Ads webhook delivery (created or refreshed)
 - `ai.agent_run.created` / `ai.agent_run.completed` / `ai.agent_run.failed` — explicit, on POST `/api/ai/agent-runs/` (Phase 3A)
+- `ai.ceo_brief.generated` — explicit, on CEO daily briefing run when the LLM returns usable content (Phase 3B)
+- `ai.caio_sweep.completed` — explicit, on CAIO audit-sweep success (Phase 3B)
+- `ai.agent_runtime.completed` / `ai.agent_runtime.failed` — explicit, on every per-agent runtime endpoint (Phase 3B)
 
-Phase 3B+ will add: reward/penalty assigned, prompt updated, rollback
+Phase 4+ will add: reward/penalty assigned, prompt updated, rollback
 performed, CAIO audit completed, CEO approval recorded.
 
 ---
@@ -197,6 +201,23 @@ Invalid transitions return HTTP 400 with a `detail` message.
 | POST | `/api/ai/agent-runs/` | Trigger a dry-run agent analysis. Body: `{ agent: "ceo"\|"caio"\|"ads"\|"rto"\|"sales_growth"\|"marketing"\|"cfo"\|"compliance", input: {...}, dryRun?: true }`. Admin/director only. Phase 3A coerces `dryRun` to `true` server-side; the field is on the wire for forward-compat with Phase 5 approval-matrix execution. Routes through `apps/integrations/ai/<provider>.py` based on `AI_PROVIDER` (`disabled`/`openai`/`anthropic`/`grok`). When the provider is disabled or no key is configured the run is persisted with `status: "skipped"` — no LLM call. Every call is grounded in `apps.compliance.Claim` via the prompt builder; medical/product prompts with no approved-claim entries return `failed` rather than dispatching. CAIO can never execute business actions: payloads with intents like `execute`, `apply`, `create_order`, `transition`, etc. are rejected before any LLM dispatch. |
 | GET | `/api/ai/agent-runs/` | List recent agent runs (admin/director only). |
 | GET | `/api/ai/agent-runs/{id}/` | Single run detail (admin/director only). |
+
+### AI agent runtime (Phase 3B — per-agent dispatch with pre-built DB slices)
+
+Every endpoint is admin/director only and dry-run by construction. Each call dispatches the agent's read-only DB slice through `run_readonly_agent_analysis`; the underlying LLM never runs when `AI_PROVIDER=disabled` (every run is persisted as `skipped`). Each endpoint returns the persisted `AgentRun`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/ai/agent-runtime/status/` | Snapshot — phase + dry-run flag + the last `AgentRun` per agent. |
+| POST | `/api/ai/agent-runtime/ceo/daily-brief/` | Generate the daily CEO briefing. On `success` with usable output, refreshes the `CeoBriefing` row + writes `ai.ceo_brief.generated`. Skipped/failed runs leave the existing briefing untouched. |
+| POST | `/api/ai/agent-runtime/caio/audit-sweep/` | CAIO audit/monitor sweep. Reads recent `AgentRun` rows + handoff flags + Claim Vault status. Never writes to business state — `services.CAIO_FORBIDDEN_INTENTS` blocks any execute/apply/create_* payload before the LLM is called. |
+| POST | `/api/ai/agent-runtime/ads/analyze/` | Meta attribution + ad recommendations. Reads `Lead.meta_*` fields grouped by campaign / ad / form. |
+| POST | `/api/ai/agent-runtime/rto/analyze/` | High-risk orders, NDR/RTO shipments, and rescue-attempt outcomes. Suggestions only. |
+| POST | `/api/ai/agent-runtime/sales-growth/analyze/` | Call outcomes + order conversion + advance/discount ratios. |
+| POST | `/api/ai/agent-runtime/cfo/analyze/` | Revenue + delivered/RTO + payment status. Reporting only. |
+| POST | `/api/ai/agent-runtime/compliance/analyze/` | Claim Vault coverage + handoff flags + critical CAIO audits. Fails closed when the vault is empty (`ClaimVaultMissing` → `failed` AgentRun). |
+
+Cron / Windows Task Scheduler can also call `python manage.py run_daily_ai_briefing` to fire the CEO + CAIO sweeps in one shot (`--skip-ceo` / `--skip-caio` to run just one).
 
 ### Webhooks (gateway → backend, public)
 

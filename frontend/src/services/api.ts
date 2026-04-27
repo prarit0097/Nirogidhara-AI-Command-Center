@@ -45,6 +45,7 @@ import type {
   Agent,
   AgentRun,
   AgentRunCreatePayload,
+  AgentRuntimeStatus,
   CaioAudit,
   Call,
   CallTranscriptLine,
@@ -340,6 +341,60 @@ export const api = {
     safeMutate<AgentRun>("/ai/agent-runs/", "POST", payload, () =>
       optimisticAgentRun(payload),
     ),
+
+  // ---------- PHASE 3B — per-agent runtime (admin/director only) ----------
+  // Each call dispatches the agent's read-only DB slice through
+  // run_readonly_agent_analysis on the backend. Disabled / no-key path
+  // returns a `skipped` AgentRun. Frontend never receives an API key.
+
+  getAgentRuntimeStatus: () =>
+    safeFetch<AgentRuntimeStatus>("/ai/agent-runtime/status/", () =>
+      optimisticRuntimeStatus(),
+    ),
+
+  runCeoDailyBrief: () =>
+    safeMutate<AgentRun>("/ai/agent-runtime/ceo/daily-brief/", "POST", {}, () =>
+      optimisticAgentRun({ agent: "ceo" }),
+    ),
+
+  runCaioAuditSweep: () =>
+    safeMutate<AgentRun>(
+      "/ai/agent-runtime/caio/audit-sweep/",
+      "POST",
+      {},
+      () => optimisticAgentRun({ agent: "caio" }),
+    ),
+
+  runAdsAnalysis: () =>
+    safeMutate<AgentRun>("/ai/agent-runtime/ads/analyze/", "POST", {}, () =>
+      optimisticAgentRun({ agent: "ads" }),
+    ),
+
+  runRtoAnalysis: () =>
+    safeMutate<AgentRun>("/ai/agent-runtime/rto/analyze/", "POST", {}, () =>
+      optimisticAgentRun({ agent: "rto" }),
+    ),
+
+  runSalesGrowthAnalysis: () =>
+    safeMutate<AgentRun>(
+      "/ai/agent-runtime/sales-growth/analyze/",
+      "POST",
+      {},
+      () => optimisticAgentRun({ agent: "sales_growth" }),
+    ),
+
+  runCfoAnalysis: () =>
+    safeMutate<AgentRun>("/ai/agent-runtime/cfo/analyze/", "POST", {}, () =>
+      optimisticAgentRun({ agent: "cfo" }),
+    ),
+
+  runComplianceAnalysis: () =>
+    safeMutate<AgentRun>(
+      "/ai/agent-runtime/compliance/analyze/",
+      "POST",
+      {},
+      () => optimisticAgentRun({ agent: "compliance" }),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -489,6 +544,32 @@ function optimisticAgentRun(payload: AgentRunCreatePayload): AgentRun {
     triggeredBy: "",
     createdAt: new Date().toISOString(),
     completedAt: null,
+  };
+}
+
+function optimisticRuntimeStatus(): AgentRuntimeStatus {
+  return {
+    phase: "3B",
+    dryRunOnly: true,
+    agents: [
+      "ceo",
+      "caio",
+      "ads",
+      "rto",
+      "sales_growth",
+      "cfo",
+      "compliance",
+    ],
+    lastRuns: {
+      ceo: null,
+      caio: null,
+      ads: null,
+      rto: null,
+      sales_growth: null,
+      cfo: null,
+      compliance: null,
+      marketing: null,
+    },
   };
 }
 

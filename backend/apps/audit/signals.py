@@ -49,6 +49,11 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.agent_run.created": "sparkles",
     "ai.agent_run.completed": "check-circle",
     "ai.agent_run.failed": "x-circle",
+    # Phase 3B — per-agent runtime outcomes.
+    "ai.ceo_brief.generated": "presentation",
+    "ai.caio_sweep.completed": "shield-check",
+    "ai.agent_runtime.completed": "play-circle",
+    "ai.agent_runtime.failed": "alert-octagon",
 }
 
 

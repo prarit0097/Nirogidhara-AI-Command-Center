@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A done):** All 14 Django apps scaffolded, **25 read + 16 write endpoints + Razorpay webhook + Delhivery webhook + Vapi webhook + Meta Lead Ads webhook + AgentRun (read-only/dry-run) endpoint** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay / Delhivery / Vapi / Meta Lead Ads gateway integrations all with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **Phase 3A AgentRun foundation: AI provider adapters (OpenAI / Anthropic / Grok) under `apps/integrations/ai/`, Approved-Claim-Vault prompt builder that fails closed when medical content has no grounding, CAIO hard-stop refusing every execution intent, dry-run-only POST /api/ai/agent-runs/ endpoint admin/director-gated**, seed command, frontend wired with **automatic mock fallback**. **132 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 3B+):** Per-agent service modules (CEO / CAIO / Ads / RTO / Sales Growth / etc.), background scheduler for the daily briefing, WebSockets, governance UI write paths (kill switch / sandbox / rollback), reward/penalty engine, learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B done):** All 14 Django apps scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (Phase 3A) + 8 per-agent runtime endpoints (Phase 3B)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay / Delhivery / Vapi / Meta Lead Ads gateway integrations all with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **Phase 3A AgentRun foundation + Phase 3B per-agent runtime: 7 agent service modules (CEO/CAIO/Ads/RTO/Sales Growth/CFO/Compliance) each pulling a safe DB slice and dispatching via `run_readonly_agent_analysis`, the CEO success path refreshes the `CeoBriefing` row, the management command `run_daily_ai_briefing` wires CEO + CAIO into cron without Redis**, seed command, frontend wired with **automatic mock fallback**. **158 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 3C+):** Background scheduler (Celery beat) + per-provider cost tracking + provider fall-back chains, WebSockets, governance UI write paths (kill switch / sandbox / rollback), reward/penalty engine, learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -335,7 +335,7 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far — Phase 1 to Phase 3A — every checkpoint we shipped
+## 8. What's done so far — Phase 1 to Phase 3B — every checkpoint we shipped
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
 - 17 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.**
@@ -471,7 +471,29 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
-### ✅ Phase 3A — AgentRun Foundation + AI Provider Adapters (built this session)
+### ✅ Phase 3B — Per-agent Runtime Services (built this session)
+
+- **Per-agent service modules** under `apps/ai_governance/services/agents/`: `ceo.py`, `caio.py`, `ads.py`, `rto.py`, `sales_growth.py`, `cfo.py`, `compliance.py`. Each exposes `build_input_payload()` (safe read-only DB slice — counts, aggregations, recent rows) and `run(triggered_by="")` that dispatches through the existing `run_readonly_agent_analysis`.
+- **Package conversion**: `apps/ai_governance/services.py` → `apps/ai_governance/services/__init__.py` to host the new `services/agents/` subpackage. Existing imports (`from apps.ai_governance.services import run_readonly_agent_analysis`) keep working.
+- **CEO success path** updates the `CeoBriefing` row only when the LLM returns a non-empty `summary` — skipped/failed runs leave the existing briefing untouched. Recommendations array is also persisted into `CeoRecommendation` rows. Writes a wrapping `ai.ceo_brief.generated` audit row.
+- **CAIO** stays read-only by construction. Its payload is pulled from the AgentRun ledger + handoff flags + Claim Vault status — none of those keys overlap with `CAIO_FORBIDDEN_INTENTS`, so the existing Phase 3A guardrail keeps the LLM call from being asked to write anywhere.
+- **Compliance** runtime fails closed when the Claim Vault is empty (the prompt builder raises `ClaimVaultMissing` → `failed` AgentRun + danger-tone audit row).
+- **8 new endpoints** under `/api/ai/agent-runtime/*` (admin/director only via the same `_AdminAndUpAlways` permission used by `/api/ai/agent-runs/`):
+  - `GET /api/ai/agent-runtime/status/` — phase + dry-run flag + last `AgentRun` per agent.
+  - `POST /api/ai/agent-runtime/{ceo|caio|ads|rto|sales-growth|cfo|compliance}/...` — each runs its agent and returns the persisted `AgentRun`.
+- **Management command** `python manage.py run_daily_ai_briefing` calls CEO + CAIO in one shot (`--skip-ceo` / `--skip-caio` to run just one). No Redis / Celery dependency — wires straight to cron / Windows Task Scheduler. Phase 3C upgrades to Celery beat once Redis is available.
+- **Audit kinds** added: `ai.ceo_brief.generated` (success), `ai.caio_sweep.completed` (info), `ai.agent_runtime.completed` (success/info), `ai.agent_runtime.failed` (danger).
+- **Frontend** `AgentRuntimeStatus` type + 8 `api.*` methods (one per endpoint) with offline-safe optimistic stubs. No page changes needed — Phase 3C can wire a UI on top.
+- **26 new pytest tests** cover each agent's payload shape (Meta attribution, RTO data, calls/orders/payments, Claim Vault grounding), the CEO success path refreshing `CeoBriefing`, the CEO skipped path leaving the existing briefing untouched, the compliance fail-closed when the vault is empty, the permission gates (anonymous / viewer / operations all blocked across all 7 endpoints, admin / director allowed), the status endpoint surfacing the last run per agent, the management command (with `--skip-caio` variant), and the wrapping `ai.agent_runtime.completed` / `ai.agent_runtime.failed` audit events firing on the right paths.
+
+**Compliance hard stop (Master Blueprint §26 #4):** CAIO never executes — the runtime payload contains no execution intents, the prompt builder reminds the model, and `services.run_readonly_agent_analysis` would refuse one anyway. Compliance runtime never generates new medical claims; it only summarises Claim Vault coverage. Phase 3B is dry-run by construction; the only path that will ever turn an AgentRun suggestion into a business write is the Phase 5 approval-matrix middleware.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **158 passed** (132 + 26 phase3b) |
+| `python manage.py check` | 0 issues |
+
+### ✅ Phase 3A — AgentRun Foundation + AI Provider Adapters (built earlier this session)
 
 - **AgentRun model** (`apps/ai_governance/models.py`) — every LLM dispatch is logged: `id`, `agent`, `prompt_version`, `input_payload`, `output_payload`, `status` (`pending`/`success`/`failed`/`skipped`), `provider`, `model`, `latency_ms`, `cost_usd`, `error_message`, `dry_run`, `triggered_by`, `created_at`, `completed_at`. Migration `0002_agentrun`.
 - **Provider adapters** under `apps/integrations/ai/`: `base.py` (Adapter protocol + `AdapterResult` dataclass + `skipped_result` helper), `openai_client.py`, `anthropic_client.py`, `grok_client.py` (Grok reuses the OpenAI SDK pointed at `https://api.x.ai/v1`). Every adapter lazy-imports its SDK and short-circuits with `skipped` when `current_config().enabled` is False — disabled / no-key path never touches the network. `dispatch.py` is the single seam the agent service calls.
@@ -486,7 +508,7 @@ Final Reward Score =
 
 | Command | Result |
 | --- | --- |
-| `python -m pytest -q` | **132 passed** (107 + 25 phase3a) |
+| `python -m pytest -q` | **132 passed** (107 + 25 phase3a) — pre-Phase-3B snapshot |
 | `python manage.py check` | 0 issues |
 
 ### ✅ Phase 2E — Meta Lead Ads Webhook (built earlier this session)
@@ -590,7 +612,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 132 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a)
+cd backend && python -m pytest -q   # 158 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -679,8 +701,11 @@ Three-mode adapter, GET subscription handshake, signed POST webhook, idempotent 
 ### ✅ Phase 3A — AgentRun foundation + AI provider adapters (DONE)
 AgentRun model + 4 provider adapters (OpenAI / Anthropic / Grok / disabled) + Claim-Vault-enforced prompt builder + CAIO hard stop + admin/director-only `/api/ai/agent-runs/` endpoint, 25 new tests. See §8.
 
-### Phase 3B — Per-agent runtime (NEXT)
-Build `services/agents/{ceo,caio,ads,rto,sales_growth,...}.py` modules that pull the right DB slice and call `run_readonly_agent_analysis`. Wire a Celery beat job for the daily CEO briefing.
+### ✅ Phase 3B — Per-agent runtime services (DONE)
+7 agent modules (CEO / CAIO / Ads / RTO / Sales Growth / CFO / Compliance) + 8 admin-only runtime endpoints + `run_daily_ai_briefing` management command + `CeoBriefing` refresh on CEO success, 26 new tests. See §8.
+
+### Phase 3C — Background scheduler + cost tracking (NEXT)
+Celery beat schedule firing `run_daily_ai_briefing` once a day, per-provider cost tracking (token usage → USD) populating `AgentRun.cost_usd`, provider fall-back chains.
 
 ### Phase 2 — Other gateways (slot when needed)
 - **Meta Lead Ads webhook** — `POST /api/webhooks/meta/leads/`, idempotent on `leadgen_id`, maps form fields to the `Lead` model.
@@ -824,4 +849,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 3A AgentRun foundation + AI provider adapters._
+_End of `nd.md`. Last updated after Phase 3B per-agent runtime services._
