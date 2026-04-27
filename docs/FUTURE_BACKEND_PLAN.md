@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -221,13 +221,48 @@ Shipped via `feat: add ai scheduler and cost tracking`.
   succeeds, ClaimVaultMissing not-triggering-fallback, and CAIO hard-stop
   surviving the dispatcher refactor.
 
-## Phase 3D — Sandbox + prompt rollback (NEXT)
+## ✅ Phase 3D — Sandbox + prompt rollback + budget guards (DONE)
 
-- Sandbox mode toggle (Section 12.2) — staged AgentRuns that don't write
-  CeoBriefing or count toward reward / penalty.
-- Prompt version rollback (Section 12.3) — versioned prompt artifacts +
-  one-click revert.
-- Provider cost budget guard rails — daily / monthly cap per agent.
+Shipped via `feat: add ai sandbox prompt rollback and budget guards`.
+
+- **PromptVersion model** — versioned prompt content per agent. DB-level
+  partial-unique constraint enforces "one active per agent". The prompt
+  builder (`apps.ai_governance.prompting.build_messages`) accepts an
+  optional active version and overrides ``system_policy`` / ``role_prompt``
+  with its content. The Claim Vault block is **always** appended on top —
+  a PromptVersion CANNOT skip it.
+- **AgentBudget model** — per-agent daily + monthly USD caps with
+  `is_enforced` flag and `alert_threshold_pct`. Spend is computed by
+  summing successful `AgentRun.cost_usd` for the agent over the period.
+- **SandboxState singleton** — DB-backed toggle seeded from
+  `settings.AI_SANDBOX_MODE`. While enabled, successful CEO runs do NOT
+  refresh the live `CeoBriefing` row. CAIO is read-only regardless.
+- **AgentRun** extended with `sandbox_mode`, `prompt_version_ref` FK,
+  `budget_status`, `budget_snapshot` (migration `0004`).
+- **Budget guard** in `run_readonly_agent_analysis` runs BEFORE prompt
+  building and dispatch:
+  1. Block when daily / monthly cap is exceeded → `failed` AgentRun +
+     `ai.budget.blocked` audit. **Never triggers provider fallback.**
+  2. Warning at `alert_threshold_pct` → `ai.budget.warning` audit; run
+     still proceeds.
+- **9 new endpoints** under `/api/ai/{sandbox,prompt-versions,budgets}/*`
+  — admin/director only. Sandbox + activate + rollback all write
+  audit-ledger rows.
+- **7 new audit kinds**: `ai.prompt_version.{created,activated,rolled_back}`,
+  `ai.sandbox.{enabled,disabled}`, `ai.budget.{warning,blocked}`.
+- **Frontend Governance page** at `/ai-governance` (under "AI Layer")
+  — sandbox toggle, per-agent prompt-version list with activate /
+  rollback buttons, per-agent budget editor with live spend display.
+  Premium Ayurveda + AI SaaS theme. Pure read/write through `api.ts`;
+  no business logic; never receives provider keys.
+- 15 new pytest tests cover PromptVersion CRUD + activation flip +
+  rollback, sandbox-mode CeoBriefing skip, active prompt version
+  injection (with Claim Vault still appended), budget block path
+  (no fallback), budget warning path, ClaimVaultMissing still failing
+  closed, CAIO still hard-stopped, and admin/viewer permission gates
+  on every new endpoint.
+
+## Phase 4 — Real-time + reward / penalty engine (NEXT)
 
 ## Phase 4 — Real-Time
 

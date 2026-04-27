@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C done):** All 14 Django apps scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status endpoint (3C)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay / Delhivery / Vapi / Meta Lead Ads gateway integrations all with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat scheduler firing CEO + CAIO at 09:00 + 18:00 IST + provider fallback chain (OpenAI → Anthropic) + model-wise USD cost tracking via frozen pricing snapshots + frontend Scheduler Status page**, seed command, frontend wired with **automatic mock fallback** (18 pages). **175 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 3D+):** Sandbox mode + prompt rollback, governance UI write paths (kill switch / approval matrix), WebSockets, reward/penalty engine, learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D done):** All 14 Django apps scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page**, seed command, frontend wired with **automatic mock fallback** (19 pages). **190 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 4+):** Real-time WebSockets, reward / penalty engine, governance UI write paths (kill switch / approval matrix), learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -135,7 +135,7 @@ nirogidhara-command/
 │       │   ├── WorkflowMap.tsx
 │       │   ├── layout/{AppLayout, Sidebar, Topbar}.tsx
 │       │   └── ui/                # shadcn components
-│       ├── pages/                 # 17 pages — see §6 below
+│       ├── pages/                 # 19 pages — see §6 below
 │       ├── hooks/{use-mobile, use-toast}.tsx
 │       ├── lib/utils.ts
 │       └── test/
@@ -335,10 +335,10 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far — Phase 1 to Phase 3C — every checkpoint we shipped
+## 8. What's done so far — Phase 1 to Phase 3D — every checkpoint we shipped
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
-- 17 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.**
+- 19 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.** Phase 3C added the Scheduler Status page; Phase 3D added the AI Governance page.
 - Shared TypeScript types in `src/types/domain.ts` covering Lead / Customer / Order / Call / Payment / Shipment / Agent / RewardPenalty / Claim / LearningRecording / CaioAudit / CeoBriefing / DashboardMetrics / ActivityEvent / WorkflowStep / KPITrend.
 - Sidebar collapse layout, mobile responsive baseline, dashboard polish, shadcn UI.
 - Vitest + React Testing Library configured.
@@ -471,7 +471,31 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
-### ✅ Phase 3C — Celery Scheduler + Cost Tracking + Fallback (built this session)
+### ✅ Phase 3D — Sandbox + Prompt Rollback + Budget Guards (built this session)
+
+- **PromptVersion model** (`apps.ai_governance.models.PromptVersion`) — versioned prompt content per agent: `id`, `agent`, `version`, `title`, `system_policy`, `role_prompt`, `instruction_payload`, `is_active`, `status` (draft/sandbox/active/rolled_back/archived), `created_by`, `metadata`, `created_at`, `activated_at`, `rolled_back_at`, `rollback_reason`. DB partial-unique constraint enforces "one active per agent".
+- **AgentBudget model** — per-agent daily + monthly USD caps with `is_enforced` flag and `alert_threshold_pct`. Spend is computed at runtime by summing successful `AgentRun.cost_usd`.
+- **SandboxState singleton** (`apps.ai_governance.models.SandboxState`) — DB-backed toggle seeded from `settings.AI_SANDBOX_MODE`. PATCH endpoint flips the row and writes audit. While ON: every successful AgentRun is stamped `sandbox_mode=True` and the CEO success path skips `CeoBriefing` refresh — no business-state mutation.
+- **AgentRun extended** (migration `0004_phase3d_sandbox_prompts_budgets`): `sandbox_mode`, `prompt_version_ref` FK to PromptVersion, `budget_status`, `budget_snapshot`.
+- **Prompt builder integration** — `build_messages` accepts an optional active PromptVersion. When supplied, its `system_policy` and `role_prompt` blocks override the defaults. The Approved Claim Vault block is **always** appended on top — a custom PromptVersion CANNOT skip it.
+- **Budget guard** (`apps.ai_governance.budgets`) runs in `run_readonly_agent_analysis` BEFORE prompt building and dispatch:
+  1. Block when daily / monthly cap is exceeded → write `ai.budget.blocked` audit, persist a `failed` AgentRun, **never trigger provider fallback**.
+  2. Warning at `alert_threshold_pct` → write `ai.budget.warning` audit; run still proceeds.
+  3. Snapshot stamped on every `AgentRun.budget_snapshot`.
+- **9 new endpoints** under `/api/ai/{sandbox,prompt-versions,budgets}/*` (admin/director only): GET/PATCH sandbox status, list/create/retrieve/activate/rollback prompt versions, list/upsert/patch agent budgets. Budget list/upsert decorate the response with `dailySpendUsd` + `monthlySpendUsd`.
+- **7 new audit kinds**: `ai.prompt_version.{created,activated,rolled_back}`, `ai.sandbox.{enabled,disabled}`, `ai.budget.{warning,blocked}`.
+- **Frontend Governance page** at `/ai-governance` (under "AI Layer" in the sidebar). Shows the sandbox toggle, per-agent prompt version list with one-click Activate / Rollback, and per-agent daily/monthly budget editor showing live spend. No business logic in the frontend — every state change goes through the typed `api.ts` calls. Frontend never receives provider keys.
+- **CAIO is still hard-stopped** — the existing `CAIO_FORBIDDEN_INTENTS` guard runs before any of the new code paths and still refuses execution intents.
+- **15 new pytest tests** cover PromptVersion CRUD + activation flip + rollback (with audit reason + audit event), sandbox endpoint perms + audit, sandbox-mode CeoBriefing skip on a successful CEO run, active prompt version injection (with custom system_policy / role_prompt + Claim Vault still appended), budget block path (no provider fallback), budget warning path with allowed run, ClaimVaultMissing still failing closed before any adapter is called, CAIO refusal under the new guards, and AgentBudget upsert + admin-only perms.
+
+**Compliance hard stop (Master Blueprint §26 #4):** PromptVersion content cannot bypass the Approved Claim Vault — every prompt still attaches the relevant Claim entries on top of any custom system policy. CAIO remains read-only in every sandbox / budget / prompt state. Budget blocks fail closed and never trigger the provider fallback chain. ClaimVaultMissing still fails before any adapter dispatch. Phase 3D remains dry-run by construction; the only path that will turn an AgentRun suggestion into a business write is the future approval-matrix middleware.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **190 passed** (175 + 15 phase3d) |
+| `python manage.py check` | 0 issues |
+
+### ✅ Phase 3C — Celery Scheduler + Cost Tracking + Fallback (built earlier this session)
 
 - **Celery app** at `backend/config/celery.py` autoloads via `config/__init__.py`. Local dev runs in eager mode (`CELERY_TASK_ALWAYS_EAGER=true`) — Redis is not required for `pytest` / `manage.py check` / day-to-day development. Production cron starts `celery -A config worker -B`.
 - **Beat schedule** fires `apps.ai_governance.tasks.run_daily_ai_briefing_task` at **09:00 IST** (morning) and **18:00 IST** (evening). Hours / minutes are env-driven (`AI_DAILY_BRIEFING_*`). The task wraps the existing Phase 3B `ceo.run` + `caio.run` services, so the scheduler shares the same compliance and CAIO hard-stops.
@@ -634,7 +658,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 175 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c)
+cd backend && python -m pytest -q   # 190 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 15 phase3d)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -729,8 +753,11 @@ AgentRun model + 4 provider adapters (OpenAI / Anthropic / Grok / disabled) + Cl
 ### ✅ Phase 3C — Celery scheduler + cost tracking + fallback (DONE)
 Celery beat at 09:00 + 18:00 IST + provider fallback chain (OpenAI → Anthropic) + model-wise USD cost tracking + frontend Scheduler Status page, 17 new tests. See §8.
 
-### Phase 3D — Sandbox + prompt rollback (NEXT)
-Sandbox toggle (Section 12.2), versioned prompt artifacts + rollback (12.3), per-agent cost budget guards.
+### ✅ Phase 3D — Sandbox + prompt rollback + budget guards (DONE)
+SandboxState singleton + versioned PromptVersion (one active per agent + rollback) + per-agent USD budget caps with warning + block + Governance page, 15 new tests. See §8.
+
+### Phase 4 — Real-time + reward / penalty (NEXT)
+Django Channels for live AuditEvent push + the actual reward / penalty engine (Master Blueprint §10.2) + the approval-matrix middleware that finally turns dry-run AgentRun suggestions into business writes.
 
 ### Phase 2 — Other gateways / credentials (slot when needed)
 - **PayU payment links** — same shape as Razorpay; only the adapter is missing.
@@ -876,4 +903,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 3C Celery scheduler + cost tracking._
+_End of `nd.md`. Last updated after Phase 3D AI sandbox + prompt rollback + budget guards._

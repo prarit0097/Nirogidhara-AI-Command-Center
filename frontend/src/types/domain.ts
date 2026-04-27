@@ -235,6 +235,77 @@ export interface AiSchedulerStatus {
   lastFallbackUsed: boolean;
 }
 
+// ----- Phase 3D — sandbox + prompt versioning + budget guards -----
+
+export type PromptVersionStatus =
+  | "draft"
+  | "sandbox"
+  | "active"
+  | "rolled_back"
+  | "archived";
+
+export interface PromptVersion {
+  id: string;
+  agent: AgentName;
+  version: string;
+  title: string;
+  systemPolicy: string;
+  rolePrompt: string;
+  instructionPayload: Record<string, unknown>;
+  isActive: boolean;
+  status: PromptVersionStatus;
+  createdBy: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  activatedAt: string | null;
+  rolledBackAt: string | null;
+  rollbackReason: string;
+}
+
+export interface PromptVersionCreatePayload {
+  agent: AgentName;
+  version: string;
+  title?: string;
+  systemPolicy?: string;
+  rolePrompt?: string;
+  instructionPayload?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentBudget {
+  id: number;
+  agent: AgentName;
+  dailyBudgetUsd: string;
+  monthlyBudgetUsd: string;
+  isEnforced: boolean;
+  alertThresholdPct: number;
+  createdAt: string;
+  updatedAt: string;
+  /** Decorated by the API — current period's spend (USD). */
+  dailySpendUsd?: string;
+  monthlySpendUsd?: string;
+}
+
+export interface AgentBudgetWritePayload {
+  agent: AgentName;
+  dailyBudgetUsd: string | number;
+  monthlyBudgetUsd: string | number;
+  isEnforced?: boolean;
+  alertThresholdPct?: number;
+}
+
+export interface SandboxState {
+  isEnabled: boolean;
+  note: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface SandboxPatchPayload {
+  isEnabled: boolean;
+  note?: string;
+}
+
 export interface ActiveCall {
   id: string;
   customer: string;

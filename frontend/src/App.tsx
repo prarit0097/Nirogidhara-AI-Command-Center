@@ -22,6 +22,7 @@ import LearningPage from "./pages/Learning";
 import ClaimsPage from "./pages/Claims";
 import AnalyticsPage from "./pages/Analytics";
 import SchedulerPage from "./pages/Scheduler";
+import GovernancePage from "./pages/Governance";
 import SettingsPage from "./pages/Settings";
 
 const queryClient = new QueryClient();
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/claims" element={<ClaimsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/ai-scheduler" element={<SchedulerPage />} />
+            <Route path="/ai-governance" element={<GovernancePage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />

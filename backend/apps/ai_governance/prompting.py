@@ -32,6 +32,12 @@ from apps.compliance.models import Claim
 
 PROMPT_VERSION = "v1.0-phase3a"
 
+# When an active PromptVersion is loaded for the agent, the runtime passes
+# it to ``build_messages`` and we use its ``system_policy`` /
+# ``role_prompt`` blocks instead of the hard-coded defaults below. The
+# Approved Claim Vault block is **always** appended on top — a custom
+# PromptVersion CANNOT skip it.
+
 
 # ----- Constants -----
 
@@ -199,8 +205,16 @@ def build_messages(
     *,
     agent: str,
     input_payload: dict[str, Any],
+    prompt_version: Any | None = None,
 ) -> PromptBundle:
-    """Assemble the message list for a Phase 3A agent dispatch.
+    """Assemble the message list for an agent dispatch.
+
+    Phase 3D: when ``prompt_version`` is supplied (an active PromptVersion
+    row from ``apps.ai_governance.models``), its ``system_policy`` and
+    ``role_prompt`` blocks override the hard-coded defaults in this
+    module. The Claim Vault block is **always** appended on top — a
+    PromptVersion CANNOT skip it. The reported ``prompt_version`` string
+    becomes ``"<agent>:<version>"`` for forward-compat audit trails.
 
     Raises:
         ValueError: when ``agent`` is not in the supported set.
@@ -229,7 +243,26 @@ def build_messages(
             "Do NOT introduce medical/product claims."
         )
 
+    # Phase 3D — when an active PromptVersion is supplied, its blocks
+    # override the hard-coded defaults. The Claim Vault block is always
+    # appended on top regardless.
+    system_policy_block = _SYSTEM_POLICY.strip()
     role_block = _AGENT_ROLES[agent]
+    reported_version = PROMPT_VERSION
+    if prompt_version is not None:
+        custom_system = (getattr(prompt_version, "system_policy", "") or "").strip()
+        custom_role = (getattr(prompt_version, "role_prompt", "") or "").strip()
+        if custom_system:
+            system_policy_block = custom_system
+        if custom_role:
+            role_block = custom_role
+        version_label = (
+            f"{getattr(prompt_version, 'agent', agent)}:"
+            f"{getattr(prompt_version, 'version', '')}"
+        ).strip(":")
+        if version_label:
+            reported_version = version_label
+
     user_block = (
         "Input payload (JSON):\n"
         + json.dumps(input_payload or {}, ensure_ascii=False, indent=2)
@@ -238,14 +271,14 @@ def build_messages(
     )
 
     messages = [
-        {"role": "system", "content": _SYSTEM_POLICY.strip()},
+        {"role": "system", "content": system_policy_block},
         {"role": "system", "content": role_block},
         {"role": "system", "content": claim_block},
         {"role": "user", "content": user_block},
     ]
     return PromptBundle(
         messages=messages,
-        prompt_version=PROMPT_VERSION,
+        prompt_version=reported_version,
         claims_used=claims_used,
     )
 

@@ -11,13 +11,27 @@ from apps.accounts.permissions import ADMIN_AND_UP, RoleBasedPermission
 from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 
-from . import services
-from .models import AgentRun, CaioAudit, CeoBriefing
+from . import prompt_versions, sandbox, services
+from .budgets import calculate_agent_spend, get_agent_budget
+from .models import (
+    AgentBudget,
+    AgentRun,
+    CaioAudit,
+    CeoBriefing,
+    PromptVersion,
+    SandboxState,
+)
 from .serializers import (
+    AgentBudgetSerializer,
     AgentRunCreateSerializer,
     AgentRunSerializer,
     CaioAuditSerializer,
     CeoBriefingSerializer,
+    PromptVersionCreateSerializer,
+    PromptVersionRollbackSerializer,
+    PromptVersionSerializer,
+    SandboxPatchSerializer,
+    SandboxStateSerializer,
 )
 from .services.agents import ads, caio, ceo, cfo, compliance, rto, sales_growth
 
@@ -310,3 +324,186 @@ class SchedulerStatusView(APIView):
                 ),
             }
         )
+
+
+# ----- Phase 3D — PromptVersion + AgentBudget + SandboxState views -----
+
+
+class PromptVersionViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Phase 3D — admin/director only. POST creates a draft version; the
+    :action:`activate` and :action:`rollback` actions move the active flag.
+    """
+
+    queryset = PromptVersion.objects.all()
+    serializer_class = PromptVersionSerializer
+    pagination_class = None
+    permission_classes = [_AdminAndUpAlways]
+
+    def list(self, request):
+        agent = request.query_params.get("agent")
+        qs = self.queryset.all()
+        if agent:
+            qs = qs.filter(agent=agent)
+        return Response(
+            PromptVersionSerializer(qs.order_by("agent", "-created_at"), many=True).data
+        )
+
+    def create(self, request):
+        payload = PromptVersionCreateSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        try:
+            pv = prompt_versions.create_prompt_version(
+                agent=payload.validated_data["agent"],
+                version=payload.validated_data["version"],
+                title=payload.validated_data.get("title", ""),
+                system_policy=payload.validated_data.get("systemPolicy", ""),
+                role_prompt=payload.validated_data.get("rolePrompt", ""),
+                instruction_payload=payload.validated_data.get("instructionPayload"),
+                metadata=payload.validated_data.get("metadata"),
+                by_user=request.user,
+            )
+        except ValueError as exc:
+            from rest_framework.exceptions import ValidationError as _VE
+
+            raise _VE({"detail": str(exc)}) from exc
+        return Response(
+            PromptVersionSerializer(pv).data, status=status.HTTP_201_CREATED
+        )
+
+    @staticmethod
+    def _activate_view(request, pk):
+        try:
+            pv = prompt_versions.activate_prompt_version(
+                prompt_version_id=pk, by_user=request.user
+            )
+        except PromptVersion.DoesNotExist as exc:
+            raise NotFound(f"PromptVersion {pk} not found") from exc
+        return Response(PromptVersionSerializer(pv).data)
+
+    @staticmethod
+    def _rollback_view(request, pk):
+        payload = PromptVersionRollbackSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        try:
+            pv = prompt_versions.rollback_prompt_version(
+                target_version_id=pk,
+                reason=payload.validated_data["reason"],
+                by_user=request.user,
+            )
+        except PromptVersion.DoesNotExist as exc:
+            raise NotFound(f"PromptVersion {pk} not found") from exc
+        except ValueError as exc:
+            from rest_framework.exceptions import ValidationError as _VE
+
+            raise _VE({"detail": str(exc)}) from exc
+        return Response(PromptVersionSerializer(pv).data)
+
+
+class PromptVersionActivateView(APIView):
+    permission_classes = [_AdminAndUpAlways]
+
+    def post(self, request, pk):
+        return PromptVersionViewSet._activate_view(request, pk)
+
+
+class PromptVersionRollbackView(APIView):
+    permission_classes = [_AdminAndUpAlways]
+
+    def post(self, request, pk):
+        return PromptVersionViewSet._rollback_view(request, pk)
+
+
+class AgentBudgetViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Phase 3D — admin/director only. POST upserts by ``agent`` so the
+    operator can set/update a budget without juggling primary keys.
+    """
+
+    queryset = AgentBudget.objects.all()
+    serializer_class = AgentBudgetSerializer
+    pagination_class = None
+    permission_classes = [_AdminAndUpAlways]
+
+    def create(self, request):
+        # Support upsert: pre-existing row + new POST → update in place
+        # rather than 400 on the unique constraint.
+        agent = (request.data or {}).get("agent")
+        instance = AgentBudget.objects.filter(agent=agent).first() if agent else None
+        if instance is None:
+            ser = AgentBudgetSerializer(data=request.data)
+        else:
+            ser = AgentBudgetSerializer(instance, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        instance = ser.save()
+        body = AgentBudgetSerializer(instance).data
+        body["dailySpendUsd"] = str(
+            calculate_agent_spend(agent=instance.agent, period="daily")
+        )
+        body["monthlySpendUsd"] = str(
+            calculate_agent_spend(agent=instance.agent, period="monthly")
+        )
+        return Response(body, status=status.HTTP_201_CREATED)
+
+    def list(self, request):
+        out = []
+        for budget in self.queryset.all():
+            row = AgentBudgetSerializer(budget).data
+            row["dailySpendUsd"] = str(
+                calculate_agent_spend(agent=budget.agent, period="daily")
+            )
+            row["monthlySpendUsd"] = str(
+                calculate_agent_spend(agent=budget.agent, period="monthly")
+            )
+            out.append(row)
+        return Response(out)
+
+    def partial_update(self, request, pk=None):
+        try:
+            instance = self.queryset.get(pk=pk)
+        except AgentBudget.DoesNotExist as exc:
+            raise NotFound(f"AgentBudget {pk} not found") from exc
+        ser = AgentBudgetSerializer(instance, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        body = AgentBudgetSerializer(instance).data
+        body["dailySpendUsd"] = str(
+            calculate_agent_spend(agent=instance.agent, period="daily")
+        )
+        body["monthlySpendUsd"] = str(
+            calculate_agent_spend(agent=instance.agent, period="monthly")
+        )
+        return Response(body)
+
+
+class SandboxStatusView(APIView):
+    """Phase 3D — read or flip the global sandbox toggle.
+
+    GET returns the singleton state. PATCH flips ``isEnabled`` and writes
+    an ``ai.sandbox.{enabled,disabled}`` audit event. Both paths are
+    admin/director only.
+    """
+
+    permission_classes = [_AdminAndUpAlways]
+
+    def get(self, _request):
+        state = sandbox.get_state()
+        return Response(SandboxStateSerializer(state).data)
+
+    def patch(self, request):
+        payload = SandboxPatchSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        state = sandbox.set_sandbox_enabled(
+            enabled=payload.validated_data["isEnabled"],
+            note=payload.validated_data.get("note", ""),
+            by_user=request.user,
+        )
+        return Response(SandboxStateSerializer(state).data)

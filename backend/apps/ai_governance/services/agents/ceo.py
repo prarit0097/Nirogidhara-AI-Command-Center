@@ -111,8 +111,16 @@ def build_input_payload() -> dict[str, Any]:
 
 
 def _maybe_update_briefing(run: AgentRun) -> None:
-    """Replace the latest CeoBriefing row only when the run produced usable output."""
+    """Replace the latest CeoBriefing row only when the run produced usable output.
+
+    Phase 3D: sandbox-mode runs NEVER mutate the visible briefing — the
+    AgentRun is logged but the user-facing ``CeoBriefing`` row is left
+    alone. This is the operator's safety hatch for trying new
+    PromptVersions or providers without affecting production output.
+    """
     if run.status != AgentRun.Status.SUCCESS:
+        return
+    if run.sandbox_mode:
         return
     output = run.output_payload or {}
     summary = (output.get("summary") or "").strip()

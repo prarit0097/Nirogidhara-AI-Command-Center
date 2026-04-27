@@ -7,7 +7,7 @@ direction.
 
 Item | Status
 --- | ---
-All 17 pages exist | done
+All 19 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page
 Pages go through `src/services/api.ts` only | done — no page imports `mockData.ts` directly
 TypeScript shared types in `src/types/domain.ts` | done
 Sidebar collapse layout | done — shared collapsed state
@@ -40,3 +40,29 @@ cd ../frontend && npm run dev
 - Replace placeholder login flow when JWT auth is wired (Phase 2).
 - Bundle is ~900 KB gzipped to ~257 KB — code-split heavy charts (recharts is
   the dominant chunk) when bundle size matters.
+
+## Page inventory (Phase 3D)
+
+| Route | Page | Phase | Notes |
+| --- | --- | --- | --- |
+| `/` | `Index.tsx` | 1 | Command Center dashboard |
+| `/leads` | `Leads.tsx` | 1 / 2A | Leads CRM |
+| `/customers` | `Customers.tsx` | 1 / 2A | Customer 360 |
+| `/calling` | `Calling.tsx` | 1 / 2D | AI Calling Console |
+| `/orders` | `Orders.tsx` | 1 / 2A | Orders Pipeline |
+| `/confirmation` | `Confirmation.tsx` | 1 / 2A | Confirmation Queue |
+| `/payments` | `Payments.tsx` | 1 / 2B | Payments — Razorpay link generation |
+| `/delivery` | `Delivery.tsx` | 1 / 2C | Delhivery + Tracking |
+| `/rto` | `Rto.tsx` | 1 / 2A | RTO Rescue Board |
+| `/agents` | `Agents.tsx` | 1 | AI Agents Center |
+| `/ceo-ai` | `CeoAi.tsx` | 1 / 3B | CEO AI Briefing |
+| `/caio` | `Caio.tsx` | 1 / 3B | CAIO Audit Center |
+| `/ai-scheduler` | `Scheduler.tsx` | 3C | Celery beat + cost / fallback snapshot (admin/director only on the API) |
+| `/ai-governance` | `Governance.tsx` | 3D | Sandbox toggle + prompt version rollback + per-agent USD budgets |
+| `/rewards` | `Rewards.tsx` | 1 | Reward & Penalty leaderboard |
+| `/learning` | `Learning.tsx` | 1 | Call Learning Studio |
+| `/claims` | `Claims.tsx` | 1 | Claim Vault |
+| `/analytics` | `Analytics.tsx` | 1 | Analytics |
+| `/settings` | `Settings.tsx` | 1 | Settings & Control |
+
+19 pages total. Sidebar groups: Overview · Sales · Operations · AI Layer (now 5 entries: Agents Center, CEO AI Briefing, CAIO Audit Center, AI Scheduler & Cost, AI Governance) · Governance · Insights · System.

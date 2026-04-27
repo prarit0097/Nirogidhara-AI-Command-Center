@@ -44,10 +44,16 @@ import type {
   ActivityEvent,
   Agent,
   AgentRun,
+  AgentBudget,
+  AgentBudgetWritePayload,
   AgentRunCreatePayload,
   AgentRuntimeStatus,
   AiSchedulerStatus,
   CaioAudit,
+  PromptVersion,
+  PromptVersionCreatePayload,
+  SandboxPatchPayload,
+  SandboxState,
   Call,
   CallTranscriptLine,
   CallTriggerPayload,
@@ -405,6 +411,73 @@ export const api = {
     safeFetch<AiSchedulerStatus>("/ai/scheduler/status/", () =>
       optimisticSchedulerStatus(),
     ),
+
+  // ---------- PHASE 3D — Governance: sandbox + prompts + budgets ----------
+  // Admin/director only. The frontend never receives provider API keys.
+
+  getSandboxStatus: () =>
+    safeFetch<SandboxState>("/ai/sandbox/status/", () => ({
+      isEnabled: false,
+      note: "",
+      updatedBy: "",
+      updatedAt: new Date().toISOString(),
+    })),
+
+  setSandboxStatus: (payload: SandboxPatchPayload) =>
+    safeMutate<SandboxState>("/ai/sandbox/status/", "PATCH", payload, () => ({
+      isEnabled: payload.isEnabled,
+      note: payload.note ?? "",
+      updatedBy: "",
+      updatedAt: new Date().toISOString(),
+    })),
+
+  listPromptVersions: (agent?: string) => {
+    const path = agent
+      ? `/ai/prompt-versions/?agent=${encodeURIComponent(agent)}`
+      : "/ai/prompt-versions/";
+    return safeFetch<PromptVersion[]>(path, () => []);
+  },
+
+  createPromptVersion: (payload: PromptVersionCreatePayload) =>
+    safeMutate<PromptVersion>(
+      "/ai/prompt-versions/",
+      "POST",
+      payload,
+      () => optimisticPromptVersion(payload),
+    ),
+
+  activatePromptVersion: (id: string) =>
+    safeMutate<PromptVersion>(
+      `/ai/prompt-versions/${id}/activate/`,
+      "POST",
+      {},
+      () => ({ ...optimisticPromptVersion({ agent: "ceo", version: "draft" }), id, isActive: true, status: "active" }),
+    ),
+
+  rollbackPromptVersion: (id: string, reason: string) =>
+    safeMutate<PromptVersion>(
+      `/ai/prompt-versions/${id}/rollback/`,
+      "POST",
+      { reason },
+      () => ({ ...optimisticPromptVersion({ agent: "ceo", version: "draft" }), id, rollbackReason: reason, status: "active" }),
+    ),
+
+  listAgentBudgets: () =>
+    safeFetch<AgentBudget[]>("/ai/budgets/", () => []),
+
+  upsertAgentBudget: (payload: AgentBudgetWritePayload) =>
+    safeMutate<AgentBudget>("/ai/budgets/", "POST", payload, () => ({
+      id: 0,
+      agent: payload.agent,
+      dailyBudgetUsd: String(payload.dailyBudgetUsd),
+      monthlyBudgetUsd: String(payload.monthlyBudgetUsd),
+      isEnforced: payload.isEnforced ?? true,
+      alertThresholdPct: payload.alertThresholdPct ?? 80,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      dailySpendUsd: "0",
+      monthlySpendUsd: "0",
+    })),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -586,6 +659,26 @@ function optimisticRuntimeStatus(): AgentRuntimeStatus {
       compliance: null,
       marketing: null,
     },
+  };
+}
+
+function optimisticPromptVersion(payload: PromptVersionCreatePayload): PromptVersion {
+  return {
+    id: `PV-DRAFT-${Date.now()}`,
+    agent: payload.agent,
+    version: payload.version,
+    title: payload.title ?? "",
+    systemPolicy: payload.systemPolicy ?? "",
+    rolePrompt: payload.rolePrompt ?? "",
+    instructionPayload: payload.instructionPayload ?? {},
+    isActive: false,
+    status: "draft",
+    createdBy: "",
+    metadata: payload.metadata ?? {},
+    createdAt: new Date().toISOString(),
+    activatedAt: null,
+    rolledBackAt: null,
+    rollbackReason: "",
   };
 }
 

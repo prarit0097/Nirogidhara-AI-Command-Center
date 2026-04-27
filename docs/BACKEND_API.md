@@ -74,6 +74,10 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 | GET | `/api/ai/agent-runs/{id}/` | `AgentRun` (admin/director only) |
 | GET | `/api/ai/agent-runtime/status/` | `{phase, dryRunOnly, agents, lastRuns}` (Phase 3B — admin/director only) |
 | GET | `/api/ai/scheduler/status/` | `{celeryConfigured, celeryEagerMode, redisConfigured, brokerUrl (redacted), timezone, morningSchedule, eveningSchedule, lastDailyBriefingRun, lastCaioSweepRun, aiProvider, primaryModel, fallbacks, lastCostUsd, lastFallbackUsed}` (Phase 3C — admin/director only) |
+| GET | `/api/ai/sandbox/status/` | Sandbox singleton: `{isEnabled, note, updatedBy, updatedAt}` (Phase 3D — admin/director only) |
+| GET | `/api/ai/prompt-versions/` (`?agent=`) | List prompt versions (Phase 3D — admin/director only) |
+| GET | `/api/ai/prompt-versions/{id}/` | Single prompt version |
+| GET | `/api/ai/budgets/` | Per-agent budgets with current daily/monthly spend decoration |
 
 ## Compliance / Rewards / Learning
 
@@ -130,9 +134,12 @@ Receivers in `apps/audit/signals.py` write rows on:
 - `ai.scheduler.daily_briefing.started` / `.completed` / `.failed` — explicit, on the Celery beat task wrapping CEO + CAIO sweeps (Phase 3C)
 - `ai.provider.fallback_used` — explicit, when the dispatcher answered with a fallback provider after the primary failed (Phase 3C)
 - `ai.cost_tracked` — explicit, on every successful AgentRun whose adapter reported token usage (Phase 3C)
+- `ai.prompt_version.created` / `.activated` / `.rolled_back` — explicit, on PromptVersion CRUD + activate + rollback (Phase 3D)
+- `ai.sandbox.enabled` / `.disabled` — explicit, on PATCH `/api/ai/sandbox/status/` (Phase 3D)
+- `ai.budget.warning` / `.blocked` — explicit, when an agent's spend crosses the alert threshold or exceeds the configured cap (Phase 3D)
 
-Phase 4+ will add: reward/penalty assigned, prompt updated, rollback
-performed, CAIO audit completed, CEO approval recorded.
+Phase 4+ will add: reward/penalty assigned, CAIO audit completed,
+CEO approval recorded.
 
 ---
 
@@ -235,6 +242,27 @@ celery -A config worker -B --loglevel=info
 ```
 
 Pricing fallback for `ClaimVaultMissing`: never. The prompt builder fails closed before any adapter is invoked, so a compliance refusal does not trigger a fallback to a different provider.
+
+### AI governance — sandbox / prompt rollback / budget guards (Phase 3D)
+
+All endpoints are admin/director only.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/ai/sandbox/status/` | Read the global sandbox toggle. |
+| PATCH | `/api/ai/sandbox/status/` | Body: `{ isEnabled, note? }`. Flips the singleton; writes `ai.sandbox.{enabled,disabled}`. While ON, successful AgentRuns NEVER refresh `CeoBriefing` or any other business-state row. |
+| POST | `/api/ai/prompt-versions/` | Body: `{ agent, version, title?, systemPolicy?, rolePrompt?, instructionPayload?, metadata? }`. Creates a `draft` PromptVersion. The Approved Claim Vault block is always appended to every dispatched prompt — a PromptVersion CANNOT skip it. |
+| POST | `/api/ai/prompt-versions/{id}/activate/` | Make this version the active one for its agent. The previous active version is auto-archived. |
+| POST | `/api/ai/prompt-versions/{id}/rollback/` | Body: `{ reason }`. Re-activate this version and mark the prior active as `rolled_back` with the reason recorded. |
+| POST | `/api/ai/budgets/` | Upsert by `agent`. Body: `{ agent, dailyBudgetUsd, monthlyBudgetUsd, isEnforced?, alertThresholdPct? }`. |
+| PATCH | `/api/ai/budgets/{id}/` | Update an existing budget row. |
+
+Behavior of the budget guard inside `run_readonly_agent_analysis`:
+
+1. Compute the agent's daily + monthly spend from successful `AgentRun.cost_usd`.
+2. If `is_enforced=True` AND spend exceeds the daily or monthly cap → write `ai.budget.blocked`, persist a `failed` AgentRun, and **never** call any adapter (no fallback either).
+3. Else if spend ≥ `alert_threshold_pct`% of either cap → write `ai.budget.warning` and continue.
+4. Snapshot of the budget check is stamped onto every `AgentRun.budget_snapshot`.
 
 ### Webhooks (gateway → backend, public)
 

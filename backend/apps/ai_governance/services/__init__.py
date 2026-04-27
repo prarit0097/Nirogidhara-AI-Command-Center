@@ -35,8 +35,14 @@ from apps.audit.signals import write_event
 from apps.integrations.ai.base import AdapterResult, AdapterStatus
 from apps.integrations.ai.dispatch import dispatch_messages
 
-from apps.ai_governance.models import AgentRun
+from apps.ai_governance.budgets import (
+    BudgetCheckResult,
+    check_budget_before_run,
+)
+from apps.ai_governance.models import AgentRun, PromptVersion
+from apps.ai_governance.prompt_versions import get_active_prompt_version
 from apps.ai_governance.prompting import ClaimVaultMissing, build_messages
+from apps.ai_governance.sandbox import is_sandbox_enabled
 
 
 # CAIO is read-only. If the payload includes any of these keys we refuse to
@@ -72,6 +78,8 @@ def create_agent_run(
     triggered_by: str = "",
     dry_run: bool = True,
     prompt_version: str | None = None,
+    sandbox_mode: bool = False,
+    prompt_version_ref: PromptVersion | None = None,
 ) -> AgentRun:
     """Insert a ``pending`` AgentRun row + write an audit-ledger event."""
     if agent not in AgentRun.Agent.values:
@@ -85,6 +93,8 @@ def create_agent_run(
         status=AgentRun.Status.PENDING,
         dry_run=dry_run,
         triggered_by=triggered_by,
+        sandbox_mode=bool(sandbox_mode),
+        prompt_version_ref=prompt_version_ref,
     )
     write_event(
         kind="ai.agent_run.created",
@@ -302,16 +312,69 @@ def run_readonly_agent_analysis(
                 provider="disabled",
             )
 
+    # Phase 3D — load active PromptVersion (if any) + read sandbox state.
+    prompt_version_ref = get_active_prompt_version(agent)
+    sandbox_active = is_sandbox_enabled()
+
     run = create_agent_run(
         agent=agent,
         input_payload=input_payload,
         triggered_by=triggered_by,
         dry_run=dry_run,
+        sandbox_mode=sandbox_active,
+        prompt_version_ref=prompt_version_ref,
     )
+
+    # Phase 3D budget guard — runs BEFORE the prompt builder + dispatcher
+    # so a blocked agent never racks up provider cost. Budget blocks do
+    # NOT trigger the provider fallback chain.
+    budget = check_budget_before_run(agent=agent)
+    run.budget_status = budget.status
+    run.budget_snapshot = budget.to_snapshot()
+    run.save(update_fields=["budget_status", "budget_snapshot"])
+
+    if budget.warning:
+        write_event(
+            kind="ai.budget.warning",
+            text=(
+                f"Agent {agent} budget at threshold · {budget.reason} "
+                f"(daily ${budget.daily_spend_usd}/${budget.daily_budget_usd})"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "run_id": run.id,
+                "agent": agent,
+                "snapshot": budget.to_snapshot(),
+            },
+        )
+
+    if budget.blocked:
+        write_event(
+            kind="ai.budget.blocked",
+            text=f"Agent {agent} blocked by budget guard · {budget.reason}",
+            tone=AuditEvent.Tone.DANGER,
+            payload={
+                "run_id": run.id,
+                "agent": agent,
+                "snapshot": budget.to_snapshot(),
+            },
+        )
+        return fail_agent_run(
+            run,
+            error_message=(
+                f"Budget guard blocked {agent}: {budget.reason}. Adjust "
+                "AgentBudget or wait for the period to roll over."
+            ),
+            provider="disabled",
+        )
 
     # Compliance gate: build messages with mandatory Claim Vault grounding.
     try:
-        bundle = build_messages(agent=agent, input_payload=input_payload)
+        bundle = build_messages(
+            agent=agent,
+            input_payload=input_payload,
+            prompt_version=prompt_version_ref,
+        )
     except ClaimVaultMissing as exc:
         return fail_agent_run(run, error_message=str(exc), provider="disabled")
     except ValueError as exc:

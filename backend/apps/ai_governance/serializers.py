@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from .models import AgentRun, CaioAudit, CeoBriefing, CeoRecommendation
+from .models import (
+    AgentBudget,
+    AgentRun,
+    CaioAudit,
+    CeoBriefing,
+    CeoRecommendation,
+    PromptVersion,
+    SandboxState,
+)
 
 
 class CeoRecommendationSerializer(serializers.ModelSerializer):
@@ -54,6 +62,13 @@ class AgentRunSerializer(serializers.ModelSerializer):
     )
     fallbackUsed = serializers.BooleanField(source="fallback_used", read_only=True)
     pricingSnapshot = serializers.JSONField(source="pricing_snapshot", read_only=True)
+    # Phase 3D
+    sandboxMode = serializers.BooleanField(source="sandbox_mode", read_only=True)
+    promptVersionRef = serializers.CharField(
+        source="prompt_version_ref_id", read_only=True
+    )
+    budgetStatus = serializers.CharField(source="budget_status", read_only=True)
+    budgetSnapshot = serializers.JSONField(source="budget_snapshot", read_only=True)
 
     class Meta:
         model = AgentRun
@@ -79,6 +94,10 @@ class AgentRunSerializer(serializers.ModelSerializer):
             "providerAttempts",
             "fallbackUsed",
             "pricingSnapshot",
+            "sandboxMode",
+            "promptVersionRef",
+            "budgetStatus",
+            "budgetSnapshot",
         )
 
 
@@ -93,3 +112,97 @@ class AgentRunCreateSerializer(serializers.Serializer):
     agent = serializers.ChoiceField(choices=AgentRun.Agent.choices)
     input = serializers.JSONField(required=False, default=dict)
     dryRun = serializers.BooleanField(required=False, default=True)
+
+
+# ----- Phase 3D — PromptVersion, AgentBudget, SandboxState -----
+
+
+class PromptVersionSerializer(serializers.ModelSerializer):
+    systemPolicy = serializers.CharField(source="system_policy", read_only=True)
+    rolePrompt = serializers.CharField(source="role_prompt", read_only=True)
+    instructionPayload = serializers.JSONField(
+        source="instruction_payload", read_only=True
+    )
+    isActive = serializers.BooleanField(source="is_active", read_only=True)
+    createdBy = serializers.CharField(source="created_by", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    activatedAt = serializers.DateTimeField(source="activated_at", read_only=True)
+    rolledBackAt = serializers.DateTimeField(source="rolled_back_at", read_only=True)
+    rollbackReason = serializers.CharField(source="rollback_reason", read_only=True)
+
+    class Meta:
+        model = PromptVersion
+        fields = (
+            "id",
+            "agent",
+            "version",
+            "title",
+            "systemPolicy",
+            "rolePrompt",
+            "instructionPayload",
+            "isActive",
+            "status",
+            "createdBy",
+            "metadata",
+            "createdAt",
+            "activatedAt",
+            "rolledBackAt",
+            "rollbackReason",
+        )
+
+
+class PromptVersionCreateSerializer(serializers.Serializer):
+    agent = serializers.ChoiceField(choices=AgentRun.Agent.choices)
+    version = serializers.CharField(max_length=24)
+    title = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+    systemPolicy = serializers.CharField(required=False, allow_blank=True, default="")
+    rolePrompt = serializers.CharField(required=False, allow_blank=True, default="")
+    instructionPayload = serializers.JSONField(required=False, default=dict)
+    metadata = serializers.JSONField(required=False, default=dict)
+
+
+class PromptVersionRollbackSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500)
+
+
+class AgentBudgetSerializer(serializers.ModelSerializer):
+    dailyBudgetUsd = serializers.DecimalField(
+        source="daily_budget_usd", max_digits=10, decimal_places=4
+    )
+    monthlyBudgetUsd = serializers.DecimalField(
+        source="monthly_budget_usd", max_digits=10, decimal_places=4
+    )
+    isEnforced = serializers.BooleanField(source="is_enforced")
+    alertThresholdPct = serializers.IntegerField(source="alert_threshold_pct")
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = AgentBudget
+        fields = (
+            "id",
+            "agent",
+            "dailyBudgetUsd",
+            "monthlyBudgetUsd",
+            "isEnforced",
+            "alertThresholdPct",
+            "createdAt",
+            "updatedAt",
+        )
+
+
+class SandboxStateSerializer(serializers.ModelSerializer):
+    isEnabled = serializers.BooleanField(source="is_enabled")
+    updatedBy = serializers.CharField(source="updated_by", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = SandboxState
+        fields = ("isEnabled", "note", "updatedBy", "updatedAt")
+
+
+class SandboxPatchSerializer(serializers.Serializer):
+    isEnabled = serializers.BooleanField()
+    note = serializers.CharField(
+        max_length=240, required=False, allow_blank=True, default=""
+    )

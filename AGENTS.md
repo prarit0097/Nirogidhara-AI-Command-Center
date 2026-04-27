@@ -78,7 +78,7 @@ React UI  ──/api/JSON──►  Django + DRF  ──ORM──►  SQLite (de
 frontend/src/services/api.ts        ← service layer (HTTP + mock fallback)
 frontend/src/services/mockData.ts   ← deterministic fixtures (internal)
 frontend/src/types/domain.ts        ← THE TypeScript contract
-frontend/src/pages/                 ← 17 pages, each maps to a route
+frontend/src/pages/                 ← 19 pages, each maps to a route
 frontend/src/components/{ui,layout} ← shadcn UI + app shell
 
 backend/config/settings.py          ← env-driven config
@@ -107,6 +107,9 @@ backend/apps/ai_governance/models.py ← AgentRun (id, agent, prompt_version, in
 backend/apps/integrations/ai/pricing.py ← Model-wise OpenAI + Anthropic per-1M-token rates (review periodically)
 backend/config/celery.py            ← Celery app + 09:00 + 18:00 IST beat schedule (CELERY_TASK_ALWAYS_EAGER=true in dev)
 docker-compose.dev.yml              ← Local Redis only — VPS Redis NEVER used in development
+backend/apps/ai_governance/sandbox.py ← Phase 3D SandboxState singleton (skips CeoBriefing refresh when ON)
+backend/apps/ai_governance/prompt_versions.py ← Phase 3D PromptVersion lifecycle (one active per agent + rollback)
+backend/apps/ai_governance/budgets.py ← Phase 3D per-agent USD budget guard (warning + block, no provider fallback)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -117,7 +120,7 @@ nd.md                               ← full project handoff (read this if you n
 
 14 Django apps: `accounts`, `audit`, `crm`, `calls`, `orders`, `payments`, `shipments`, `agents`, `ai_governance`, `compliance`, `rewards`, `learning_engine`, `analytics`, `dashboards`.
 
-17 frontend pages: Dashboard, Leads CRM, Customer 360, AI Calling, Orders Pipeline, Confirmation Queue, Payments, Delhivery Tracking, RTO Rescue, AI Agents Center, CEO AI Briefing, CAIO Audit, Reward & Penalty, Human Call Learning, Claim Vault, Analytics, Settings.
+19 frontend pages: Dashboard, Leads CRM, Customer 360, AI Calling, Orders Pipeline, Confirmation Queue, Payments, Delhivery Tracking, RTO Rescue, AI Agents Center, CEO AI Briefing, CAIO Audit, AI Scheduler & Cost (Phase 3C), AI Governance (Phase 3D), Reward & Penalty, Human Call Learning, Claim Vault, Analytics, Settings.
 
 ---
 
@@ -166,7 +169,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 175 tests today
+python -m pytest -q                 # 190 tests today
 
 # Frontend
 cd frontend

@@ -60,6 +60,14 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.scheduler.daily_briefing.failed": "alarm-clock-off",
     "ai.provider.fallback_used": "shuffle",
     "ai.cost_tracked": "indian-rupee",
+    # Phase 3D — sandbox + prompt versioning + budget guards.
+    "ai.prompt_version.created": "file-plus",
+    "ai.prompt_version.activated": "play",
+    "ai.prompt_version.rolled_back": "rotate-ccw",
+    "ai.sandbox.enabled": "shield-half",
+    "ai.sandbox.disabled": "shield-off",
+    "ai.budget.warning": "gauge",
+    "ai.budget.blocked": "ban",
 }
 
 

@@ -294,6 +294,14 @@ OPENAI_FALLBACK_MODEL = os.environ.get("OPENAI_FALLBACK_MODEL", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "")
 GROK_MODEL = os.environ.get("GROK_MODEL", "")
 
+
+# ----- Phase 3D — Sandbox toggle default -----
+# The DB-backed SandboxState singleton holds the live toggle; this env
+# var is the boot-time default the singleton picks up the FIRST time it
+# is queried. Flipping the toggle later goes through PATCH
+# /api/ai/sandbox/status/ (admin/director only).
+AI_SANDBOX_MODE = _bool(os.environ.get("AI_SANDBOX_MODE"), default=False)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
