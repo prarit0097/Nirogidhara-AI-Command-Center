@@ -399,8 +399,9 @@ function optimisticPayment(payload: PaymentLinkPayload): Payment {
 }
 
 function optimisticShipment(payload: ShipmentCreatePayload): Shipment {
+  const awb = `DLH${Date.now().toString().slice(-8)}`;
   return {
-    awb: `DLH${Date.now().toString().slice(-8)}`,
+    awb,
     orderId: payload.orderId,
     customer: "",
     state: "",
@@ -408,6 +409,8 @@ function optimisticShipment(payload: ShipmentCreatePayload): Shipment {
     status: "Pickup Scheduled",
     eta: "3 days",
     courier: "Delhivery",
+    trackingUrl: `https://delhivery.example/track/${awb}`,
+    riskFlag: "",
     timeline: [
       { step: "AWB Generated", at: "Day 0", done: true },
       { step: "Pickup Scheduled", at: "Day 0", done: true },

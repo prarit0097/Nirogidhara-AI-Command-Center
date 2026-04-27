@@ -30,6 +30,11 @@ ICON_BY_KIND: dict[str, str] = {
     "shipment.created": "package",
     "rescue.attempted": "phone-call",
     "rescue.updated": "phone-forwarded",
+    # Phase 2C — Delhivery webhook outcomes.
+    "shipment.delivered": "package-check",
+    "shipment.ndr": "alert-octagon",
+    "shipment.rto_initiated": "package-x",
+    "shipment.rto_delivered": "rotate-ccw",
 }
 
 

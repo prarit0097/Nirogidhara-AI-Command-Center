@@ -89,6 +89,8 @@ backend/apps/audit/signals.py       ← Master Event Ledger receivers
 backend/apps/accounts/permissions.py ← RoleBasedPermission + role-set constants
 backend/apps/payments/integrations/razorpay_client.py ← Razorpay mock/test/live adapter
 backend/apps/payments/webhooks.py   ← Razorpay webhook receiver (HMAC + idempotent)
+backend/apps/shipments/integrations/delhivery_client.py ← Delhivery mock/test/live adapter
+backend/apps/shipments/webhooks.py  ← Delhivery tracking webhook receiver (HMAC + idempotent)
 backend/apps/_ai_config.py          ← AI provider config helper (Phase 3+ scaffold)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
@@ -149,7 +151,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 64 tests today
+python -m pytest -q                 # 77 tests today
 
 # Frontend
 cd frontend
@@ -188,7 +190,7 @@ cd frontend && npm run lint && npm test && npm run build
 - Don't add Supabase, Firebase, or any other backend service. Backend is Django + DRF, period.
 - Don't hard-code medical claims in any file. They live in `apps.compliance.Claim`.
 - Don't write to the database from CAIO endpoints. CAIO is read/audit only.
-- Don't add a real third-party integration without confirming credentials & sandbox setup with Prarit first. **Razorpay (Phase 2B) is shipped** — `RAZORPAY_MODE=test` or `live` enables it. Delhivery (Phase 2C, next), Vapi (2D), Meta Lead Ads (2E), PayU, and WhatsApp still need creds before any wiring lands.
+- Don't add a real third-party integration without confirming credentials & sandbox setup with Prarit first. **Razorpay (Phase 2B) and Delhivery (Phase 2C) are shipped** — `RAZORPAY_MODE=test|live` and `DELHIVERY_MODE=test|live` enable them once real credentials are in `backend/.env`. Vapi (2D, next), Meta Lead Ads (2E), PayU, and WhatsApp still need creds before any wiring lands.
 - Don't push to `main` without running tests + build + lint locally first.
 - Don't `git push --force`. Don't skip hooks. Don't amend pushed commits.
 

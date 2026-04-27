@@ -1,12 +1,16 @@
-"""Shipment + RTO rescue write services. Phase 2A: mock courier only.
+"""Shipment + RTO rescue write services.
 
-Real Delhivery AWB creation is Phase 2B. We mint a fake AWB matching the
-existing seed pattern (``DLH<8 digits>``) so frontend tracking views render
-without any code change.
+Phase 2C: real Delhivery integration via the three-mode adapter at
+``apps/shipments/integrations/delhivery_client.py``. The default
+``DELHIVERY_MODE=mock`` keeps the AWB pattern (``DLH<8 digits>``) so the
+existing seeded data and frontend tracking views keep rendering without any
+code change. ``test`` and ``live`` modes route through the real Delhivery API.
+
+Webhook updates (status transitions, NDR, RTO) are applied by
+``apps/shipments/webhooks.py`` — those reuse helpers exposed below.
 """
 from __future__ import annotations
 
-import secrets
 from typing import Any
 
 from django.db import transaction
@@ -16,6 +20,11 @@ from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 from apps.orders.models import Order
 
+from .integrations.delhivery_client import (
+    AwbResult,
+    DelhiveryClientError,
+    create_awb as _gateway_create_awb,
+)
 from .models import RescueAttempt, Shipment, WorkflowStep
 
 try:  # pragma: no cover - typing only
@@ -33,28 +42,47 @@ _DEFAULT_TIMELINE: list[dict] = [
 ]
 
 
-def _mint_awb() -> str:
-    """Generate a unique mock AWB. Retries on the (vanishingly rare) collision."""
-    for _ in range(10):
-        candidate = f"DLH{secrets.randbelow(99_999_999):08d}"
-        if not Shipment.objects.filter(awb=candidate).exists():
-            return candidate
-    raise RuntimeError("Could not mint a unique AWB after 10 attempts")
+def _shipment_exists(awb: str) -> bool:
+    return Shipment.objects.filter(awb=awb).exists()
 
 
 @transaction.atomic
-def create_mock_shipment(*, order: Order, by_user: "User") -> Shipment:
-    """Create a shipment + 5-step timeline. Updates parent order's awb + stage."""
-    awb = _mint_awb()
+def create_shipment(*, order: Order, by_user: "User") -> Shipment:
+    """Create a Delhivery shipment + 5-step timeline. Updates parent order's awb.
+
+    Routes through the Delhivery adapter — ``mock`` mode mints a deterministic
+    ``DLH<8 digits>`` AWB without touching the network; ``test``/``live`` modes
+    hit the real Delhivery API. Raises ``DelhiveryClientError`` if the gateway
+    misbehaves so the view can return 502/400.
+    """
+    try:
+        result: AwbResult = _gateway_create_awb(
+            order_id=order.id,
+            customer_name=order.customer_name,
+            customer_phone=order.phone,
+            address_line=f"{order.city}, {order.state}",
+            city=order.city,
+            state=order.state,
+            cod_amount=0 if order.advance_paid else max(order.amount - order.advance_amount, 0),
+            payment_mode="Prepaid" if order.advance_paid else "COD",
+            exists=_shipment_exists,
+        )
+    except DelhiveryClientError:
+        # Re-raise so the view can return 502/400; never silently swallow.
+        raise
+
     shipment = Shipment.objects.create(
-        awb=awb,
+        awb=result.awb,
         order_id=order.id,
         customer=order.customer_name,
         state=order.state,
         city=order.city,
-        status="Pickup Scheduled",
+        status=result.status or "Pickup Scheduled",
         eta="3 days",
         courier="Delhivery",
+        delhivery_status=result.status or "Pickup Scheduled",
+        tracking_url=result.tracking_url,
+        raw_response=dict(result.raw or {}),
     )
     WorkflowStep.objects.bulk_create(
         [WorkflowStep(shipment=shipment, **step) for step in _DEFAULT_TIMELINE]
@@ -62,20 +90,25 @@ def create_mock_shipment(*, order: Order, by_user: "User") -> Shipment:
 
     # Sync parent order — only set awb (don't auto-transition stage; that's the
     # caller's choice via /orders/{id}/transition/).
-    order.awb = awb
+    order.awb = result.awb
     order.save(update_fields=["awb"])
 
     write_event(
         kind="shipment.created",
-        text=f"Shipment {awb} created for order {order.id} (mock Delhivery)",
+        text=f"Shipment {result.awb} created for order {order.id} (Delhivery)",
         tone=AuditEvent.Tone.SUCCESS,
         payload={
-            "awb": awb,
+            "awb": result.awb,
             "order_id": order.id,
+            "tracking_url": result.tracking_url,
             "by": getattr(by_user, "username", ""),
         },
     )
     return shipment
+
+
+# Back-compat alias — older callers (and a Phase 2A test) reference this name.
+create_mock_shipment = create_shipment
 
 
 @transaction.atomic

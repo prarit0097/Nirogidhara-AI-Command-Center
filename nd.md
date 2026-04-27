@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B done; Phase 3 env scaffolded):** All 14 Django apps scaffolded, **25 read + 14 write endpoints + Razorpay webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, mock shipment/RTO rescue adapters, **AI provider env scaffolding (OpenAI / Anthropic / Grok — disabled by default, no SDK calls yet)**, seed command, frontend wired with **automatic mock fallback**. **64 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 2C+):** Delhivery courier API + tracking webhook, Vapi voice trigger + transcript ingest, Meta Lead Ads webhook, LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C done; Phase 3 env scaffolded):** All 14 Django apps scaffolded, **25 read + 14 write endpoints + Razorpay webhook + Delhivery webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, **Delhivery courier integration with mock/test/live modes + HMAC-verified tracking webhook handling delivered/NDR/RTO**, **AI provider env scaffolding (OpenAI / Anthropic / Grok — disabled by default, no SDK calls yet)**, seed command, frontend wired with **automatic mock fallback**. **77 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 2D+):** Vapi voice trigger + transcript ingest, Meta Lead Ads webhook, LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -462,7 +462,7 @@ Final Reward Score =
 - New env vars: `RAZORPAY_MODE`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_CALLBACK_URL`. Frontend never sees them.
 - Payments page "Generate link" button wired to `api.createPaymentLink`.
 
-### ✅ Phase 3 prep — AI provider env scaffolding (built this session)
+### ✅ Phase 3 prep — AI provider env scaffolding (built earlier this session)
 
 - New env block in `backend/.env.example`: `AI_PROVIDER` (default `disabled`), `AI_MODEL`, `AI_TEMPERATURE`, `AI_MAX_TOKENS`, `AI_REQUEST_TIMEOUT_SECONDS`, plus per-provider keys: `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_ORG_ID`, `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`, `GROK_API_KEY`/`GROK_BASE_URL`. All secrets stay server-side.
 - Settings constants wired in `backend/config/settings.py` with safe defaults (no float/int parse explosions if env is malformed).
@@ -471,9 +471,20 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
+### ✅ Phase 2C — Delhivery Courier Integration (built this session)
+
+- Three-mode adapter at `backend/apps/shipments/integrations/delhivery_client.py` (`mock` | `test` | `live`). `requests` is imported lazily so mock works without the package. Mock mode preserves the seeded `DLH<8 digits>` AWB pattern.
+- `Shipment` model gains `delhivery_status`, `tracking_url`, `risk_flag` (`NDR`/`RTO`), `raw_response`, `updated_at` via migration `0003_shipment_delhivery_fields`.
+- `services.create_shipment` now routes through the adapter, persists the gateway response, and writes a `shipment.created` audit row with `tracking_url` payload. The Phase 2A name `create_mock_shipment` is kept as an alias for callers that still reference it.
+- `POST /api/webhooks/delhivery/` verifies HMAC-SHA256 (`X-Delhivery-Signature`), deduplicates by event id (reusing `payments.WebhookEvent` because its `gateway` field accepts arbitrary strings), and dispatches handlers for `pickup_scheduled` / `picked_up` / `in_transit` / `out_for_delivery` / `delivered` / `ndr` / `rto_initiated` / `rto_delivered`. NDR / RTO transitions bump `Order.rto_risk` to High and write danger-tone audit rows; delivered transitions advance `Order.stage` to `Delivered`.
+- 13 new pytest tests cover mock + test-mode adapter, auth/role gating, webhook delivered/NDR/RTO/duplicate/invalid-sig/unknown-event, signature helper round-trip, AuditEvent firing.
+- New env vars: `DELHIVERY_MODE`, `DELHIVERY_API_BASE_URL`, `DELHIVERY_API_TOKEN`, `DELHIVERY_PICKUP_LOCATION`, `DELHIVERY_RETURN_ADDRESS`, `DELHIVERY_DEFAULT_PACKAGE_WEIGHT_GRAMS`, `DELHIVERY_WEBHOOK_SECRET`. Frontend never sees them.
+- Frontend `Shipment` interface widened with optional `trackingUrl` / `riskFlag` so the existing Delivery page picks them up automatically once the backend serves them.
+- `audit.signals.ICON_BY_KIND` extended with `shipment.delivered`, `shipment.ndr`, `shipment.rto_initiated`, `shipment.rto_delivered`.
+
 | Command | Result |
 | --- | --- |
-| `python -m pytest -q` | **64 passed** (44 + 13 razorpay + 7 ai config) |
+| `python -m pytest -q` | **77 passed** (44 + 13 razorpay + 7 ai config + 13 delhivery) |
 | `python manage.py check` | 0 issues |
 
 ---
@@ -523,7 +534,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 44 tests (26 reads + 18 writes)
+cd backend && python -m pytest -q   # 77 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -566,7 +577,7 @@ JSON in, JSON out. Every entry below is consumed by `frontend/src/services/api.t
 | `getCallTranscripts` | GET | `/api/calls/active/transcript/` | `CallTranscriptLine[]` |
 | `getConfirmationQueue` | GET | `/api/confirmation/queue/` | `(Order & {hoursWaiting, addressConfidence, checklist})[]` |
 | `getPayments` | GET | `/api/payments/` | `Payment[]` |
-| `getShipments` | GET | `/api/shipments/` | `Shipment[]` (with `timeline`) |
+| `getShipments` | GET | `/api/shipments/` | `Shipment[]` (with `timeline`, `trackingUrl`, `riskFlag`) |
 | `getRtoRiskOrders` | GET | `/api/rto/risk/` | `(Order & {riskReasons, rescueStatus})[]` |
 | `getAgentStatus` | GET | `/api/agents/` | `Agent[]` |
 | `getAgentHierarchy` | GET | `/api/agents/hierarchy/` | `{root, ceo, caio, departments}` |
@@ -597,12 +608,20 @@ CRM → Workflow → Integrations → Voice AI → Agents → Governance → Lea
 ### ✅ Phase 2A — Core Write APIs + Workflow State Machine (DONE)
 13 write endpoints · service layer · order state machine · `RoleBasedPermission` · 18 new tests · mock payment + shipment + RTO rescue. See §8.
 
-### Phase 2B — Real integrations
-- **Razorpay payment links** — replace the mock URL in `payments/services.py` with a real Razorpay client call. Add `POST /api/webhooks/razorpay/` for paid-event ingest.
-- **PayU payment links** — same shape, gateway flag.
-- **Delhivery AWB creation + tracking webhook** — replace `_mint_awb()` mock with real Delhivery API call. Add `POST /api/webhooks/delhivery/`.
-- **Vapi voice trigger + transcript ingest** — `POST /api/calls/trigger/`, `POST /api/webhooks/vapi/`.
-- **Meta Lead Ads webhook** — `POST /api/webhooks/meta/leads/`, idempotent.
+### ✅ Phase 2B — Razorpay payment-link integration (DONE)
+Three-mode adapter, HMAC-verified webhook, idempotency, 13 new tests. See §8.
+
+### ✅ Phase 2C — Delhivery courier integration (DONE)
+Three-mode adapter, HMAC-verified tracking webhook, NDR / RTO risk handling, 13 new tests. See §8.
+
+### Phase 2D — Vapi voice trigger + transcript ingest (NEXT)
+- `POST /api/calls/trigger/` kicks off an outbound Vapi call for a lead.
+- `POST /api/webhooks/vapi/` receives transcript + objection-detection output and persists `Call`, `ActiveCall`, `CallTranscriptLine` rows.
+- HMAC verification on the webhook.
+
+### Phase 2E — Other gateways
+- **Meta Lead Ads webhook** — `POST /api/webhooks/meta/leads/`, idempotent on `leadgen_id`, maps form fields to the `Lead` model.
+- **PayU payment links** — same shape as Razorpay; only the adapter is missing.
 - Tighten role permissions per blueprint §8 where needed (compliance writes, settings writes).
 
 ### Phase 3 — LLM-powered AI agents

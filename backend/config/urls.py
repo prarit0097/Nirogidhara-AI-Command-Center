@@ -28,6 +28,7 @@ api_patterns = [
     path("rewards/", include("apps.rewards.urls")),
     path("learning/", include("apps.learning_engine.urls")),
     path("webhooks/", include("apps.payments.webhook_urls")),
+    path("webhooks/", include("apps.shipments.webhook_urls")),
 ]
 
 urlpatterns = [

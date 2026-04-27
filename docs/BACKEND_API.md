@@ -59,7 +59,7 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 | Method | Path | Returns |
 | --- | --- | --- |
 | GET | `/api/payments/` | `Payment[]` |
-| GET | `/api/shipments/` | `Shipment[]` (with `timeline`) |
+| GET | `/api/shipments/` | `Shipment[]` (with `timeline`, `trackingUrl`, `riskFlag`) |
 | GET | `/api/rto/risk/` | `(Order & {riskReasons, rescueStatus})[]` |
 
 ## Agents & AI Governance
@@ -110,10 +110,13 @@ Receivers in `apps/audit/signals.py` write rows on:
 - `payment.received` — Payment row saved with status=Paid (post-save signal)
 - `shipment.created` — explicit, on POST `/shipments/`
 - `shipment.status_changed` — Shipment row saved (post-save signal)
+- `shipment.delivered` — explicit, on Delhivery webhook `delivered`
+- `shipment.ndr` — explicit, on Delhivery webhook `ndr`
+- `shipment.rto_initiated` / `shipment.rto_delivered` — explicit, on Delhivery webhook RTO events
 - `rescue.attempted` / `rescue.updated` — explicit, on POST/PATCH `/rto/rescue/`
 
-Phase 2B+ will add: reward/penalty assigned, prompt updated, rollback performed,
-CAIO audit completed, CEO approval recorded.
+Phase 2D+ will add: voice-call ingest, reward/penalty assigned, prompt updated,
+rollback performed, CAIO audit completed, CEO approval recorded.
 
 ---
 
@@ -169,9 +172,16 @@ Invalid transitions return HTTP 400 with a `detail` message.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/shipments/` | Mock Delhivery dispatch. Body: `{ orderId }`. Generates `DLH<8 digits>` AWB and a 5-step timeline. |
+| POST | `/api/shipments/` | Create a Delhivery shipment. Body: `{ orderId }`. Routes through the three-mode adapter (`DELHIVERY_MODE=mock\|test\|live`). Mock mode generates `DLH<8 digits>` deterministically; test/live mode hits the real Delhivery API. Returns the `Shipment` row with `trackingUrl` populated. |
 | POST | `/api/rto/rescue/` | Create a rescue attempt. Body: `{ orderId, channel, notes? }`. |
 | PATCH | `/api/rto/rescue/{id}/` | Update outcome. Body: `{ outcome, notes? }`. Bubbles up to parent order's `rescue_status`. |
+
+### Webhooks (gateway → backend, public)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/webhooks/razorpay/` | Razorpay payment events (Phase 2B). HMAC-verified via `RAZORPAY_WEBHOOK_SECRET`; idempotent on `event.id`. |
+| POST | `/api/webhooks/delhivery/` | Delhivery tracking events (Phase 2C). HMAC-verified via `DELHIVERY_WEBHOOK_SECRET` (`X-Delhivery-Signature`); idempotent on `event.id`. Status mapping: `pickup_scheduled` / `picked_up` / `in_transit` / `out_for_delivery` / `delivered` / `ndr` / `rto_initiated` / `rto_delivered`. NDR + RTO events bump parent order's `rto_risk` and write danger-tone `AuditEvent` rows. |
 
 ### Permissions
 

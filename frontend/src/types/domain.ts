@@ -137,6 +137,10 @@ export interface Shipment {
   status: string;
   eta: string;
   courier: string;
+  /** Customer-facing tracking URL — populated by Delhivery in test/live mode. */
+  trackingUrl?: string;
+  /** "NDR" / "RTO" surfaced on the RTO board when set by the tracking webhook. */
+  riskFlag?: string;
   timeline: WorkflowStep[];
 }
 

@@ -4,7 +4,15 @@ from django.db import models
 
 
 class Shipment(models.Model):
-    """Blueprint Section 5.6 — Delhivery AWB + tracking lifecycle."""
+    """Blueprint Section 5.6 — Delhivery AWB + tracking lifecycle.
+
+    Phase 2C adds the integration fields ``delhivery_status`` (raw status from
+    Delhivery's tracking webhook, kept verbatim for debugging), ``tracking_url``
+    (customer-facing tracking URL when the gateway returns one),
+    ``risk_flag`` (NDR / RTO indicator surfaced on RTO board) and
+    ``raw_response`` (full payload for the most recent gateway exchange so
+    operators can audit any disputed event).
+    """
 
     awb = models.CharField(primary_key=True, max_length=40)
     order_id = models.CharField(max_length=32, db_index=True)
@@ -14,7 +22,13 @@ class Shipment(models.Model):
     status = models.CharField(max_length=80, default="Manifested")
     eta = models.CharField(max_length=40, default="")
     courier = models.CharField(max_length=40, default="Delhivery")
+    # Phase 2C integration fields.
+    delhivery_status = models.CharField(max_length=64, blank=True, default="")
+    tracking_url = models.URLField(blank=True, default="")
+    risk_flag = models.CharField(max_length=24, blank=True, default="")
+    raw_response = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ("-created_at",)

@@ -147,24 +147,6 @@ CORS_ALLOWED_ORIGINS = _csv(os.environ.get("CORS_ALLOWED_ORIGINS")) or [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# ----- Razorpay (Phase 2B) -----
-# Three modes: ``mock`` (default, deterministic fake link, no network),
-# ``test`` (Razorpay sandbox), ``live`` (real production). Frontend never sees
-# any of these — secrets stay server-side.
-RAZORPAY_MODE = (os.environ.get("RAZORPAY_MODE") or "mock").lower()
-RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
-RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
-RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
-RAZORPAY_CALLBACK_URL = os.environ.get("RAZORPAY_CALLBACK_URL", "")
-
-
-# ----- AI provider (Phase 3+ scaffolding) -----
-# Today no LLM call is dispatched. ``apps/_ai_config.py`` reads these and
-# Phase 3 adapters in ``apps/integrations/ai/`` will consume them.
-# COMPLIANCE HARD STOP: AI must speak only from ``apps.compliance.Claim``.
-AI_PROVIDER = (os.environ.get("AI_PROVIDER") or "disabled").lower()
-AI_MODEL = os.environ.get("AI_MODEL", "")
-
 
 def _safe_float(value: str | None, default: float) -> float:
     try:
@@ -180,6 +162,39 @@ def _safe_int(value: str | None, default: int) -> int:
         return default
 
 
+# ----- Razorpay (Phase 2B) -----
+# Three modes: ``mock`` (default, deterministic fake link, no network),
+# ``test`` (Razorpay sandbox), ``live`` (real production). Frontend never sees
+# any of these — secrets stay server-side.
+RAZORPAY_MODE = (os.environ.get("RAZORPAY_MODE") or "mock").lower()
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
+RAZORPAY_CALLBACK_URL = os.environ.get("RAZORPAY_CALLBACK_URL", "")
+
+
+# ----- Delhivery (Phase 2C) -----
+# Same three-mode dispatch as Razorpay: ``mock`` (default, network-free,
+# deterministic AWB), ``test`` (Delhivery staging — needs real test token +
+# pickup location), ``live`` (production). Secrets stay server-side; the
+# frontend only ever sees the AWB string and the customer-facing tracking URL.
+DELHIVERY_MODE = (os.environ.get("DELHIVERY_MODE") or "mock").lower()
+DELHIVERY_API_BASE_URL = os.environ.get("DELHIVERY_API_BASE_URL", "")
+DELHIVERY_API_TOKEN = os.environ.get("DELHIVERY_API_TOKEN", "")
+DELHIVERY_PICKUP_LOCATION = os.environ.get("DELHIVERY_PICKUP_LOCATION", "")
+DELHIVERY_RETURN_ADDRESS = os.environ.get("DELHIVERY_RETURN_ADDRESS", "")
+DELHIVERY_DEFAULT_PACKAGE_WEIGHT_GRAMS = _safe_int(
+    os.environ.get("DELHIVERY_DEFAULT_PACKAGE_WEIGHT_GRAMS"), default=500
+)
+DELHIVERY_WEBHOOK_SECRET = os.environ.get("DELHIVERY_WEBHOOK_SECRET", "")
+
+
+# ----- AI provider (Phase 3+ scaffolding) -----
+# Today no LLM call is dispatched. ``apps/_ai_config.py`` reads these and
+# Phase 3 adapters in ``apps/integrations/ai/`` will consume them.
+# COMPLIANCE HARD STOP: AI must speak only from ``apps.compliance.Claim``.
+AI_PROVIDER = (os.environ.get("AI_PROVIDER") or "disabled").lower()
+AI_MODEL = os.environ.get("AI_MODEL", "")
 AI_TEMPERATURE = _safe_float(os.environ.get("AI_TEMPERATURE"), default=0.2)
 AI_MAX_TOKENS = _safe_int(os.environ.get("AI_MAX_TOKENS"), default=2000)
 AI_REQUEST_TIMEOUT_SECONDS = _safe_int(

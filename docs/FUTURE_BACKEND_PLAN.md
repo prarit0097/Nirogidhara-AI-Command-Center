@@ -1,7 +1,7 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B are shipped (see `nd.md` §8 for the full checkpoint trail).
-Phase 3 env scaffolding is in place. Real AI-agent reasoning, the rest of the
+Phase 1 + 2A + 2B + 2C are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
 Agents → Governance → Learning → Reward/Penalty → Growth → SaaS`).
@@ -29,21 +29,22 @@ idempotent webhook receiver at `/api/webhooks/razorpay/` handling
 `payment.failed`, `refund.processed`. 13 new pytest tests covering all event
 flows + signature verification.
 
-## ⏭ Phase 2C — Delhivery Courier API + Tracking Webhook (NEXT)
+## ✅ Phase 2C — Delhivery Courier API + Tracking Webhook (DONE)
 
-| Item | Notes |
-| --- | --- |
-| Delhivery client adapter | New `apps/shipments/integrations/delhivery_client.py` mirroring the Razorpay three-mode dispatch (`DELHIVERY_MODE=mock|test|live`). |
-| Real AWB creation | Replace `_mint_awb()` mock in `apps/shipments/services.create_mock_shipment` with a real Delhivery `POST /api/cmu/create.json` call when mode is test/live. |
-| Tracking webhook | New `POST /api/webhooks/delhivery/` — verify Delhivery's `token` header (or HMAC if available), update Shipment status + parent Order. Idempotent via `WebhookEvent` table (already exists). |
-| Status events to handle | Manifested → Pickup Scheduled → In Transit → Out for Delivery → Delivered → RTO Initiated → RTO Delivered. |
-| Tests | Mock + test-mode adapter, webhook OFD/Delivered/RTO, idempotency, invalid token. ~10 tests. |
+Shipped via `feat: add delhivery shipment integration adapter`.
+Three-mode adapter (`apps/shipments/integrations/delhivery_client.py`):
+`mock` (default, deterministic `DLH<8 digits>` AWB, no network), `test`
+(Delhivery staging), `live` (production). The `_create_via_sdk` path lazy-
+imports `requests` so mock dev works without the dependency. HMAC-verified,
+idempotent webhook receiver at `/api/webhooks/delhivery/` (`X-Delhivery-
+Signature`) handling `pickup_scheduled`, `picked_up`, `in_transit`,
+`out_for_delivery`, `delivered`, `ndr`, `rto_initiated`, `rto_delivered`.
+NDR / RTO transitions bump `Order.rto_risk` to High and write danger-tone
+audit rows. 13 new pytest tests covering all event flows + signature
+verification. Reuses `payments.WebhookEvent` for cross-gateway idempotency
+(its `gateway` field accepts arbitrary strings).
 
-Acceptance: setting `DELHIVERY_MODE=test` and providing the API token must
-let the same `POST /api/shipments/` flow create a real AWB in Delhivery's
-sandbox without any view code change.
-
-## Phase 2D — Vapi Voice Trigger + Transcript Ingest
+## ⏭ Phase 2D — Vapi Voice Trigger + Transcript Ingest (NEXT)
 
 - `POST /api/calls/trigger/` — kicks off an outbound Vapi call for a lead.
 - `POST /api/webhooks/vapi/` — receives the transcript + objection detection
@@ -61,6 +62,7 @@ sandbox without any view code change.
 | Item | Notes |
 | --- | --- |
 | PayU payment links | Same shape as Razorpay; `gateway` flag in `PaymentLinkSerializer` already accepts it — only the adapter is missing. |
+| Delhivery test-mode credentials | Code path is wired; just needs a real test API token + a pickup location registered with Delhivery to flip `DELHIVERY_MODE=test`. |
 | WhatsApp Business outbound + consent | Blueprint §24 lists this as a clarification — design first, build later. |
 
 ## Phase 3 — AI Agents (LLM-powered)

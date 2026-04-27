@@ -13,11 +13,25 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
 
 class ShipmentSerializer(serializers.ModelSerializer):
     orderId = serializers.CharField(source="order_id")
+    trackingUrl = serializers.CharField(source="tracking_url", read_only=True)
+    riskFlag = serializers.CharField(source="risk_flag", read_only=True)
     timeline = WorkflowStepSerializer(many=True, read_only=True)
 
     class Meta:
         model = Shipment
-        fields = ("awb", "orderId", "customer", "state", "city", "status", "eta", "courier", "timeline")
+        fields = (
+            "awb",
+            "orderId",
+            "customer",
+            "state",
+            "city",
+            "status",
+            "eta",
+            "courier",
+            "trackingUrl",
+            "riskFlag",
+            "timeline",
+        )
 
 
 # ----- Phase 2A — write input + rescue attempt -----
