@@ -9,7 +9,7 @@
 
 Full-stack AI Business Operating System for Nirogidhara Private Limited (Ayurvedic medicine D2C). React 18 + Vite + TS frontend talks to Django 5 + DRF backend. Director: Prarit Sidana — final authority for high-risk decisions. Reference: *Nirogidhara AI Command Center — Master Blueprint v1.0* (PDF in repo).
 
-Status: Phase 1 + Phase 2A + Phase 2B complete (CRM data layer, write APIs with workflow state machine, Razorpay payment-link integration with mock/test/live modes + webhook handling). 57 backend tests + 8 frontend tests, all green.
+Status: Phase 1 + Phase 2A + Phase 2B complete; Phase 3 env scaffolded (CRM data layer, write APIs with workflow state machine, Razorpay payment-link integration with mock/test/live modes + webhook handling, AI provider env config for OpenAI / Anthropic / Grok — disabled by default). **64 backend tests + 8 frontend tests**, all green. Next: Phase 2C — Delhivery courier API + tracking webhook.
 
 GitHub: https://github.com/prarit0097/Nirogidhara-AI-Command-Center
 
@@ -104,7 +104,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 57 tests today
+python -m pytest -q                    # 64 tests today
 
 # Frontend
 cd frontend

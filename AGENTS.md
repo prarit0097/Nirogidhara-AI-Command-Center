@@ -149,7 +149,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 26 tests today
+python -m pytest -q                 # 64 tests today
 
 # Frontend
 cd frontend
@@ -188,7 +188,7 @@ cd frontend && npm run lint && npm test && npm run build
 - Don't add Supabase, Firebase, or any other backend service. Backend is Django + DRF, period.
 - Don't hard-code medical claims in any file. They live in `apps.compliance.Claim`.
 - Don't write to the database from CAIO endpoints. CAIO is read/audit only.
-- Don't add a real third-party integration (Razorpay, Vapi, Delhivery, etc.) without confirming the credentials & sandbox setup with Prarit first — these are Phase 2 with explicit clarifications listed in `nd.md` §12.
+- Don't add a real third-party integration without confirming credentials & sandbox setup with Prarit first. **Razorpay (Phase 2B) is shipped** — `RAZORPAY_MODE=test` or `live` enables it. Delhivery (Phase 2C, next), Vapi (2D), Meta Lead Ads (2E), PayU, and WhatsApp still need creds before any wiring lands.
 - Don't push to `main` without running tests + build + lint locally first.
 - Don't `git push --force`. Don't skip hooks. Don't amend pushed commits.
 

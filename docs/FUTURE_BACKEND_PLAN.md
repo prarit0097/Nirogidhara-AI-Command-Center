@@ -1,34 +1,79 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 ships a working Django + DRF backend with all 25 read endpoints
-matching the frontend service-layer contract. Real integrations, AI agent
-reasoning, and the full governance UI live in the phases below — ordered per
-blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI → Agents →
-Governance → Learning → Reward/Penalty → Growth → SaaS`).
+Phase 1 + 2A + 2B are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 3 env scaffolding is in place. Real AI-agent reasoning, the rest of the
+gateway integrations, and the full governance UI live in the phases below —
+ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
+Agents → Governance → Learning → Reward/Penalty → Growth → SaaS`).
 
 Each phase is shippable on its own. None of it is required to keep the
 frontend working today (the mock-fallback in `services/api.ts` keeps every
 page rendering even if the backend is offline).
 
-## Phase 2 — Integrations & Write Operations
+## ✅ Phase 2A — Core Write APIs + Workflow State Machine (DONE)
+
+Shipped in commit `82f1a60`. 13 write endpoints (lead create/update/assign,
+customer upsert, order create/transition/move-to-confirmation/confirm, mock
+shipment, RTO rescue create/update). Role-based permissions
+(`apps/accounts/permissions.py`) — anonymous → 401, viewer → 403, ops/admin/
+director → allowed. Order state machine in `apps/orders/services.py`. Service-
+layer pattern across CRM / orders / payments / shipments. 18 new pytest tests.
+
+## ✅ Phase 2B — Razorpay Payment Links (DONE)
+
+Shipped in commit `82f1a60`. Three-mode adapter
+(`apps/payments/integrations/razorpay_client.py`): `mock` (default, no
+network), `test` (Razorpay sandbox), `live` (production). HMAC-verified,
+idempotent webhook receiver at `/api/webhooks/razorpay/` handling
+`payment_link.paid`, `partially_paid`, `cancelled`, `expired`,
+`payment.failed`, `refund.processed`. 13 new pytest tests covering all event
+flows + signature verification.
+
+## ⏭ Phase 2C — Delhivery Courier API + Tracking Webhook (NEXT)
 
 | Item | Notes |
 | --- | --- |
-| Razorpay payment links | Need merchant account + webhook secret. New endpoint `POST /api/payments/links/`. |
-| PayU payment links | Same shape as Razorpay; gateway flag selects provider. |
-| Delhivery AWB creation + tracking webhook | `POST /api/shipments/` and `/api/webhooks/delhivery/`. |
-| Vapi voice AI trigger + transcript ingest | `POST /api/calls/trigger/`. Webhook receives transcript & saves `ActiveCall` + `CallTranscriptLine`. |
-| Meta Lead Ads webhook ingest | `POST /api/webhooks/meta/leads/`. Idempotent — same lead ID skips. |
-| WhatsApp Business consent + outbound | Optional, blueprint Section 24 lists this as a clarification. |
-| Audit signals for: payment events, shipment events, reward assigned, prompt updated | Already partially wired; expand. |
+| Delhivery client adapter | New `apps/shipments/integrations/delhivery_client.py` mirroring the Razorpay three-mode dispatch (`DELHIVERY_MODE=mock|test|live`). |
+| Real AWB creation | Replace `_mint_awb()` mock in `apps/shipments/services.create_mock_shipment` with a real Delhivery `POST /api/cmu/create.json` call when mode is test/live. |
+| Tracking webhook | New `POST /api/webhooks/delhivery/` — verify Delhivery's `token` header (or HMAC if available), update Shipment status + parent Order. Idempotent via `WebhookEvent` table (already exists). |
+| Status events to handle | Manifested → Pickup Scheduled → In Transit → Out for Delivery → Delivered → RTO Initiated → RTO Delivered. |
+| Tests | Mock + test-mode adapter, webhook OFD/Delivered/RTO, idempotency, invalid token. ~10 tests. |
 
-Add `Authorization` checks on writes (`IsAuthenticated`).
+Acceptance: setting `DELHIVERY_MODE=test` and providing the API token must
+let the same `POST /api/shipments/` flow create a real AWB in Delhivery's
+sandbox without any view code change.
+
+## Phase 2D — Vapi Voice Trigger + Transcript Ingest
+
+- `POST /api/calls/trigger/` — kicks off an outbound Vapi call for a lead.
+- `POST /api/webhooks/vapi/` — receives the transcript + objection detection
+  output and persists `Call` + `ActiveCall` + `CallTranscriptLine` rows.
+- HMAC verification on the webhook.
+
+## Phase 2E — Meta Lead Ads Webhook
+
+- `POST /api/webhooks/meta/leads/` — ingest leads from Meta forms.
+- Idempotent on Meta's `leadgen_id`.
+- Maps form fields to the `Lead` model.
+
+## Phase 2 — Other gateways (slot when needed)
+
+| Item | Notes |
+| --- | --- |
+| PayU payment links | Same shape as Razorpay; `gateway` flag in `PaymentLinkSerializer` already accepts it — only the adapter is missing. |
+| WhatsApp Business outbound + consent | Blueprint §24 lists this as a clarification — design first, build later. |
 
 ## Phase 3 — AI Agents (LLM-powered)
 
-The CEO/CAIO/department agents currently return seeded structured insights.
-Phase 3 replaces those with real LLM calls.
+**Env scaffolding is already in place** (`apps/_ai_config.py` exposes
+`current_config()` reading `AI_PROVIDER` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
+`GROK_API_KEY`). Today the CEO/CAIO/department agents return seeded
+structured insights; Phase 3 replaces those with real LLM calls dispatched
+through provider adapters.
 
+- Add per-provider adapters under `apps/integrations/ai/`:
+  `openai.py`, `anthropic.py`, `grok.py`. Each follows the Razorpay
+  pattern (lazy SDK import, `enabled` short-circuit when key empty).
 - Add an `AgentRun` model (`agent`, `prompt_version`, `input_payload`,
   `output_payload`, `status`, `latency_ms`, `cost_usd`).
 - Hook a service per agent: `services/agents/ceo.py`, `services/agents/caio.py`,

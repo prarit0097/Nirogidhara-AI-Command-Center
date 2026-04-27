@@ -60,7 +60,7 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 ## Tests
 
 ```bash
-# Backend (pytest, 26 tests)
+# Backend (pytest, 64 tests)
 cd backend && python -m pytest -q
 
 # Frontend (vitest, 8 tests)
@@ -69,24 +69,28 @@ cd frontend && npm test
 
 ## Phase scope
 
-Phase 1 (current) ships:
+**Done:**
 
-- All 14 Django apps from blueprint Section 15.
-- 25 read endpoints matching `frontend/src/services/api.ts`.
-- JWT auth, CORS, Master Event Ledger via signals.
-- Seed command that mirrors the frontend's mock fixtures (42 leads, 60 orders,
-  18 calls, 19 agents, etc.).
-- Frontend wired to backend with mock fallback.
+- ✅ **Phase 1** — 14 Django apps, 25 read endpoints, JWT auth, CORS, Master Event Ledger via signals, seed command (42 leads, 60 orders, 18 calls, 19 agents, etc.), frontend wired with mock fallback.
+- ✅ **Phase 2A** — 14 write endpoints, role-based permissions (`apps/accounts/permissions.py`), order workflow state machine (`apps/orders/services.py`), service-layer pattern across CRM / orders / payments / shipments.
+- ✅ **Phase 2B** — Razorpay payment-link integration with mock / test / live modes (`apps/payments/integrations/razorpay_client.py`) and HMAC-verified, idempotent webhook receiver at `/api/webhooks/razorpay/`.
+- ✅ **Phase 3 prep** — AI provider env scaffolding (OpenAI / Anthropic / Grok) via `apps/_ai_config.py`. No LLM calls dispatched yet; `AI_PROVIDER=disabled` is the default.
 
-Phase 2+ roadmap (real integrations, LLM agents, WebSockets, sandbox,
-governance UI, multi-tenant SaaS) lives in
-[`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
+**Next:**
+
+- ⏭ **Phase 2C** — Delhivery courier API + tracking webhook.
+- Phase 2D — Vapi voice trigger + transcript ingest.
+- Phase 2E — Meta Lead Ads webhook.
+- Phase 3 (real LLM agents), Phase 4 (WebSockets), Phase 5 (governance UI write paths), Phase 6 (learning loop), Phase 7 (multi-tenant SaaS).
+
+Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
+Detailed handoff: [`nd.md`](nd.md).
 
 ## Stack
 
 **Frontend:** React 18, Vite, TypeScript, Tailwind, shadcn UI, React Router, Recharts, Vitest
 
-**Backend:** Python 3.10+, Django 5.1, Django REST Framework, simplejwt, django-cors-headers, dj-database-url, pytest
+**Backend:** Python 3.10+, Django 5.1, Django REST Framework, simplejwt, django-cors-headers, dj-database-url, razorpay, pytest
 
 ## License
 
