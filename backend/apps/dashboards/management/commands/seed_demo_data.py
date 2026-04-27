@@ -650,7 +650,7 @@ class Command(BaseCommand):
         ACTIVE_CALL_PAYLOAD["transcript"] = transcript_lines
         CallTranscriptLine.objects.bulk_create(
             [
-                CallTranscriptLine(call=active, order=i, who=who, text=text)
+                CallTranscriptLine(active_call=active, order=i, who=who, text=text)
                 for i, (who, text) in enumerate(transcript_lines)
             ]
         )

@@ -35,6 +35,14 @@ ICON_BY_KIND: dict[str, str] = {
     "shipment.ndr": "alert-octagon",
     "shipment.rto_initiated": "package-x",
     "shipment.rto_delivered": "rotate-ccw",
+    # Phase 2D — Vapi voice events.
+    "call.triggered": "phone-outgoing",
+    "call.started": "phone-incoming",
+    "call.completed": "phone-off",
+    "call.failed": "phone-missed",
+    "call.transcript": "file-text",
+    "call.analysis": "sparkles",
+    "call.handoff_flagged": "alert-triangle",
 }
 
 

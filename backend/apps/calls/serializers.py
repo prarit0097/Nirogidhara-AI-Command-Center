@@ -9,6 +9,9 @@ class CallSerializer(serializers.ModelSerializer):
     leadId = serializers.CharField(source="lead_id")
     scriptCompliance = serializers.IntegerField(source="script_compliance")
     paymentLinkSent = serializers.BooleanField(source="payment_link_sent")
+    providerCallId = serializers.CharField(source="provider_call_id", read_only=True)
+    handoffFlags = serializers.JSONField(source="handoff_flags", read_only=True)
+    recordingUrl = serializers.CharField(source="recording_url", read_only=True)
 
     class Meta:
         model = Call
@@ -24,6 +27,11 @@ class CallSerializer(serializers.ModelSerializer):
             "sentiment",
             "scriptCompliance",
             "paymentLinkSent",
+            "provider",
+            "providerCallId",
+            "summary",
+            "recordingUrl",
+            "handoffFlags",
         )
 
 
@@ -55,3 +63,13 @@ class ActiveCallSerializer(serializers.ModelSerializer):
             "detectedObjections",
             "approvedClaimsUsed",
         )
+
+
+# ----- Phase 2D — Vapi trigger payload -----
+
+
+class CallTriggerSerializer(serializers.Serializer):
+    leadId = serializers.CharField(max_length=32)
+    purpose = serializers.CharField(
+        max_length=40, required=False, allow_blank=True, default="sales_call"
+    )

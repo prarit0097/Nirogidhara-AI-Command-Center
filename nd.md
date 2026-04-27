@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C done; Phase 3 env scaffolded):** All 14 Django apps scaffolded, **25 read + 14 write endpoints + Razorpay webhook + Delhivery webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, **Delhivery courier integration with mock/test/live modes + HMAC-verified tracking webhook handling delivered/NDR/RTO**, **AI provider env scaffolding (OpenAI / Anthropic / Grok — disabled by default, no SDK calls yet)**, seed command, frontend wired with **automatic mock fallback**. **77 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 2D+):** Vapi voice trigger + transcript ingest, Meta Lead Ads webhook, LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D done; Phase 3 env scaffolded):** All 14 Django apps scaffolded, **25 read + 15 write endpoints + Razorpay webhook + Delhivery webhook + Vapi webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, **Delhivery courier integration with mock/test/live modes + HMAC-verified tracking webhook handling delivered/NDR/RTO**, **Vapi voice trigger + transcript ingest with mock/test/live modes + HMAC-verified webhook handling six handoff flags (medical / side-effect / angry / human-requested / low-confidence / legal-threat)**, **AI provider env scaffolding (OpenAI / Anthropic / Grok — disabled by default, no SDK calls yet)**, seed command, frontend wired with **automatic mock fallback**. **93 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 2E+):** Meta Lead Ads webhook, LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -471,7 +471,27 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
-### ✅ Phase 2C — Delhivery Courier Integration (built this session)
+### ✅ Phase 2D — Vapi Voice Trigger + Transcript Ingest (built this session)
+
+- Three-mode adapter at `backend/apps/calls/integrations/vapi_client.py` (`mock` | `test` | `live`). `requests` is imported lazily so mock works without the package. Mock mode returns a deterministic provider call id (`call_mock_<lead>_<purpose>`).
+- `Call` model gains `provider`, `provider_call_id`, `summary`, `recording_url`, `handoff_flags` (JSON list), `ended_at`, `error_message`, `raw_response`, `updated_at`. Status enum widened with `Failed`. Migration `0002_phase2d_vapi_fields`.
+- `CallTranscriptLine` now supports two parents: the legacy `active_call` FK (for the live console) and a new `call` FK (for Vapi-recorded post-call transcripts). Each row has exactly one parent set; the legacy field was renamed in the same migration.
+- New endpoint `POST /api/calls/trigger/`. Body `{ leadId, purpose? }` → `201 { callId, provider, status, leadId, providerCallId }`. Roles gated by `OPERATIONS_AND_UP`.
+- New webhook `POST /api/webhooks/vapi/` verifies HMAC-SHA256 (`X-Vapi-Signature`) when `VAPI_WEBHOOK_SECRET` is set; signature is skipped when the secret is empty so dev/test fixtures stay simple. Idempotency via per-app `calls.WebhookEvent` (PK = `event_id`). Handlers: `call.started`, `call.ended`, `transcript.updated`, `transcript.final`, `analysis.completed`, `call.failed`.
+- Six handoff flags (`medical_emergency`, `side_effect_complaint`, `very_angry_customer`, `human_requested`, `low_confidence`, `legal_or_refund_threat`) are persisted on `Call.handoff_flags` from the analysis payload, with a keyword fallback against the final transcript when Vapi omits the explicit list. `call.handoff_flagged` audit row fires whenever any flag fires; `call.failed` writes a danger-tone audit row.
+- 14 new pytest tests cover mock + test-mode adapter, auth/role gating, every webhook event type (started/transcript/failed/analysis/duplicate/invalid-sig/no-secret), keyword-fallback handoff, signature helper round-trip, full audit-ledger flow.
+- New env vars: `VAPI_MODE`, `VAPI_API_BASE_URL`, `VAPI_API_KEY`, `VAPI_ASSISTANT_ID`, `VAPI_PHONE_NUMBER_ID`, `VAPI_WEBHOOK_SECRET`, `VAPI_DEFAULT_LANGUAGE`, `VAPI_CALLBACK_URL`. All secrets stay server-side.
+- Frontend `Call` type + new `CallTriggerPayload` / `CallTriggerResponse`; `api.triggerCallForLead()` with offline-safe optimistic fallback. The existing AI Calling Console keeps working unchanged.
+- `audit.signals.ICON_BY_KIND` extended with `call.triggered`, `call.started`, `call.completed`, `call.failed`, `call.transcript`, `call.analysis`, `call.handoff_flagged`.
+
+**Compliance hard stop (Master Blueprint §26 #4):** the Vapi adapter passes only metadata in the call payload; the assistant prompt is configured server-side in Vapi's dashboard with content sourced from the Approved Claim Vault. No free-form medical text is injected from this codebase. CAIO never executes business actions; nothing in this pipeline routes through CAIO.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **93 passed** (77 + 14 vapi + 2 keyword/no-secret edge tests) |
+| `python manage.py check` | 0 issues |
+
+### ✅ Phase 2C — Delhivery Courier Integration (built earlier this session)
 
 - Three-mode adapter at `backend/apps/shipments/integrations/delhivery_client.py` (`mock` | `test` | `live`). `requests` is imported lazily so mock works without the package. Mock mode preserves the seeded `DLH<8 digits>` AWB pattern.
 - `Shipment` model gains `delhivery_status`, `tracking_url`, `risk_flag` (`NDR`/`RTO`), `raw_response`, `updated_at` via migration `0003_shipment_delhivery_fields`.
@@ -484,7 +504,7 @@ Final Reward Score =
 
 | Command | Result |
 | --- | --- |
-| `python -m pytest -q` | **77 passed** (44 + 13 razorpay + 7 ai config + 13 delhivery) |
+| `python -m pytest -q` | **77 passed** (44 + 13 razorpay + 7 ai config + 13 delhivery) — pre-Phase-2D snapshot |
 | `python manage.py check` | 0 issues |
 
 ---
@@ -534,7 +554,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 77 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery)
+cd backend && python -m pytest -q   # 93 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -614,12 +634,10 @@ Three-mode adapter, HMAC-verified webhook, idempotency, 13 new tests. See §8.
 ### ✅ Phase 2C — Delhivery courier integration (DONE)
 Three-mode adapter, HMAC-verified tracking webhook, NDR / RTO risk handling, 13 new tests. See §8.
 
-### Phase 2D — Vapi voice trigger + transcript ingest (NEXT)
-- `POST /api/calls/trigger/` kicks off an outbound Vapi call for a lead.
-- `POST /api/webhooks/vapi/` receives transcript + objection-detection output and persists `Call`, `ActiveCall`, `CallTranscriptLine` rows.
-- HMAC verification on the webhook.
+### ✅ Phase 2D — Vapi voice trigger + transcript ingest (DONE)
+Three-mode adapter, `POST /api/calls/trigger/`, HMAC-verified webhook, six handoff flags, keyword fallback, 14 new tests. See §8.
 
-### Phase 2E — Other gateways
+### Phase 2E — Other gateways (NEXT)
 - **Meta Lead Ads webhook** — `POST /api/webhooks/meta/leads/`, idempotent on `leadgen_id`, maps form fields to the `Lead` model.
 - **PayU payment links** — same shape as Razorpay; only the adapter is missing.
 - Tighten role permissions per blueprint §8 where needed (compliance writes, settings writes).

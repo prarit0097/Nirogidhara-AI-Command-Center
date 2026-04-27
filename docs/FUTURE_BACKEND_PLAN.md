@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -44,14 +44,31 @@ audit rows. 13 new pytest tests covering all event flows + signature
 verification. Reuses `payments.WebhookEvent` for cross-gateway idempotency
 (its `gateway` field accepts arbitrary strings).
 
-## ⏭ Phase 2D — Vapi Voice Trigger + Transcript Ingest (NEXT)
+## ✅ Phase 2D — Vapi Voice Trigger + Transcript Ingest (DONE)
 
-- `POST /api/calls/trigger/` — kicks off an outbound Vapi call for a lead.
-- `POST /api/webhooks/vapi/` — receives the transcript + objection detection
-  output and persists `Call` + `ActiveCall` + `CallTranscriptLine` rows.
-- HMAC verification on the webhook.
+Shipped via `feat: add vapi call trigger and transcript ingest`.
+Three-mode adapter (`apps/calls/integrations/vapi_client.py`): `mock`
+(default, deterministic provider call id, no network), `test` (Vapi
+staging), `live` (production). Lazy `requests` import keeps mock dev
+free of the dependency. New endpoint `POST /api/calls/trigger/` returns
+`{ callId, provider, status, leadId, providerCallId }`. HMAC-verified
+(when `VAPI_WEBHOOK_SECRET` is set), idempotent webhook receiver at
+`/api/webhooks/vapi/` handling `call.started`, `call.ended`,
+`transcript.updated`, `transcript.final`, `analysis.completed`,
+`call.failed`. Six handoff flags (medical_emergency,
+side_effect_complaint, very_angry_customer, human_requested,
+low_confidence, legal_or_refund_threat) are persisted on `Call.handoff_flags`
+with a keyword fallback when Vapi omits the explicit flag list. Per-call
+transcripts are stored on `CallTranscriptLine.call` (the legacy FK was
+renamed to `active_call` to keep the live console intact). 14 new pytest
+tests cover mock + test-mode adapter, auth/role gating, every webhook
+event, idempotency, signature verification, audit firing.
 
-## Phase 2E — Meta Lead Ads Webhook
+**Compliance**: Vapi adapter passes only metadata in the call payload;
+medical text is configured server-side in Vapi's dashboard. Any future
+prompt-builder MUST pull from `apps.compliance.Claim` only.
+
+## ⏭ Phase 2E — Meta Lead Ads Webhook (NEXT)
 
 - `POST /api/webhooks/meta/leads/` — ingest leads from Meta forms.
 - Idempotent on Meta's `leadgen_id`.

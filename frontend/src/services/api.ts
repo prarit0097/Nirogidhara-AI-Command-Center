@@ -46,6 +46,8 @@ import type {
   CaioAudit,
   Call,
   CallTranscriptLine,
+  CallTriggerPayload,
+  CallTriggerResponse,
   CeoBriefing,
   Claim,
   ConfirmationOutcome,
@@ -312,6 +314,15 @@ export const api = {
       notes: payload.notes ?? "",
       attemptedAt: new Date().toISOString(),
     })),
+
+  // ---------- PHASE 2D — Vapi voice trigger ----------
+  // Server holds the API key; the frontend just kicks off the call. Mock
+  // mode (default) returns a deterministic provider id without any network.
+
+  triggerCallForLead: (payload: CallTriggerPayload) =>
+    safeMutate<CallTriggerResponse>("/calls/trigger/", "POST", payload, () =>
+      optimisticCallTrigger(payload),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -429,6 +440,18 @@ function optimisticRescue(payload: RescueAttemptCreatePayload): RescueAttempt {
     outcome: "Pending",
     notes: payload.notes ?? "",
     attemptedAt: new Date().toISOString(),
+  };
+}
+
+function optimisticCallTrigger(payload: CallTriggerPayload): CallTriggerResponse {
+  const safeLead = payload.leadId.replace(/-/g, "_");
+  const purpose = payload.purpose || "sales_call";
+  return {
+    callId: `CL-DRAFT-${Date.now()}`,
+    provider: "vapi",
+    status: "queued",
+    leadId: payload.leadId,
+    providerCallId: `call_mock_${safeLead}_${purpose}`,
   };
 }
 

@@ -189,6 +189,26 @@ DELHIVERY_DEFAULT_PACKAGE_WEIGHT_GRAMS = _safe_int(
 DELHIVERY_WEBHOOK_SECRET = os.environ.get("DELHIVERY_WEBHOOK_SECRET", "")
 
 
+# ----- Vapi (Phase 2D) -----
+# Same three-mode dispatch: ``mock`` (default, deterministic fake call id, no
+# network), ``test`` (Vapi staging — needs a real test API key + sandbox
+# assistant id + caller phone-number id), ``live`` (production). Secrets stay
+# server-side; the frontend never receives the API key.
+#
+# COMPLIANCE HARD STOP (Master Blueprint §26 #4):
+#   The Vapi assistant prompt MUST pull only from apps.compliance.Claim.
+#   Never inject free-style medical text from this codebase. CAIO never
+#   executes business actions.
+VAPI_MODE = (os.environ.get("VAPI_MODE") or "mock").lower()
+VAPI_API_BASE_URL = os.environ.get("VAPI_API_BASE_URL", "")
+VAPI_API_KEY = os.environ.get("VAPI_API_KEY", "")
+VAPI_ASSISTANT_ID = os.environ.get("VAPI_ASSISTANT_ID", "")
+VAPI_PHONE_NUMBER_ID = os.environ.get("VAPI_PHONE_NUMBER_ID", "")
+VAPI_WEBHOOK_SECRET = os.environ.get("VAPI_WEBHOOK_SECRET", "")
+VAPI_DEFAULT_LANGUAGE = os.environ.get("VAPI_DEFAULT_LANGUAGE", "hi-IN")
+VAPI_CALLBACK_URL = os.environ.get("VAPI_CALLBACK_URL", "")
+
+
 # ----- AI provider (Phase 3+ scaffolding) -----
 # Today no LLM call is dispatched. ``apps/_ai_config.py`` reads these and
 # Phase 3 adapters in ``apps/integrations/ai/`` will consume them.

@@ -86,6 +86,16 @@ export interface CallTranscriptLine {
   text: string;
 }
 
+export type CallProvider = "manual" | "vapi";
+
+export type CallHandoffFlag =
+  | "medical_emergency"
+  | "side_effect_complaint"
+  | "very_angry_customer"
+  | "human_requested"
+  | "low_confidence"
+  | "legal_or_refund_threat";
+
 export interface Call {
   id: string;
   leadId: string;
@@ -94,10 +104,33 @@ export interface Call {
   agent: string;
   language: string;
   duration: string;
-  status: "Live" | "Queued" | "Completed" | "Missed";
+  status: "Live" | "Queued" | "Completed" | "Missed" | "Failed";
   sentiment: "Positive" | "Neutral" | "Hesitant" | "Annoyed";
   scriptCompliance: number;
   paymentLinkSent: boolean;
+  /** "manual" for human callers, "vapi" for AI voice (Phase 2D). */
+  provider?: CallProvider;
+  /** Vapi external call id, used to correlate webhook events. */
+  providerCallId?: string;
+  /** Post-call summary populated by analysis.completed. */
+  summary?: string;
+  recordingUrl?: string;
+  /** Compliance / safety triggers detected by Vapi or our analyser. */
+  handoffFlags?: CallHandoffFlag[];
+}
+
+export interface CallTriggerPayload {
+  leadId: string;
+  /** Defaults to "sales_call" if omitted. */
+  purpose?: string;
+}
+
+export interface CallTriggerResponse {
+  callId: string;
+  provider: CallProvider;
+  status: string;
+  leadId: string;
+  providerCallId: string;
 }
 
 export interface ActiveCall {
