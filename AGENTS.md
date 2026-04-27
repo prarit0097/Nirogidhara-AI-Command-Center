@@ -48,6 +48,7 @@ This codebase serves an Ayurvedic medicine business. Some rules are non-negotiab
 8. **Frontend never holds business logic.** All calculations with business meaning live in Django services.
 9. **AI Kill Switch, Sandbox Mode, Rollback System, Approval Matrix** are mandatory before any production rollout.
 10. **Future Android/iOS apps must use the same backend APIs.** Don't fork business logic into mobile clients.
+11. **AI provider keys live in `backend/.env` only** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROK_API_KEY`). Read them through `apps._ai_config.current_config()`. Never hard-code, never log them, never expose them to the frontend. When wiring Phase 3 LLM calls, every prompt MUST inject relevant `apps.compliance.Claim` entries before reaching the model — see rule #1.
 
 ---
 
@@ -83,7 +84,12 @@ frontend/src/components/{ui,layout} ← shadcn UI + app shell
 backend/config/settings.py          ← env-driven config
 backend/config/urls.py              ← mounts every app under /api/
 backend/apps/<app>/{models,serializers,views,urls}.py  ← per-app skeleton
+backend/apps/<app>/services.py      ← workflow logic per app (writes happen here, not views)
 backend/apps/audit/signals.py       ← Master Event Ledger receivers
+backend/apps/accounts/permissions.py ← RoleBasedPermission + role-set constants
+backend/apps/payments/integrations/razorpay_client.py ← Razorpay mock/test/live adapter
+backend/apps/payments/webhooks.py   ← Razorpay webhook receiver (HMAC + idempotent)
+backend/apps/_ai_config.py          ← AI provider config helper (Phase 3+ scaffold)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack

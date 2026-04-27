@@ -157,6 +157,45 @@ RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 RAZORPAY_CALLBACK_URL = os.environ.get("RAZORPAY_CALLBACK_URL", "")
 
+
+# ----- AI provider (Phase 3+ scaffolding) -----
+# Today no LLM call is dispatched. ``apps/_ai_config.py`` reads these and
+# Phase 3 adapters in ``apps/integrations/ai/`` will consume them.
+# COMPLIANCE HARD STOP: AI must speak only from ``apps.compliance.Claim``.
+AI_PROVIDER = (os.environ.get("AI_PROVIDER") or "disabled").lower()
+AI_MODEL = os.environ.get("AI_MODEL", "")
+
+
+def _safe_float(value: str | None, default: float) -> float:
+    try:
+        return float(value) if value not in (None, "") else default
+    except ValueError:
+        return default
+
+
+def _safe_int(value: str | None, default: int) -> int:
+    try:
+        return int(value) if value not in (None, "") else default
+    except ValueError:
+        return default
+
+
+AI_TEMPERATURE = _safe_float(os.environ.get("AI_TEMPERATURE"), default=0.2)
+AI_MAX_TOKENS = _safe_int(os.environ.get("AI_MAX_TOKENS"), default=2000)
+AI_REQUEST_TIMEOUT_SECONDS = _safe_int(
+    os.environ.get("AI_REQUEST_TIMEOUT_SECONDS"), default=30
+)
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
+OPENAI_ORG_ID = os.environ.get("OPENAI_ORG_ID", "")
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
+
+GROK_API_KEY = os.environ.get("GROK_API_KEY", "")
+GROK_BASE_URL = os.environ.get("GROK_BASE_URL", "")
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

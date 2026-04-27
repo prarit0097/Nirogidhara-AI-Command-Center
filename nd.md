@@ -12,7 +12,7 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B done):** All 14 Django apps scaffolded, **25 read + 14 write endpoints + Razorpay webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, mock shipment/RTO rescue adapters, seed command, frontend wired with **automatic mock fallback**. **57 backend tests + 8 frontend tests** all green.
+- **Status today (Phase 1 + 2A + 2B done; Phase 3 env scaffolded):** All 14 Django apps scaffolded, **25 read + 14 write endpoints + Razorpay webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, mock shipment/RTO rescue adapters, **AI provider env scaffolding (OpenAI / Anthropic / Grok — disabled by default, no SDK calls yet)**, seed command, frontend wired with **automatic mock fallback**. **64 backend tests + 8 frontend tests** all green.
 - **What's next (Phase 2C+):** Delhivery courier API + tracking webhook, Vapi voice trigger + transcript ingest, Meta Lead Ads webhook, LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
@@ -451,6 +451,30 @@ Final Reward Score =
 | `npm run lint` | 0 errors, 8 pre-existing shadcn warnings |
 | `npm run build` | OK |
 | Live curl chain (lead → order → confirm → pay → ship → rescue) | every step 200/201, ledger grew by 7+ events |
+
+### ✅ Phase 2B — Razorpay Payment-Link Integration (built earlier this session)
+
+- Three-mode adapter at `backend/apps/payments/integrations/razorpay_client.py` (`mock` | `test` | `live`). SDK imported lazily so mock works without the package.
+- `Payment` model gains `gateway_reference_id`, `payment_url`, `customer_phone/email`, `raw_response`, `updated_at`. New `WebhookEvent` model for idempotency.
+- `POST /api/payments/links/` extended with customer info; flat response shape (`paymentId`, `gateway`, `status`, `paymentUrl`, `gatewayReferenceId`) plus Phase 2A backwards-compat `payment` nested object.
+- `POST /api/webhooks/razorpay/` verifies HMAC-SHA256, deduplicates by event id, dispatches 6 handlers (paid/partial/cancelled/expired/failed/refunded).
+- 13 new pytest tests cover mock + test-mode adapter, auth/role gating, webhook paid/duplicate/invalid-sig/expired/unknown-event, signature helper round-trip, AuditEvent firing.
+- New env vars: `RAZORPAY_MODE`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_CALLBACK_URL`. Frontend never sees them.
+- Payments page "Generate link" button wired to `api.createPaymentLink`.
+
+### ✅ Phase 3 prep — AI provider env scaffolding (built this session)
+
+- New env block in `backend/.env.example`: `AI_PROVIDER` (default `disabled`), `AI_MODEL`, `AI_TEMPERATURE`, `AI_MAX_TOKENS`, `AI_REQUEST_TIMEOUT_SECONDS`, plus per-provider keys: `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_ORG_ID`, `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`, `GROK_API_KEY`/`GROK_BASE_URL`. All secrets stay server-side.
+- Settings constants wired in `backend/config/settings.py` with safe defaults (no float/int parse explosions if env is malformed).
+- New helper `backend/apps/_ai_config.py` exposes `current_config()` returning a frozen `AIConfig` dataclass. `enabled` is False whenever `AI_PROVIDER=disabled` or the matching key is empty — Phase 3 adapters refuse to dispatch when not enabled.
+- **No SDK installed yet** — `openai` / `anthropic` / `xai_sdk` packages are NOT in `requirements.txt`. They'll be added in Phase 3 alongside actual adapters at `apps/integrations/ai/<provider>.py`.
+- 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
+- **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **64 passed** (44 + 13 razorpay + 7 ai config) |
+| `python manage.py check` | 0 issues |
 
 ---
 
