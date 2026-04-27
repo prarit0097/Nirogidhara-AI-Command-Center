@@ -45,6 +45,10 @@ ICON_BY_KIND: dict[str, str] = {
     "call.handoff_flagged": "alert-triangle",
     # Phase 2E — Meta Lead Ads ingestion.
     "lead.meta_ingested": "facebook",
+    # Phase 3A — AgentRun lifecycle.
+    "ai.agent_run.created": "sparkles",
+    "ai.agent_run.completed": "check-circle",
+    "ai.agent_run.failed": "x-circle",
 }
 
 

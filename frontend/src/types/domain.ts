@@ -141,6 +141,45 @@ export interface CallTriggerResponse {
   providerCallId: string;
 }
 
+// ----- Phase 3A — AgentRun -----
+
+export type AgentName =
+  | "ceo"
+  | "caio"
+  | "ads"
+  | "rto"
+  | "sales_growth"
+  | "marketing"
+  | "cfo"
+  | "compliance";
+
+export type AgentRunStatus = "pending" | "success" | "failed" | "skipped";
+
+export interface AgentRun {
+  id: string;
+  agent: AgentName;
+  promptVersion: string;
+  inputPayload: Record<string, unknown>;
+  outputPayload: Record<string, unknown>;
+  status: AgentRunStatus;
+  provider: string;
+  model: string;
+  latencyMs: number;
+  costUsd: string | null;
+  errorMessage: string;
+  dryRun: boolean;
+  triggeredBy: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface AgentRunCreatePayload {
+  agent: AgentName;
+  input?: Record<string, unknown>;
+  /** Phase 3A coerces this to true server-side; kept on the wire for forward-compat. */
+  dryRun?: boolean;
+}
+
 export interface ActiveCall {
   id: string;
   customer: string;

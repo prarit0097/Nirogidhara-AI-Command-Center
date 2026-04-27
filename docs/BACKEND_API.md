@@ -70,6 +70,8 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 | GET | `/api/agents/hierarchy/` | `{root, ceo, caio, departments}` |
 | GET | `/api/ai/ceo-briefing/` | `CeoBriefing` (latest) |
 | GET | `/api/ai/caio-audits/` | `CaioAudit[]` |
+| GET | `/api/ai/agent-runs/` | `AgentRun[]` (Phase 3A — admin/director only) |
+| GET | `/api/ai/agent-runs/{id}/` | `AgentRun` (admin/director only) |
 
 ## Compliance / Rewards / Learning
 
@@ -119,8 +121,9 @@ Receivers in `apps/audit/signals.py` write rows on:
 - `call.transcript` — explicit, on Vapi `transcript.updated` / `transcript.final`
 - `call.analysis` / `call.handoff_flagged` — explicit, on Vapi `analysis.completed` (handoff_flagged fires only when one of the 6 safety triggers is present)
 - `lead.meta_ingested` — explicit, on Meta Lead Ads webhook delivery (created or refreshed)
+- `ai.agent_run.created` / `ai.agent_run.completed` / `ai.agent_run.failed` — explicit, on POST `/api/ai/agent-runs/` (Phase 3A)
 
-Phase 3+ will add: reward/penalty assigned, prompt updated, rollback
+Phase 3B+ will add: reward/penalty assigned, prompt updated, rollback
 performed, CAIO audit completed, CEO approval recorded.
 
 ---
@@ -186,6 +189,14 @@ Invalid transitions return HTTP 400 with a `detail` message.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/calls/trigger/` | Trigger an outbound Vapi voice call. Body: `{ leadId, purpose? }`. Routes through the three-mode adapter (`VAPI_MODE=mock\|test\|live`). Returns `{ callId, provider, status, leadId, providerCallId }`. |
+
+### AI agent runs (Phase 3A — read-only / dry-run)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/ai/agent-runs/` | Trigger a dry-run agent analysis. Body: `{ agent: "ceo"\|"caio"\|"ads"\|"rto"\|"sales_growth"\|"marketing"\|"cfo"\|"compliance", input: {...}, dryRun?: true }`. Admin/director only. Phase 3A coerces `dryRun` to `true` server-side; the field is on the wire for forward-compat with Phase 5 approval-matrix execution. Routes through `apps/integrations/ai/<provider>.py` based on `AI_PROVIDER` (`disabled`/`openai`/`anthropic`/`grok`). When the provider is disabled or no key is configured the run is persisted with `status: "skipped"` — no LLM call. Every call is grounded in `apps.compliance.Claim` via the prompt builder; medical/product prompts with no approved-claim entries return `failed` rather than dispatching. CAIO can never execute business actions: payloads with intents like `execute`, `apply`, `create_order`, `transition`, etc. are rejected before any LLM dispatch. |
+| GET | `/api/ai/agent-runs/` | List recent agent runs (admin/director only). |
+| GET | `/api/ai/agent-runs/{id}/` | Single run detail (admin/director only). |
 
 ### Webhooks (gateway → backend, public)
 

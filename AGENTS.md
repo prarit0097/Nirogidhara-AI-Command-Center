@@ -96,7 +96,11 @@ backend/apps/calls/webhooks.py      ← Vapi voice webhook receiver (HMAC when s
 backend/apps/calls/services.py      ← trigger_call_for_lead + persist_vapi_webhook
 backend/apps/crm/integrations/meta_client.py ← Meta Lead Ads mock/test/live adapter + signature/handshake helpers
 backend/apps/crm/webhooks.py        ← Meta Lead Ads webhook (GET handshake + POST ingest, idempotent on leadgen_id)
-backend/apps/_ai_config.py          ← AI provider config helper (Phase 3+ scaffold)
+backend/apps/_ai_config.py          ← AI provider config helper
+backend/apps/integrations/ai/       ← Phase 3A provider adapters: base.py, openai_client.py, anthropic_client.py, grok_client.py, dispatch.py
+backend/apps/ai_governance/prompting.py ← System policy + Approved Claim Vault enforced prompt builder (raises ClaimVaultMissing when ungrounded)
+backend/apps/ai_governance/services.py ← AgentRun lifecycle + CAIO hard stop (refuses execute/apply/create_order/transition intents)
+backend/apps/ai_governance/models.py ← AgentRun model (id, agent, prompt_version, input/output payload, status, provider, latency_ms, cost_usd)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -156,7 +160,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 107 tests today
+python -m pytest -q                 # 132 tests today
 
 # Frontend
 cd frontend

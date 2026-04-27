@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from .models import CaioAudit, CeoBriefing, CeoRecommendation
+from .models import AgentRun, CaioAudit, CeoBriefing, CeoRecommendation
 
 
 class CeoRecommendationSerializer(serializers.ModelSerializer):
@@ -25,3 +25,54 @@ class CaioAuditSerializer(serializers.ModelSerializer):
     class Meta:
         model = CaioAudit
         fields = ("agent", "issue", "severity", "suggestion", "status")
+
+
+# ----- Phase 3A — AgentRun -----
+
+
+class AgentRunSerializer(serializers.ModelSerializer):
+    inputPayload = serializers.JSONField(source="input_payload", read_only=True)
+    outputPayload = serializers.JSONField(source="output_payload", read_only=True)
+    promptVersion = serializers.CharField(source="prompt_version", read_only=True)
+    latencyMs = serializers.IntegerField(source="latency_ms", read_only=True)
+    costUsd = serializers.DecimalField(
+        source="cost_usd", max_digits=10, decimal_places=6, read_only=True
+    )
+    errorMessage = serializers.CharField(source="error_message", read_only=True)
+    dryRun = serializers.BooleanField(source="dry_run", read_only=True)
+    triggeredBy = serializers.CharField(source="triggered_by", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    completedAt = serializers.DateTimeField(source="completed_at", read_only=True)
+
+    class Meta:
+        model = AgentRun
+        fields = (
+            "id",
+            "agent",
+            "promptVersion",
+            "inputPayload",
+            "outputPayload",
+            "status",
+            "provider",
+            "model",
+            "latencyMs",
+            "costUsd",
+            "errorMessage",
+            "dryRun",
+            "triggeredBy",
+            "createdAt",
+            "completedAt",
+        )
+
+
+class AgentRunCreateSerializer(serializers.Serializer):
+    """Inbound payload for ``POST /api/ai/agent-runs/``.
+
+    Phase 3A always coerces ``dryRun`` to True before dispatch — the field
+    is accepted from the client only so the contract is forward-compatible
+    with Phase 5 (approval-matrix execution).
+    """
+
+    agent = serializers.ChoiceField(choices=AgentRun.Agent.choices)
+    input = serializers.JSONField(required=False, default=dict)
+    dryRun = serializers.BooleanField(required=False, default=True)

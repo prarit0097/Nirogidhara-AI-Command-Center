@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -106,27 +106,56 @@ round-trip, empty payload.
 | Meta test-mode credentials | Code path is wired; just needs a real Meta app + page access token to flip `META_MODE=test`. |
 | WhatsApp Business outbound + consent | Blueprint §24 lists this as a clarification — design first, build later. |
 
-## Phase 3 — AI Agents (LLM-powered)
+## ✅ Phase 3A — AgentRun foundation + provider adapters (DONE)
 
-**Env scaffolding is already in place** (`apps/_ai_config.py` exposes
-`current_config()` reading `AI_PROVIDER` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
-`GROK_API_KEY`). Today the CEO/CAIO/department agents return seeded
-structured insights; Phase 3 replaces those with real LLM calls dispatched
-through provider adapters.
+Shipped via `feat: add agent run foundation`.
 
-- Add per-provider adapters under `apps/integrations/ai/`:
-  `openai.py`, `anthropic.py`, `grok.py`. Each follows the Razorpay
-  pattern (lazy SDK import, `enabled` short-circuit when key empty).
-- Add an `AgentRun` model (`agent`, `prompt_version`, `input_payload`,
-  `output_payload`, `status`, `latency_ms`, `cost_usd`).
-- Hook a service per agent: `services/agents/ceo.py`, `services/agents/caio.py`,
-  etc. Each takes the relevant DB slice and returns the same dataclass shapes
-  the seed currently produces.
-- Background scheduler (Celery beat) regenerates the daily CEO briefing.
-- Approved Claim Vault is the single source of truth for medical claims —
-  every LLM call must include the relevant Claim entries in its prompt.
+- `AgentRun` model (`apps/ai_governance/models.py`) — id, agent, prompt_version,
+  input/output payload, status (pending/success/failed/skipped), provider,
+  model, latency_ms, cost_usd, error_message, dry_run, triggered_by,
+  created_at, completed_at. Migration `0002_agentrun`.
+- Provider adapters under `apps/integrations/ai/`:
+  `base.py` (Adapter Protocol, AdapterResult dataclass, `skipped_result`),
+  `openai_client.py`, `anthropic_client.py`, `grok_client.py` (Grok reuses the
+  OpenAI SDK pointed at `https://api.x.ai/v1`). All adapters lazy-import
+  their SDK and short-circuit with `skipped` when `config.enabled` is False.
+  `dispatch.py` is the single seam the agent service calls.
+- Prompt builder (`apps/ai_governance/prompting.py`) assembles a fixed
+  system policy block, agent role block, Approved Claim Vault grounding,
+  and the JSON-coerced input payload. `ClaimVaultMissing` is raised when a
+  medical/product run has no approved claims — the call site logs a
+  `failed` AgentRun rather than dispatching a hallucinated answer.
+- Services (`apps/ai_governance/services.py`): `create_agent_run`,
+  `complete_agent_run`, `fail_agent_run`, and the high-level
+  `run_readonly_agent_analysis` which builds prompt → dispatches → persists.
+  CAIO is hard-stopped: payloads carrying `execute`, `apply`, `create_order`,
+  `transition` (etc.) are refused before any LLM call.
+- New endpoint `POST /api/ai/agent-runs/` (admin/director only). Phase 3A
+  always coerces `dryRun` to `true` — non-dry-run requests fail with a row
+  pointing at the Phase 5 approval-matrix milestone.
+- `GET /api/ai/agent-runs/` and `/{id}/` are admin/director-only audit reads.
+- `audit.signals.ICON_BY_KIND` extended with `ai.agent_run.created`,
+  `ai.agent_run.completed`, `ai.agent_run.failed`.
+- Frontend `AgentRun` type + `api.listAgentRuns()` / `getAgentRun()` /
+  `createAgentRun()` (offline-safe optimistic stub returns a `skipped`
+  draft so dev never crashes when the backend is offline).
+- 25 new pytest tests cover provider routing (disabled/openai/anthropic/grok
+  with patched adapters — real SDKs never imported), auth/role gating,
+  CAIO no-execute, prompt-builder Claim Vault enforcement, audit firing,
+  and the dry-run guard.
 
-Sandbox mode and prompt versioning (Section 12.2) live here too.
+## Phase 3B — Agent runtime expansion (NEXT)
+
+Build on the AgentRun foundation:
+
+- Per-agent service modules: `services/agents/{ceo,caio,ads,rto,...}.py`
+  that pull the right DB slice and call `run_readonly_agent_analysis`.
+- Background scheduler (Celery beat) regenerates the daily CEO briefing
+  and CAIO sweep. Generated briefings replace the seeded
+  `CeoBriefing` row.
+- Cost tracking + provider fall-back chains (e.g. OpenAI → Anthropic on
+  rate-limit).
+- Sandbox mode toggle (Section 12.2) and prompt version rollback (12.3).
 
 ## Phase 4 — Real-Time
 

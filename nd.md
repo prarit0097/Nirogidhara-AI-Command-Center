@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E done; Phase 3 env scaffolded):** All 14 Django apps scaffolded, **25 read + 15 write endpoints + Razorpay webhook + Delhivery webhook + Vapi webhook + Meta Lead Ads webhook** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay payment-link integration with mock/test/live modes + HMAC-verified webhook + idempotency**, **Delhivery courier integration with mock/test/live modes + HMAC-verified tracking webhook handling delivered/NDR/RTO**, **Vapi voice trigger + transcript ingest with mock/test/live modes + HMAC-verified webhook handling six handoff flags**, **Meta Lead Ads ingest with mock/test/live modes + GET subscription handshake + signed POST webhook + leadgen_id idempotency**, **AI provider env scaffolding (OpenAI / Anthropic / Grok — disabled by default, no SDK calls yet)**, seed command, frontend wired with **automatic mock fallback**. **107 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 3+):** LLM-powered AI agent reasoning, WebSockets, governance UI write paths (kill switch / sandbox / rollback), learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A done):** All 14 Django apps scaffolded, **25 read + 16 write endpoints + Razorpay webhook + Delhivery webhook + Vapi webhook + Meta Lead Ads webhook + AgentRun (read-only/dry-run) endpoint** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **Razorpay / Delhivery / Vapi / Meta Lead Ads gateway integrations all with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **Phase 3A AgentRun foundation: AI provider adapters (OpenAI / Anthropic / Grok) under `apps/integrations/ai/`, Approved-Claim-Vault prompt builder that fails closed when medical content has no grounding, CAIO hard-stop refusing every execution intent, dry-run-only POST /api/ai/agent-runs/ endpoint admin/director-gated**, seed command, frontend wired with **automatic mock fallback**. **132 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 3B+):** Per-agent service modules (CEO / CAIO / Ads / RTO / Sales Growth / etc.), background scheduler for the daily briefing, WebSockets, governance UI write paths (kill switch / sandbox / rollback), reward/penalty engine, learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -335,7 +335,7 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far — Phase 1 to Phase 2E — every checkpoint we shipped
+## 8. What's done so far — Phase 1 to Phase 3A — every checkpoint we shipped
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
 - 17 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.**
@@ -471,7 +471,25 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
-### ✅ Phase 2E — Meta Lead Ads Webhook (built this session)
+### ✅ Phase 3A — AgentRun Foundation + AI Provider Adapters (built this session)
+
+- **AgentRun model** (`apps/ai_governance/models.py`) — every LLM dispatch is logged: `id`, `agent`, `prompt_version`, `input_payload`, `output_payload`, `status` (`pending`/`success`/`failed`/`skipped`), `provider`, `model`, `latency_ms`, `cost_usd`, `error_message`, `dry_run`, `triggered_by`, `created_at`, `completed_at`. Migration `0002_agentrun`.
+- **Provider adapters** under `apps/integrations/ai/`: `base.py` (Adapter protocol + `AdapterResult` dataclass + `skipped_result` helper), `openai_client.py`, `anthropic_client.py`, `grok_client.py` (Grok reuses the OpenAI SDK pointed at `https://api.x.ai/v1`). Every adapter lazy-imports its SDK and short-circuits with `skipped` when `current_config().enabled` is False — disabled / no-key path never touches the network. `dispatch.py` is the single seam the agent service calls.
+- **Prompt builder** (`apps/ai_governance/prompting.py`) — assembles a fixed system policy block (the §26 hard stops verbatim, blocked phrases enumerated), agent role block, **Approved Claim Vault grounding** (relevant `apps.compliance.Claim` rows), and the JSON-coerced input payload. Raises `ClaimVaultMissing` when a medical/product run has no approved claims, so the call site logs a `failed` AgentRun rather than dispatching a hallucinated answer. Heuristic `needs_claim_vault` covers both agent type (compliance/ceo/caio/marketing/sales_growth always need it) and payload-text triggers (`product`, `claim`, `medicine`, `script`, `creative`, etc.).
+- **Services** (`apps/ai_governance/services.py`): `create_agent_run`, `complete_agent_run`, `fail_agent_run`, and the high-level `run_readonly_agent_analysis` which builds prompt → dispatches → persists. **CAIO hard stop** — payloads carrying `execute`, `apply`, `create_order`, `transition`, `assign_lead`, `approve` (etc.) are refused before any LLM call, with a `failed` AgentRun + danger-tone audit row.
+- **New endpoint** `POST /api/ai/agent-runs/` — admin/director only via a tightened `_AdminAndUpAlways` permission (reads also gated). Body `{ agent, input, dryRun? }`. Phase 3A coerces `dryRun` to `true` server-side; non-dry-run requests at the service level fail with a row pointing at the Phase 5 approval-matrix milestone. `GET /api/ai/agent-runs/` list + `/{id}/` detail.
+- **Audit kinds** added: `ai.agent_run.created` (info), `ai.agent_run.completed` (success or info), `ai.agent_run.failed` (danger).
+- **Frontend** `AgentRun` + `AgentRunCreatePayload` types and `api.listAgentRuns()` / `getAgentRun()` / `createAgentRun()` with offline-safe optimistic stub returning a `skipped` draft so dev never crashes when the backend is offline. No page changes needed.
+- **25 new pytest tests** cover provider routing (disabled/openai/anthropic/grok with patched adapters — real SDKs never imported), missing-key skip path, list/detail endpoints, anonymous/viewer/operations/admin gates, CAIO no-execute refusals (`intent: execute` and `create_order: {...}` payloads), Claim Vault enforcement (vault attached when seeded, refused when empty, skipped for non-medical agents, blocked when payload mentions products and vault is empty), audit firing for create/complete/fail, dry-run guard, and unit-level adapter skips.
+
+**Compliance hard stop (Master Blueprint §26 #4):** No prompt is dispatched without Approved Claim Vault grounding for medical/product content. CAIO is wired so even the call signature refuses execution intents — the LLM never sees them. Phase 3A is read-only by construction; even if a model suggests an action, the runtime won't execute it until the Phase 5 approval-matrix middleware is built.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **132 passed** (107 + 25 phase3a) |
+| `python manage.py check` | 0 issues |
+
+### ✅ Phase 2E — Meta Lead Ads Webhook (built earlier this session)
 
 - Three-mode adapter at `backend/apps/crm/integrations/meta_client.py` (`mock` | `test` | `live`). Mock parses the inbound payload as-is (no network); `test` / `live` lazy-import `requests` and call Meta's Graph API to expand each `leadgen_id`.
 - New endpoint `GET /api/webhooks/meta/leads/` answers Meta's subscription handshake when `hub.mode == "subscribe"` and `hub.verify_token == META_VERIFY_TOKEN`. Mismatch / missing token → 403.
@@ -572,7 +590,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 107 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta)
+cd backend && python -m pytest -q   # 132 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -657,6 +675,12 @@ Three-mode adapter, `POST /api/calls/trigger/`, HMAC-verified webhook, six hando
 
 ### ✅ Phase 2E — Meta Lead Ads webhook (DONE)
 Three-mode adapter, GET subscription handshake, signed POST webhook, idempotent leadgen ingest, 13 new tests. See §8.
+
+### ✅ Phase 3A — AgentRun foundation + AI provider adapters (DONE)
+AgentRun model + 4 provider adapters (OpenAI / Anthropic / Grok / disabled) + Claim-Vault-enforced prompt builder + CAIO hard stop + admin/director-only `/api/ai/agent-runs/` endpoint, 25 new tests. See §8.
+
+### Phase 3B — Per-agent runtime (NEXT)
+Build `services/agents/{ceo,caio,ads,rto,sales_growth,...}.py` modules that pull the right DB slice and call `run_readonly_agent_analysis`. Wire a Celery beat job for the daily CEO briefing.
 
 ### Phase 2 — Other gateways (slot when needed)
 - **Meta Lead Ads webhook** — `POST /api/webhooks/meta/leads/`, idempotent on `leadgen_id`, maps form fields to the `Lead` model.
@@ -800,4 +824,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 2E Meta Lead Ads webhook._
+_End of `nd.md`. Last updated after Phase 3A AgentRun foundation + AI provider adapters._

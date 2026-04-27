@@ -43,6 +43,8 @@ import type {
   ActiveCall,
   ActivityEvent,
   Agent,
+  AgentRun,
+  AgentRunCreatePayload,
   CaioAudit,
   Call,
   CallTranscriptLine,
@@ -323,6 +325,21 @@ export const api = {
     safeMutate<CallTriggerResponse>("/calls/trigger/", "POST", payload, () =>
       optimisticCallTrigger(payload),
     ),
+
+  // ---------- PHASE 3A — AgentRun (read-only / dry-run) ----------
+  // Admin/director only. Phase 3A always runs in dry-run mode server-side
+  // — `dryRun` on the wire is forward-compat for Phase 5 approval matrix.
+
+  listAgentRuns: () =>
+    safeFetch<AgentRun[]>("/ai/agent-runs/", () => []),
+
+  getAgentRun: (id: string) =>
+    safeFetch<AgentRun | undefined>(`/ai/agent-runs/${id}/`, () => undefined),
+
+  createAgentRun: (payload: AgentRunCreatePayload) =>
+    safeMutate<AgentRun>("/ai/agent-runs/", "POST", payload, () =>
+      optimisticAgentRun(payload),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -452,6 +469,26 @@ function optimisticCallTrigger(payload: CallTriggerPayload): CallTriggerResponse
     status: "queued",
     leadId: payload.leadId,
     providerCallId: `call_mock_${safeLead}_${purpose}`,
+  };
+}
+
+function optimisticAgentRun(payload: AgentRunCreatePayload): AgentRun {
+  return {
+    id: `AR-DRAFT-${Date.now()}`,
+    agent: payload.agent,
+    promptVersion: "v1.0-phase3a",
+    inputPayload: payload.input ?? {},
+    outputPayload: {},
+    status: "skipped",
+    provider: "disabled",
+    model: "",
+    latencyMs: 0,
+    costUsd: null,
+    errorMessage: "Backend offline — optimistic stub. Phase 3A runs are dry-run only.",
+    dryRun: true,
+    triggeredBy: "",
+    createdAt: new Date().toISOString(),
+    completedAt: null,
   };
 }
 
