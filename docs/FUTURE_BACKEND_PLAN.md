@@ -586,7 +586,55 @@ execute the underlying business write; the existing tested service
 path still owns the write. Phase 4D will add explicit safe execution
 paths action-by-action.
 
-## Phase 5 — Governance UI write paths
+## Phase 5 — WhatsApp + Governance UI write paths
+
+### ✅ Phase 5A-0 — WhatsApp compatibility audit (DONE, doc-only)
+
+Shipped via `docs: add whatsapp integration audit and phase 5a plan`.
+Audit of [`prarit0097/Whatsapp-sales-dashboard`](https://github.com/prarit0097/Whatsapp-sales-dashboard) at SHA `273b57a3`. Every backend module, frontend page, and Node service file mapped to a `reuse / adapt / replace / avoid` decision. Locked decisions (Production Meta Cloud only; Baileys dev/demo only; Claim Vault + consent + approval matrix gates server-side; CAIO blocked end-to-end). Full integration plan with Sections A-R, model specs, provider interface, allowed message types, audit kinds, env vars, test plan, and migration sequence lives in **`docs/WHATSAPP_INTEGRATION_PLAN.md`**. **Zero runtime code changes.**
+
+### Phase 5A — WhatsApp Live Sender Foundation (NEXT)
+
+Per `docs/WHATSAPP_INTEGRATION_PLAN.md` §C / §D / §E / §O:
+
+- New `apps.whatsapp` app: 8 models (`WhatsAppConnection`, `WhatsAppTemplate`, `WhatsAppConsent`, `WhatsAppConversation`, `WhatsAppMessage`, `WhatsAppMessageAttachment`, `WhatsAppMessageStatusEvent`, `WhatsAppWebhookEvent`, `WhatsAppSendLog`).
+- Provider interface (`base.py`) + `MockProvider` (default for tests / dev).
+- **Real Meta Cloud client** (the reference repo's Meta Cloud is stubbed — we build from scratch): `send_template_message`, `send_text_message` (Phase 5B+ flag), `verify_webhook` with `X-Hub-Signature-256` + replay-window check, `parse_webhook_event` for `entry[].changes[].value.{messages,statuses,errors,contacts}`, `get_message_status`, `health_check`.
+- Service layer + Celery `send_whatsapp_message_task` with `bind=True, autoretry_for=(httpx.HTTPError, RateLimitError), retry_backoff=True, retry_jitter=True, max_retries=5`. Idempotency key on every send.
+- Webhook receiver at `/api/webhooks/whatsapp/meta/` (GET handshake + signed POST). HMAC-verified, replay-window-checked, idempotent on `WhatsAppWebhookEvent.provider_event_id`.
+- Consent enforcement (`Customer.consent.whatsapp` + `WhatsAppConsent.consent_state`). Claim Vault enforcement for `claim_vault_required` templates.
+- Approval matrix integration: every send routes through `approval_engine.enforce_or_queue` first.
+- Frontend: Settings → WABA Connection section + WhatsAppTemplates page (read-only mirror of Meta-approved templates).
+- 9 backend test groups + 5 frontend tests; existing 351 backend + 13 frontend tests stay green.
+
+### Phase 5B — Inbound Inbox + Customer 360 timeline
+
+- WhatsAppInbox three-pane page (port the reference repo's UX shape; replace data layer with Nirogidhara API).
+- Customer 360 WhatsApp tab.
+- Internal notes per conversation.
+- Live refresh via Phase 4A `connectAuditEvents` (filter on `kind.startsWith("whatsapp.")`) — no separate WebSocket channel.
+
+### Phase 5C — AI Suggestions + Learning Loop
+
+- Port `learned_memory.py` from the reference repo wholesale (the cleanest file in that repo — explicit human-vetted gate, no auto-promotion).
+- AI suggestions become `apps.ai_governance.ApprovalRequest` rows of action `whatsapp.<message_type>`. Admin / director approves → Phase 4D execute layer dispatches via the existing service helper.
+- Claim Vault filter wraps the AI path: any LLM-emitted text not present in `apps.compliance.Claim.approved` for the relevant product is dropped + escalates to human handoff.
+- CAIO refused at engine + AgentRun bridge + execute layer (carry-through Phase 4D pre-checks).
+
+### Phase 5D — Lifecycle automation
+
+- Order / Payment / Shipment state-change signals fire `enforce_or_queue` for the matching template.
+- Auto-approved (consent-gated) lifecycle messages flow without operator action.
+- Operations / admin can still manually pre-empt or send.
+
+### Phase 5E — Campaign system (gated, later)
+
+- Director-approved broadcast campaigns.
+- Meta MARKETING template tier required.
+- Per-campaign rate limit + dry-run + audit.
+- Frontend: a Campaigns page for Director + Admin only.
+
+### Phase 5 — Governance UI write paths (interleaved)
 
 - Kill switch toggle endpoints (Section 12.1).
 - Prompt rollback (already shipped in Phase 3D — frontend page exists).

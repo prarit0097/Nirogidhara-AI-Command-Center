@@ -90,7 +90,9 @@ cd frontend && npm test
 
 **Next:**
 
-- ⏭ **WhatsApp** — Live Business Cloud API sender (consent-gated, Claim-Vault-grounded). Phase 3E ships only the design scaffold.
+- ⏭ **Phase 5A-0** ✅ done (doc-only): WhatsApp compatibility audit of [`prarit0097/Whatsapp-sales-dashboard`](https://github.com/prarit0097/Whatsapp-sales-dashboard) → integration plan in [`docs/WHATSAPP_INTEGRATION_PLAN.md`](docs/WHATSAPP_INTEGRATION_PLAN.md). Locked: production target is Meta Cloud API (the reference repo's Meta Cloud provider is stubbed); Baileys is dev/demo only.
+- ⏭ **Phase 5A** — WhatsApp Live Sender Foundation: build Meta Cloud client from scratch, 8 new models under `apps/whatsapp/`, consent + approved-template + Claim-Vault gates server-side, signed webhook + replay-window check, Celery send task with retry/jitter/idempotency, Settings → WABA section + read-only WhatsAppTemplates page.
+- ⏭ **Phase 5B–5E** — Inbound inbox + Customer 360 timeline (5B); AI suggestions + learning loop (5C; AI suggestions become ApprovalRequests); lifecycle automation (5D); approval-gated campaigns (5E).
 
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
 Detailed handoff: [`nd.md`](nd.md).
