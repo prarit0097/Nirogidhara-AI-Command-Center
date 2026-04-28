@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, Bot, CheckCircle2, CreditCard, IndianRupee, PackageCheck,
   Phone, ShieldAlert, Sparkles, Truck, UserPlus, Users, Workflow, ArrowRight,
@@ -13,9 +13,36 @@ import {
   Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "@/services/api";
-import type { Agent, CaioAudit, CeoBriefing } from "@/types/domain";
+import { connectAuditEvents } from "@/services/realtime";
+import type { ActivityEvent, Agent, CaioAudit, CeoBriefing, RealtimeStatus } from "@/types/domain";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+
+const REALTIME_LABEL: Record<RealtimeStatus, string> = {
+  connecting: "connecting",
+  live: "realtime",
+  reconnecting: "reconnecting",
+  offline: "polling fallback",
+};
+const REALTIME_TONE: Record<RealtimeStatus, string> = {
+  connecting: "text-muted-foreground",
+  live: "text-success",
+  reconnecting: "text-warning",
+  offline: "text-muted-foreground",
+};
+
+function mergeActivityFeed(
+  existing: ActivityEvent[],
+  incoming: ActivityEvent,
+  max: number = 25,
+): ActivityEvent[] {
+  if (incoming.id !== undefined) {
+    if (existing.some((e) => e.id !== undefined && e.id === incoming.id)) {
+      return existing;
+    }
+  }
+  return [incoming, ...existing].slice(0, max);
+}
 
 const ICONS: Record<string, any> = {
   Phone, Truck, ShieldAlert, CreditCard, Sparkles, AlertTriangle, CheckCircle2, UserPlus,
@@ -55,10 +82,13 @@ export default function Index() {
   const [revenue, setRevenue] = useState<any[]>([]);
   const [stateRto, setStateRto] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
-  const [activity, setActivity] = useState<any[]>([]);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [ceo, setCeo] = useState<CeoBriefing | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [audits, setAudits] = useState<CaioAudit[]>([]);
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("connecting");
+  const activityRef = useRef<ActivityEvent[]>([]);
+  activityRef.current = activity;
 
   useEffect(() => {
     Promise.all([
@@ -69,6 +99,22 @@ export default function Index() {
       setM(mm); setFunnel(f); setRevenue(r); setStateRto(s); setProducts(p); setActivity(a);
       setCeo(c); setAgents(ag); setAudits(au);
     });
+  }, []);
+
+  // Phase 4A — open the audit-events WebSocket. Snapshot replaces the
+  // initial feed; new events prepend with id-deduplication. Existing
+  // polling endpoints keep working as fallback when the socket is offline.
+  useEffect(() => {
+    const ctrl = connectAuditEvents({
+      onSnapshot: (events) => {
+        if (events.length > 0) setActivity(events.slice(0, 25));
+      },
+      onEvent: (event) => {
+        setActivity((prev) => mergeActivityFeed(prev, event, 25));
+      },
+      onStatusChange: setRealtimeStatus,
+    });
+    return () => ctrl.close();
   }, []);
 
   if (!m || !ceo) return <div className="h-96 grid place-items-center text-muted-foreground">Loading command center...</div>;
@@ -247,13 +293,21 @@ export default function Index() {
         <div className="surface-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-display text-xl font-semibold">Live Activity</h3>
-            <span className="inline-flex items-center gap-1.5 text-xs text-success"><span className="live-dot" /> realtime</span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 text-xs capitalize",
+                REALTIME_TONE[realtimeStatus],
+              )}
+            >
+              {realtimeStatus === "live" && <span className="live-dot" />}
+              {REALTIME_LABEL[realtimeStatus]}
+            </span>
           </div>
           <ul className="space-y-3 max-h-[420px] overflow-auto scrollbar-thin pr-2">
             {activity.map((a, i) => {
               const Icon = ICONS[a.icon] || Activity;
               return (
-                <li key={i} className="flex gap-3 animate-rise">
+                <li key={a.id ?? i} className="flex gap-3 animate-rise">
                   <div className={cn("h-8 w-8 rounded-lg grid place-items-center shrink-0", ACTIVITY_TONES[a.tone])}>
                     <Icon className="h-4 w-4" />
                   </div>

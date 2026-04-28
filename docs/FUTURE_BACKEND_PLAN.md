@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C + 4D are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4A + 4B + 4C + 4D are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -297,12 +297,60 @@ no live messaging or order writes are executed by the Phase 3E modules.
 
 ## Phase 4 — Real-time + reward / penalty + approval middleware
 
-### Phase 4A — Real-time WebSockets (PENDING)
+### ✅ Phase 4A — Real-time AuditEvent WebSockets (DONE)
 
-- Django Channels + WebSockets to push `AuditEvent` rows to subscribed
-  dashboards.
-- Replace polling on the dashboard's activity feed.
-- Frontend already polls via React Query — adding push is purely additive.
+Shipped via `feat: add realtime audit event websockets`.
+
+- `requirements.txt` adds `channels`, `channels_redis`, and `daphne`.
+  `INSTALLED_APPS` lists `daphne` first and `channels` after the
+  third-party DRF block.
+- `config/asgi.py` rewired as a `ProtocolTypeRouter`: HTTP through the
+  standard Django ASGI app; WebSocket through a `URLRouter` mounted
+  from `config/routing.py` (which mounts `apps.audit.routing`).
+- `apps/audit/realtime.py` — `serialize_event(event)` returns the
+  camelCase shape the frontend `ActivityEvent` type expects and
+  carries the **full stored `AuditEvent.payload`** verbatim.
+  `latest_events()` returns the freshest 25 rows for the connect
+  snapshot. `publish_audit_event(event)` schedules a fan-out via
+  `transaction.on_commit` and swallows every Channels failure so a
+  missing Redis cannot cascade into a service-layer write failure.
+- `apps/audit/consumers.py` — `AuditEventConsumer` (an
+  `AsyncJsonWebsocketConsumer`). On connect: optional `?token=<jwt>`
+  validation via simplejwt, group join on `audit_events`, initial
+  `{ type: "audit.snapshot", events: [...] }` frame. On each broadcast:
+  `{ type: "audit.event", event: ... }`. `ping` → `pong`. Read-only.
+- `apps/audit/routing.py` mounts the consumer at `/ws/audit/events/`.
+- `apps/audit/signals.py` adds a `post_save(sender=AuditEvent)`
+  receiver that fans newly-created rows out to the WebSocket group
+  via `publish_audit_event`. Updates are intentionally not streamed.
+- New env vars in `backend/.env.example`: `CHANNEL_LAYER_BACKEND`
+  (default `memory` for tests / dev) and `CHANNEL_REDIS_URL`
+  (default `redis://localhost:6379/2` — index 2 reserved for
+  Channels; Celery still uses 0/1). Production sets
+  `CHANNEL_LAYER_BACKEND=redis`.
+- Frontend `services/realtime.ts` — `buildWebSocketUrl(path?, opts?)`
+  + `connectAuditEvents(opts)` with snapshot replace + per-event
+  prepend dedupe + exponential reconnect + status callback
+  (`connecting | live | reconnecting | offline`). Never throws.
+- Dashboard `Index.tsx` — opens the socket on mount, replaces the
+  initial polling-fetched activity list with the snapshot, prepends
+  new events with id-deduplication, caps the list at 25 rows.
+  "Live Activity" header shows a tone-mapped status pill.
+- Governance `Governance.tsx` — opens the same socket, calls
+  `refresh()` whenever a frame's `kind` starts with `ai.approval.`,
+  `ai.agent_run.approval_requested`, `ai.prompt_version.`,
+  `ai.sandbox.`, or `ai.budget.`. The Approval queue header shows
+  the same realtime status pill.
+- Existing HTTP polling endpoints (`/api/dashboard/activity/`,
+  `/api/ai/approvals/`) remain as fallback and stay green in tests.
+- 8 new pytest tests cover serializer shape (full payload included),
+  `latest_events()`, publisher resilience to a broken channel layer,
+  `AuditEvent.objects.create` not breaking when the layer raises,
+  consumer connect + snapshot, broadcast forwarding, ping/pong, and
+  `GET /api/dashboard/activity/` still working.
+- 5 new vitest cases cover `buildWebSocketUrl` for `http→ws`,
+  `https→wss + /api stripping`, `VITE_WS_BASE_URL` override,
+  empty-base fallback, and `?token=…` appending.
 
 ### ✅ Phase 4D — Approved Action Execution Layer (DONE)
 

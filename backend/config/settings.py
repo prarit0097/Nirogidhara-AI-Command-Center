@@ -35,6 +35,10 @@ ALLOWED_HOSTS = _csv(os.environ.get("DJANGO_ALLOWED_HOSTS")) or [
 ]
 
 INSTALLED_APPS = [
+    # Phase 4A — daphne goes BEFORE django.contrib.staticfiles when
+    # used with `runserver` so the ASGI runserver picks up the
+    # WebSocket router. Channels itself is third-party.
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -46,6 +50,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "corsheaders",
     "django_filters",
+    "channels",
     # Local apps (order respects FK dependencies)
     "apps.accounts",
     "apps.audit",
@@ -77,6 +82,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
+# Phase 4A — channels reads ASGI_APPLICATION to bootstrap the routing.
 ASGI_APPLICATION = "config.asgi.application"
 
 TEMPLATES = [
@@ -302,6 +308,34 @@ GROK_MODEL = os.environ.get("GROK_MODEL", "")
 # is queried. Flipping the toggle later goes through PATCH
 # /api/ai/sandbox/status/ (admin/director only).
 AI_SANDBOX_MODE = _bool(os.environ.get("AI_SANDBOX_MODE"), default=False)
+
+
+# ----- Phase 4A — Real-time WebSockets via Django Channels -----
+# Local dev / pytest default to the in-memory channel layer so neither
+# Redis nor the daphne ASGI runner is required for the test suite. To
+# use Redis-backed channels (production target) set:
+#   CHANNEL_LAYER_BACKEND=redis
+#   CHANNEL_REDIS_URL=redis://localhost:6379/2
+# The frontend can override the WebSocket origin via VITE_WS_BASE_URL;
+# otherwise it derives the URL from VITE_API_BASE_URL.
+CHANNEL_LAYER_BACKEND = (
+    os.environ.get("CHANNEL_LAYER_BACKEND") or "memory"
+).strip().lower()
+CHANNEL_REDIS_URL = os.environ.get(
+    "CHANNEL_REDIS_URL", "redis://localhost:6379/2"
+)
+
+if CHANNEL_LAYER_BACKEND == "redis":
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [CHANNEL_REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+    }
 
 LOGGING = {
     "version": 1,

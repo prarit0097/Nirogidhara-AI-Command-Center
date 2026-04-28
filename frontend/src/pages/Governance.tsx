@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { api } from "@/services/api";
+import { connectAuditEvents } from "@/services/realtime";
 import type {
   AgentBudget,
   AgentBudgetWritePayload,
@@ -28,8 +29,35 @@ import type {
   ApprovalRequest,
   ApprovalRequestStatus,
   PromptVersion,
+  RealtimeStatus,
   SandboxState,
 } from "@/types/domain";
+
+const GOVERNANCE_REFRESH_KIND_PREFIXES = [
+  "ai.approval.",
+  "ai.agent_run.approval_requested",
+  "ai.prompt_version.",
+  "ai.sandbox.",
+  "ai.budget.",
+];
+
+function shouldRefreshGovernance(kind: string | undefined | null): boolean {
+  if (!kind) return false;
+  return GOVERNANCE_REFRESH_KIND_PREFIXES.some((prefix) => kind.startsWith(prefix));
+}
+
+const REALTIME_LABEL: Record<RealtimeStatus, string> = {
+  connecting: "connecting",
+  live: "live",
+  reconnecting: "reconnecting",
+  offline: "polling fallback",
+};
+const REALTIME_TONE: Record<RealtimeStatus, string> = {
+  connecting: "text-muted-foreground",
+  live: "text-success",
+  reconnecting: "text-warning",
+  offline: "text-muted-foreground",
+};
 
 const AGENTS: AgentName[] = [
   "ceo",
@@ -113,6 +141,7 @@ export default function Governance() {
   const [busy, setBusy] = useState(false);
   const [decisionBusy, setDecisionBusy] = useState<string | null>(null);
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("connecting");
 
   const refresh = async () => {
     try {
@@ -185,6 +214,20 @@ export default function Governance() {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  // Phase 4A — live refresh on approval / governance audit events.
+  // The HTTP polling endpoints stay as fallback when the socket is offline.
+  useEffect(() => {
+    const ctrl = connectAuditEvents({
+      onEvent: (event) => {
+        if (shouldRefreshGovernance(event.kind)) {
+          refresh();
+        }
+      },
+      onStatusChange: setRealtimeStatus,
+    });
+    return () => ctrl.close();
   }, []);
 
   const promptsByAgent = useMemo(() => {
@@ -391,9 +434,23 @@ export default function Governance() {
               Approval queue · Phase 4C
             </h2>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {approvals.length} requests
-          </span>
+          <div className="flex items-center gap-3 text-xs">
+            <span
+              className={[
+                "inline-flex items-center gap-1.5 capitalize",
+                REALTIME_TONE[realtimeStatus],
+              ].join(" ")}
+              title="Phase 4A — live AuditEvent stream"
+            >
+              {realtimeStatus === "live" && (
+                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+              )}
+              {REALTIME_LABEL[realtimeStatus]}
+            </span>
+            <span className="text-muted-foreground">
+              {approvals.length} requests
+            </span>
+          </div>
         </div>
         <div className="px-6 py-3 text-xs text-muted-foreground border-b border-border bg-muted/20">
           Approve / reject business actions gated by the matrix. Director-only

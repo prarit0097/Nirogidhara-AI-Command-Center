@@ -607,7 +607,16 @@ export interface ActivityEvent {
   icon: string;
   text: string;
   tone: "success" | "info" | "warning" | "danger";
+  // Phase 4A — present on live WebSocket frames (and optional on the
+  // legacy polling response for backward compat).
+  id?: number;
+  kind?: string;
+  payload?: Record<string, unknown>;
+  createdAt?: string;
 }
+
+// Phase 4A — Realtime AuditEvent stream connection states.
+export type RealtimeStatus = "connecting" | "live" | "reconnecting" | "offline";
 
 export interface WorkflowStep {
   step: string;

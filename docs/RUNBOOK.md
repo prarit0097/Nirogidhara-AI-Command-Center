@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 314 tests (Phase 1 → 4D)
+python -m pytest -q                     # 322 tests (Phase 1 → 4A inclusive)
 
 # Frontend
 cd ../frontend
@@ -346,6 +346,72 @@ sign-off + matching tests): no autonomous AI execution, no ad-budget
 changes, no refunds, no live WhatsApp, no discount execution in this
 first pass, no sandbox-disable execution in this first pass, idempotent
 re-execute, director-only override on `director_override` actions.
+
+## Phase 4A — Real-time AuditEvent WebSockets
+
+The Master Event Ledger now streams to a WebSocket alongside the
+existing polling endpoints. Local dev defaults to the in-memory
+channel layer so neither Redis nor a separate ASGI worker is
+required for `pytest` / `manage.py runserver`. Spin up Redis only
+when you want to validate the production path.
+
+### Local dev (in-memory layer, no Redis)
+
+Just run the stack normally:
+
+```bash
+# Terminal 1
+cd backend
+.\.venv\Scripts\Activate.ps1
+python manage.py runserver 0.0.0.0:8000
+
+# Terminal 2
+cd frontend
+npm run dev
+```
+
+Open [http://localhost:8080](http://localhost:8080). The Dashboard
+"Live Activity" feed and the Governance "Approval queue" both show a
+realtime status pill (`connecting` → `live` once the socket opens).
+Trigger any write action (e.g. a payment-link curl) and the new
+AuditEvent appears in the feed without a page refresh.
+
+### Manual WebSocket smoke test
+
+Browser DevTools → Network → WS → open `/ws/audit/events/` → expect:
+
+1. An `audit.snapshot` frame with the latest 25 events.
+2. An `audit.event` frame for every new audit row.
+
+Or via `wscat`:
+
+```bash
+npx wscat -c ws://localhost:8000/ws/audit/events/
+```
+
+### Production / Redis-backed channel layer
+
+Bring up Redis (the same `docker-compose.dev.yml` works for staging
+smoke tests), then flip the env:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d redis
+# backend/.env
+CHANNEL_LAYER_BACKEND=redis
+CHANNEL_REDIS_URL=redis://localhost:6379/2
+```
+
+Channels uses Redis index 2 so it does not collide with Celery's 0/1.
+For real production traffic, run the ASGI worker via daphne (or
+uvicorn / gunicorn-with-uvicorn-workers) instead of `runserver`:
+
+```bash
+daphne -b 0.0.0.0 -p 8000 config.asgi:application
+```
+
+The polling endpoints (`/api/dashboard/activity/`,
+`/api/ai/approvals/`) stay live as fallback — frontend pages keep
+working when the WebSocket is unreachable.
 
 ## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
 

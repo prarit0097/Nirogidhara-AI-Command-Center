@@ -3,6 +3,12 @@
 Connecting receivers here (rather than in each app) keeps the audit module the
 single owner of ``AuditEvent`` writes — apps emit ``post_save``/``post_delete``
 naturally, audit translates them into ledger rows.
+
+Phase 4A also adds a fan-out receiver on ``AuditEvent`` itself that
+publishes the row to the Channels ``audit_events`` group so dashboards
+can stream new events live. The publisher is wrapped in
+``transaction.on_commit`` and a broad ``try/except`` so a missing
+Redis / Channels failure can never break the underlying write.
 """
 from __future__ import annotations
 
@@ -10,6 +16,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from .models import AuditEvent
+from .realtime import publish_audit_event
 
 ICON_BY_KIND: dict[str, str] = {
     # Existing (Phase 1).
@@ -113,6 +120,19 @@ def write_event(*, kind: str, text: str, tone: str = AuditEvent.Tone.INFO, paylo
         icon=ICON_BY_KIND.get(kind, "activity"),
         payload=payload or {},
     )
+
+
+@receiver(post_save, sender=AuditEvent, dispatch_uid="audit.event_created_publish")
+def _on_audit_event_created(sender, instance: AuditEvent, created: bool, **_):
+    """Phase 4A — publish new AuditEvent rows to the WebSocket fanout group.
+
+    Updates are skipped intentionally (Phase 4A streams creates only).
+    The publish is fire-and-forget: failures are logged inside
+    :func:`publish_audit_event`, never raised.
+    """
+    if not created:
+        return
+    publish_audit_event(instance)
 
 
 @receiver(post_save, sender="crm.Lead", dispatch_uid="audit.lead_created")

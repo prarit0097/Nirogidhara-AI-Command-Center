@@ -126,6 +126,11 @@ backend/apps/ai_governance/models.py ← Phase 4C: ApprovalRequest + ApprovalDec
 backend/apps/ai_governance/views.py ← Phase 4C/4D endpoints: /api/ai/approvals/{,id/,id/approve/,id/reject/,id/execute/,evaluate/} + /api/ai/agent-runs/{id}/request-approval/
 backend/apps/ai_governance/approval_execution.py ← Phase 4D execution engine + 3-action allow-listed registry (payment.link.advance_499, payment.link.custom_amount, ai.prompt_version.activate)
 backend/apps/ai_governance/models.py ← Phase 4D: ApprovalExecutionLog (status executed/failed/skipped, partial unique constraint enforcing one executed per ApprovalRequest)
+backend/apps/audit/realtime.py ← Phase 4A: serialize_event + latest_events + publish_audit_event (transaction.on_commit, never blocks DB writes)
+backend/apps/audit/consumers.py ← Phase 4A: AuditEventConsumer (read-only fanout to ws://<host>/ws/audit/events/)
+backend/apps/audit/routing.py ← Phase 4A: WebSocket URL routes for the audit app
+backend/config/routing.py ← Phase 4A: top-level WebSocket router consumed by config/asgi.py ProtocolTypeRouter
+frontend/src/services/realtime.ts ← Phase 4A: buildWebSocketUrl + connectAuditEvents (snapshot + per-event push, exponential reconnect, dedupe by id, never throws)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -185,7 +190,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 314 tests today
+python -m pytest -q                 # 322 tests today
 
 # Frontend
 cd frontend
@@ -229,6 +234,7 @@ cd frontend && npm run lint && npm test && npm run build
 - Don't move the reward/penalty formula into the frontend. Phase 4B engine (`apps/rewards/engine.py`) wires the Phase 3E pure formula into per-order, per-AI-agent `RewardPenaltyEvent` rows. Frontend renders API data only — no scoring math in React. CEO AI **always** receives a net accountability event for every delivered (reward) and every RTO / cancelled (penalty) order. CAIO is excluded from business reward / penalty.
 - Don't duplicate approval rules in views. Phase 4C middleware (`apps/ai_governance/approval_engine.py`) is the single source. Risky write paths call `enforce_or_queue` and stop when `result.allowed` is False. `approve_request` flips status to `approved` and writes audits — it does **not** silently execute the underlying business write; that still flows through its existing tested service path. CAIO can never request an executable approval (refused at AgentRun bridge AND at the matrix evaluation step).
 - Phase 4D ships an Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` over a strict allow-listed registry. The first pass wires only 3 actions: `payment.link.advance_499`, `payment.link.custom_amount`, `ai.prompt_version.activate`. Every other approved action — discount, sandbox-disable, ad-budget, refund, WhatsApp, escalations, production live-mode switch — returns HTTP 400 + `ai.approval.execution_skipped` audit. Don't expand the registry without explicit Prarit sign-off + matching tests. CAIO blocked at engine + AgentRun bridge + execute layer. Idempotent: a successful execution writes one log; re-running the endpoint returns the prior result without re-invoking the handler.
+- Phase 4A wires Django Channels for live AuditEvent streaming at `ws://<host>/ws/audit/events/`. The frame carries the **full stored `AuditEvent.payload`** — never trim it, but never put secrets in audit payloads either (the existing rule). The publisher in `apps/audit/realtime.py` runs inside `transaction.on_commit` and swallows Channels failures, so a missing Redis must never break a service-layer write. Existing polling endpoints (`/api/dashboard/activity/`, `/api/ai/approvals/`) remain as fallback — don't remove them. The consumer is read-and-fanout only: never execute, never mutate. Local dev defaults to the in-memory channel layer; production sets `CHANNEL_LAYER_BACKEND=redis` + `CHANNEL_REDIS_URL=redis://...:6379/2` (Channels uses Redis index 2; Celery uses 0/1).
 - Don't push to `main` without running tests + build + lint locally first.
 - Don't `git push --force`. Don't skip hooks. Don't amend pushed commits.
 

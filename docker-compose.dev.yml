@@ -1,11 +1,27 @@
-# Local-only Redis for the Phase 3C Celery worker / beat.
+# Local-only Redis for the Phase 3C Celery worker / beat AND the
+# Phase 4A Channels (WebSocket) layer.
 #
-# Bring Redis up only when you actually want to run a Celery worker or
-# Celery beat — for normal dev / pytest you don't need this at all because
-# CELERY_TASK_ALWAYS_EAGER=true makes `.delay()` run synchronously.
+# Bring Redis up only when you actually need it. Day-to-day dev /
+# pytest don't need it because:
+#   - Celery: CELERY_TASK_ALWAYS_EAGER=true makes `.delay()` synchronous.
+#   - Channels: CHANNEL_LAYER_BACKEND=memory (default) uses the
+#     in-memory channel layer, so a single-process runserver still
+#     fans out audit events to its own WebSocket clients.
+#
+# Spin Redis up when:
+#   - you want the Celery beat schedule to fire on the wall clock
+#   - you want to validate the Redis-backed Channels layer (production)
 #
 #   docker compose -f docker-compose.dev.yml up -d redis
+#   # then point env at it:
+#   #   CHANNEL_LAYER_BACKEND=redis
+#   #   CHANNEL_REDIS_URL=redis://localhost:6379/2
 #   celery -A config worker -B --loglevel=info
+#
+# DB index conventions (so Celery + Channels do not collide):
+#   - 0 → Celery broker
+#   - 1 → Celery result backend
+#   - 2 → Channels group layer (Phase 4A)
 #
 # Production / staging Redis lives elsewhere — never use this file there.
 services:

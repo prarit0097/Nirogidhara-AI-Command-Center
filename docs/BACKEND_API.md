@@ -306,6 +306,31 @@ Other normal workflows (lead create / call trigger / ₹499 advance / Delhivery 
 
 **Phase 4D shipped:** the Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` is now live with the locked 3-action registry. Future expansion (discount + sandbox-disable + ad-budget execution, etc.) requires explicit Prarit sign-off + matching tests. CAIO + Claim Vault + idempotency hard stops remain in place.
 
+### Realtime AuditEvent WebSockets (Phase 4A)
+
+Django Channels powers a single live AuditEvent stream alongside the
+existing polling endpoints. The frame carries the **full stored**
+`AuditEvent.payload` verbatim — never trimmed.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| WS | `ws://<host>/ws/audit/events/[?token=<jwt>]` | Live AuditEvent stream. On connect: `{ "type": "audit.snapshot", "events": [<latest 25>] }`. On every new AuditEvent: `{ "type": "audit.event", "event": { id, kind, text, tone, icon, payload, createdAt, time } }`. Optional `?token=<jwt>` validates a simplejwt access token (best-effort attach for telemetry; connection still accepts on validation failure to keep the dev dashboard working). Client may send `{ "type": "ping" }` and receive `{ "type": "pong" }`. |
+
+Settings:
+
+- `CHANNEL_LAYER_BACKEND` — `memory` (default for tests / dev) or `redis` (production target).
+- `CHANNEL_REDIS_URL` — `redis://localhost:6379/2` (Channels uses Redis index 2 so it does not collide with Celery's 0/1).
+- `ASGI_APPLICATION = "config.asgi.application"` — `ProtocolTypeRouter` over `config/routing.py`.
+
+Frontend `services/realtime.ts`:
+
+- `buildWebSocketUrl(path?, options?)` — derives `ws://` / `wss://` from `VITE_WS_BASE_URL` if set, otherwise from `VITE_API_BASE_URL` (`http`→`ws`, `https`→`wss`, `/api` suffix stripped). Optional `?token=…` append.
+- `connectAuditEvents({ onSnapshot, onEvent, onStatusChange, onError, token?, path? })` — opens the socket, dedupes events by `id`, exponential reconnect, never throws to the caller.
+
+Existing HTTP polling endpoints (`GET /api/dashboard/activity/`, `GET /api/ai/approvals/`) **remain as fallback** when the WebSocket is unavailable.
+
+Locked Phase 4A rules: full payload streamed (existing rule still applies — secrets must never be put in audit payloads); CAIO never executes (consumer is read-and-fanout only); publish failures are swallowed inside `apps.audit.realtime.publish_audit_event` and never break a service-layer write.
+
 ### Reward / Penalty Engine (Phase 4B)
 
 The legacy `GET /api/rewards/` list endpoint stays public and now returns the agent-level rollup with Phase 4B fields (`agentId`, `agentType`, `rewardedOrders`, `penalizedOrders`, `lastCalculatedAt`) appended in camelCase. Three new endpoints power the per-order scoring view:

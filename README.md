@@ -60,10 +60,10 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 ## Tests
 
 ```bash
-# Backend (pytest, 314 tests)
+# Backend (pytest, 322 tests)
 cd backend && python -m pytest -q
 
-# Frontend (vitest, 8 tests)
+# Frontend (vitest, 13 tests)
 cd frontend && npm test
 ```
 
@@ -85,10 +85,10 @@ cd frontend && npm test
 - ✅ **Phase 4B** — Reward / Penalty Engine wiring (`apps/rewards/engine.py`) on top of the Phase 3E formula: AI-agents-only scoring with **CEO AI net accountability** for every delivered / RTO / cancelled order, idempotent `RewardPenaltyEvent` rows keyed by `unique_key`, agent leaderboard rollup, `/api/rewards/{events,summary,sweep}/` endpoints (admin/director only for events / summary / sweep), `python manage.py calculate_reward_penalties` (cron-friendly, supports `--order-id` and `--dry-run`), `apps.rewards.tasks.run_reward_penalty_sweep_task` (Celery eager-mode safe), Rewards page now shows agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button.
 - ✅ **Phase 4C** — Approval Matrix Middleware enforcement (`apps/ai_governance/approval_engine.py`): `ApprovalRequest` + `ApprovalDecisionLog` models, `evaluate_action` / `enforce_or_queue` / `approve_request` / `reject_request` / `request_approval_for_agent_run`. 5 new admin/director endpoints under `/api/ai/approvals/...` and `/api/ai/agent-runs/{id}/request-approval/`. Live enforcement gating custom-amount payment links, prompt activation, and sandbox disable. CAIO never executes (refused at the bridge AND at the matrix evaluator). Governance page upgraded with an Approval queue table + Approve / Reject controls.
 - ✅ **Phase 4D** — Approved Action Execution Layer (`apps/ai_governance/approval_execution.py`): `ApprovalExecutionLog` model with one-executed-per-request constraint, `POST /api/ai/approvals/{id}/execute/` endpoint, **allow-listed registry of 3 handlers** (`payment.link.advance_499`, `payment.link.custom_amount`, `ai.prompt_version.activate`). Every other approved action returns HTTP 400 + `ai.approval.execution_skipped` audit. CAIO blocked at engine + bridge + execute layer; idempotent re-execute returns prior result; director-only override on `director_override`. Governance page now shows an Execution column + Execute button on approved rows.
+- ✅ **Phase 4A** — Real-time AuditEvent WebSockets via Django Channels: `ws://<host>/ws/audit/events/` carries the **full stored `AuditEvent.payload`**, Dashboard "Live Activity" feed and Governance "Approval queue" auto-refresh on relevant audit kinds, existing polling endpoints (`/api/dashboard/activity/`, `/api/ai/approvals/`) remain as fallback. Frontend `services/realtime.ts` derives the WS origin from `VITE_API_BASE_URL` (or `VITE_WS_BASE_URL` override), reconnects with exponential backoff, deduplicates by id. Local dev defaults to the in-memory channel layer; production uses `CHANNEL_LAYER_BACKEND=redis` + `CHANNEL_REDIS_URL=redis://...:6379/2`.
 
 **Next:**
 
-- ⏭ **Phase 4A** — Real-time WebSockets (Django Channels pushing AuditEvent rows live).
 - ⏭ **Expanded execution registry** — discount.up_to_10 / discount.11_to_20 / ai.sandbox.disable execution come later, intentionally not in the 4D first pass.
 - ⏭ **WhatsApp** — Live Business Cloud API sender (consent-gated, Claim-Vault-grounded). Phase 3E ships only the design scaffold.
 
