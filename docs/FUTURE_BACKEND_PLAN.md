@@ -297,12 +297,94 @@ no live messaging or order writes are executed by the Phase 3E modules.
 
 ## Phase 4 — Real-time + reward / penalty + approval middleware
 
-### Phase 4A — Real-time WebSockets (NEXT)
+### Phase 4A — Real-time WebSockets (PENDING)
 
 - Django Channels + WebSockets to push `AuditEvent` rows to subscribed
   dashboards.
 - Replace polling on the dashboard's activity feed.
 - Frontend already polls via React Query — adding push is purely additive.
+
+### Phase 4D — Approved Action Execution Layer (NEXT)
+
+Phase 4C ships approval gating but does **not** execute the underlying
+business write. Phase 4D adds the safe, explicit execution paths so a
+director-approved action actually performs its write — and *only* the
+specific, tested actions we authorize per release.
+
+**Goal**: turn an approved `ApprovalRequest` into the underlying
+business write through a tested service path, with no autonomous /
+silent execution and a strong CAIO + Claim Vault hard stop.
+
+**Surface to add (planned, not yet implemented):**
+
+- `POST /api/ai/approvals/{id}/execute/` — admin/director only;
+  director-only when policy mode is `director_override`. Body
+  optional. Returns `{ approvalRequestId, executionStatus, notes,
+  executedAt, executedBy, result }`.
+- Either:
+  (a) extend `ApprovalRequest` with `execution_status` (one of
+  `not_executed`, `pending`, `executed`, `failed`, `skipped`) +
+  `executed_at` + `executed_by` + `execution_result` JSON, OR
+  (b) add a separate `ApprovalExecutionLog` model linked FK-style to
+  `ApprovalRequest`. Decision deferred to the Phase 4D PR.
+- An execution registry that maps each authorized matrix `action` key
+  to a function in the *existing tested service layer*. Initial
+  registry (allow-listed; everything else 400s):
+  - `payment.link.advance_499` → `apps.payments.services.create_payment_link`
+  - `payment.link.custom_amount` → same service, custom amount path
+  - `discount.up_to_10` → trivial pass-through (auto-already)
+  - `discount.11_to_20` → order discount update via existing service
+  - `ai.prompt_version.activate` → already wired
+  - `ai.sandbox.disable` → already wired
+- Audit kinds:
+  `ai.approval.executed`, `ai.approval.execution_failed`,
+  `ai.approval.execution_skipped`.
+
+**Hard stops (locked, do NOT relax):**
+
+1. **CAIO can never trigger execution.** Refused at the engine AND at
+   the bridge — Phase 4D adds a third refusal at the execute endpoint.
+2. **Claim Vault remains mandatory** — no medical / claim-bound action
+   may execute without an Approved Claim Vault grounding.
+3. **No autonomous AI execution.** The execute endpoint always requires
+   an approved `ApprovalRequest`; AgentRuns can only request approval,
+   never execute.
+4. **No ad budget changes** in Phase 4D — `ad.budget_change` stays in
+   `director_override` mode and the registry intentionally leaves it
+   unmapped (will 400 on execute even if approved).
+5. **No refunds** in Phase 4D — `payment.refund` stays in
+   `human_escalation` mode and is intentionally unmapped.
+6. **No live WhatsApp** in Phase 4D — design scaffold only.
+7. **No silent complex business writes.** The registry is an
+   allow-list; an approved action whose key is NOT in the registry
+   responds with HTTP 400 and writes `ai.approval.execution_skipped`.
+8. **Director-only override** stays enforced for any `director_override`
+   action even at the execute endpoint.
+9. **Idempotency** — re-executing an already-executed approval returns
+   the prior result; never re-runs the underlying write.
+10. **Existing tests must stay green** (currently 275 backend + 8
+    frontend).
+
+**Frontend (planned for Phase 4D):**
+
+- An "Execute" button on the approved-row of the Governance page's
+  Approval queue (admin/director only on the API). Pressing it calls
+  `api.executeApprovalRequest(id)`; the page refreshes to show the new
+  `executionStatus`.
+- No business logic in React.
+
+**What Phase 4D will NOT do:**
+
+- Will not replace the existing service layer.
+- Will not introduce a new ORM-side execution path. Every write still
+  flows through `apps/<app>/services.py`.
+- Will not add automation that turns approval queues into background
+  drainers. Execution remains an explicit operator action.
+
+This plan is doc-only at the time of writing. The Phase 4D PR will
+implement it incrementally, action-by-action, with a dedicated test
+file covering each newly-allowed action plus the no-op for unmapped
+actions.
 
 ### ✅ Phase 4B — Reward / Penalty Engine wiring (DONE)
 

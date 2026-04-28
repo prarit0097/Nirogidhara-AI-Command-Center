@@ -305,6 +305,16 @@ buttons (admin/director only on the API; the frontend just renders).
 audits. It does **not** silently execute the underlying business write;
 that still flows through its existing tested service path.
 
+**Phase 4D (planned, not yet implemented):** an Approved Action
+Execution Layer will add `POST /api/ai/approvals/{id}/execute/` over an
+allow-listed registry of tested service functions. Until 4D ships, an
+approved `ApprovalRequest` is a green-light signal — the operator still
+triggers the existing service path manually. Locked Phase 4D hard
+stops: CAIO never executes, Claim Vault stays mandatory, no autonomous
+AI execution, no ad-budget changes, no refunds, no live WhatsApp, no
+silent complex writes, idempotent re-execute, director-only override on
+`director_override` actions. Plan: `docs/FUTURE_BACKEND_PLAN.md`.
+
 ## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
 
 The repo currently runs on SQLite + Celery eager mode + no Redis. The

@@ -87,6 +87,7 @@ cd frontend && npm test
 
 **Next:**
 
+- ⏭ **Phase 4D** — Approved Action Execution Layer. Adds `POST /api/ai/approvals/{id}/execute/` over an allow-listed registry that maps each authorized matrix `action` key to a tested service-layer function. Hard stops locked: CAIO never executes, Claim Vault stays mandatory, no autonomous AI execution, **no ad-budget changes**, **no refunds**, **no live WhatsApp**, no silent complex writes (unmapped actions → HTTP 400 + `ai.approval.execution_skipped` audit), idempotent re-execute, director-only override on `director_override` actions. Plan in `docs/FUTURE_BACKEND_PLAN.md`.
 - ⏭ **Phase 4A** — Real-time WebSockets (Django Channels pushing AuditEvent rows live).
 - ⏭ **WhatsApp** — Live Business Cloud API sender (consent-gated, Claim-Vault-grounded). Phase 3E ships only the design scaffold.
 

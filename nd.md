@@ -13,7 +13,7 @@
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
 - **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C done):** **15 Django apps** scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D) + product catalog read/write + approval matrix read endpoint (3E) + reward-penalty events / summary / sweep endpoints (4B) + approval list / approve / reject / evaluate / agent-run-request-approval endpoints (4C)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + WhatsApp sales/support design scaffold + Phase 4B reward/penalty engine (AI agents only, CEO AI net accountability) + Rewards page now shows agent-wise leaderboard and order-wise scoring events + Phase 4C approval-matrix middleware enforcement (`enforce_or_queue` + ApprovalRequest table + AgentRun → approval bridge + Governance page approval queue with Approve / Reject)**, seed command, frontend wired with **automatic mock fallback** (19 pages). **275 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 4+):** Real-time WebSockets (4A), live WhatsApp sender — then learning loop pipeline, multi-tenant SaaS.
+- **What's next (Phase 4+):** Phase 4D — Approved Action Execution Layer (turn approved `ApprovalRequest` rows into the underlying business write through a tested, allow-listed service path; **no autonomous AI execution, no ad-budget / refund / live-WhatsApp execution in 4D**); Phase 4A — real-time WebSockets; live WhatsApp sender; learning loop pipeline; multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -860,7 +860,10 @@ Product Catalog admin (`apps.catalog`) + discount policy (10/20% bands) + ₹499
 ### ✅ Phase 4C — Approval Matrix Middleware enforcement (DONE)
 `ApprovalRequest` + `ApprovalDecisionLog` models + `apps.ai_governance.approval_engine` (`evaluate_action` / `enforce_or_queue` / `approve_request` / `reject_request` / AgentRun bridge) + 5 new admin/director endpoints + live enforcement on payment-link custom-amount, prompt activation, and sandbox-disable + Governance page approval queue with Approve / Reject buttons, 31 new tests. See §8.
 
-### Phase 4A — Real-time WebSockets (NEXT)
+### Phase 4D — Approved Action Execution Layer (NEXT)
+Adds `POST /api/ai/approvals/{id}/execute/` plus an `execution_status` column (or a dedicated `ApprovalExecutionLog`) on `ApprovalRequest` so a director-approved action actually performs its write through an **allow-listed, tested service path**. Hard stops stay locked: CAIO never executes, Claim Vault stays mandatory, no autonomous AI execution, **no ad-budget changes**, **no refunds**, **no live WhatsApp**, no silent complex writes (unmapped actions return HTTP 400 + `ai.approval.execution_skipped` audit), idempotent re-execute, director-only override on `director_override` actions. Detailed plan: `docs/FUTURE_BACKEND_PLAN.md` Phase 4D section.
+
+### Phase 4A — Real-time WebSockets (PENDING)
 - Django Channels for live AuditEvent push to subscribed dashboards.
 - Live WhatsApp Business Cloud API sender (consent-gated, Claim-Vault-grounded) is still pending; Phase 3E ships only the design scaffold.
 
@@ -1008,4 +1011,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 4C approval-matrix middleware enforcement (ApprovalRequest table + AgentRun bridge + Governance approval queue + live enforcement on payment-link custom-amount, prompt activation, and sandbox-disable)._
+_End of `nd.md`. Last updated after Phase 4C handoff sync + Phase 4D plan (Approved Action Execution Layer: `POST /api/ai/approvals/{id}/execute/` over an allow-listed registry; CAIO blocked, Claim Vault enforced, no ad-budget / refund / live-WhatsApp execution, no autonomous AI execution)._

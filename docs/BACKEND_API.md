@@ -293,6 +293,8 @@ Live enforcement is wired into 3 high-value paths today:
 
 Other normal workflows (lead create / call trigger / ₹499 advance / Delhivery dispatch / RTO rescue / 0–10% discount) stay auto per matrix.
 
+**Phase 4D (planned, not implemented yet — `docs/FUTURE_BACKEND_PLAN.md`):** an Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` will turn an approved `ApprovalRequest` into the underlying business write — but only over an allow-listed registry of tested service-layer functions. Hard stops locked: CAIO never executes, Claim Vault stays mandatory, no autonomous AI execution, **no ad-budget changes**, **no refunds**, **no live WhatsApp**, idempotent re-execute, director-only override on `director_override` actions; unmapped actions → HTTP 400 + `ai.approval.execution_skipped` audit.
+
 ### Reward / Penalty Engine (Phase 4B)
 
 The legacy `GET /api/rewards/` list endpoint stays public and now returns the agent-level rollup with Phase 4B fields (`agentId`, `agentType`, `rewardedOrders`, `penalizedOrders`, `lastCalculatedAt`) appended in camelCase. Three new endpoints power the per-order scoring view:
