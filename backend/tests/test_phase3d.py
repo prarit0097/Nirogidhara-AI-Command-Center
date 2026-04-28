@@ -168,6 +168,12 @@ def test_sandbox_status_requires_admin(viewer_user, auth_client) -> None:
 def test_sandbox_patch_flips_state_and_writes_audit(
     admin_user, auth_client
 ) -> None:
+    """Phase 3D: enabling sandbox is auto for admin; disabling is gated.
+
+    Phase 4C tightens disabling sandbox to ``director_override`` per the
+    approval matrix, so the OFF half of this test now lives in
+    ``test_phase4c.py``.
+    """
     client = auth_client(admin_user)
     AuditEvent.objects.all().delete()
     res = client.patch(
@@ -179,15 +185,6 @@ def test_sandbox_patch_flips_state_and_writes_audit(
     assert res.json()["isEnabled"] is True
     assert SandboxState.objects.get(pk=1).is_enabled is True
     assert AuditEvent.objects.filter(kind="ai.sandbox.enabled").exists()
-
-    off_res = client.patch(
-        "/api/ai/sandbox/status/",
-        {"isEnabled": False},
-        format="json",
-    )
-    assert off_res.status_code == 200
-    assert off_res.json()["isEnabled"] is False
-    assert AuditEvent.objects.filter(kind="ai.sandbox.disabled").exists()
 
 
 # ---------- 5. Sandbox blocks CeoBriefing refresh ----------

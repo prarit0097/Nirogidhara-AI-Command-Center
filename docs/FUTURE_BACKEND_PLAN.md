@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -340,13 +340,42 @@ Shipped via `feat: add reward penalty engine`.
   audit firing, dry-run no-persistence, management command, Celery
   task in eager mode, and full role-gating across the new endpoints.
 
-### Phase 4C — Approval Matrix Middleware (NEXT)
+### ✅ Phase 4C — Approval Matrix Middleware enforcement (DONE)
 
-- Read `apps.ai_governance.approval_matrix.APPROVAL_MATRIX` (Phase 3E)
-  before every business write. Block / queue / route to approver per
-  the matrix `mode`.
-- This is the layer that finally turns dry-run AgentRun suggestions into
-  business writes after CEO AI / admin / director approval.
+Shipped via `feat: add approval matrix middleware`.
+
+- Two new models in `apps.ai_governance`: `ApprovalRequest` (id, action,
+  mode, approver, status, requested_by, target, proposed_payload,
+  policy_snapshot, decision fields, metadata) and `ApprovalDecisionLog`
+  (one row per status transition with note + decided_by). Migration
+  `0005_phase4c_approval_matrix`.
+- `apps/ai_governance/approval_engine.py` — pure `evaluate_action` +
+  persisted `enforce_or_queue` / `create_approval_request` /
+  `mark_auto_approved` / `approve_request` / `reject_request` /
+  `request_approval_for_agent_run`. Modes: `auto`, `auto_with_consent`,
+  `approval_required`, `director_override`, `human_escalation` —
+  unknown mode / action fail closed. CAIO actor blocked at the
+  evaluator AND at the AgentRun bridge.
+- 5 new admin/director endpoints under `/api/ai/`:
+  list / detail / approve / reject / evaluate + AgentRun
+  `request-approval/`.
+- Live enforcement wired into 3 high-value paths today:
+  `payment.link.{advance_499,custom_amount}`, `ai.prompt_version.activate`,
+  `ai.sandbox.disable`. Other workflows stay auto per matrix.
+- 8 new audit kinds (`ai.approval.*` + `ai.agent_run.approval_requested`).
+- Frontend Governance page upgraded with an Approval queue table
+  (Action / Mode / Approver / Target / Status / Proposed payload preview /
+  Approve + Reject controls + decision-note input).
+- 31 new pytest tests cover every matrix mode, persistence + policy
+  snapshot, approve / reject transitions, director-only override,
+  AgentRun bridge happy path + all rejection paths, full role-gating
+  on every endpoint, and live enforcement smoke for payment-link
+  custom-amount + sandbox-disable.
+
+**Locked decisions:** approval `approve_request` does NOT silently
+execute the underlying business write; the existing tested service
+path still owns the write. Phase 4D will add explicit safe execution
+paths action-by-action.
 
 ## Phase 5 — Governance UI write paths
 

@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B done):** **15 Django apps** scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D) + product catalog read/write + approval matrix read endpoint (3E) + reward-penalty events / summary / sweep endpoints (4B)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + WhatsApp sales/support design scaffold + Phase 4B reward/penalty engine (AI agents only, CEO AI net accountability) + Rewards page now shows agent-wise leaderboard and order-wise scoring events**, seed command, frontend wired with **automatic mock fallback** (19 pages). **244 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 4+):** Real-time WebSockets (4A), approval-matrix middleware enforcement (4C), live WhatsApp sender — then learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C done):** **15 Django apps** scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D) + product catalog read/write + approval matrix read endpoint (3E) + reward-penalty events / summary / sweep endpoints (4B) + approval list / approve / reject / evaluate / agent-run-request-approval endpoints (4C)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + WhatsApp sales/support design scaffold + Phase 4B reward/penalty engine (AI agents only, CEO AI net accountability) + Rewards page now shows agent-wise leaderboard and order-wise scoring events + Phase 4C approval-matrix middleware enforcement (`enforce_or_queue` + ApprovalRequest table + AgentRun → approval bridge + Governance page approval queue with Approve / Reject)**, seed command, frontend wired with **automatic mock fallback** (19 pages). **275 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 4+):** Real-time WebSockets (4A), live WhatsApp sender — then learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -121,7 +121,7 @@ nirogidhara-command/
 │   ├── public/
 │   └── src/
 │       ├── main.tsx
-│       ├── App.tsx                # Router + 17 routes
+│       ├── App.tsx                # Router + 19 routes
 │       ├── index.css              # Tailwind tokens
 │       ├── types/domain.ts        # ← TS contract (every type below maps 1:1 to a Django serializer)
 │       ├── services/
@@ -474,6 +474,47 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
+### ✅ Phase 4C — Approval Matrix Middleware enforcement (built this session)
+
+- **Two new models in `apps.ai_governance`** — `ApprovalRequest` (one row per gated business action: id, action, mode, approver, status, requested_by user / agent, target app/model/id, proposed_payload JSON, policy_snapshot JSON, reason, decision_note, decided_by, decided_at, expires_at, created_at, updated_at, metadata) and `ApprovalDecisionLog` (one row per status transition: old_status → new_status with note + decided_by + metadata). Migration `0005_phase4c_approval_matrix`.
+- **`apps/ai_governance/approval_engine.py`** — the middleware. `evaluate_action` is pure (no DB, used for previews). `create_approval_request`, `mark_auto_approved`, `enforce_or_queue`, `approve_request`, `reject_request`, `request_approval_for_agent_run`. Mode handling:
+  - **auto** → allowed; logged as `auto_approved` for the queue.
+  - **auto_with_consent** → allowed only when `payload.customer_consent` or any value in `target.consent` is `True`; otherwise queued.
+  - **approval_required** → caller blocked, `pending` ApprovalRequest created.
+  - **director_override** → blocked unless `actor_role='director'` AND `payload.director_override=True` AND `payload.override_reason` is non-empty.
+  - **human_escalation** → blocked, status `escalated`, no automated path.
+  - Unknown action / unknown mode → fail closed.
+  - **CAIO actor** → always blocked (`caio_no_execute` note); belt-and-braces on top of the AgentRun layer guard.
+- **AgentRun → ApprovalRequest bridge** (`request_approval_for_agent_run`): only succeeds for non-CAIO, `success`-status AgentRuns whose `output_payload` contains `action` (matrix key) and `proposedPayload`. CAIO is refused outright; failed / skipped / unknown-action runs raise `ValueError`. The new ApprovalRequest links back via `metadata.agent_run_id` and writes a `ai.agent_run.approval_requested` audit row.
+- **5 new endpoints** under `/api/ai/`:
+  - `GET /api/ai/approvals/` — admin/director only. Filters: `status`, `action`, `limit`.
+  - `GET /api/ai/approvals/{id}/` — admin/director only. Includes `decisionLogs[]`.
+  - `POST /api/ai/approvals/{id}/approve/` — admin/director only. Director-only when policy `mode=director_override`.
+  - `POST /api/ai/approvals/{id}/reject/` — admin/director only.
+  - `POST /api/ai/approvals/evaluate/` — admin/director only. `persist=False` (default) returns the pure evaluation; `persist=True` runs `enforce_or_queue` and returns the persisted `approvalRequestId`.
+  - `POST /api/ai/agent-runs/{id}/request-approval/` — admin/director only. CAIO blocked; failed / skipped runs blocked.
+- **Live enforcement wired into 3 high-value paths** (the rest stays auto, intentionally):
+  - `POST /api/payments/links/` — routes to `payment.link.advance_499` (auto) when type is Advance and amount is `0` or `₹499`; otherwise to `payment.link.custom_amount` (admin approval). Operations role + custom amount → 403 + queued ApprovalRequest.
+  - `POST /api/ai/prompt-versions/{id}/activate/` — calls `mark_auto_approved` for `ai.prompt_version.activate` so the activation appears in the approval queue. (Endpoint is already admin/director-only.)
+  - `PATCH /api/ai/sandbox/status/` with `isEnabled=false` — gated through `ai.sandbox.disable` (`director_override`). Admin → 403; director with `director_override=True` and a `note` → allowed.
+- **8 new audit kinds** — `ai.approval.requested`, `ai.approval.auto_approved`, `ai.approval.approved`, `ai.approval.rejected`, `ai.approval.blocked`, `ai.approval.escalated`, `ai.approval.expired`, `ai.agent_run.approval_requested`. Every status transition writes an `ApprovalDecisionLog` + a Master Event Ledger audit row.
+- **Frontend Governance page enhanced** — new "Approval queue · Phase 4C" table at the bottom of `/ai-governance`: Action / Mode / Approver / Target / Status / Proposed payload preview / Decision controls. Per-row decision-note input + Approve / Reject buttons. Premium Ayurveda + AI SaaS theme. **No business logic in React** — every approve / reject goes through `api.approveApprovalRequest()` / `api.rejectApprovalRequest()`; the backend enforces the role gate.
+- **Frontend types + api.ts** — `ApprovalRequest`, `ApprovalDecisionLog`, `ApprovalEvaluationResult`, `ApprovalEvaluatePayload`, `ApprovalRequestStatus`, `ApprovalRequestMode`. New `api.getApprovals()`, `api.getApprovalById()`, `api.approveApprovalRequest()`, `api.rejectApprovalRequest()`, `api.evaluateApprovalAction()`, `api.requestAgentRunApproval()` with deterministic mock fallback so dev never crashes when backend is offline.
+- **31 new pytest tests** (`tests/test_phase4c.py`) covering all 5 matrix modes (auto / auto_with_consent / approval_required / director_override / human_escalation / unknown / caio_actor), persistence + policy snapshot, approve / reject transitions + audit, director-only override, can't-approve-already-decided, AgentRun bridge happy path + CAIO blocked + failed / skipped / missing-action / unknown-action all rejected, full role gating across the 5 endpoints, and live enforcement smoke for payment-link advance / custom-amount + sandbox-disable. The Phase 3D sandbox-disable test was tightened to match the new enforcement (admin can no longer flip sandbox off without director_override).
+
+**Locked Phase 4C decisions:**
+1. The approval matrix is the **single source of truth**. Views / services call `enforce_or_queue` instead of duplicating policy.
+2. Approval **never silently executes** the underlying business write. `approve_request` flips status to `approved` and writes audits; the actual write still flows through its existing tested service path (Phase 4D will add explicit safe execution paths action-by-action).
+3. CAIO can never request an executable approval — refused at the AgentRun bridge AND at the matrix evaluation step.
+4. Phase 4C ships only enforcement on 3 controlled high-value paths (custom-amount payment link, prompt activation, sandbox disable). Other normal workflows (lead create / call trigger / ₹499 advance / Delhivery dispatch / RTO rescue / 0–10% discount) stay auto per matrix.
+
+**Compliance hard stop preserved (Master Blueprint §26):** The Approved Claim Vault check still runs at the AgentRun layer — failed / skipped runs cannot be promoted. CAIO never executes (double-guarded at engine + bridge). The middleware fails closed on unknown actions / modes. No business logic landed in React. Live WhatsApp sender + Phase 4A WebSockets remain pending.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **275 passed** (244 + 31 phase4c) |
+| `python manage.py check` | 0 issues |
+
 ### ✅ Phase 4B — Reward / Penalty Engine wiring (built this session)
 
 - **`apps.rewards` extended**: new `RewardPenaltyEvent` model (per-order, per-AI-agent scoring event with `unique_key` for idempotency, `components` / `missing_data` / `attribution` JSON, `event_type` reward/penalty/mixed). `RewardPenalty` rollup row gains Phase 4B fields (`agent_id`, `agent_type`, `rewarded_orders`, `penalized_orders`, `last_calculated_at`). Migration `0002_phase4b_reward_events`.
@@ -712,7 +753,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 244 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 15 phase3d + 29 phase3e + 25 phase4b)
+cd backend && python -m pytest -q   # 275 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 14 phase3d + 29 phase3e + 25 phase4b + 31 phase4c)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -816,9 +857,12 @@ Product Catalog admin (`apps.catalog`) + discount policy (10/20% bands) + ₹499
 ### ✅ Phase 4B — Reward / Penalty Engine wiring (DONE)
 `RewardPenaltyEvent` model + `apps.rewards.engine` (AI-agents-only attribution, CEO AI net accountability rule) + `/api/rewards/{events,summary,sweep}/` endpoints + `calculate_reward_penalties` management command + `run_reward_penalty_sweep_task` Celery task + Rewards page upgraded with leaderboard / events / sweep button, 25 new tests. See §8.
 
-### Phase 4 — Real-time + approval middleware (NEXT)
-- **Phase 4A — Real-time WebSockets**: Django Channels for live AuditEvent push.
-- **Phase 4C — Approval Matrix Middleware**: enforce `apps.ai_governance.approval_matrix` (Phase 3E) so dry-run AgentRun suggestions can finally turn into business writes after the right approver signs off.
+### ✅ Phase 4C — Approval Matrix Middleware enforcement (DONE)
+`ApprovalRequest` + `ApprovalDecisionLog` models + `apps.ai_governance.approval_engine` (`evaluate_action` / `enforce_or_queue` / `approve_request` / `reject_request` / AgentRun bridge) + 5 new admin/director endpoints + live enforcement on payment-link custom-amount, prompt activation, and sandbox-disable + Governance page approval queue with Approve / Reject buttons, 31 new tests. See §8.
+
+### Phase 4A — Real-time WebSockets (NEXT)
+- Django Channels for live AuditEvent push to subscribed dashboards.
+- Live WhatsApp Business Cloud API sender (consent-gated, Claim-Vault-grounded) is still pending; Phase 3E ships only the design scaffold.
 
 ### Phase 2 — Other gateways / credentials (slot when needed)
 - **PayU payment links** — same shape as Razorpay; only the adapter is missing.
@@ -964,4 +1008,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 4B reward / penalty engine wiring (AI-agents only, CEO AI net accountability, agent + order-event Rewards page)._
+_End of `nd.md`. Last updated after Phase 4C approval-matrix middleware enforcement (ApprovalRequest table + AgentRun bridge + Governance approval queue + live enforcement on payment-link custom-amount, prompt activation, and sandbox-disable)._

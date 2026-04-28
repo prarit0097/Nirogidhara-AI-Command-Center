@@ -6,9 +6,14 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AdsAnalyzeView,
     AgentBudgetViewSet,
+    AgentRunRequestApprovalView,
     AgentRunViewSet,
     AgentRuntimeStatusView,
+    ApprovalApproveView,
+    ApprovalEvaluateView,
     ApprovalMatrixView,
+    ApprovalRejectView,
+    ApprovalRequestViewSet,
     CaioAuditSweepView,
     CaioAuditViewSet,
     CeoBriefingView,
@@ -28,6 +33,7 @@ router = DefaultRouter()
 router.register("agent-runs", AgentRunViewSet, basename="agent-run")
 router.register("prompt-versions", PromptVersionViewSet, basename="prompt-version")
 router.register("budgets", AgentBudgetViewSet, basename="agent-budget")
+router.register("approvals", ApprovalRequestViewSet, basename="approval-request")
 
 urlpatterns = [
     path("ceo-briefing/", CeoBriefingView.as_view(), name="ceo-briefing"),
@@ -100,5 +106,26 @@ urlpatterns = [
         "approval-matrix/",
         ApprovalMatrixView.as_view(),
         name="ai-approval-matrix",
+    ),
+    # Phase 4C — approval matrix middleware enforcement.
+    path(
+        "approvals/evaluate/",
+        ApprovalEvaluateView.as_view(),
+        name="ai-approval-evaluate",
+    ),
+    path(
+        "approvals/<str:pk>/approve/",
+        ApprovalApproveView.as_view(),
+        name="ai-approval-approve",
+    ),
+    path(
+        "approvals/<str:pk>/reject/",
+        ApprovalRejectView.as_view(),
+        name="ai-approval-reject",
+    ),
+    path(
+        "agent-runs/<str:pk>/request-approval/",
+        AgentRunRequestApprovalView.as_view(),
+        name="ai-agent-run-request-approval",
     ),
 ] + router.urls

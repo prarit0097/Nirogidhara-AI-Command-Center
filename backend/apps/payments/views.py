@@ -6,11 +6,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import OPERATIONS_AND_UP, RoleBasedPermission
+from apps.ai_governance import approval_engine
 from apps.orders.models import Order
 
 from . import services
 from .integrations.razorpay_client import RazorpayClientError
 from .models import Payment
+from .policies import FIXED_ADVANCE_AMOUNT_INR
 from .serializers import PaymentLinkSerializer, PaymentSerializer
 
 
@@ -47,6 +49,42 @@ class PaymentLinkView(APIView):
             order = Order.objects.get(pk=order_id)
         except Order.DoesNotExist as exc:
             raise NotFound(f"Order {order_id} not found") from exc
+
+        # Phase 4C — gate the action through the approval matrix.
+        # ``payment.link.advance_499`` is auto; ``payment.link.custom_amount``
+        # requires admin approval. The serializer defaults Advance amount
+        # to 0 → the service resolves it to ₹499 — so we route the matrix
+        # action accordingly.
+        amount_in = int(payload.validated_data.get("amount") or 0)
+        type_in = payload.validated_data.get("type") or Payment.Type.ADVANCE
+        is_standard_advance = (
+            type_in == Payment.Type.ADVANCE
+            and (amount_in == 0 or amount_in == FIXED_ADVANCE_AMOUNT_INR)
+        )
+        evaluation = approval_engine.enforce_or_queue(
+            action=(
+                "payment.link.advance_499"
+                if is_standard_advance
+                else "payment.link.custom_amount"
+            ),
+            payload={
+                "orderId": order_id,
+                "amount": amount_in or FIXED_ADVANCE_AMOUNT_INR,
+                "type": type_in,
+            },
+            actor_role=getattr(request.user, "role", "") or "",
+            target={"app": "payments", "model": "Order", "id": order_id},
+            by_user=request.user,
+        )
+        if not evaluation.allowed:
+            from rest_framework.exceptions import PermissionDenied as _PD
+
+            raise _PD(detail={
+                "detail": evaluation.reason,
+                "approvalRequestId": evaluation.approval_request_id,
+                "mode": evaluation.mode,
+                "action": evaluation.action,
+            })
 
         try:
             payment, payment_url = services.create_payment_link(

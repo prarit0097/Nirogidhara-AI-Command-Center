@@ -121,6 +121,9 @@ backend/apps/rewards/engine.py ← Phase 4B engine: AI-agents-only attribution, 
 backend/apps/rewards/tasks.py ← Phase 4B Celery task (run_reward_penalty_sweep_task; eager-mode safe)
 backend/apps/rewards/management/commands/calculate_reward_penalties.py ← Phase 4B cron-friendly sweep command
 backend/apps/rewards/views.py ← Phase 4B endpoints: /api/rewards/{events,summary,sweep}/
+backend/apps/ai_governance/approval_engine.py ← Phase 4C middleware: evaluate_action / enforce_or_queue / approve_request / reject_request / request_approval_for_agent_run
+backend/apps/ai_governance/models.py ← Phase 4C: ApprovalRequest + ApprovalDecisionLog
+backend/apps/ai_governance/views.py ← Phase 4C endpoints: /api/ai/approvals/{,id/,id/approve/,id/reject/,evaluate/} + /api/ai/agent-runs/{id}/request-approval/
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -180,7 +183,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 244 tests today
+python -m pytest -q                 # 275 tests today
 
 # Frontend
 cd frontend
@@ -222,6 +225,7 @@ cd frontend && npm run lint && npm test && npm run build
 - Don't add a real third-party integration without confirming credentials & sandbox setup with Prarit first. **Razorpay (2B), Delhivery (2C), Vapi (2D), and Meta Lead Ads (2E) are shipped** — `RAZORPAY_MODE`, `DELHIVERY_MODE`, `VAPI_MODE`, and `META_MODE` each accept `mock|test|live` and flip to test/live once real credentials are in `backend/.env`. **WhatsApp** has a design scaffold only (`apps/crm/whatsapp_design.py`, Phase 3E) — no live sender; Phase 4+ wires it once Business API credentials + consent flow are confirmed. PayU still needs creds before any wiring lands.
 - Don't bypass the Phase 3E policies: `apps/orders/discounts.py` is the discount source of truth (10% auto / 20% approval / above-20 director-override), `apps/payments/policies.py` defines the ₹499 fixed advance, `apps/rewards/scoring.py` is the reward/penalty formula (do not invent missing data), and `apps/ai_governance/approval_matrix.py` is the action → approver table. The Phase 4C middleware will enforce the matrix; until then, keep the policy modules as the single source.
 - Don't move the reward/penalty formula into the frontend. Phase 4B engine (`apps/rewards/engine.py`) wires the Phase 3E pure formula into per-order, per-AI-agent `RewardPenaltyEvent` rows. Frontend renders API data only — no scoring math in React. CEO AI **always** receives a net accountability event for every delivered (reward) and every RTO / cancelled (penalty) order. CAIO is excluded from business reward / penalty.
+- Don't duplicate approval rules in views. Phase 4C middleware (`apps/ai_governance/approval_engine.py`) is the single source. Risky write paths call `enforce_or_queue` and stop when `result.allowed` is False. `approve_request` flips status to `approved` and writes audits — it does **not** silently execute the underlying business write; that still flows through its existing tested service path. CAIO can never request an executable approval (refused at AgentRun bridge AND at the matrix evaluation step).
 - Don't push to `main` without running tests + build + lint locally first.
 - Don't `git push --force`. Don't skip hooks. Don't amend pushed commits.
 

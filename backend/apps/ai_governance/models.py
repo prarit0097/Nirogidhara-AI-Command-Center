@@ -241,3 +241,120 @@ class SandboxState(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"SandboxState(enabled={self.is_enabled})"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4C — Approval Matrix Middleware enforcement.
+# ---------------------------------------------------------------------------
+
+
+class ApprovalRequest(models.Model):
+    """Phase 4C — one row per business action that needs human/CEO-AI sign-off.
+
+    Created by :mod:`apps.ai_governance.approval_engine` whenever an action
+    classified ``approval_required``, ``director_override``, or
+    ``human_escalation`` in :data:`apps.ai_governance.approval_matrix.APPROVAL_MATRIX`
+    is requested. The middleware never silently executes; this row is the
+    single durable record of intent + outcome.
+
+    ``policy_snapshot`` freezes the matrix row that gated the request so
+    later policy edits don't rewrite history.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "pending"
+        APPROVED = "approved", "approved"
+        REJECTED = "rejected", "rejected"
+        AUTO_APPROVED = "auto_approved", "auto_approved"
+        BLOCKED = "blocked", "blocked"
+        ESCALATED = "escalated", "escalated"
+        EXPIRED = "expired", "expired"
+
+    class Mode(models.TextChoices):
+        AUTO = "auto", "auto"
+        AUTO_WITH_CONSENT = "auto_with_consent", "auto_with_consent"
+        APPROVAL_REQUIRED = "approval_required", "approval_required"
+        DIRECTOR_OVERRIDE = "director_override", "director_override"
+        HUMAN_ESCALATION = "human_escalation", "human_escalation"
+
+    id = models.CharField(primary_key=True, max_length=40)
+    action = models.CharField(max_length=120)
+    mode = models.CharField(max_length=24, choices=Mode.choices)
+    approver = models.CharField(max_length=24, default="auto")
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_requests",
+    )
+    requested_by_agent = models.CharField(max_length=64, blank=True, default="")
+    target_app = models.CharField(max_length=64, blank=True, default="")
+    target_model = models.CharField(max_length=64, blank=True, default="")
+    target_object_id = models.CharField(max_length=64, blank=True, default="")
+    proposed_payload = models.JSONField(default=dict, blank=True)
+    policy_snapshot = models.JSONField(default=dict, blank=True)
+    reason = models.TextField(blank=True, default="")
+    decision_note = models.TextField(blank=True, default="")
+    decided_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_decisions",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("action",)),
+            models.Index(fields=("status",)),
+            models.Index(fields=("mode",)),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.id} · {self.action} · {self.status}"
+
+
+class ApprovalDecisionLog(models.Model):
+    """Audit-style log for every status transition on an :class:`ApprovalRequest`.
+
+    Decisions write a row here even when they also write a Master Event
+    Ledger row, because the `metadata` and `note` fields belong in the
+    governance domain rather than the global activity feed.
+    """
+
+    approval_request = models.ForeignKey(
+        ApprovalRequest,
+        on_delete=models.CASCADE,
+        related_name="decision_logs",
+    )
+    old_status = models.CharField(max_length=16, blank=True, default="")
+    new_status = models.CharField(max_length=16)
+    decided_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    note = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (models.Index(fields=("approval_request", "created_at")),)
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return (
+            f"{self.approval_request_id} · {self.old_status} → {self.new_status}"
+        )

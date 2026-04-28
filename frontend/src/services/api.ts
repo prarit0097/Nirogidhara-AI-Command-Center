@@ -74,6 +74,9 @@ import type {
   Payment,
   PaymentLinkPayload,
   PaymentLinkResponse,
+  ApprovalEvaluatePayload,
+  ApprovalEvaluationResult,
+  ApprovalRequest,
   RescueAttempt,
   RescueAttemptCreatePayload,
   RescueAttemptUpdatePayload,
@@ -262,6 +265,51 @@ export const api = {
       "POST",
       payload,
       () => optimisticSweepResult(payload),
+    ),
+  // Phase 4C — Approval Matrix Middleware.
+  getApprovals: (params?: { status?: string; action?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.action) qs.set("action", params.action);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return safeFetch<ApprovalRequest[]>(
+      `/ai/approvals/${suffix}`,
+      () => M.APPROVAL_REQUESTS as ApprovalRequest[],
+    );
+  },
+  getApprovalById: (id: string) =>
+    safeFetch<ApprovalRequest | undefined>(
+      `/ai/approvals/${id}/`,
+      () => (M.APPROVAL_REQUESTS as ApprovalRequest[]).find((a) => a.id === id),
+    ),
+  approveApprovalRequest: (id: string, note: string = "") =>
+    safeMutate<ApprovalRequest>(
+      `/ai/approvals/${id}/approve/`,
+      "POST",
+      { note },
+      () => optimisticApprovalDecision(id, "approved", note),
+    ),
+  rejectApprovalRequest: (id: string, note: string = "") =>
+    safeMutate<ApprovalRequest>(
+      `/ai/approvals/${id}/reject/`,
+      "POST",
+      { note },
+      () => optimisticApprovalDecision(id, "rejected", note),
+    ),
+  evaluateApprovalAction: (payload: ApprovalEvaluatePayload) =>
+    safeMutate<ApprovalEvaluationResult>(
+      "/ai/approvals/evaluate/",
+      "POST",
+      payload,
+      () => optimisticApprovalEvaluation(payload),
+    ),
+  requestAgentRunApproval: (agentRunId: string, reason: string = "") =>
+    safeMutate<ApprovalRequest>(
+      `/ai/agent-runs/${agentRunId}/request-approval/`,
+      "POST",
+      { reason },
+      () => optimisticAgentRunApproval(agentRunId, reason),
     ),
   getClaimVault: () => safeFetch<Claim[]>("/compliance/claims/", () => M.CLAIM_VAULT as Claim[]),
   getHumanCallLearningItems: () =>
@@ -708,6 +756,68 @@ function optimisticPromptVersion(payload: PromptVersionCreatePayload): PromptVer
     activatedAt: null,
     rolledBackAt: null,
     rollbackReason: "",
+  };
+}
+
+function optimisticApprovalDecision(
+  id: string,
+  status: ApprovalRequest["status"],
+  note: string,
+): ApprovalRequest {
+  const fallback = (M.APPROVAL_REQUESTS as ApprovalRequest[]).find((a) => a.id === id);
+  const base: ApprovalRequest =
+    fallback ?? ((M.APPROVAL_REQUESTS as ApprovalRequest[])[0] as ApprovalRequest);
+  return {
+    ...base,
+    id,
+    status,
+    decisionNote: note,
+    decidedBy: "you",
+    decidedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function optimisticApprovalEvaluation(
+  payload: ApprovalEvaluatePayload,
+): ApprovalEvaluationResult {
+  return {
+    action: payload.action,
+    mode: "approval_required",
+    approver: "admin",
+    status: "pending",
+    allowed: false,
+    requiresHuman: true,
+    reason: "Offline preview — backend unreachable.",
+    policy: {},
+    approvalRequestId: null,
+    notes: ["offline_preview"],
+  };
+}
+
+function optimisticAgentRunApproval(agentRunId: string, reason: string): ApprovalRequest {
+  return {
+    id: `APR-DRAFT-${Date.now()}`,
+    action: "agent_run.suggested",
+    mode: "approval_required",
+    approver: "admin",
+    status: "pending",
+    requestedBy: "you",
+    requestedByAgent: agentRunId,
+    targetApp: "ai_governance",
+    targetModel: "AgentRun",
+    targetObjectId: agentRunId,
+    proposedPayload: {},
+    policySnapshot: {},
+    reason: reason || "Draft promotion (offline)",
+    decisionNote: "",
+    decidedBy: "",
+    decidedAt: null,
+    expiresAt: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    metadata: { agent_run_id: agentRunId, offline: true },
+    decisionLogs: [],
   };
 }
 

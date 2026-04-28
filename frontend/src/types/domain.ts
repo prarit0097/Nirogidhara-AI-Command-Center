@@ -435,6 +435,80 @@ export interface RewardPenaltySweepResult {
   missingDataWarnings: string[];
 }
 
+// Phase 4C — Approval Matrix Middleware.
+export type ApprovalRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "auto_approved"
+  | "blocked"
+  | "escalated"
+  | "expired";
+
+export type ApprovalRequestMode =
+  | "auto"
+  | "auto_with_consent"
+  | "approval_required"
+  | "director_override"
+  | "human_escalation";
+
+export interface ApprovalDecisionLog {
+  id: number;
+  oldStatus: string;
+  newStatus: string;
+  decidedBy: string;
+  note: string;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  action: string;
+  mode: ApprovalRequestMode;
+  approver: string;
+  status: ApprovalRequestStatus;
+  requestedBy: string;
+  requestedByAgent: string;
+  targetApp: string;
+  targetModel: string;
+  targetObjectId: string;
+  proposedPayload: Record<string, unknown>;
+  policySnapshot: Record<string, unknown>;
+  reason: string;
+  decisionNote: string;
+  decidedBy: string;
+  decidedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  metadata: Record<string, unknown>;
+  decisionLogs: ApprovalDecisionLog[];
+}
+
+export interface ApprovalEvaluationResult {
+  action: string;
+  mode: ApprovalRequestMode | "unknown";
+  approver: string;
+  status: ApprovalRequestStatus | "unknown";
+  allowed: boolean;
+  requiresHuman: boolean;
+  reason: string;
+  policy: Record<string, unknown>;
+  approvalRequestId: string | null;
+  notes: string[];
+}
+
+export interface ApprovalEvaluatePayload {
+  action: string;
+  actorRole?: string;
+  actorAgent?: string;
+  payload?: Record<string, unknown>;
+  target?: Record<string, unknown>;
+  persist?: boolean;
+  reason?: string;
+}
+
 export interface Claim {
   product: string;
   approved: string[];

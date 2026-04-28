@@ -68,6 +68,15 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.sandbox.disabled": "shield-off",
     "ai.budget.warning": "gauge",
     "ai.budget.blocked": "ban",
+    # Phase 4C — approval matrix middleware enforcement.
+    "ai.approval.requested": "user-check",
+    "ai.approval.auto_approved": "badge-check",
+    "ai.approval.approved": "check-circle",
+    "ai.approval.rejected": "x-circle",
+    "ai.approval.blocked": "ban",
+    "ai.approval.escalated": "alert-triangle",
+    "ai.approval.expired": "timer-off",
+    "ai.agent_run.approval_requested": "user-plus",
     # Phase 4B — reward / penalty engine.
     "ai.reward.calculated": "award",
     "ai.penalty.applied": "minus-circle",

@@ -11,12 +11,13 @@ from apps.accounts.permissions import ADMIN_AND_UP, RoleBasedPermission
 from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 
-from . import prompt_versions, sandbox, services
+from . import approval_engine, prompt_versions, sandbox, services
 from .approval_matrix import APPROVAL_MATRIX
 from .budgets import calculate_agent_spend, get_agent_budget
 from .models import (
     AgentBudget,
     AgentRun,
+    ApprovalRequest,
     CaioAudit,
     CeoBriefing,
     PromptVersion,
@@ -24,8 +25,12 @@ from .models import (
 )
 from .serializers import (
     AgentBudgetSerializer,
+    AgentRunApprovalRequestSerializer,
     AgentRunCreateSerializer,
     AgentRunSerializer,
+    ApprovalDecisionPayloadSerializer,
+    ApprovalEvaluateRequestSerializer,
+    ApprovalRequestSerializer,
     CaioAuditSerializer,
     CeoBriefingSerializer,
     PromptVersionCreateSerializer,
@@ -377,6 +382,18 @@ class PromptVersionViewSet(
 
     @staticmethod
     def _activate_view(request, pk):
+        # Phase 4C — record approval matrix usage for the audit trail.
+        # The policy is ``approval_required``; admin/director already cleared
+        # the role gate (this endpoint requires admin/director), so the
+        # approval is effectively satisfied — we record it as auto-approved
+        # so the operator queue shows the activation.
+        approval_engine.mark_auto_approved(
+            action="ai.prompt_version.activate",
+            payload={"promptVersionId": pk},
+            actor_role=getattr(request.user, "role", "") or "",
+            target={"app": "ai_governance", "model": "PromptVersion", "id": pk},
+            by_user=request.user,
+        )
         try:
             pv = prompt_versions.activate_prompt_version(
                 prompt_version_id=pk, by_user=request.user
@@ -521,9 +538,200 @@ class SandboxStatusView(APIView):
     def patch(self, request):
         payload = SandboxPatchSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
+        # Phase 4C — flipping sandbox OFF must go through the approval matrix
+        # because it's a director_override action. ON stays low-risk and
+        # auto-approved.
+        if payload.validated_data["isEnabled"] is False:
+            evaluation = approval_engine.enforce_or_queue(
+                action="ai.sandbox.disable",
+                payload={
+                    "director_override": bool(
+                        payload.validated_data.get("director_override")
+                    ),
+                    "override_reason": payload.validated_data.get("note", ""),
+                },
+                actor_role=getattr(request.user, "role", "") or "",
+                by_user=request.user,
+            )
+            if not evaluation.allowed:
+                from rest_framework.exceptions import PermissionDenied as _PD
+
+                raise _PD(detail={
+                    "detail": evaluation.reason,
+                    "approvalRequestId": evaluation.approval_request_id,
+                    "mode": evaluation.mode,
+                })
         state = sandbox.set_sandbox_enabled(
             enabled=payload.validated_data["isEnabled"],
             note=payload.validated_data.get("note", ""),
             by_user=request.user,
         )
         return Response(SandboxStateSerializer(state).data)
+
+
+# ----- Phase 4C — Approval Matrix Middleware endpoints -----
+
+
+class ApprovalRequestViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Phase 4C — admin/director only. Read-only viewset; transitions go
+    through the dedicated approve / reject views.
+    """
+
+    queryset = ApprovalRequest.objects.all().prefetch_related("decision_logs")
+    serializer_class = ApprovalRequestSerializer
+    pagination_class = None
+    permission_classes = [_AdminAndUpAlways]
+
+    def list(self, request):
+        qs = self.queryset.all()
+        status_param = request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+        action_param = request.query_params.get("action")
+        if action_param:
+            qs = qs.filter(action=action_param)
+        try:
+            limit = max(1, min(int(request.query_params.get("limit") or 200), 1000))
+        except (TypeError, ValueError):
+            limit = 200
+        qs = qs.order_by("-created_at")[:limit]
+        return Response(ApprovalRequestSerializer(qs, many=True).data)
+
+
+class ApprovalApproveView(APIView):
+    permission_classes = [_AdminAndUpAlways]
+
+    def post(self, request, pk):
+        payload = ApprovalDecisionPayloadSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        try:
+            req = approval_engine.approve_request(
+                request_id=pk,
+                user=request.user,
+                note=payload.validated_data.get("note", ""),
+            )
+        except ApprovalRequest.DoesNotExist as exc:
+            raise NotFound(f"ApprovalRequest {pk} not found") from exc
+        except PermissionError as exc:
+            from rest_framework.exceptions import PermissionDenied as _PD
+
+            raise _PD(detail=str(exc)) from exc
+        except ValueError as exc:
+            from rest_framework.exceptions import ValidationError as _VE
+
+            raise _VE({"detail": str(exc)}) from exc
+        return Response(ApprovalRequestSerializer(req).data)
+
+
+class ApprovalRejectView(APIView):
+    permission_classes = [_AdminAndUpAlways]
+
+    def post(self, request, pk):
+        payload = ApprovalDecisionPayloadSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        try:
+            req = approval_engine.reject_request(
+                request_id=pk,
+                user=request.user,
+                note=payload.validated_data.get("note", ""),
+            )
+        except ApprovalRequest.DoesNotExist as exc:
+            raise NotFound(f"ApprovalRequest {pk} not found") from exc
+        except ValueError as exc:
+            from rest_framework.exceptions import ValidationError as _VE
+
+            raise _VE({"detail": str(exc)}) from exc
+        return Response(ApprovalRequestSerializer(req).data)
+
+
+class ApprovalEvaluateView(APIView):
+    """Preview / persist an evaluation. Admin / director only.
+
+    With ``persist=False`` (default), returns the pure evaluation; with
+    ``persist=True``, runs :func:`approval_engine.enforce_or_queue` and
+    returns the same shape with the persisted ``approvalRequestId``.
+    """
+
+    permission_classes = [_AdminAndUpAlways]
+
+    def post(self, request):
+        payload = ApprovalEvaluateRequestSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        action = payload.validated_data["action"]
+        actor_role = (
+            payload.validated_data.get("actorRole")
+            or (getattr(request.user, "role", "") or "")
+        )
+        actor_agent = payload.validated_data.get("actorAgent") or ""
+        proposed_payload = dict(payload.validated_data.get("payload") or {})
+        target = dict(payload.validated_data.get("target") or {})
+        persist = bool(payload.validated_data.get("persist") or False)
+        reason = payload.validated_data.get("reason", "")
+
+        if persist:
+            result = approval_engine.enforce_or_queue(
+                action=action,
+                payload=proposed_payload,
+                actor_role=actor_role,
+                actor_agent=actor_agent,
+                target=target,
+                reason=reason,
+                by_user=request.user,
+            )
+        else:
+            result = approval_engine.evaluate_action(
+                action=action,
+                actor_role=actor_role,
+                actor_agent=actor_agent,
+                payload=proposed_payload,
+                target=target,
+            )
+        return Response(
+            {
+                "action": result.action,
+                "mode": result.mode,
+                "approver": result.approver,
+                "status": result.status,
+                "allowed": result.allowed,
+                "requiresHuman": result.requires_human,
+                "reason": result.reason,
+                "policy": dict(result.policy),
+                "approvalRequestId": result.approval_request_id,
+                "notes": list(result.notes),
+            }
+        )
+
+
+class AgentRunRequestApprovalView(APIView):
+    """Promote a successful, non-CAIO AgentRun into an ApprovalRequest."""
+
+    permission_classes = [_AdminAndUpAlways]
+
+    def post(self, request, pk):
+        payload = AgentRunApprovalRequestSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        try:
+            run = AgentRun.objects.get(pk=pk)
+        except AgentRun.DoesNotExist as exc:
+            raise NotFound(f"AgentRun {pk} not found") from exc
+        try:
+            req = approval_engine.request_approval_for_agent_run(
+                agent_run=run,
+                by_user=request.user,
+                reason=payload.validated_data.get("reason", ""),
+            )
+        except PermissionError as exc:
+            from rest_framework.exceptions import PermissionDenied as _PD
+
+            raise _PD(detail=str(exc)) from exc
+        except ValueError as exc:
+            from rest_framework.exceptions import ValidationError as _VE
+
+            raise _VE({"detail": str(exc)}) from exc
+        return Response(
+            ApprovalRequestSerializer(req).data, status=status.HTTP_201_CREATED
+        )

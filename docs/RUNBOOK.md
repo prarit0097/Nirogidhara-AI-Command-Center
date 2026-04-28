@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 244 tests (Phase 1 → 4B)
+python -m pytest -q                     # 275 tests (Phase 1 → 4C)
 
 # Frontend
 cd ../frontend
@@ -256,6 +256,54 @@ Frontend Rewards page at `/rewards` shows the agent-wise leaderboard,
 order-wise scoring events table, sweep summary cards, and Run Sweep
 button (admin / director only on the API; viewer / operations / anonymous
 are blocked).
+
+## Phase 4C — Approval Matrix Middleware
+
+The Phase 3E approval matrix is now actively enforced. Any service that
+performs a gated business write calls
+`apps.ai_governance.approval_engine.enforce_or_queue(...)` first; when
+the matrix demands approval / override / escalation, the engine creates
+an `ApprovalRequest` row and the service stops.
+
+What is enforced today (Phase 4C scope):
+
+- **Custom-amount payment links**: `POST /api/payments/links/` with a
+  custom amount → `payment.link.custom_amount` requires admin approval.
+  ₹0 / ₹499 advance is auto.
+- **Prompt activation**: `POST /api/ai/prompt-versions/{id}/activate/` is
+  recorded as auto-approved (admin/director already cleared the role gate).
+- **Sandbox disable**: `PATCH /api/ai/sandbox/status/` with `isEnabled=false`
+  → `ai.sandbox.disable` (`director_override`). Admin → 403; director with
+  `director_override=true` + `note` → allowed.
+
+How to approve / reject from the API:
+
+```bash
+TOKEN=...   # admin or director JWT
+
+# List pending approvals.
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/ai/approvals/?status=pending" | jq .
+
+# Approve.
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"note":"OK"}' \
+  "http://localhost:8000/api/ai/approvals/APR-90001/approve/" | jq .
+
+# Reject.
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"note":"too risky"}' \
+  "http://localhost:8000/api/ai/approvals/APR-90002/reject/" | jq .
+```
+
+The Governance page at `/ai-governance` exposes the same operations as
+buttons (admin/director only on the API; the frontend just renders).
+
+**Important**: `approve_request` flips status to `approved` and writes
+audits. It does **not** silently execute the underlying business write;
+that still flows through its existing tested service path.
 
 ## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
 

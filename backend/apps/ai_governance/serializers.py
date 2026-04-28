@@ -5,6 +5,8 @@ from rest_framework import serializers
 from .models import (
     AgentBudget,
     AgentRun,
+    ApprovalDecisionLog,
+    ApprovalRequest,
     CaioAudit,
     CeoBriefing,
     CeoRecommendation,
@@ -206,3 +208,92 @@ class SandboxPatchSerializer(serializers.Serializer):
     note = serializers.CharField(
         max_length=240, required=False, allow_blank=True, default=""
     )
+    # Phase 4C — disabling sandbox is a director_override action.
+    director_override = serializers.BooleanField(
+        required=False, default=False
+    )
+
+
+# ----- Phase 4C — Approval matrix middleware -----
+
+
+class ApprovalDecisionLogSerializer(serializers.ModelSerializer):
+    oldStatus = serializers.CharField(source="old_status", read_only=True)
+    newStatus = serializers.CharField(source="new_status", read_only=True)
+    decidedBy = serializers.CharField(
+        source="decided_by.username", default="", read_only=True
+    )
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+
+    class Meta:
+        model = ApprovalDecisionLog
+        fields = ("id", "oldStatus", "newStatus", "decidedBy", "note", "createdAt", "metadata")
+
+
+class ApprovalRequestSerializer(serializers.ModelSerializer):
+    requestedBy = serializers.CharField(
+        source="requested_by.username", default="", read_only=True
+    )
+    requestedByAgent = serializers.CharField(
+        source="requested_by_agent", read_only=True
+    )
+    targetApp = serializers.CharField(source="target_app", read_only=True)
+    targetModel = serializers.CharField(source="target_model", read_only=True)
+    targetObjectId = serializers.CharField(source="target_object_id", read_only=True)
+    proposedPayload = serializers.JSONField(source="proposed_payload", read_only=True)
+    policySnapshot = serializers.JSONField(source="policy_snapshot", read_only=True)
+    decisionNote = serializers.CharField(source="decision_note", read_only=True)
+    decidedBy = serializers.CharField(
+        source="decided_by.username", default="", read_only=True
+    )
+    decidedAt = serializers.DateTimeField(source="decided_at", read_only=True)
+    expiresAt = serializers.DateTimeField(source="expires_at", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+    decisionLogs = ApprovalDecisionLogSerializer(
+        source="decision_logs", many=True, read_only=True
+    )
+
+    class Meta:
+        model = ApprovalRequest
+        fields = (
+            "id",
+            "action",
+            "mode",
+            "approver",
+            "status",
+            "requestedBy",
+            "requestedByAgent",
+            "targetApp",
+            "targetModel",
+            "targetObjectId",
+            "proposedPayload",
+            "policySnapshot",
+            "reason",
+            "decisionNote",
+            "decidedBy",
+            "decidedAt",
+            "expiresAt",
+            "createdAt",
+            "updatedAt",
+            "metadata",
+            "decisionLogs",
+        )
+
+
+class ApprovalDecisionPayloadSerializer(serializers.Serializer):
+    note = serializers.CharField(max_length=2000, required=False, allow_blank=True, default="")
+
+
+class ApprovalEvaluateRequestSerializer(serializers.Serializer):
+    action = serializers.CharField(max_length=120)
+    actorRole = serializers.CharField(required=False, allow_blank=True, default="")
+    actorAgent = serializers.CharField(required=False, allow_blank=True, default="")
+    payload = serializers.JSONField(required=False, default=dict)
+    target = serializers.JSONField(required=False, default=dict)
+    persist = serializers.BooleanField(required=False, default=False)
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class AgentRunApprovalRequestSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True, default="")

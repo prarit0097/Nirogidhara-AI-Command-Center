@@ -264,6 +264,35 @@ Behavior of the budget guard inside `run_readonly_agent_analysis`:
 3. Else if spend ≥ `alert_threshold_pct`% of either cap → write `ai.budget.warning` and continue.
 4. Snapshot of the budget check is stamped onto every `AgentRun.budget_snapshot`.
 
+### Approval Matrix Middleware (Phase 4C)
+
+The Phase 3E approval matrix is now actively **enforced**. Risky write paths call `apps.ai_governance.approval_engine.enforce_or_queue()` before performing the write; when the matrix mode is `approval_required`, `director_override`, `auto_with_consent` (no consent), or `human_escalation`, the engine creates an `ApprovalRequest` row and the caller stops. Every status transition writes an `ApprovalDecisionLog` + a Master Event Ledger audit row.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/ai/approvals/` | List approval requests. **Admin/director only.** Query params: `status` (`pending`/`approved`/`rejected`/`auto_approved`/`blocked`/`escalated`/`expired`), `action` (matrix key exact match), `limit` (default 200, max 1000). |
+| GET | `/api/ai/approvals/{id}/` | Single request with `decisionLogs[]`. Admin/director only. |
+| POST | `/api/ai/approvals/{id}/approve/` | Body `{ note? }`. Admin/director. **Director-only when `policy.mode == director_override`** — admin → 403. Status flips to `approved`; the underlying business write still flows through its own service path. |
+| POST | `/api/ai/approvals/{id}/reject/` | Body `{ note? }`. Admin/director only. Status flips to `rejected`. |
+| POST | `/api/ai/approvals/evaluate/` | Body `{ action, actorRole?, actorAgent?, payload?, target?, persist?, reason? }`. Admin/director only. With `persist=false` (default) returns the pure evaluation; with `persist=true`, runs `enforce_or_queue` and returns the persisted `approvalRequestId`. Response: `{ action, mode, approver, status, allowed, requiresHuman, reason, policy, approvalRequestId, notes }`. |
+| POST | `/api/ai/agent-runs/{id}/request-approval/` | Body `{ reason? }`. Admin/director only. Promotes a successful, non-CAIO AgentRun whose `output_payload` contains `action` (matrix key) and `proposedPayload` into a pending ApprovalRequest. CAIO → 403; failed / skipped / unknown-action runs → 400. |
+
+**Locked rules** (Master Blueprint §12 / §26 + Apr 2026):
+- The approval matrix is the single source of truth — views / services call `enforce_or_queue`, not duplicate policy.
+- `approve_request` flips status to `approved` and writes audits. It does **not** silently execute the underlying business write; that still flows through its existing tested service path. Phase 4D will add explicit safe execution paths action-by-action.
+- **CAIO can never** request an executable approval (refused at the AgentRun bridge AND at the matrix evaluator).
+- Unknown action / unknown mode → fail closed.
+
+Audit kinds (Phase 4C):
+- `ai.approval.requested`, `ai.approval.auto_approved`, `ai.approval.approved`, `ai.approval.rejected`, `ai.approval.blocked`, `ai.approval.escalated`, `ai.approval.expired`, `ai.agent_run.approval_requested`.
+
+Live enforcement is wired into 3 high-value paths today:
+- `POST /api/payments/links/` — `payment.link.advance_499` (auto, type=Advance + amount in {0, 499}) vs `payment.link.custom_amount` (admin approval).
+- `POST /api/ai/prompt-versions/{id}/activate/` — logs `ai.prompt_version.activate` as auto-approved (admin/director already cleared the role gate).
+- `PATCH /api/ai/sandbox/status/` with `isEnabled=false` — `ai.sandbox.disable` (`director_override`); admin → 403, director with `director_override=true` + `note` → allowed.
+
+Other normal workflows (lead create / call trigger / ₹499 advance / Delhivery dispatch / RTO rescue / 0–10% discount) stay auto per matrix.
+
 ### Reward / Penalty Engine (Phase 4B)
 
 The legacy `GET /api/rewards/` list endpoint stays public and now returns the agent-level rollup with Phase 4B fields (`agentId`, `agentType`, `rewardedOrders`, `penalizedOrders`, `lastCalculatedAt`) appended in camelCase. Three new endpoints power the per-order scoring view:

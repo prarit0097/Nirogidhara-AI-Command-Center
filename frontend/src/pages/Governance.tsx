@@ -8,6 +8,7 @@ import {
   ShieldOff,
   RotateCcw,
   Sparkles,
+  UserCheck,
   XCircle,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -22,6 +23,8 @@ import type {
   AgentBudget,
   AgentBudgetWritePayload,
   AgentName,
+  ApprovalRequest,
+  ApprovalRequestStatus,
   PromptVersion,
   SandboxState,
 } from "@/types/domain";
@@ -47,6 +50,23 @@ function fmtRelative(iso: string | null | undefined) {
   return d.toLocaleString();
 }
 
+function pillToneForApproval(status: ApprovalRequestStatus) {
+  switch (status) {
+    case "approved":
+    case "auto_approved":
+      return "success";
+    case "rejected":
+    case "blocked":
+      return "danger";
+    case "escalated":
+    case "expired":
+      return "warning";
+    case "pending":
+    default:
+      return "info";
+  }
+}
+
 function pillToneForStatus(status: PromptVersion["status"]) {
   switch (status) {
     case "active":
@@ -68,21 +88,54 @@ export default function Governance() {
   const [sandbox, setSandbox] = useState<SandboxState | null>(null);
   const [prompts, setPrompts] = useState<PromptVersion[]>([]);
   const [budgets, setBudgets] = useState<AgentBudget[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [decisionBusy, setDecisionBusy] = useState<string | null>(null);
+  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
 
   const refresh = async () => {
     try {
-      const [s, p, b] = await Promise.all([
+      const [s, p, b, a] = await Promise.all([
         api.getSandboxStatus(),
         api.listPromptVersions(),
         api.listAgentBudgets(),
+        api.getApprovals({ limit: 100 }),
       ]);
       setSandbox(s);
       setPrompts(p);
       setBudgets(b);
+      setApprovals(a);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load governance.");
+    }
+  };
+
+  const onApprove = async (id: string) => {
+    setDecisionBusy(id);
+    try {
+      await api.approveApprovalRequest(id, decisionNotes[id] ?? "");
+      toast.success("Approved");
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Approve failed";
+      toast.error(message);
+    } finally {
+      setDecisionBusy(null);
+    }
+  };
+
+  const onReject = async (id: string) => {
+    setDecisionBusy(id);
+    try {
+      await api.rejectApprovalRequest(id, decisionNotes[id] ?? "");
+      toast.success("Rejected");
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Reject failed";
+      toast.error(message);
+    } finally {
+      setDecisionBusy(null);
     }
   };
 
@@ -285,6 +338,152 @@ export default function Governance() {
         })}
       </div>
 
+      {/* Phase 4C — Approval queue */}
+      <div className="surface-card mt-6 overflow-hidden">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <UserCheck className="h-5 w-5 text-accent" />
+            <h2 className="font-display text-lg font-semibold">
+              Approval queue · Phase 4C
+            </h2>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {approvals.length} requests
+          </span>
+        </div>
+        <div className="px-6 py-3 text-xs text-muted-foreground border-b border-border bg-muted/20">
+          Approve / reject business actions gated by the matrix. Director-only
+          actions block admin approvers. Approval here flips status to
+          <code className="mx-1">approved</code>; the underlying business write
+          still flows through its existing service path.
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[920px]">
+            <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-6 py-3">Action</th>
+                <th className="text-left font-medium py-3">Mode</th>
+                <th className="text-left font-medium py-3">Approver</th>
+                <th className="text-left font-medium py-3">Target</th>
+                <th className="text-left font-medium py-3">Status</th>
+                <th className="text-left font-medium py-3">Proposed payload</th>
+                <th className="text-right font-medium px-6 py-3">Decision</th>
+              </tr>
+            </thead>
+            <tbody>
+              {approvals.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-6 py-6 text-center text-muted-foreground text-sm"
+                  >
+                    No approval requests yet.
+                  </td>
+                </tr>
+              )}
+              {approvals.map((req) => {
+                const pending =
+                  req.status === "pending" || req.status === "escalated";
+                const target =
+                  [req.targetApp, req.targetModel, req.targetObjectId]
+                    .filter(Boolean)
+                    .join(" · ") || "—";
+                return (
+                  <tr
+                    key={req.id}
+                    className="border-t border-border/60 align-top"
+                  >
+                    <td className="px-6 py-3">
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {req.id}
+                      </div>
+                      <div className="font-medium">{req.action}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {fmtRelative(req.createdAt)} · by{" "}
+                        {req.requestedBy || req.requestedByAgent || "system"}
+                      </div>
+                      {req.reason && (
+                        <div className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+                          {req.reason}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      <code className="text-xs">{req.mode}</code>
+                    </td>
+                    <td className="py-3 capitalize">{req.approver}</td>
+                    <td className="py-3 text-xs text-muted-foreground max-w-[200px]">
+                      {target}
+                    </td>
+                    <td className="py-3">
+                      <StatusPill tone={pillToneForApproval(req.status)}>
+                        {req.status}
+                      </StatusPill>
+                      {req.decisionNote && (
+                        <div className="text-xs text-muted-foreground mt-1 max-w-[200px]">
+                          “{req.decisionNote}”
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 text-xs text-muted-foreground max-w-[260px]">
+                      <pre className="whitespace-pre-wrap font-mono text-[11px]">
+                        {JSON.stringify(req.proposedPayload, null, 0)}
+                      </pre>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      {pending ? (
+                        <div className="flex flex-col items-end gap-2">
+                          <Input
+                            placeholder="decision note"
+                            value={decisionNotes[req.id] ?? ""}
+                            onChange={(e) =>
+                              setDecisionNotes((prev) => ({
+                                ...prev,
+                                [req.id]: e.target.value,
+                              }))
+                            }
+                            className="h-8 text-xs w-44"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => onApprove(req.id)}
+                              disabled={decisionBusy === req.id}
+                              className="bg-success text-success-foreground"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onReject(req.id)}
+                              disabled={decisionBusy === req.id}
+                            >
+                              <XCircle className="h-3.5 w-3.5 mr-1" />
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {req.decidedBy || "—"}
+                          {req.decidedAt && (
+                            <div className="text-[11px]">
+                              {fmtRelative(req.decidedAt)}
+                            </div>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="surface-card p-6 mt-6 bg-gradient-emerald-soft">
         <div className="flex items-start gap-3">
           <Gauge className="h-5 w-5 text-accent mt-0.5" />
@@ -294,7 +493,8 @@ export default function Governance() {
             prompt still attaches the relevant <code>apps.compliance.Claim</code>{" "}
             entries on top of any custom system policy. CAIO remains read-only
             in every state. Budget blocks fail closed and never trigger the
-            provider fallback chain.
+            provider fallback chain. Approval-matrix middleware enforces the
+            policy table for every gated business write.
           </div>
         </div>
       </div>
