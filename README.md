@@ -10,8 +10,8 @@ reward/penalty engine, and the human-call learning loop.
 
 ```
 nirogidhara-command/
-  frontend/   # React 18 + Vite + TS + shadcn UI (19 pages)
-  backend/    # Django 5 + DRF — 15 apps, implements the api.ts contract
+  frontend/   # React 18 + Vite + TS + shadcn UI (20 pages)
+  backend/    # Django 5 + DRF — 16 apps, implements the api.ts contract
   docs/       # RUNBOOK, BACKEND_API, FRONTEND_AUDIT, FUTURE_BACKEND_PLAN
 ```
 

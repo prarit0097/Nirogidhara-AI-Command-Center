@@ -135,7 +135,7 @@ nirogidhara-command/
 │       │   ├── WorkflowMap.tsx
 │       │   ├── layout/{AppLayout, Sidebar, Topbar}.tsx
 │       │   └── ui/                # shadcn components
-│       ├── pages/                 # 19 pages — see §6 below
+│       ├── pages/                 # 20 pages — see §6 below
 │       ├── hooks/{use-mobile, use-toast}.tsx
 │       ├── lib/utils.ts
 │       └── test/
@@ -156,7 +156,7 @@ nirogidhara-command/
 │   │   ├── urls.py                # mounts every app under /api/
 │   │   ├── asgi.py
 │   │   └── wsgi.py
-│   ├── apps/                      # 15 Django apps — see §5 below (catalog added in Phase 3E)
+│   ├── apps/                      # 16 Django apps — see §5 below (catalog added in Phase 3E, whatsapp added in Phase 5A)
 │   │   ├── accounts/              # Custom User + JWT auth + /api/settings/
 │   │   ├── audit/                 # AuditEvent + cross-app signal receivers (Master Event Ledger)
 │   │   ├── crm/                   # Lead, Customer
@@ -233,6 +233,7 @@ nirogidhara-command/
 | `analytics` | KPI rollups (funnel/revenue/state/product) | `KPITrend` | `/api/analytics/`, `/api/analytics/funnel/`, `/api/analytics/revenue-trend/`, `/api/analytics/state-rto/`, `/api/analytics/product-performance/` |
 | `dashboards` | Top KPI cards + live activity feed + seed command | `DashboardMetric` | `/api/dashboard/metrics/`, `/api/dashboard/activity/`, `/api/healthz/` |
 | `catalog` (Phase 3E) | Product catalog admin (categories / products / SKUs) | `ProductCategory`, `Product`, `ProductSKU` | `/api/catalog/categories/`, `/api/catalog/products/`, `/api/catalog/skus/` |
+| `whatsapp` (Phase 5A) | WhatsApp Live Sender Foundation (Meta Cloud) | `WhatsAppConnection`, `WhatsAppTemplate`, `WhatsAppConsent`, `WhatsAppConversation`, `WhatsAppMessage`, `WhatsAppMessageAttachment`, `WhatsAppMessageStatusEvent`, `WhatsAppWebhookEvent`, `WhatsAppSendLog` | `/api/whatsapp/{provider/status,connections,templates,conversations,messages,send-template,messages/{id}/retry,consent/{customer_id},templates/sync}/`, signed webhook at `/api/webhooks/whatsapp/meta/` |
 
 ### How the Master Event Ledger works
 
@@ -250,7 +251,7 @@ The seed command intentionally **disconnects the signal receivers** during bulk 
 
 ---
 
-## 6. Frontend pages (19)
+## 6. Frontend pages (20)
 
 All under `frontend/src/pages/`. Each one calls **only** `import { api } from "@/services/api"` — never `mockData.ts`.
 
@@ -341,7 +342,7 @@ Final Reward Score =
 ## 8. What's done so far — Phase 1 to Phase 3D — every checkpoint we shipped
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
-- 19 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.** Phase 3C added the Scheduler Status page; Phase 3D added the AI Governance page.
+- 20 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.** Phase 3C added the Scheduler Status page; Phase 3D added the AI Governance page; Phase 5A added the read-only WhatsApp Templates page.
 - Shared TypeScript types in `src/types/domain.ts` covering Lead / Customer / Order / Call / Payment / Shipment / Agent / RewardPenalty / Claim / LearningRecording / CaioAudit / CeoBriefing / DashboardMetrics / ActivityEvent / WorkflowStep / KPITrend.
 - Sidebar collapse layout, mobile responsive baseline, dashboard polish, shadcn UI.
 - Vitest + React Testing Library configured.
@@ -1182,4 +1183,38 @@ The external [`prarit0097/Whatsapp-sales-dashboard`](https://github.com/prarit00
 
 The plan is the single source for Phase 5A scoping. Next: Phase 5A WhatsApp Live Sender Foundation.
 
-_End of `nd.md`. Last updated after **Phase 5A — WhatsApp Live Sender Foundation** (new `apps.whatsapp` app with 8 models, three providers — `mock` default + `meta_cloud` Nirogidhara-built Graph client + `baileys_dev` dev-only stub, service layer gating consent + Claim Vault + matrix + CAIO + idempotency, Celery task with autoretry/backoff/jitter, signed `/api/webhooks/whatsapp/meta/` with HMAC-SHA256 + replay-window, 13 API endpoints, frontend Settings WABA section + read-only `/whatsapp-templates` page, **failed sends never mutate Order/Payment/Shipment**, 50 new tests; total 401 backend + 13 frontend, all green)._
+### ✅ Phase 5A-Fix — Env + Docs Consistency Audit (DONE, no runtime change)
+
+Small cleanup phase that ran after Phase 5A. **No runtime code changed.**
+
+- Diffed `backend/config/settings.py` against `backend/.env.example`. Two
+  vars were read by the code but missing from the documented env template:
+  `DJANGO_TIME_ZONE` (defaults to `Asia/Kolkata` when unset) and
+  `GROK_MODEL` (defaults to `""`). Both are now documented in `.env.example`
+  and the local `.env` got safe blank defaults.
+- Frontend uses `VITE_API_BASE_URL` (already documented) and
+  `VITE_WS_BASE_URL` (Phase 4A WebSocket origin override — was undocumented).
+  Added both to `frontend/.env.example` with comments explaining the
+  derivation rule.
+- Verified `backend/.env` and `frontend/.env` are correctly gitignored
+  and not tracked (`git ls-files | grep -E '\.env$'` returns nothing).
+  No secrets were exposed during the audit.
+- Fixed stale counts in `README.md` ("15 apps" → "16 apps", "19 pages" →
+  "20 pages"), `AGENTS.md` ("19 pages" → "20 pages"), and `nd.md` §3
+  tree comments + §5 (added the `whatsapp` row) + §6 (`Frontend pages
+  (19)` → `Frontend pages (20)`) + §8 page-count line.
+- `docs/RUNBOOK.md` already shipped a "Phase 5A — WhatsApp (Meta Cloud)
+  live sender" section with the env, sync, send, and webhook smoke tests
+  (added in the Phase 5A commit). Verified complete; no edits needed.
+- Existing 401 backend + 13 frontend tests stay green; lint 0 errors;
+  build OK.
+
+The audit found no runtime bugs — the missing env vars all had safe
+in-code defaults, so the gap was purely documentation drift. Phase 5B
+implementation can start from a clean baseline.
+
+_End of `nd.md`. Last updated after **Phase 5A-Fix** — env + docs
+consistency audit (no runtime changes; `.env.example` fully aligned
+with `settings.py`, README + AGENTS + nd.md counts refreshed to 16
+apps / 20 pages, frontend `VITE_WS_BASE_URL` documented). 401 backend
++ 13 frontend tests, all green._

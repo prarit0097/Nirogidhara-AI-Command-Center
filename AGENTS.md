@@ -78,7 +78,7 @@ React UI  ──/api/JSON──►  Django + DRF  ──ORM──►  SQLite (de
 frontend/src/services/api.ts        ← service layer (HTTP + mock fallback)
 frontend/src/services/mockData.ts   ← deterministic fixtures (internal)
 frontend/src/types/domain.ts        ← THE TypeScript contract
-frontend/src/pages/                 ← 19 pages, each maps to a route
+frontend/src/pages/                 ← 20 pages, each maps to a route
 frontend/src/components/{ui,layout} ← shadcn UI + app shell
 
 backend/config/settings.py          ← env-driven config
