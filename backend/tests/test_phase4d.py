@@ -410,7 +410,8 @@ def test_prompt_version_activate_does_not_bypass_claim_vault(admin_user) -> None
     [
         # approval_required + human_escalation matrix modes — admin passes
         # the role check → engine reaches the registry lookup → SKIPPED.
-        "discount.11_to_20",
+        # Phase 4E: ``discount.11_to_20`` is now mapped, so it's tested in
+        # ``tests/test_phase4e.py`` with the proper handler-side coverage.
         "payment.refund",
         "whatsapp.broadcast_or_campaign",
         "complaint.medical_emergency",
@@ -437,7 +438,8 @@ def test_unmapped_action_skipped_for_admin(admin_user, action) -> None:
     [
         # director_override matrix modes — only director can pass the role
         # check; once past it, the registry lookup fails → SKIPPED.
-        "ai.sandbox.disable",
+        # Phase 4E: ``ai.sandbox.disable`` is now mapped — covered in
+        # ``tests/test_phase4e.py``. ``ad.budget_change`` stays unmapped.
         "ad.budget_change",
     ],
 )

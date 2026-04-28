@@ -290,12 +290,15 @@ Audit kinds (Phase 4C):
 Audit kinds (Phase 4D):
 - `ai.approval.executed`, `ai.approval.execution_failed`, `ai.approval.execution_skipped`. Every execute attempt — success, failure, or skipped (unmapped action / pre-check refused) — writes both an `ApprovalExecutionLog` row and a Master Event Ledger audit row.
 
-**Phase 4D execution registry (locked initial set):**
+**Execution registry (Phase 4D + 4E — 6 actions total):**
 1. `payment.link.advance_499` → `apps.payments.services.create_payment_link` (amount **always** resolved to `FIXED_ADVANCE_AMOUNT_INR`; tampered payload amounts are ignored).
 2. `payment.link.custom_amount` → same service path; requires `amount > 0`.
 3. `ai.prompt_version.activate` → `apps.ai_governance.prompt_versions.activate_prompt_version`. Idempotent on already-active.
+4. **Phase 4E** `discount.up_to_10` → `apps.orders.services.apply_order_discount`. Accepts ApprovalRequest status `approved` OR `auto_approved` (the matrix lets this band auto-approve). Band-edge guard: rejects `discount_pct > 10`, negative, or missing. Mutates ONLY `Order.discount_pct`; writes `discount.applied` audit.
+5. **Phase 4E** `discount.11_to_20` → same service; `discount_pct` must be `> 10` and `<= 20`. Auto_approved is enough only because the backend approval_engine put it there — frontend / AI cannot fake the status.
+6. **Phase 4E** `ai.sandbox.disable` → `apps.ai_governance.sandbox.set_sandbox_enabled(enabled=False, …)`. **Director-only** via matrix `director_override` (admin → 403). Requires `note` or `overrideReason` in `proposed_payload`. Idempotent: returns `{ alreadyDisabled: true, isEnabled: false }` when sandbox is already off.
 
-Everything else (discount.*, ai.sandbox.disable, ad.budget_change, payment.refund, whatsapp.*, complaint.*, ai.production.live_mode_switch, etc.) is intentionally unmapped in this first 4D pass and returns HTTP 400 + `ai.approval.execution_skipped` audit.
+Everything else (`discount.above_20`, `ad.budget_change`, `payment.refund`, `whatsapp.*`, `complaint.*`, `ai.production.live_mode_switch`, etc.) is intentionally unmapped and returns HTTP 400 + `ai.approval.execution_skipped` audit. The registry is an explicit allow-list — expansion needs Prarit sign-off + matching tests.
 
 Live enforcement is wired into 3 high-value paths today:
 - `POST /api/payments/links/` — `payment.link.advance_499` (auto, type=Advance + amount in {0, 499}) vs `payment.link.custom_amount` (admin approval).
@@ -304,7 +307,7 @@ Live enforcement is wired into 3 high-value paths today:
 
 Other normal workflows (lead create / call trigger / ₹499 advance / Delhivery dispatch / RTO rescue / 0–10% discount) stay auto per matrix.
 
-**Phase 4D shipped:** the Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` is now live with the locked 3-action registry. Future expansion (discount + sandbox-disable + ad-budget execution, etc.) requires explicit Prarit sign-off + matching tests. CAIO + Claim Vault + idempotency hard stops remain in place.
+**Phase 4D + 4E shipped:** the Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` now serves a 6-action allow-listed registry. Phase 4E added discount.up_to_10 + discount.11_to_20 (via `apps.orders.services.apply_order_discount`) and ai.sandbox.disable (Director-only via matrix `director_override`). Future expansion (ad-budget execution, refunds, production live-mode switch, discount.above_20) requires explicit Prarit sign-off + matching tests. CAIO + Claim Vault + idempotency hard stops remain in place.
 
 ### Realtime AuditEvent WebSockets (Phase 4A)
 

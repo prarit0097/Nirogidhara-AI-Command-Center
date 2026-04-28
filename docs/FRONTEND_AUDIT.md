@@ -7,14 +7,14 @@ direction.
 
 Item | Status
 --- | ---
-All 19 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page (no new pages added in 3E — backend-only phase). Phase 4B enhanced the existing Rewards page with agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button. **Phase 4C** appended an Approval queue table on the Governance page (Action / Mode / Approver / Target / Status / Proposed payload / Approve + Reject controls + decision-note input). **Phase 4D** added an Execution column + Execute button on approved rows (admin/director only on the API; backend remains the final permission enforcer). **Phase 4A** added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed (snapshot + per-event push, dedupe by id, capped at 25 rows) and the Governance "Approval queue" (live `refresh()` on `ai.approval.* / ai.agent_run.approval_requested / ai.prompt_version.* / ai.sandbox.* / ai.budget.*`); status pill shows `connecting` / `realtime` / `reconnecting` / `polling fallback`.
+All 19 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page (no new pages added in 3E — backend-only phase). Phase 4B enhanced the existing Rewards page with agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button. **Phase 4C** appended an Approval queue table on the Governance page (Action / Mode / Approver / Target / Status / Proposed payload / Approve + Reject controls + decision-note input). **Phase 4D** added an Execution column + Execute button on approved rows (admin/director only on the API; backend remains the final permission enforcer). **Phase 4A** added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed (snapshot + per-event push, dedupe by id, capped at 25 rows) and the Governance "Approval queue" (live `refresh()` on `ai.approval.* / ai.agent_run.approval_requested / ai.prompt_version.* / ai.sandbox.* / ai.budget.*`); status pill shows `connecting` / `realtime` / `reconnecting` / `polling fallback`. **Phase 4E** is backend-only; the Governance Execute button + execution-status column already render the discount and sandbox-disable handler results verbatim — no React-side business logic needed.
 Pages go through `src/services/api.ts` only | done — no page imports `mockData.ts` directly
 TypeScript shared types in `src/types/domain.ts` | done
 Sidebar collapse layout | done — shared collapsed state
 Mobile responsiveness | baseline done — KPI stack, sidebar drawer, tables horizontal-scroll on small screens; per-page tuning continues
 Dashboard polish | baseline done — premium spacing, hierarchy, executive feel; iterate as needed
 Workflow visuals | UI-component diagrams in `WorkflowMap`
-Vitest tests | 8 tests passing (5 page/sidebar + 3 API fallback)
+Vitest tests | 13 tests passing (5 page/sidebar + 3 API fallback + 5 realtime)
 ESLint warnings | 8 pre-existing shadcn warnings (`react-refresh/only-export-components`); 0 errors
 Mock fallback in `api.ts` | done — pages never break when backend is offline
 

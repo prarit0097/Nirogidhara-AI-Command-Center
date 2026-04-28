@@ -170,3 +170,84 @@ def record_confirmation_outcome(
         },
     )
     return order
+
+
+# ---------------------------------------------------------------------------
+# Phase 4E — Apply discount through approval execution layer.
+# ---------------------------------------------------------------------------
+
+
+class DiscountValidationError(ValueError):
+    """Raised when ``apply_order_discount`` rejects a discount via policy."""
+
+
+@transaction.atomic
+def apply_order_discount(
+    order: Order,
+    *,
+    discount_pct: int,
+    actor: "User" | None = None,
+    actor_role: str | None = None,
+    reason: str = "",
+    source: str = "approval_execution",
+    approval_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Apply a discount to an order via the locked Phase 3E policy.
+
+    Phase 4E uses this from the Approved Action Execution Layer (handlers
+    for ``discount.up_to_10`` and ``discount.11_to_20``). The function:
+
+    - Validates via :func:`apps.orders.discounts.validate_discount`.
+    - Mutates ONLY ``Order.discount_pct`` — never touches customer /
+      payment / shipment / stage data.
+    - Writes a ``discount.applied`` AuditEvent.
+    - Returns a structured result the execute endpoint surfaces back to
+      the operator UI.
+    """
+    from apps.orders.discounts import validate_discount
+
+    if discount_pct is None:
+        raise DiscountValidationError("discountPct is required.")
+    try:
+        new_pct = int(discount_pct)
+    except (TypeError, ValueError) as exc:
+        raise DiscountValidationError("discountPct must be an integer.") from exc
+
+    role = (actor_role or getattr(actor, "role", "") or "").lower().strip()
+    validation = validate_discount(
+        new_pct,
+        actor_role=role,
+        approval_context=approval_context,
+    )
+    if not validation.allowed:
+        raise DiscountValidationError(validation.reason)
+
+    old_pct = int(order.discount_pct or 0)
+    order.discount_pct = new_pct
+    order.save(update_fields=["discount_pct"])
+
+    write_event(
+        kind="discount.applied",
+        text=(
+            f"Discount {old_pct}% → {new_pct}% applied to order {order.id} "
+            f"({source})"
+        ),
+        tone=AuditEvent.Tone.INFO,
+        payload={
+            "order_id": order.id,
+            "old_discount_pct": old_pct,
+            "new_discount_pct": new_pct,
+            "actor_role": role,
+            "reason": reason,
+            "source": source,
+            "by": getattr(actor, "username", "") or "",
+        },
+    )
+    return {
+        "orderId": order.id,
+        "oldDiscountPct": old_pct,
+        "newDiscountPct": new_pct,
+        "policyBand": validation.policy_band,
+        "reason": reason,
+        "source": source,
+    }

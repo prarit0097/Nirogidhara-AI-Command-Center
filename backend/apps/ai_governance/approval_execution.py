@@ -290,6 +290,180 @@ def _handler_prompt_version_activate(
     }
 
 
+def _handler_discount_apply(
+    approval: ApprovalRequest,
+    user: "User",
+    payload: Mapping[str, Any],
+    *,
+    band_min_exclusive: int,
+    band_max_inclusive: int,
+    band_label: str,
+) -> Mapping[str, Any]:
+    """Phase 4E — apply a discount inside an approval-gated band.
+
+    Used by both ``discount.up_to_10`` (band 0–10) and
+    ``discount.11_to_20`` (band 11–20). Out-of-band requests fail closed
+    BEFORE :func:`apps.orders.services.apply_order_discount` is called so
+    the policy module remains the only source of truth.
+    """
+    from apps.orders import services as orders_services
+    from apps.orders.services import DiscountValidationError
+
+    order_id = (payload.get("orderId") or approval.target_object_id or "").strip()
+    if not order_id:
+        raise ExecutionRefused(
+            reason=f"{approval.action} requires orderId in proposed_payload."
+        )
+    if "discountPct" not in payload and "discount_pct" not in payload:
+        raise ExecutionRefused(
+            reason=f"{approval.action} requires discountPct in proposed_payload."
+        )
+    raw_pct = payload.get("discountPct")
+    if raw_pct is None:
+        raw_pct = payload.get("discount_pct")
+    try:
+        pct = int(raw_pct)
+    except (TypeError, ValueError) as exc:
+        raise ExecutionRefused(
+            reason=f"{approval.action} discountPct must be an integer."
+        ) from exc
+
+    if pct < 0:
+        raise ExecutionRefused(
+            reason=f"{approval.action} discountPct cannot be negative."
+        )
+    if pct <= band_min_exclusive:
+        raise ExecutionRefused(
+            reason=(
+                f"{approval.action} requires discountPct in the {band_label} "
+                f"band (>{band_min_exclusive} & <={band_max_inclusive}); "
+                f"got {pct}."
+            )
+        )
+    if pct > band_max_inclusive:
+        raise ExecutionRefused(
+            reason=(
+                f"{approval.action} requires discountPct <= "
+                f"{band_max_inclusive}; got {pct}. Use a higher-band "
+                f"action (e.g. director_override) instead."
+            )
+        )
+
+    try:
+        order = Order.objects.get(pk=order_id)
+    except Order.DoesNotExist as exc:  # noqa: BLE001
+        raise ExecutionRefused(
+            reason=f"Order {order_id} not found.", http_status=404
+        ) from exc
+
+    actor_role = (getattr(user, "role", "") or "").lower()
+    # The matrix gating happens above (status + role); pass the approval
+    # decision through validate_discount via approval_context so the
+    # policy still validates the band.
+    approval_context: dict[str, Any] = {
+        "approved_by": "admin" if actor_role in {"admin", "director"} else actor_role,
+    }
+    try:
+        result = orders_services.apply_order_discount(
+            order,
+            discount_pct=pct,
+            actor=user,
+            actor_role=actor_role,
+            reason=str(payload.get("reason") or ""),
+            source="approval_execution",
+            approval_context=approval_context,
+        )
+    except DiscountValidationError as exc:  # pragma: no cover - defensive
+        raise ExecutionRefused(reason=str(exc)) from exc
+
+    return {
+        **result,
+        "approvalRequestId": approval.id,
+        "executedBy": getattr(user, "username", "") or "",
+    }
+
+
+def _handler_discount_up_to_10(
+    approval: ApprovalRequest, user: "User", payload: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    return _handler_discount_apply(
+        approval,
+        user,
+        payload,
+        band_min_exclusive=-1,  # 0..10 inclusive (i.e. > -1 and <= 10)
+        band_max_inclusive=10,
+        band_label="0–10%",
+    )
+
+
+def _handler_discount_11_to_20(
+    approval: ApprovalRequest, user: "User", payload: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    return _handler_discount_apply(
+        approval,
+        user,
+        payload,
+        band_min_exclusive=10,  # > 10 and <= 20
+        band_max_inclusive=20,
+        band_label="11–20%",
+    )
+
+
+def _handler_sandbox_disable(
+    approval: ApprovalRequest, user: "User", payload: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    """Phase 4E — flip the SandboxState singleton to disabled.
+
+    Director-only is enforced by the existing ``_check_role`` pre-check
+    (the matrix policy mode for ``ai.sandbox.disable`` is
+    ``director_override``). The handler additionally:
+
+    - Requires ``note`` and ``overrideReason`` in the proposed payload
+      (or ``approval.reason`` / ``approval.decision_note`` as fallback).
+    - Returns ``alreadyDisabled=True`` idempotently when the singleton
+      is already off — no audit fire in that branch.
+    """
+    from apps.ai_governance import sandbox as sandbox_services
+
+    note = (payload.get("note") or approval.decision_note or approval.reason or "").strip()
+    override_reason = (
+        payload.get("overrideReason")
+        or payload.get("override_reason")
+        or note
+        or ""
+    ).strip()
+    if not note and not override_reason:
+        raise ExecutionRefused(
+            reason=(
+                "ai.sandbox.disable requires a note or overrideReason in "
+                "proposed_payload (or on the approval) so the audit trail "
+                "captures the disable rationale."
+            )
+        )
+
+    state = sandbox_services.get_state()
+    if not state.is_enabled:
+        return {
+            "isEnabled": False,
+            "alreadyDisabled": True,
+            "note": state.note,
+            "message": "Sandbox is already disabled.",
+        }
+
+    updated = sandbox_services.set_sandbox_enabled(
+        enabled=False,
+        note=note or override_reason,
+        by_user=user,
+    )
+    return {
+        "isEnabled": updated.is_enabled,
+        "alreadyDisabled": False,
+        "note": updated.note,
+        "updatedBy": updated.updated_by,
+        "updatedAt": updated.updated_at.isoformat() if updated.updated_at else None,
+    }
+
+
 _REGISTRY: dict[str, _HandlerSpec] = {
     "payment.link.advance_499": _HandlerSpec(
         action="payment.link.advance_499",
@@ -305,6 +479,25 @@ _REGISTRY: dict[str, _HandlerSpec] = {
         action="ai.prompt_version.activate",
         handler=_handler_prompt_version_activate,
         description="Activate a versioned prompt through the existing service helper.",
+    ),
+    # Phase 4E — discount + sandbox-disable execution.
+    "discount.up_to_10": _HandlerSpec(
+        action="discount.up_to_10",
+        handler=_handler_discount_up_to_10,
+        description="Apply a discount in the 0–10% band on an existing order.",
+    ),
+    "discount.11_to_20": _HandlerSpec(
+        action="discount.11_to_20",
+        handler=_handler_discount_11_to_20,
+        description="Apply a discount in the 11–20% band on an existing order.",
+    ),
+    "ai.sandbox.disable": _HandlerSpec(
+        action="ai.sandbox.disable",
+        handler=_handler_sandbox_disable,
+        description=(
+            "Disable the AI sandbox singleton. Director-only via the "
+            "matrix policy mode (director_override)."
+        ),
     ),
 }
 

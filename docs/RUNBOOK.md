@@ -70,11 +70,11 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 322 tests (Phase 1 → 4A inclusive)
+python -m pytest -q                     # 351 tests (Phase 1 → 4E inclusive)
 
 # Frontend
 cd ../frontend
-npm test                                # ~8 vitest tests
+npm test                                # 13 vitest tests
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
@@ -304,12 +304,12 @@ buttons (admin/director only on the API; the frontend just renders).
 **Important**: `approve_request` flips status to `approved` and writes
 audits. It does **not** silently execute the underlying business write.
 
-## Phase 4D — Approved Action Execution Layer
+## Phase 4D + 4E — Approved Action Execution Layer
 
-`POST /api/ai/approvals/{id}/execute/` is now wired and runs an
-already-approved `ApprovalRequest` through a strict allow-listed
-registry. Initial registry (everything else returns HTTP 400 +
-`ai.approval.execution_skipped` audit):
+`POST /api/ai/approvals/{id}/execute/` runs an already-approved
+`ApprovalRequest` through a strict allow-listed registry. The Phase 4E
+expansion brought the total to 6 actions; everything else returns
+HTTP 400 + `ai.approval.execution_skipped` audit.
 
 1. `payment.link.advance_499` — calls
    `apps.payments.services.create_payment_link` with the amount
@@ -319,6 +319,17 @@ registry. Initial registry (everything else returns HTTP 400 +
 3. `ai.prompt_version.activate` — calls
    `apps.ai_governance.prompt_versions.activate_prompt_version`.
    Idempotent on already-active.
+4. **Phase 4E** `discount.up_to_10` — calls
+   `apps.orders.services.apply_order_discount` for the 0–10% band.
+   Accepts `approved` OR `auto_approved` ApprovalRequest status.
+   Mutates ONLY `Order.discount_pct`; writes `discount.applied` audit.
+5. **Phase 4E** `discount.11_to_20` — same service, 11–20% band.
+   Same approve / auto_approve gate; auto_approved is trusted only
+   because the backend approval_engine put it there.
+6. **Phase 4E** `ai.sandbox.disable` — flips the SandboxState
+   singleton off via the existing helper. **Director-only** via
+   matrix `director_override` (admin → 403). Idempotent on already-
+   off (`alreadyDisabled=true`). Requires `note` or `overrideReason`.
 
 Pre-checks (defense in depth, fail closed in this order):
 

@@ -105,6 +105,8 @@ ICON_BY_KIND: dict[str, str] = {
     "discount.requested": "percent",
     "discount.approved": "badge-check",
     "discount.blocked": "ban",
+    # Phase 4E — Approved Action Execution Layer expansion (discount apply).
+    "discount.applied": "percent",
     "approval.required": "user-check",
     "whatsapp.message_queued": "message-circle",
     "whatsapp.broadcast.requested": "megaphone",

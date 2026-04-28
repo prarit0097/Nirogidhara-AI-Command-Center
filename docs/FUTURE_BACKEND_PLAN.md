@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4A + 4B + 4C + 4D are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4A + 4B + 4C + 4D + 4E are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -441,8 +441,64 @@ stop.
 - Did not introduce automation that turns approval queues into
   background drainers. Execution stays an explicit operator action.
 - Did not wire discount / sandbox-disable / ad-budget / refund /
-  WhatsApp / production live-mode-switch handlers. Those stay
-  intentionally unmapped until the next phase.
+  WhatsApp / production live-mode-switch handlers. Phase 4E (below)
+  later wired discount + sandbox-disable; ad-budget / refund / WhatsApp
+  / production live-mode-switch / discount.above_20 stay unmapped.
+
+### ✅ Phase 4E — Expanded Approved Execution Registry (DONE)
+
+Shipped via `feat: expand approved action execution registry`.
+
+- Three new handlers added to `apps/ai_governance/approval_execution.py`:
+  - `discount.up_to_10` (band 0–10%) — accepts ApprovalRequest status
+    `approved` OR `auto_approved` (the matrix lets this band auto-approve).
+  - `discount.11_to_20` (band 11–20%) — same approve / auto_approve gate.
+    Auto_approved is trusted only because the backend approval_engine
+    puts it there; frontend / AI cannot fake the status.
+  - `ai.sandbox.disable` — flips the SandboxState singleton off via the
+    existing `apps.ai_governance.sandbox.set_sandbox_enabled` helper.
+    **Director-only** via matrix `director_override`. Idempotent on
+    already-off (returns `alreadyDisabled=true`, no audit fire).
+- New service `apps.orders.services.apply_order_discount` — validates
+  via the locked Phase 3E `validate_discount` policy, mutates ONLY
+  `Order.discount_pct`, writes a `discount.applied` audit row, returns
+  a structured result. New `DiscountValidationError` exception bubbles
+  policy refusals to the handler.
+- New audit kind `discount.applied` registered in `ICON_BY_KIND`.
+- Band-edge guards in the handler (belt-and-braces on top of policy):
+  `discount.up_to_10` rejects pct > 10; `discount.11_to_20` rejects
+  pct ≤ 10 OR > 20; both reject negative + missing. Missing `orderId`
+  → ExecutionRefused; unknown order → 404.
+- `ai.sandbox.disable` requires `note` OR `overrideReason` in the
+  proposed payload (or via `approval.reason` / `decision_note`);
+  otherwise refuses.
+- Phase 4D pre-checks unchanged — idempotency, CAIO refusal, role
+  gate (admin/director; director-only on `director_override`),
+  status gate (must be `approved` or `auto_approved`), unknown action
+  → skipped + 400.
+- 31 new pytest tests cover discount.up_to_10 happy + edge paths;
+  discount.11_to_20 happy + every band-edge refusal; discount.above_20
+  stays unmapped → 400 + skipped + order untouched; idempotency on
+  discount; discount-only side-effect scope (only `discount_pct`
+  changes); audit firing on discount + sandbox paths; sandbox.disable
+  Director-only + idempotent + note required; CAIO blocked on both
+  surfaces; remaining-unmapped parametric on the 4 still-blocked
+  actions; HTTP endpoint smoke tests.
+- Phase 4D `tests/test_phase4d.py` parametrized "unmapped" lists were
+  trimmed by 2 (the now-mapped `discount.11_to_20` and
+  `ai.sandbox.disable`), keeping the rest of the regression intact.
+
+**What Phase 4E explicitly did NOT do:**
+
+- Did not wire `discount.above_20` execution. Even when approved (e.g.
+  director_override path), execute → 400 + skipped audit.
+- Did not wire `ad.budget_change`, `payment.refund`, `whatsapp.*`, or
+  `ai.production.live_mode_switch` execution.
+- Did not change role rules. Director-only on `director_override` is
+  inherited from Phase 4D `_check_role`.
+- Did not introduce frontend-side discount or sandbox logic. The
+  Governance page Execute button + execution-status column from
+  Phase 4D continue to render the result of any registered handler.
 
 **39 new pytest tests** (`tests/test_phase4d.py`) cover idempotency,
 non-approved status refusals (pending / rejected / blocked / escalated /

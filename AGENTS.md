@@ -126,6 +126,8 @@ backend/apps/ai_governance/models.py ← Phase 4C: ApprovalRequest + ApprovalDec
 backend/apps/ai_governance/views.py ← Phase 4C/4D endpoints: /api/ai/approvals/{,id/,id/approve/,id/reject/,id/execute/,evaluate/} + /api/ai/agent-runs/{id}/request-approval/
 backend/apps/ai_governance/approval_execution.py ← Phase 4D execution engine + 3-action allow-listed registry (payment.link.advance_499, payment.link.custom_amount, ai.prompt_version.activate)
 backend/apps/ai_governance/models.py ← Phase 4D: ApprovalExecutionLog (status executed/failed/skipped, partial unique constraint enforcing one executed per ApprovalRequest)
+backend/apps/orders/services.py ← Phase 4E: apply_order_discount (mutates only Order.discount_pct via validate_discount; writes discount.applied audit)
+backend/apps/ai_governance/approval_execution.py ← Phase 4D + 4E: 6-action allow-listed registry — payment.link.advance_499, payment.link.custom_amount, ai.prompt_version.activate, discount.up_to_10, discount.11_to_20, ai.sandbox.disable
 backend/apps/audit/realtime.py ← Phase 4A: serialize_event + latest_events + publish_audit_event (transaction.on_commit, never blocks DB writes)
 backend/apps/audit/consumers.py ← Phase 4A: AuditEventConsumer (read-only fanout to ws://<host>/ws/audit/events/)
 backend/apps/audit/routing.py ← Phase 4A: WebSocket URL routes for the audit app
@@ -190,13 +192,13 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 322 tests today
+python -m pytest -q                 # 351 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                         # http://localhost:8080
-npm test                            # 8 tests today
+npm test                            # 13 tests today
 npm run lint                        # 0 errors expected
 npm run build                       # production build
 ```
@@ -235,6 +237,7 @@ cd frontend && npm run lint && npm test && npm run build
 - Don't duplicate approval rules in views. Phase 4C middleware (`apps/ai_governance/approval_engine.py`) is the single source. Risky write paths call `enforce_or_queue` and stop when `result.allowed` is False. `approve_request` flips status to `approved` and writes audits — it does **not** silently execute the underlying business write; that still flows through its existing tested service path. CAIO can never request an executable approval (refused at AgentRun bridge AND at the matrix evaluation step).
 - Phase 4D ships an Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` over a strict allow-listed registry. The first pass wires only 3 actions: `payment.link.advance_499`, `payment.link.custom_amount`, `ai.prompt_version.activate`. Every other approved action — discount, sandbox-disable, ad-budget, refund, WhatsApp, escalations, production live-mode switch — returns HTTP 400 + `ai.approval.execution_skipped` audit. Don't expand the registry without explicit Prarit sign-off + matching tests. CAIO blocked at engine + AgentRun bridge + execute layer. Idempotent: a successful execution writes one log; re-running the endpoint returns the prior result without re-invoking the handler.
 - Phase 4A wires Django Channels for live AuditEvent streaming at `ws://<host>/ws/audit/events/`. The frame carries the **full stored `AuditEvent.payload`** — never trim it, but never put secrets in audit payloads either (the existing rule). The publisher in `apps/audit/realtime.py` runs inside `transaction.on_commit` and swallows Channels failures, so a missing Redis must never break a service-layer write. Existing polling endpoints (`/api/dashboard/activity/`, `/api/ai/approvals/`) remain as fallback — don't remove them. The consumer is read-and-fanout only: never execute, never mutate. Local dev defaults to the in-memory channel layer; production sets `CHANNEL_LAYER_BACKEND=redis` + `CHANNEL_REDIS_URL=redis://...:6379/2` (Channels uses Redis index 2; Celery uses 0/1).
+- Phase 4E grows the execution registry to 6 actions: `payment.link.advance_499`, `payment.link.custom_amount`, `ai.prompt_version.activate`, `discount.up_to_10`, `discount.11_to_20`, `ai.sandbox.disable`. Discount handlers route through `apps.orders.services.apply_order_discount` (only mutates `Order.discount_pct`, validates via the Phase 3E `validate_discount` policy, writes `discount.applied` audit). `ai.sandbox.disable` stays Director-only (matrix `director_override`) and is idempotent on already-off (`alreadyDisabled=true`). **`discount.above_20` + `ad.budget_change` + `payment.refund` + `whatsapp.*` + `ai.production.live_mode_switch` remain unmapped** — execute → HTTP 400 + `ai.approval.execution_skipped` audit. CAIO blocked at engine + bridge + execute layer. Don't expand the registry without explicit Prarit sign-off + matching tests.
 - Don't push to `main` without running tests + build + lint locally first.
 - Don't `git push --force`. Don't skip hooks. Don't amend pushed commits.
 

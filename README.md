@@ -60,7 +60,7 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 ## Tests
 
 ```bash
-# Backend (pytest, 322 tests)
+# Backend (pytest, 351 tests)
 cd backend && python -m pytest -q
 
 # Frontend (vitest, 13 tests)
@@ -86,10 +86,10 @@ cd frontend && npm test
 - ✅ **Phase 4C** — Approval Matrix Middleware enforcement (`apps/ai_governance/approval_engine.py`): `ApprovalRequest` + `ApprovalDecisionLog` models, `evaluate_action` / `enforce_or_queue` / `approve_request` / `reject_request` / `request_approval_for_agent_run`. 5 new admin/director endpoints under `/api/ai/approvals/...` and `/api/ai/agent-runs/{id}/request-approval/`. Live enforcement gating custom-amount payment links, prompt activation, and sandbox disable. CAIO never executes (refused at the bridge AND at the matrix evaluator). Governance page upgraded with an Approval queue table + Approve / Reject controls.
 - ✅ **Phase 4D** — Approved Action Execution Layer (`apps/ai_governance/approval_execution.py`): `ApprovalExecutionLog` model with one-executed-per-request constraint, `POST /api/ai/approvals/{id}/execute/` endpoint, **allow-listed registry of 3 handlers** (`payment.link.advance_499`, `payment.link.custom_amount`, `ai.prompt_version.activate`). Every other approved action returns HTTP 400 + `ai.approval.execution_skipped` audit. CAIO blocked at engine + bridge + execute layer; idempotent re-execute returns prior result; director-only override on `director_override`. Governance page now shows an Execution column + Execute button on approved rows.
 - ✅ **Phase 4A** — Real-time AuditEvent WebSockets via Django Channels: `ws://<host>/ws/audit/events/` carries the **full stored `AuditEvent.payload`**, Dashboard "Live Activity" feed and Governance "Approval queue" auto-refresh on relevant audit kinds, existing polling endpoints (`/api/dashboard/activity/`, `/api/ai/approvals/`) remain as fallback. Frontend `services/realtime.ts` derives the WS origin from `VITE_API_BASE_URL` (or `VITE_WS_BASE_URL` override), reconnects with exponential backoff, deduplicates by id. Local dev defaults to the in-memory channel layer; production uses `CHANNEL_LAYER_BACKEND=redis` + `CHANNEL_REDIS_URL=redis://...:6379/2`.
+- ✅ **Phase 4E** — Expanded Approved Execution Registry. Adds 3 new handlers: `discount.up_to_10`, `discount.11_to_20` (route through new `apps.orders.services.apply_order_discount`; only `Order.discount_pct` is mutated; validates via Phase 3E `validate_discount`), `ai.sandbox.disable` (Director-only via matrix `director_override`; idempotent on already-off). `discount.above_20` + ad-budget + refund + WhatsApp + production-live-mode-switch all remain unmapped → HTTP 400 + `ai.approval.execution_skipped`. CAIO blocked at engine + bridge + execute layer.
 
 **Next:**
 
-- ⏭ **Expanded execution registry** — discount.up_to_10 / discount.11_to_20 / ai.sandbox.disable execution come later, intentionally not in the 4D first pass.
 - ⏭ **WhatsApp** — Live Business Cloud API sender (consent-gated, Claim-Vault-grounded). Phase 3E ships only the design scaffold.
 
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
