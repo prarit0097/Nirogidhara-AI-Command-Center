@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C + 4D are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -304,40 +304,46 @@ no live messaging or order writes are executed by the Phase 3E modules.
 - Replace polling on the dashboard's activity feed.
 - Frontend already polls via React Query — adding push is purely additive.
 
-### Phase 4D — Approved Action Execution Layer (NEXT)
+### ✅ Phase 4D — Approved Action Execution Layer (DONE)
 
-Phase 4C ships approval gating but does **not** execute the underlying
-business write. Phase 4D adds the safe, explicit execution paths so a
-director-approved action actually performs its write — and *only* the
-specific, tested actions we authorize per release.
+Shipped via `feat: add approved action execution layer`. Phase 4C added
+approval gating without execution; Phase 4D adds the safe, explicit
+execution paths over a strict allow-listed registry.
 
-**Goal**: turn an approved `ApprovalRequest` into the underlying
-business write through a tested service path, with no autonomous /
-silent execution and a strong CAIO + Claim Vault hard stop.
+**Goal (delivered)**: turn an approved `ApprovalRequest` into the
+underlying business write through a tested service path, with no
+autonomous / silent execution and a strong CAIO + Claim Vault hard
+stop.
 
-**Surface to add (planned, not yet implemented):**
+**Surface shipped:**
 
 - `POST /api/ai/approvals/{id}/execute/` — admin/director only;
-  director-only when policy mode is `director_override`. Body
-  optional. Returns `{ approvalRequestId, executionStatus, notes,
-  executedAt, executedBy, result }`.
-- Either:
-  (a) extend `ApprovalRequest` with `execution_status` (one of
-  `not_executed`, `pending`, `executed`, `failed`, `skipped`) +
-  `executed_at` + `executed_by` + `execution_result` JSON, OR
-  (b) add a separate `ApprovalExecutionLog` model linked FK-style to
-  `ApprovalRequest`. Decision deferred to the Phase 4D PR.
-- An execution registry that maps each authorized matrix `action` key
-  to a function in the *existing tested service layer*. Initial
-  registry (allow-listed; everything else 400s):
+  director-only when policy mode is `director_override`. Body:
+  `{ payloadOverride?, note? }`. Response:
+  `{ approvalRequestId, action, executionStatus, executedAt,
+  executedBy, result, errorMessage, message, alreadyExecuted }`.
+- **Decision: separate model.** Added `ApprovalExecutionLog`
+  (FK to `ApprovalRequest`) with status `executed` / `failed` /
+  `skipped` and a partial unique constraint enforcing **one
+  `executed` row per request** (idempotency).
+  `ApprovalRequestSerializer` carries `latestExecutionStatus`,
+  `latestExecutionAt`, `latestExecutionResult`,
+  `latestExecutionError`, `executionLogs[]`.
+- **Allow-listed initial registry** (everything else returns HTTP
+  400 + `ai.approval.execution_skipped`):
   - `payment.link.advance_499` → `apps.payments.services.create_payment_link`
-  - `payment.link.custom_amount` → same service, custom amount path
-  - `discount.up_to_10` → trivial pass-through (auto-already)
-  - `discount.11_to_20` → order discount update via existing service
-  - `ai.prompt_version.activate` → already wired
-  - `ai.sandbox.disable` → already wired
-- Audit kinds:
-  `ai.approval.executed`, `ai.approval.execution_failed`,
+    (amount **always** resolved to `FIXED_ADVANCE_AMOUNT_INR`).
+  - `payment.link.custom_amount` → same service, requires `amount > 0`.
+  - `ai.prompt_version.activate` →
+    `apps.ai_governance.prompt_versions.activate_prompt_version`,
+    idempotent on already-active.
+- **Phase 4D first pass intentionally LEAVES UNMAPPED**:
+  `discount.up_to_10`, `discount.11_to_20`, `discount.above_20`,
+  `ai.sandbox.disable`, `ad.budget_change`, `payment.refund`,
+  every `whatsapp.*`, every `complaint.*`, and
+  `ai.production.live_mode_switch`. They stay approval-only until a
+  later phase wires them with explicit tests.
+- Audit kinds: `ai.approval.executed`, `ai.approval.execution_failed`,
   `ai.approval.execution_skipped`.
 
 **Hard stops (locked, do NOT relax):**
@@ -365,26 +371,43 @@ silent execution and a strong CAIO + Claim Vault hard stop.
 10. **Existing tests must stay green** (currently 275 backend + 8
     frontend).
 
-**Frontend (planned for Phase 4D):**
+**Frontend shipped (Phase 4D):**
 
-- An "Execute" button on the approved-row of the Governance page's
-  Approval queue (admin/director only on the API). Pressing it calls
-  `api.executeApprovalRequest(id)`; the page refreshes to show the new
-  `executionStatus`.
+- New "Execution" column in the Governance page Approval queue table
+  showing the latest execution status pill + relative time +
+  error/skip reason.
+- "Execute" button on rows whose `status ∈ {approved, auto_approved}`
+  AND `latestExecutionStatus !== "executed"` — admin/director only on
+  the API; the button is a UX affordance, not an authorization
+  mechanism.
+- TypeScript types `ApprovalExecutionLog`, `ApprovalExecutionStatus`,
+  `ExecuteApprovalPayload`, `ExecuteApprovalResponse`.
+- `api.executeApprovalRequest(id, payload?)` with deterministic mock
+  fallback.
 - No business logic in React.
 
-**What Phase 4D will NOT do:**
+**What Phase 4D explicitly did NOT do:**
 
-- Will not replace the existing service layer.
-- Will not introduce a new ORM-side execution path. Every write still
-  flows through `apps/<app>/services.py`.
-- Will not add automation that turns approval queues into background
-  drainers. Execution remains an explicit operator action.
+- Did not replace the existing service layer. Every write still flows
+  through `apps/<app>/services.py`.
+- Did not introduce automation that turns approval queues into
+  background drainers. Execution stays an explicit operator action.
+- Did not wire discount / sandbox-disable / ad-budget / refund /
+  WhatsApp / production live-mode-switch handlers. Those stay
+  intentionally unmapped until the next phase.
 
-This plan is doc-only at the time of writing. The Phase 4D PR will
-implement it incrementally, action-by-action, with a dedicated test
-file covering each newly-allowed action plus the no-op for unmapped
-actions.
+**39 new pytest tests** (`tests/test_phase4d.py`) cover idempotency,
+non-approved status refusals (pending / rejected / blocked / escalated /
+expired all → 409), CAIO requested_by_agent + metadata refusals,
+advance_499 happy path with amount = ₹499, advance_499 ignoring
+tampered amount, advance_499 missing orderId, custom_amount happy path,
+custom_amount pending → 409, custom_amount zero / negative / missing
+amount, prompt activation happy path + idempotent on already-active +
+Claim Vault preserved, 4 admin-eligible unmapped actions → skipped,
+2 director_override unmapped actions → skipped, audit emission on
+each path, full endpoint role gating, 404 / 409 / alreadyExecuted
+responses, director_override blocking admin at execute, and
+`latestExecutionStatus` surfacing in the approval list response.
 
 ### ✅ Phase 4B — Reward / Penalty Engine wiring (DONE)
 

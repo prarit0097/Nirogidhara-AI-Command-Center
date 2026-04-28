@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C done):** **15 Django apps** scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D) + product catalog read/write + approval matrix read endpoint (3E) + reward-penalty events / summary / sweep endpoints (4B) + approval list / approve / reject / evaluate / agent-run-request-approval endpoints (4C)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + WhatsApp sales/support design scaffold + Phase 4B reward/penalty engine (AI agents only, CEO AI net accountability) + Rewards page now shows agent-wise leaderboard and order-wise scoring events + Phase 4C approval-matrix middleware enforcement (`enforce_or_queue` + ApprovalRequest table + AgentRun → approval bridge + Governance page approval queue with Approve / Reject)**, seed command, frontend wired with **automatic mock fallback** (19 pages). **275 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 4+):** Phase 4D — Approved Action Execution Layer (turn approved `ApprovalRequest` rows into the underlying business write through a tested, allow-listed service path; **no autonomous AI execution, no ad-budget / refund / live-WhatsApp execution in 4D**); Phase 4A — real-time WebSockets; live WhatsApp sender; learning loop pipeline; multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C + 4D done):** **15 Django apps** scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D) + product catalog read/write + approval matrix read endpoint (3E) + reward-penalty events / summary / sweep endpoints (4B) + approval list / approve / reject / evaluate / agent-run-request-approval endpoints (4C) + approval execute endpoint with allow-listed registry (4D)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + WhatsApp sales/support design scaffold + Phase 4B reward/penalty engine (AI agents only, CEO AI net accountability) + Rewards page now shows agent-wise leaderboard and order-wise scoring events + Phase 4C approval-matrix middleware enforcement (`enforce_or_queue` + ApprovalRequest table + AgentRun → approval bridge + Governance page approval queue with Approve / Reject) + Phase 4D Approved Action Execution Layer (`POST /api/ai/approvals/{id}/execute/`, ApprovalExecutionLog table with one-executed-per-request constraint, allow-listed registry of 3 actions: payment.link.advance_499 + payment.link.custom_amount + ai.prompt_version.activate; everything else returns 400 + ai.approval.execution_skipped audit; CAIO blocked at engine + bridge + execute layer)**, seed command, frontend wired with **automatic mock fallback** (19 pages). **314 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 4+):** Phase 4A — real-time WebSockets; live WhatsApp sender; expanded execution registry (discount, sandbox-disable execution come later, intentionally not in 4D first pass); learning loop pipeline; multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -474,6 +474,48 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
+### ✅ Phase 4D — Approved Action Execution Layer (built this session)
+
+- **New `ApprovalExecutionLog` model** in `apps.ai_governance.models` (separate from `ApprovalDecisionLog` on purpose — decisions log status transitions, executions log execute attempts on top of an already-approved request). Fields: id, approval_request FK, action, status (`executed` / `failed` / `skipped`), executed_by, executed_at, result JSON, error_message, metadata, created_at, updated_at. Partial unique constraint enforces **one `status=executed` row per ApprovalRequest** so re-runs return the prior result without re-invoking the handler. Migration `0006_phase4d_approval_execution_log`.
+- **`apps/ai_governance/approval_execution.py`** — the engine. `execute_approval_request` runs a strict pre-check chain (idempotency → CAIO refusal → role gate → status gate) before reaching the **allow-listed registry**. `mark_execution_success` / `mark_execution_failed` / `mark_execution_skipped` each persist a row + write the matching audit. `ExecutionOutcome` dataclass carries the right `http_status` so the view returns 200 / 400 / 403 / 404 / 409 without re-deriving it.
+- **Phase 4D execution registry (locked initial set)** — exactly **3 actions** are wired to handlers:
+  1. `payment.link.advance_499` → `apps.payments.services.create_payment_link` with the amount **always** resolved to `FIXED_ADVANCE_AMOUNT_INR` (₹499). Tampering with `proposed_payload.amount` is ignored — defense against payload mutation.
+  2. `payment.link.custom_amount` → same service path, but executes only after admin approval and requires `amount > 0`.
+  3. `ai.prompt_version.activate` → `apps.ai_governance.prompt_versions.activate_prompt_version`. Idempotent: if the version is already active, returns `{ alreadyActive: true }` without re-flipping. Claim Vault grounding remains untouched.
+- **Everything else is intentionally unmapped** — `discount.up_to_10`, `discount.11_to_20`, `discount.above_20`, `ai.sandbox.disable`, `ad.budget_change`, `payment.refund`, all `whatsapp.*` actions, all `complaint.*` escalations, `ai.production.live_mode_switch`, etc. Even when an admin / director **approves** these, the execute endpoint returns HTTP 400, persists `status=skipped`, and writes an `ai.approval.execution_skipped` audit row. The registry is an allow-list, not a guess-list.
+- **Pre-checks (defense in depth)** — execute will refuse before touching the registry when:
+  - Already executed → 200 + prior result, no handler call.
+  - `requested_by_agent == "caio"` → 403 + failed log + audit.
+  - `metadata.actor_agent == "caio"` → 403 + failed log + audit.
+  - Caller is not admin / director → 403.
+  - Caller is admin while policy mode is `director_override` → 403.
+  - ApprovalRequest status not in `{approved, auto_approved}` → 409.
+- **New endpoint** `POST /api/ai/approvals/{id}/execute/`:
+  - Anonymous → 401, viewer / operations → 403.
+  - Admin / director → allowed for normal modes; director-only on `director_override`.
+  - Body: `{ payloadOverride?, note? }`. Caller overrides win over `proposed_payload` for that one execute call (the stored payload itself is not mutated).
+  - Response: `{ approvalRequestId, action, executionStatus, executedAt, executedBy, result, errorMessage, message, alreadyExecuted }`.
+- **3 new audit kinds** — `ai.approval.executed`, `ai.approval.execution_failed`, `ai.approval.execution_skipped`. Every attempt — success, failure, or skipped — writes both an `ApprovalExecutionLog` row and a Master Event Ledger audit row.
+- **`ApprovalRequestSerializer` extended** with `executionLogs[]`, `latestExecutionStatus`, `latestExecutionAt`, `latestExecutionResult`, `latestExecutionError` so the operator UI sees the latest outcome without an extra round-trip. New `ApprovalExecutionLogSerializer` for the nested rows.
+- **Frontend Governance page enhanced** — new "Execution" column in the Approval queue table showing the latest execution status pill (executed / failed / skipped) + relative time + error/skip reason. An **Execute** button appears for rows whose `status ∈ {approved, auto_approved}` AND `latestExecutionStatus !== "executed"` (idempotency baked into the UI). Pending / rejected / blocked / escalated / expired / already-executed rows do not show the Execute button. Backend remains the final permission enforcer — the UI just hides the affordance to keep the operator path clean.
+- **Frontend types + api.ts** — `ApprovalExecutionLog`, `ApprovalExecutionStatus`, `ExecuteApprovalPayload`, `ExecuteApprovalResponse`. New `api.executeApprovalRequest(id, payload?)` with deterministic mock fallback so dev never crashes when backend is offline.
+- **39 new pytest tests** (`tests/test_phase4d.py`) covering: model creation + idempotency constraint, already-executed returns prior result without rerun, every non-approved status → 409, CAIO requested_by_agent → 403, CAIO actor in metadata → 403, advance_499 happy path with `amount=499`, advance_499 ignores tampered amount in payload, advance_499 missing orderId → failed, custom_amount happy path with `amount=1500`, custom_amount pending → 409, custom_amount zero/negative → failed, custom_amount missing amount → failed, prompt_version.activate happy path, prompt_version.activate idempotent on already-active, prompt activation does not drop Claim Vault rows, 4 unmapped admin-eligible actions → skipped, 2 unmapped director_override actions → skipped (with director user), audit kinds emitted on each path, full endpoint role gating (anonymous / viewer / operations all blocked, admin allowed, director allowed), 404 on missing request, 409 on pending, already-executed endpoint returns `alreadyExecuted: true`, director_override blocks admin at the execute layer, ApprovalRequestSerializer surfaces `latestExecutionStatus`.
+
+**Locked Phase 4D decisions (Prarit, Apr 2026):**
+1. Initial executable registry has **only 3 actions**: payment.link.advance_499, payment.link.custom_amount, ai.prompt_version.activate.
+2. **Discount execution + sandbox-disable execution are NOT in the first 4D pass**. They stay approval-only.
+3. **No ad-budget changes**, **no refunds**, **no live WhatsApp** executes from Phase 4D.
+4. Backend remains the final permission and policy enforcement layer — the frontend Execute button is a UX affordance, not an authorization mechanism.
+5. CAIO can **never** execute. Refused at engine + AgentRun bridge + Phase 4D execute layer.
+6. Unmapped approved actions return HTTP 400 + `ai.approval.execution_skipped` audit. The registry is an explicit allow-list.
+
+**Compliance hard stop preserved (Master Blueprint §26):** None of the 3 in-scope handlers generate medical / claim text, so they don't trigger Claim Vault enforcement at the execute layer; the existing AgentRun-layer Claim Vault grounding remains the source of truth for prompt-bound actions. CAIO never executes (triple-guarded). The execute endpoint never silently runs complex business writes — every action is allow-listed by name. Phase 4A WebSockets and live WhatsApp sender remain pending.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **314 passed** (275 + 39 phase4d) |
+| `python manage.py check` | 0 issues |
+
 ### ✅ Phase 4C — Approval Matrix Middleware enforcement (built this session)
 
 - **Two new models in `apps.ai_governance`** — `ApprovalRequest` (one row per gated business action: id, action, mode, approver, status, requested_by user / agent, target app/model/id, proposed_payload JSON, policy_snapshot JSON, reason, decision_note, decided_by, decided_at, expires_at, created_at, updated_at, metadata) and `ApprovalDecisionLog` (one row per status transition: old_status → new_status with note + decided_by + metadata). Migration `0005_phase4c_approval_matrix`.
@@ -753,7 +795,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 275 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 14 phase3d + 29 phase3e + 25 phase4b + 31 phase4c)
+cd backend && python -m pytest -q   # 314 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 14 phase3d + 29 phase3e + 25 phase4b + 31 phase4c + 39 phase4d)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -860,8 +902,8 @@ Product Catalog admin (`apps.catalog`) + discount policy (10/20% bands) + ₹499
 ### ✅ Phase 4C — Approval Matrix Middleware enforcement (DONE)
 `ApprovalRequest` + `ApprovalDecisionLog` models + `apps.ai_governance.approval_engine` (`evaluate_action` / `enforce_or_queue` / `approve_request` / `reject_request` / AgentRun bridge) + 5 new admin/director endpoints + live enforcement on payment-link custom-amount, prompt activation, and sandbox-disable + Governance page approval queue with Approve / Reject buttons, 31 new tests. See §8.
 
-### Phase 4D — Approved Action Execution Layer (NEXT)
-Adds `POST /api/ai/approvals/{id}/execute/` plus an `execution_status` column (or a dedicated `ApprovalExecutionLog`) on `ApprovalRequest` so a director-approved action actually performs its write through an **allow-listed, tested service path**. Hard stops stay locked: CAIO never executes, Claim Vault stays mandatory, no autonomous AI execution, **no ad-budget changes**, **no refunds**, **no live WhatsApp**, no silent complex writes (unmapped actions return HTTP 400 + `ai.approval.execution_skipped` audit), idempotent re-execute, director-only override on `director_override` actions. Detailed plan: `docs/FUTURE_BACKEND_PLAN.md` Phase 4D section.
+### ✅ Phase 4D — Approved Action Execution Layer (DONE)
+`ApprovalExecutionLog` model + `apps/ai_governance/approval_execution.py` with allow-listed registry of 3 handlers (payment.link.advance_499, payment.link.custom_amount, ai.prompt_version.activate) + `POST /api/ai/approvals/{id}/execute/` endpoint + `executionLogs` / `latestExecutionStatus` on the `ApprovalRequestSerializer` + Governance page Execute button + 39 new tests. CAIO blocked at engine + bridge + execute layer; unmapped actions return 400 + `ai.approval.execution_skipped`. See §8.
 
 ### Phase 4A — Real-time WebSockets (PENDING)
 - Django Channels for live AuditEvent push to subscribed dashboards.
@@ -1011,4 +1053,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 4C handoff sync + Phase 4D plan (Approved Action Execution Layer: `POST /api/ai/approvals/{id}/execute/` over an allow-listed registry; CAIO blocked, Claim Vault enforced, no ad-budget / refund / live-WhatsApp execution, no autonomous AI execution)._
+_End of `nd.md`. Last updated after Phase 4D Approved Action Execution Layer (`POST /api/ai/approvals/{id}/execute/`, `ApprovalExecutionLog` table with one-executed-per-request constraint, allow-listed registry of 3 handlers, Governance page Execute button, CAIO blocked at engine + bridge + execute layer, unmapped actions return 400 + skipped audit)._

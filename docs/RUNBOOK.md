@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 275 tests (Phase 1 → 4C)
+python -m pytest -q                     # 314 tests (Phase 1 → 4D)
 
 # Frontend
 cd ../frontend
@@ -302,18 +302,50 @@ The Governance page at `/ai-governance` exposes the same operations as
 buttons (admin/director only on the API; the frontend just renders).
 
 **Important**: `approve_request` flips status to `approved` and writes
-audits. It does **not** silently execute the underlying business write;
-that still flows through its existing tested service path.
+audits. It does **not** silently execute the underlying business write.
 
-**Phase 4D (planned, not yet implemented):** an Approved Action
-Execution Layer will add `POST /api/ai/approvals/{id}/execute/` over an
-allow-listed registry of tested service functions. Until 4D ships, an
-approved `ApprovalRequest` is a green-light signal — the operator still
-triggers the existing service path manually. Locked Phase 4D hard
-stops: CAIO never executes, Claim Vault stays mandatory, no autonomous
-AI execution, no ad-budget changes, no refunds, no live WhatsApp, no
-silent complex writes, idempotent re-execute, director-only override on
-`director_override` actions. Plan: `docs/FUTURE_BACKEND_PLAN.md`.
+## Phase 4D — Approved Action Execution Layer
+
+`POST /api/ai/approvals/{id}/execute/` is now wired and runs an
+already-approved `ApprovalRequest` through a strict allow-listed
+registry. Initial registry (everything else returns HTTP 400 +
+`ai.approval.execution_skipped` audit):
+
+1. `payment.link.advance_499` — calls
+   `apps.payments.services.create_payment_link` with the amount
+   resolved to `FIXED_ADVANCE_AMOUNT_INR` (₹499). Tampered payload
+   amounts are ignored.
+2. `payment.link.custom_amount` — same service, requires `amount > 0`.
+3. `ai.prompt_version.activate` — calls
+   `apps.ai_governance.prompt_versions.activate_prompt_version`.
+   Idempotent on already-active.
+
+Pre-checks (defense in depth, fail closed in this order):
+
+- Already executed → 200 + prior result, no handler call.
+- `requested_by_agent == "caio"` or metadata.actor_agent == "caio" → 403.
+- Caller is not admin / director → 403.
+- Caller is admin while `policy.mode == director_override` → 403.
+- `ApprovalRequest.status` not `approved` / `auto_approved` → 409.
+
+Curl example (admin or director JWT):
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"note":"director-approved"}' \
+  "http://localhost:8000/api/ai/approvals/APR-90004/execute/" | jq .
+```
+
+The Governance page at `/ai-governance` now shows an Execution column
++ Execute button on approved rows. Pending / rejected / blocked /
+escalated / expired / already-executed rows do not show the button.
+
+Locked Phase 4D hard stops (do NOT relax without explicit Prarit
+sign-off + matching tests): no autonomous AI execution, no ad-budget
+changes, no refunds, no live WhatsApp, no discount execution in this
+first pass, no sandbox-disable execution in this first pass, idempotent
+re-execute, director-only override on `director_override` actions.
 
 ## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
 

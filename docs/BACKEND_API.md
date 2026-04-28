@@ -270,10 +270,11 @@ The Phase 3E approval matrix is now actively **enforced**. Risky write paths cal
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/ai/approvals/` | List approval requests. **Admin/director only.** Query params: `status` (`pending`/`approved`/`rejected`/`auto_approved`/`blocked`/`escalated`/`expired`), `action` (matrix key exact match), `limit` (default 200, max 1000). |
-| GET | `/api/ai/approvals/{id}/` | Single request with `decisionLogs[]`. Admin/director only. |
+| GET | `/api/ai/approvals/` | List approval requests. **Admin/director only.** Query params: `status` (`pending`/`approved`/`rejected`/`auto_approved`/`blocked`/`escalated`/`expired`), `action` (matrix key exact match), `limit` (default 200, max 1000). Each row carries `latestExecutionStatus`, `latestExecutionAt`, `latestExecutionResult`, `latestExecutionError`, `executionLogs[]` (Phase 4D). |
+| GET | `/api/ai/approvals/{id}/` | Single request with `decisionLogs[]` + `executionLogs[]`. Admin/director only. |
 | POST | `/api/ai/approvals/{id}/approve/` | Body `{ note? }`. Admin/director. **Director-only when `policy.mode == director_override`** — admin → 403. Status flips to `approved`; the underlying business write still flows through its own service path. |
 | POST | `/api/ai/approvals/{id}/reject/` | Body `{ note? }`. Admin/director only. Status flips to `rejected`. |
+| POST | `/api/ai/approvals/{id}/execute/` | **Phase 4D.** Body `{ payloadOverride?, note? }`. Admin/director only. **Director-only when `policy.mode == director_override`**. CAIO refused at engine + bridge + execute layer. Pre-checks: idempotency (returns prior result if already executed) → CAIO refusal → role gate → status gate (must be `approved` or `auto_approved`; else 409). Routes through the **allow-listed Phase 4D registry** (`payment.link.advance_499`, `payment.link.custom_amount`, `ai.prompt_version.activate`); every other action returns HTTP 400 + `ai.approval.execution_skipped` audit. Response: `{ approvalRequestId, action, executionStatus, executedAt, executedBy, result, errorMessage, message, alreadyExecuted }`. |
 | POST | `/api/ai/approvals/evaluate/` | Body `{ action, actorRole?, actorAgent?, payload?, target?, persist?, reason? }`. Admin/director only. With `persist=false` (default) returns the pure evaluation; with `persist=true`, runs `enforce_or_queue` and returns the persisted `approvalRequestId`. Response: `{ action, mode, approver, status, allowed, requiresHuman, reason, policy, approvalRequestId, notes }`. |
 | POST | `/api/ai/agent-runs/{id}/request-approval/` | Body `{ reason? }`. Admin/director only. Promotes a successful, non-CAIO AgentRun whose `output_payload` contains `action` (matrix key) and `proposedPayload` into a pending ApprovalRequest. CAIO → 403; failed / skipped / unknown-action runs → 400. |
 
@@ -286,6 +287,16 @@ The Phase 3E approval matrix is now actively **enforced**. Risky write paths cal
 Audit kinds (Phase 4C):
 - `ai.approval.requested`, `ai.approval.auto_approved`, `ai.approval.approved`, `ai.approval.rejected`, `ai.approval.blocked`, `ai.approval.escalated`, `ai.approval.expired`, `ai.agent_run.approval_requested`.
 
+Audit kinds (Phase 4D):
+- `ai.approval.executed`, `ai.approval.execution_failed`, `ai.approval.execution_skipped`. Every execute attempt — success, failure, or skipped (unmapped action / pre-check refused) — writes both an `ApprovalExecutionLog` row and a Master Event Ledger audit row.
+
+**Phase 4D execution registry (locked initial set):**
+1. `payment.link.advance_499` → `apps.payments.services.create_payment_link` (amount **always** resolved to `FIXED_ADVANCE_AMOUNT_INR`; tampered payload amounts are ignored).
+2. `payment.link.custom_amount` → same service path; requires `amount > 0`.
+3. `ai.prompt_version.activate` → `apps.ai_governance.prompt_versions.activate_prompt_version`. Idempotent on already-active.
+
+Everything else (discount.*, ai.sandbox.disable, ad.budget_change, payment.refund, whatsapp.*, complaint.*, ai.production.live_mode_switch, etc.) is intentionally unmapped in this first 4D pass and returns HTTP 400 + `ai.approval.execution_skipped` audit.
+
 Live enforcement is wired into 3 high-value paths today:
 - `POST /api/payments/links/` — `payment.link.advance_499` (auto, type=Advance + amount in {0, 499}) vs `payment.link.custom_amount` (admin approval).
 - `POST /api/ai/prompt-versions/{id}/activate/` — logs `ai.prompt_version.activate` as auto-approved (admin/director already cleared the role gate).
@@ -293,7 +304,7 @@ Live enforcement is wired into 3 high-value paths today:
 
 Other normal workflows (lead create / call trigger / ₹499 advance / Delhivery dispatch / RTO rescue / 0–10% discount) stay auto per matrix.
 
-**Phase 4D (planned, not implemented yet — `docs/FUTURE_BACKEND_PLAN.md`):** an Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` will turn an approved `ApprovalRequest` into the underlying business write — but only over an allow-listed registry of tested service-layer functions. Hard stops locked: CAIO never executes, Claim Vault stays mandatory, no autonomous AI execution, **no ad-budget changes**, **no refunds**, **no live WhatsApp**, idempotent re-execute, director-only override on `director_override` actions; unmapped actions → HTTP 400 + `ai.approval.execution_skipped` audit.
+**Phase 4D shipped:** the Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` is now live with the locked 3-action registry. Future expansion (discount + sandbox-disable + ad-budget execution, etc.) requires explicit Prarit sign-off + matching tests. CAIO + Claim Vault + idempotency hard stops remain in place.
 
 ### Reward / Penalty Engine (Phase 4B)
 

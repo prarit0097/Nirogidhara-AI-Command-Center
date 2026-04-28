@@ -11,6 +11,7 @@ from .views import (
     AgentRuntimeStatusView,
     ApprovalApproveView,
     ApprovalEvaluateView,
+    ApprovalExecuteView,
     ApprovalMatrixView,
     ApprovalRejectView,
     ApprovalRequestViewSet,
@@ -122,6 +123,12 @@ urlpatterns = [
         "approvals/<str:pk>/reject/",
         ApprovalRejectView.as_view(),
         name="ai-approval-reject",
+    ),
+    # Phase 4D — Approved Action Execution Layer.
+    path(
+        "approvals/<str:pk>/execute/",
+        ApprovalExecuteView.as_view(),
+        name="ai-approval-execute",
     ),
     path(
         "agent-runs/<str:pk>/request-approval/",

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from typing import Any
+
 from rest_framework import serializers
 
 from .models import (
     AgentBudget,
     AgentRun,
     ApprovalDecisionLog,
+    ApprovalExecutionLog,
     ApprovalRequest,
     CaioAudit,
     CeoBriefing,
@@ -217,6 +220,35 @@ class SandboxPatchSerializer(serializers.Serializer):
 # ----- Phase 4C — Approval matrix middleware -----
 
 
+class ApprovalExecutionLogSerializer(serializers.ModelSerializer):
+    approvalRequestId = serializers.CharField(
+        source="approval_request_id", read_only=True
+    )
+    executedBy = serializers.CharField(
+        source="executed_by.username", default="", read_only=True
+    )
+    executedAt = serializers.DateTimeField(source="executed_at", read_only=True)
+    errorMessage = serializers.CharField(source="error_message", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = ApprovalExecutionLog
+        fields = (
+            "id",
+            "approvalRequestId",
+            "action",
+            "status",
+            "executedBy",
+            "executedAt",
+            "result",
+            "errorMessage",
+            "metadata",
+            "createdAt",
+            "updatedAt",
+        )
+
+
 class ApprovalDecisionLogSerializer(serializers.ModelSerializer):
     oldStatus = serializers.CharField(source="old_status", read_only=True)
     newStatus = serializers.CharField(source="new_status", read_only=True)
@@ -253,6 +285,33 @@ class ApprovalRequestSerializer(serializers.ModelSerializer):
     decisionLogs = ApprovalDecisionLogSerializer(
         source="decision_logs", many=True, read_only=True
     )
+    # Phase 4D — surface latest-execution snapshot for the queue UI.
+    executionLogs = ApprovalExecutionLogSerializer(
+        source="execution_logs", many=True, read_only=True
+    )
+    latestExecutionStatus = serializers.SerializerMethodField()
+    latestExecutionAt = serializers.SerializerMethodField()
+    latestExecutionResult = serializers.SerializerMethodField()
+    latestExecutionError = serializers.SerializerMethodField()
+
+    def _latest_log(self, obj: ApprovalRequest) -> ApprovalExecutionLog | None:
+        return obj.execution_logs.order_by("-created_at").first()
+
+    def get_latestExecutionStatus(self, obj: ApprovalRequest) -> str | None:
+        log = self._latest_log(obj)
+        return log.status if log else None
+
+    def get_latestExecutionAt(self, obj: ApprovalRequest) -> str | None:
+        log = self._latest_log(obj)
+        return log.executed_at.isoformat() if log else None
+
+    def get_latestExecutionResult(self, obj: ApprovalRequest) -> dict[str, Any]:
+        log = self._latest_log(obj)
+        return dict(log.result or {}) if log else {}
+
+    def get_latestExecutionError(self, obj: ApprovalRequest) -> str:
+        log = self._latest_log(obj)
+        return log.error_message if log else ""
 
     class Meta:
         model = ApprovalRequest
@@ -278,6 +337,11 @@ class ApprovalRequestSerializer(serializers.ModelSerializer):
             "updatedAt",
             "metadata",
             "decisionLogs",
+            "executionLogs",
+            "latestExecutionStatus",
+            "latestExecutionAt",
+            "latestExecutionResult",
+            "latestExecutionError",
         )
 
 
@@ -297,3 +361,12 @@ class ApprovalEvaluateRequestSerializer(serializers.Serializer):
 
 class AgentRunApprovalRequestSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class ApprovalExecutePayloadSerializer(serializers.Serializer):
+    """Inbound payload for ``POST /api/ai/approvals/{id}/execute/``."""
+
+    payloadOverride = serializers.JSONField(required=False, default=dict)
+    note = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=2000
+    )

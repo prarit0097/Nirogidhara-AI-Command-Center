@@ -77,6 +77,8 @@ import type {
   ApprovalEvaluatePayload,
   ApprovalEvaluationResult,
   ApprovalRequest,
+  ExecuteApprovalPayload,
+  ExecuteApprovalResponse,
   RescueAttempt,
   RescueAttemptCreatePayload,
   RescueAttemptUpdatePayload,
@@ -310,6 +312,14 @@ export const api = {
       "POST",
       { reason },
       () => optimisticAgentRunApproval(agentRunId, reason),
+    ),
+  // Phase 4D — Approved Action Execution Layer.
+  executeApprovalRequest: (id: string, payload: ExecuteApprovalPayload = {}) =>
+    safeMutate<ExecuteApprovalResponse>(
+      `/ai/approvals/${id}/execute/`,
+      "POST",
+      payload,
+      () => optimisticExecuteApprovalResponse(id),
     ),
   getClaimVault: () => safeFetch<Claim[]>("/compliance/claims/", () => M.CLAIM_VAULT as Claim[]),
   getHumanCallLearningItems: () =>
@@ -818,6 +828,20 @@ function optimisticAgentRunApproval(agentRunId: string, reason: string): Approva
     updatedAt: new Date().toISOString(),
     metadata: { agent_run_id: agentRunId, offline: true },
     decisionLogs: [],
+  };
+}
+
+function optimisticExecuteApprovalResponse(id: string): ExecuteApprovalResponse {
+  return {
+    approvalRequestId: id,
+    action: "",
+    executionStatus: "skipped",
+    executedAt: null,
+    executedBy: "",
+    result: {},
+    errorMessage: "Offline preview — backend unreachable.",
+    message: "Offline preview — backend unreachable.",
+    alreadyExecuted: false,
   };
 }
 

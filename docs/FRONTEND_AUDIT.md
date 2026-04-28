@@ -7,7 +7,7 @@ direction.
 
 Item | Status
 --- | ---
-All 19 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page (no new pages added in 3E — backend-only phase). Phase 4B enhanced the existing Rewards page with agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button. **Phase 4C** appended an Approval queue table on the Governance page (Action / Mode / Approver / Target / Status / Proposed payload / Approve + Reject controls + decision-note input).
+All 19 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page (no new pages added in 3E — backend-only phase). Phase 4B enhanced the existing Rewards page with agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button. **Phase 4C** appended an Approval queue table on the Governance page (Action / Mode / Approver / Target / Status / Proposed payload / Approve + Reject controls + decision-note input). **Phase 4D** added an Execution column + Execute button on approved rows (admin/director only on the API; backend remains the final permission enforcer).
 Pages go through `src/services/api.ts` only | done — no page imports `mockData.ts` directly
 TypeScript shared types in `src/types/domain.ts` | done
 Sidebar collapse layout | done — shared collapsed state

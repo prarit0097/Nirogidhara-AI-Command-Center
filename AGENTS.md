@@ -123,7 +123,9 @@ backend/apps/rewards/management/commands/calculate_reward_penalties.py ← Phase
 backend/apps/rewards/views.py ← Phase 4B endpoints: /api/rewards/{events,summary,sweep}/
 backend/apps/ai_governance/approval_engine.py ← Phase 4C middleware: evaluate_action / enforce_or_queue / approve_request / reject_request / request_approval_for_agent_run
 backend/apps/ai_governance/models.py ← Phase 4C: ApprovalRequest + ApprovalDecisionLog
-backend/apps/ai_governance/views.py ← Phase 4C endpoints: /api/ai/approvals/{,id/,id/approve/,id/reject/,evaluate/} + /api/ai/agent-runs/{id}/request-approval/
+backend/apps/ai_governance/views.py ← Phase 4C/4D endpoints: /api/ai/approvals/{,id/,id/approve/,id/reject/,id/execute/,evaluate/} + /api/ai/agent-runs/{id}/request-approval/
+backend/apps/ai_governance/approval_execution.py ← Phase 4D execution engine + 3-action allow-listed registry (payment.link.advance_499, payment.link.custom_amount, ai.prompt_version.activate)
+backend/apps/ai_governance/models.py ← Phase 4D: ApprovalExecutionLog (status executed/failed/skipped, partial unique constraint enforcing one executed per ApprovalRequest)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -183,7 +185,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 275 tests today
+python -m pytest -q                 # 314 tests today
 
 # Frontend
 cd frontend
@@ -226,7 +228,7 @@ cd frontend && npm run lint && npm test && npm run build
 - Don't bypass the Phase 3E policies: `apps/orders/discounts.py` is the discount source of truth (10% auto / 20% approval / above-20 director-override), `apps/payments/policies.py` defines the ₹499 fixed advance, `apps/rewards/scoring.py` is the reward/penalty formula (do not invent missing data), and `apps/ai_governance/approval_matrix.py` is the action → approver table. The Phase 4C middleware will enforce the matrix; until then, keep the policy modules as the single source.
 - Don't move the reward/penalty formula into the frontend. Phase 4B engine (`apps/rewards/engine.py`) wires the Phase 3E pure formula into per-order, per-AI-agent `RewardPenaltyEvent` rows. Frontend renders API data only — no scoring math in React. CEO AI **always** receives a net accountability event for every delivered (reward) and every RTO / cancelled (penalty) order. CAIO is excluded from business reward / penalty.
 - Don't duplicate approval rules in views. Phase 4C middleware (`apps/ai_governance/approval_engine.py`) is the single source. Risky write paths call `enforce_or_queue` and stop when `result.allowed` is False. `approve_request` flips status to `approved` and writes audits — it does **not** silently execute the underlying business write; that still flows through its existing tested service path. CAIO can never request an executable approval (refused at AgentRun bridge AND at the matrix evaluation step).
-- Phase 4D (planned, not yet implemented) will add `POST /api/ai/approvals/{id}/execute/` to actually perform the underlying write — but only over an allow-listed registry of tested service-layer functions. Until that ships, an approved `ApprovalRequest` is a signal, not an execution: the operator still triggers the existing service path manually. Don't preempt the registry; CAIO / ad-budget / refund / live-WhatsApp execution stay locked out of 4D by design. Full plan in `docs/FUTURE_BACKEND_PLAN.md`.
+- Phase 4D ships an Approved Action Execution Layer at `POST /api/ai/approvals/{id}/execute/` over a strict allow-listed registry. The first pass wires only 3 actions: `payment.link.advance_499`, `payment.link.custom_amount`, `ai.prompt_version.activate`. Every other approved action — discount, sandbox-disable, ad-budget, refund, WhatsApp, escalations, production live-mode switch — returns HTTP 400 + `ai.approval.execution_skipped` audit. Don't expand the registry without explicit Prarit sign-off + matching tests. CAIO blocked at engine + AgentRun bridge + execute layer. Idempotent: a successful execution writes one log; re-running the endpoint returns the prior result without re-invoking the handler.
 - Don't push to `main` without running tests + build + lint locally first.
 - Don't `git push --force`. Don't skip hooks. Don't amend pushed commits.
 

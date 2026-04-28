@@ -324,6 +324,73 @@ class ApprovalRequest(models.Model):
         return f"{self.id} · {self.action} · {self.status}"
 
 
+class ApprovalExecutionLog(models.Model):
+    """Phase 4D — one row per execution attempt on an :class:`ApprovalRequest`.
+
+    Phase 4D wires `POST /api/ai/approvals/{id}/execute/` to a small
+    allow-listed registry of tested service-layer handlers. Every
+    attempt — success, failure, or skipped (e.g. unmapped action) —
+    persists a row here so the governance UI can show the operator what
+    actually happened.
+
+    Idempotency: the engine refuses to re-run a handler when a
+    ``status=executed`` row already exists for the same approval — it
+    returns the prior result instead. The DB enforces this via a partial
+    unique constraint on ``approval_request`` filtered to
+    ``status=executed``.
+
+    This model is **separate** from :class:`ApprovalDecisionLog` on
+    purpose:
+    - ``ApprovalDecisionLog`` records approval status transitions
+      (``pending`` → ``approved`` / ``rejected`` / etc.).
+    - ``ApprovalExecutionLog`` records execution attempts on top of an
+      already-approved request.
+    """
+
+    class Status(models.TextChoices):
+        EXECUTED = "executed", "executed"
+        FAILED = "failed", "failed"
+        SKIPPED = "skipped", "skipped"
+
+    approval_request = models.ForeignKey(
+        "ai_governance.ApprovalRequest",
+        on_delete=models.CASCADE,
+        related_name="execution_logs",
+    )
+    action = models.CharField(max_length=120)
+    status = models.CharField(max_length=12, choices=Status.choices)
+    executed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_executions",
+    )
+    executed_at = models.DateTimeField()
+    result = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("approval_request", "status")),
+            models.Index(fields=("action",)),
+        )
+        constraints = (
+            models.UniqueConstraint(
+                fields=("approval_request",),
+                condition=models.Q(status="executed"),
+                name="uniq_approval_executed_log_per_request",
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.approval_request_id} · {self.action} · {self.status}"
+
+
 class ApprovalDecisionLog(models.Model):
     """Audit-style log for every status transition on an :class:`ApprovalRequest`.
 

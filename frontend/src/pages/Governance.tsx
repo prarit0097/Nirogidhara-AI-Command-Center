@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Gauge,
   Play,
+  PlayCircle,
   ShieldCheck,
   ShieldOff,
   RotateCcw,
@@ -23,6 +24,7 @@ import type {
   AgentBudget,
   AgentBudgetWritePayload,
   AgentName,
+  ApprovalExecutionStatus,
   ApprovalRequest,
   ApprovalRequestStatus,
   PromptVersion,
@@ -66,6 +68,24 @@ function pillToneForApproval(status: ApprovalRequestStatus) {
       return "info";
   }
 }
+
+function pillToneForExecution(status: ApprovalExecutionStatus | null | undefined) {
+  switch (status) {
+    case "executed":
+      return "success";
+    case "failed":
+      return "danger";
+    case "skipped":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
+const EXECUTABLE_APPROVAL_STATUSES = new Set<ApprovalRequestStatus>([
+  "approved",
+  "auto_approved",
+]);
 
 function pillToneForStatus(status: PromptVersion["status"]) {
   switch (status) {
@@ -133,6 +153,30 @@ export default function Governance() {
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Reject failed";
+      toast.error(message);
+    } finally {
+      setDecisionBusy(null);
+    }
+  };
+
+  const onExecute = async (id: string) => {
+    setDecisionBusy(id);
+    try {
+      const response = await api.executeApprovalRequest(id, {
+        note: decisionNotes[id] ?? "",
+      });
+      if (response.alreadyExecuted) {
+        toast.info("Already executed; showing prior result.");
+      } else if (response.executionStatus === "executed") {
+        toast.success("Executed");
+      } else if (response.executionStatus === "skipped") {
+        toast.warning(response.message || "Skipped — action not in registry");
+      } else {
+        toast.error(response.errorMessage || "Execution failed");
+      }
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Execute failed";
       toast.error(message);
     } finally {
       setDecisionBusy(null);
@@ -354,11 +398,13 @@ export default function Governance() {
         <div className="px-6 py-3 text-xs text-muted-foreground border-b border-border bg-muted/20">
           Approve / reject business actions gated by the matrix. Director-only
           actions block admin approvers. Approval here flips status to
-          <code className="mx-1">approved</code>; the underlying business write
-          still flows through its existing service path.
+          <code className="mx-1">approved</code>. Phase 4D — once approved, an
+          allow-listed action can be <strong>executed</strong> through the
+          tested service path; unmapped actions return 400 +
+          <code className="mx-1">execution_skipped</code>.
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[920px]">
+          <table className="w-full text-sm min-w-[1080px]">
             <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left font-medium px-6 py-3">Action</th>
@@ -366,6 +412,7 @@ export default function Governance() {
                 <th className="text-left font-medium py-3">Approver</th>
                 <th className="text-left font-medium py-3">Target</th>
                 <th className="text-left font-medium py-3">Status</th>
+                <th className="text-left font-medium py-3">Execution</th>
                 <th className="text-left font-medium py-3">Proposed payload</th>
                 <th className="text-right font-medium px-6 py-3">Decision</th>
               </tr>
@@ -374,7 +421,7 @@ export default function Governance() {
               {approvals.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-6 py-6 text-center text-muted-foreground text-sm"
                   >
                     No approval requests yet.
@@ -384,6 +431,9 @@ export default function Governance() {
               {approvals.map((req) => {
                 const pending =
                   req.status === "pending" || req.status === "escalated";
+                const executable =
+                  EXECUTABLE_APPROVAL_STATUSES.has(req.status) &&
+                  req.latestExecutionStatus !== "executed";
                 const target =
                   [req.targetApp, req.targetModel, req.targetObjectId]
                     .filter(Boolean)
@@ -423,6 +473,34 @@ export default function Governance() {
                         <div className="text-xs text-muted-foreground mt-1 max-w-[200px]">
                           “{req.decisionNote}”
                         </div>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      {req.latestExecutionStatus ? (
+                        <>
+                          <StatusPill
+                            tone={pillToneForExecution(req.latestExecutionStatus)}
+                          >
+                            {req.latestExecutionStatus}
+                          </StatusPill>
+                          {req.latestExecutionAt && (
+                            <div className="text-[11px] text-muted-foreground mt-1">
+                              {fmtRelative(req.latestExecutionAt)}
+                            </div>
+                          )}
+                          {req.latestExecutionError &&
+                            req.latestExecutionStatus !== "executed" && (
+                              <div className="text-xs text-muted-foreground mt-1 max-w-[200px]">
+                                {req.latestExecutionError}
+                              </div>
+                            )}
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {EXECUTABLE_APPROVAL_STATUSES.has(req.status)
+                            ? "approved · awaiting execute"
+                            : "—"}
+                        </span>
                       )}
                     </td>
                     <td className="py-3 text-xs text-muted-foreground max-w-[260px]">
@@ -465,6 +543,21 @@ export default function Governance() {
                             </Button>
                           </div>
                         </div>
+                      ) : executable ? (
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="text-[11px] text-muted-foreground">
+                            {req.decidedBy ? `by ${req.decidedBy}` : "approved"}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => onExecute(req.id)}
+                            disabled={decisionBusy === req.id}
+                            className="bg-primary text-primary-foreground"
+                          >
+                            <PlayCircle className="h-3.5 w-3.5 mr-1" />
+                            Execute
+                          </Button>
+                        </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">
                           {req.decidedBy || "—"}
@@ -494,7 +587,11 @@ export default function Governance() {
             entries on top of any custom system policy. CAIO remains read-only
             in every state. Budget blocks fail closed and never trigger the
             provider fallback chain. Approval-matrix middleware enforces the
-            policy table for every gated business write.
+            policy table for every gated business write. Phase 4D execution
+            registry currently covers <code>payment.link.advance_499</code>,{" "}
+            <code>payment.link.custom_amount</code>, and{" "}
+            <code>ai.prompt_version.activate</code>; every other approved
+            action returns 400 + <code>execution_skipped</code>.
           </div>
         </div>
       </div>

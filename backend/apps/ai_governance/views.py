@@ -11,7 +11,7 @@ from apps.accounts.permissions import ADMIN_AND_UP, RoleBasedPermission
 from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 
-from . import approval_engine, prompt_versions, sandbox, services
+from . import approval_engine, approval_execution, prompt_versions, sandbox, services
 from .approval_matrix import APPROVAL_MATRIX
 from .budgets import calculate_agent_spend, get_agent_budget
 from .models import (
@@ -30,6 +30,7 @@ from .serializers import (
     AgentRunSerializer,
     ApprovalDecisionPayloadSerializer,
     ApprovalEvaluateRequestSerializer,
+    ApprovalExecutePayloadSerializer,
     ApprovalRequestSerializer,
     CaioAuditSerializer,
     CeoBriefingSerializer,
@@ -704,6 +705,36 @@ class ApprovalEvaluateView(APIView):
                 "notes": list(result.notes),
             }
         )
+
+
+class ApprovalExecuteView(APIView):
+    """Phase 4D — execute an already-approved ApprovalRequest.
+
+    Permission gating:
+    - Anonymous → 401.
+    - Viewer / operations → 403.
+    - Admin / director → allowed for normal modes.
+    - Director-only when ``policy_snapshot.mode == director_override``.
+    - CAIO is always blocked (defense-in-depth — also enforced inside
+      :func:`approval_execution.execute_approval_request`).
+    """
+
+    permission_classes = [_AdminAndUpAlways]
+
+    def post(self, request, pk):
+        payload_ser = ApprovalExecutePayloadSerializer(data=request.data)
+        payload_ser.is_valid(raise_exception=True)
+        try:
+            req = ApprovalRequest.objects.get(pk=pk)
+        except ApprovalRequest.DoesNotExist as exc:
+            raise NotFound(f"ApprovalRequest {pk} not found") from exc
+
+        outcome = approval_execution.execute_approval_request(
+            approval_request=req,
+            user=request.user,
+            payload_override=payload_ser.validated_data.get("payloadOverride") or {},
+        )
+        return Response(outcome.as_dict(), status=outcome.http_status)
 
 
 class AgentRunRequestApprovalView(APIView):

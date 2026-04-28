@@ -462,6 +462,22 @@ export interface ApprovalDecisionLog {
   metadata: Record<string, unknown>;
 }
 
+export type ApprovalExecutionStatus = "executed" | "failed" | "skipped";
+
+export interface ApprovalExecutionLog {
+  id: number;
+  approvalRequestId: string;
+  action: string;
+  status: ApprovalExecutionStatus;
+  executedBy: string;
+  executedAt: string;
+  result: Record<string, unknown>;
+  errorMessage: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ApprovalRequest {
   id: string;
   action: string;
@@ -484,6 +500,29 @@ export interface ApprovalRequest {
   updatedAt: string;
   metadata: Record<string, unknown>;
   decisionLogs: ApprovalDecisionLog[];
+  // Phase 4D — execution status surfaces.
+  executionLogs?: ApprovalExecutionLog[];
+  latestExecutionStatus?: ApprovalExecutionStatus | null;
+  latestExecutionAt?: string | null;
+  latestExecutionResult?: Record<string, unknown>;
+  latestExecutionError?: string;
+}
+
+export interface ExecuteApprovalPayload {
+  payloadOverride?: Record<string, unknown>;
+  note?: string;
+}
+
+export interface ExecuteApprovalResponse {
+  approvalRequestId: string;
+  action: string;
+  executionStatus: ApprovalExecutionStatus;
+  executedAt: string | null;
+  executedBy: string;
+  result: Record<string, unknown>;
+  errorMessage: string;
+  message: string;
+  alreadyExecuted: boolean;
 }
 
 export interface ApprovalEvaluationResult {

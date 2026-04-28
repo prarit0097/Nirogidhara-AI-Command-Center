@@ -77,6 +77,10 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.approval.escalated": "alert-triangle",
     "ai.approval.expired": "timer-off",
     "ai.agent_run.approval_requested": "user-plus",
+    # Phase 4D — Approved Action Execution Layer.
+    "ai.approval.executed": "play-circle",
+    "ai.approval.execution_failed": "alert-octagon",
+    "ai.approval.execution_skipped": "skip-forward",
     # Phase 4B — reward / penalty engine.
     "ai.reward.calculated": "award",
     "ai.penalty.applied": "minus-circle",

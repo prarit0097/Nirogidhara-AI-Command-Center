@@ -9,7 +9,7 @@
 
 Full-stack AI Business Operating System for Nirogidhara Private Limited (Ayurvedic medicine D2C). React 18 + Vite + TS frontend talks to Django 5 + DRF backend. Director: Prarit Sidana — final authority for high-risk decisions. Reference: *Nirogidhara AI Command Center — Master Blueprint v1.0* (PDF in repo).
 
-Status: Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C complete (CRM data layer, write APIs, all four gateway integrations, AgentRun + 7 per-agent runtime services, Celery beat at 09:00 + 18:00 IST, OpenAI → Anthropic fallback, model-wise USD cost tracking, sandbox toggle + versioned prompts with rollback + per-agent USD budgets, Scheduler + Governance frontend pages, Phase 3E business config: catalog admin app + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty deterministic scoring + approval matrix table + WhatsApp design scaffold, Phase 4B reward/penalty engine wiring: AI-agents-only scoring + CEO AI net accountability + /api/rewards/{events,summary,sweep}/ endpoints + Rewards page leaderboard, **Phase 4C approval-matrix middleware enforcement: ApprovalRequest + ApprovalDecisionLog models, apps.ai_governance.approval_engine (evaluate / enforce_or_queue / approve / reject / AgentRun bridge), 5 admin/director endpoints, live enforcement on custom-amount payment links + prompt activation + sandbox-disable, Governance page approval queue with Approve / Reject**). **275 backend tests + 8 frontend tests**, all green. Next: Phase 4D — Approved Action Execution Layer (allow-listed `POST /api/ai/approvals/{id}/execute/`; CAIO blocked, Claim Vault enforced, no ad-budget / refund / live-WhatsApp execution; plan in `docs/FUTURE_BACKEND_PLAN.md`); then Phase 4A WebSockets and live WhatsApp sender.
+Status: Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B + 4C + 4D complete (CRM data layer, write APIs, all four gateway integrations, AgentRun + 7 per-agent runtime services, Celery beat at 09:00 + 18:00 IST, OpenAI → Anthropic fallback, model-wise USD cost tracking, sandbox toggle + versioned prompts with rollback + per-agent USD budgets, Scheduler + Governance frontend pages, Phase 3E business config: catalog admin app + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty deterministic scoring + approval matrix table + WhatsApp design scaffold, Phase 4B reward/penalty engine wiring: AI-agents-only scoring + CEO AI net accountability + /api/rewards/{events,summary,sweep}/ endpoints + Rewards page leaderboard, **Phase 4C approval-matrix middleware enforcement: ApprovalRequest + ApprovalDecisionLog models, apps.ai_governance.approval_engine (evaluate / enforce_or_queue / approve / reject / AgentRun bridge), 5 admin/director endpoints, live enforcement on custom-amount payment links + prompt activation + sandbox-disable, Governance page approval queue with Approve / Reject**). Phase 4D adds the **Approved Action Execution Layer**: `ApprovalExecutionLog` model (one-executed-per-request constraint), `apps.ai_governance.approval_execution` engine + 3-action allow-listed registry (payment.link.advance_499, payment.link.custom_amount, ai.prompt_version.activate), `POST /api/ai/approvals/{id}/execute/` endpoint, Governance page Execute button + execution-status column. Unmapped actions → HTTP 400 + `ai.approval.execution_skipped`. CAIO blocked at engine + AgentRun bridge + execute layer. **314 backend tests + 8 frontend tests**, all green. Next: Phase 4A WebSockets, live WhatsApp sender.
 
 GitHub: https://github.com/prarit0097/Nirogidhara-AI-Command-Center
 
@@ -104,7 +104,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 275 tests today
+python -m pytest -q                    # 314 tests today
 
 # Frontend
 cd frontend
@@ -164,7 +164,9 @@ git push origin main
 | Reward sweep / events / summary endpoints | `backend/apps/rewards/views.py` (`/api/rewards/{events,summary,sweep}/`) |
 | Approval Matrix middleware (Phase 4C) | `backend/apps/ai_governance/approval_engine.py` |
 | ApprovalRequest + ApprovalDecisionLog models | `backend/apps/ai_governance/models.py` |
-| Approval endpoints | `backend/apps/ai_governance/views.py` (`/api/ai/approvals/{,id/,id/approve/,id/reject/,evaluate/}` + `/api/ai/agent-runs/{id}/request-approval/`) |
+| Approval endpoints | `backend/apps/ai_governance/views.py` (`/api/ai/approvals/{,id/,id/approve/,id/reject/,id/execute/,evaluate/}` + `/api/ai/agent-runs/{id}/request-approval/`) |
+| Approved Action Execution (Phase 4D) | `backend/apps/ai_governance/approval_execution.py` |
+| ApprovalExecutionLog model | `backend/apps/ai_governance/models.py` |
 | Master Event Ledger receivers | `backend/apps/audit/signals.py` |
 | Permissions (role-based) | `backend/apps/accounts/permissions.py` |
 | Order state machine | `backend/apps/orders/services.py` (`ALLOWED_TRANSITIONS`) |

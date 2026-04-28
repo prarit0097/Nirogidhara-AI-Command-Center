@@ -60,7 +60,7 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 ## Tests
 
 ```bash
-# Backend (pytest, 275 tests)
+# Backend (pytest, 314 tests)
 cd backend && python -m pytest -q
 
 # Frontend (vitest, 8 tests)
@@ -84,11 +84,12 @@ cd frontend && npm test
 - ✅ **Phase 3E** — Business configuration foundation: `apps.catalog` (ProductCategory / Product / ProductSKU + admin/director-managed CRUD) + discount policy with locked 10/20% bands (`apps/orders/discounts.py`) + ₹499 fixed advance (`apps/payments/policies.py`) + reward/penalty deterministic scoring (`apps/rewards/scoring.py`) capped at +100/-100 + approval matrix policy table (`apps/ai_governance/approval_matrix.py`) with read endpoint at `/api/ai/approval-matrix/` + WhatsApp sales/support design scaffold (`apps/crm/whatsapp_design.py` — design only, live integration is Phase 4+) + production infra targets (Postgres / Redis / Celery worker+beat / Channels / domain / SSL) documented in RUNBOOK.
 - ✅ **Phase 4B** — Reward / Penalty Engine wiring (`apps/rewards/engine.py`) on top of the Phase 3E formula: AI-agents-only scoring with **CEO AI net accountability** for every delivered / RTO / cancelled order, idempotent `RewardPenaltyEvent` rows keyed by `unique_key`, agent leaderboard rollup, `/api/rewards/{events,summary,sweep}/` endpoints (admin/director only for events / summary / sweep), `python manage.py calculate_reward_penalties` (cron-friendly, supports `--order-id` and `--dry-run`), `apps.rewards.tasks.run_reward_penalty_sweep_task` (Celery eager-mode safe), Rewards page now shows agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button.
 - ✅ **Phase 4C** — Approval Matrix Middleware enforcement (`apps/ai_governance/approval_engine.py`): `ApprovalRequest` + `ApprovalDecisionLog` models, `evaluate_action` / `enforce_or_queue` / `approve_request` / `reject_request` / `request_approval_for_agent_run`. 5 new admin/director endpoints under `/api/ai/approvals/...` and `/api/ai/agent-runs/{id}/request-approval/`. Live enforcement gating custom-amount payment links, prompt activation, and sandbox disable. CAIO never executes (refused at the bridge AND at the matrix evaluator). Governance page upgraded with an Approval queue table + Approve / Reject controls.
+- ✅ **Phase 4D** — Approved Action Execution Layer (`apps/ai_governance/approval_execution.py`): `ApprovalExecutionLog` model with one-executed-per-request constraint, `POST /api/ai/approvals/{id}/execute/` endpoint, **allow-listed registry of 3 handlers** (`payment.link.advance_499`, `payment.link.custom_amount`, `ai.prompt_version.activate`). Every other approved action returns HTTP 400 + `ai.approval.execution_skipped` audit. CAIO blocked at engine + bridge + execute layer; idempotent re-execute returns prior result; director-only override on `director_override`. Governance page now shows an Execution column + Execute button on approved rows.
 
 **Next:**
 
-- ⏭ **Phase 4D** — Approved Action Execution Layer. Adds `POST /api/ai/approvals/{id}/execute/` over an allow-listed registry that maps each authorized matrix `action` key to a tested service-layer function. Hard stops locked: CAIO never executes, Claim Vault stays mandatory, no autonomous AI execution, **no ad-budget changes**, **no refunds**, **no live WhatsApp**, no silent complex writes (unmapped actions → HTTP 400 + `ai.approval.execution_skipped` audit), idempotent re-execute, director-only override on `director_override` actions. Plan in `docs/FUTURE_BACKEND_PLAN.md`.
 - ⏭ **Phase 4A** — Real-time WebSockets (Django Channels pushing AuditEvent rows live).
+- ⏭ **Expanded execution registry** — discount.up_to_10 / discount.11_to_20 / ai.sandbox.disable execution come later, intentionally not in the 4D first pass.
 - ⏭ **WhatsApp** — Live Business Cloud API sender (consent-gated, Claim-Vault-grounded). Phase 3E ships only the design scaffold.
 
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
