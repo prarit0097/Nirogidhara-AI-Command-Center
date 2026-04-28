@@ -1,18 +1,35 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/services/api";
-import { Boxes, KeyRound, Power, RotateCcw, ShieldCheck, ScrollText, Beaker } from "lucide-react";
+import type { WhatsAppProviderStatus } from "@/types/domain";
+import {
+  Boxes,
+  KeyRound,
+  MessageSquare,
+  Power,
+  RotateCcw,
+  ShieldCheck,
+  ScrollText,
+  Beaker,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export default function Settings() {
   const [data, setData] = useState<any>(null);
   const [killSwitch, setKillSwitch] = useState(false);
   const [sandbox, setSandbox] = useState(true);
+  const [whatsappStatus, setWhatsappStatus] = useState<
+    WhatsAppProviderStatus | null
+  >(null);
 
-  useEffect(() => { api.getSettingsMock().then(setData); }, []);
+  useEffect(() => {
+    api.getSettingsMock().then(setData);
+    api.getWhatsAppProviderStatus().then(setWhatsappStatus);
+  }, []);
   if (!data) return <div className="h-96 grid place-items-center text-muted-foreground">Loading…</div>;
 
   return (
@@ -58,6 +75,97 @@ export default function Settings() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="surface-card p-6 mb-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="h-5 w-5 text-primary" />
+            <div>
+              <h3 className="font-display text-lg font-semibold">
+                WhatsApp Business (WABA)
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Phase 5A · Meta Cloud is the production target. Mock provider
+                runs in local dev so no live messages go out without consent
+                + approved template + Claim Vault.
+              </p>
+            </div>
+          </div>
+          <Link to="/whatsapp-templates">
+            <Button size="sm" variant="outline">
+              View templates
+            </Button>
+          </Link>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <WabaStatField
+            label="Provider"
+            value={whatsappStatus?.provider ?? "—"}
+            tone={
+              whatsappStatus?.provider === "meta_cloud"
+                ? "success"
+                : whatsappStatus?.provider === "mock"
+                  ? "info"
+                  : "warning"
+            }
+          />
+          <WabaStatField
+            label="Health"
+            value={
+              whatsappStatus
+                ? whatsappStatus.healthy
+                  ? "healthy"
+                  : "unhealthy"
+                : "—"
+            }
+            tone={whatsappStatus?.healthy ? "success" : "warning"}
+          />
+          <WabaStatField
+            label="Phone number"
+            value={whatsappStatus?.connection?.phoneNumber || "not set"}
+            tone={
+              whatsappStatus?.connection?.phoneNumber ? "neutral" : "warning"
+            }
+          />
+          <WabaStatField
+            label="Phone number id"
+            value={whatsappStatus?.connection?.phoneNumberId || "not set"}
+            tone={
+              whatsappStatus?.connection?.phoneNumberId
+                ? "neutral"
+                : "warning"
+            }
+          />
+          <WabaStatField
+            label="Access token"
+            value={whatsappStatus?.accessTokenSet ? "configured" : "missing"}
+            tone={whatsappStatus?.accessTokenSet ? "success" : "warning"}
+          />
+          <WabaStatField
+            label="Verify token"
+            value={whatsappStatus?.verifyTokenSet ? "configured" : "missing"}
+            tone={whatsappStatus?.verifyTokenSet ? "success" : "warning"}
+          />
+          <WabaStatField
+            label="App secret"
+            value={whatsappStatus?.appSecretSet ? "configured" : "missing"}
+            tone={whatsappStatus?.appSecretSet ? "success" : "warning"}
+          />
+          <WabaStatField
+            label="API version"
+            value={whatsappStatus?.apiVersion ?? "—"}
+            tone="neutral"
+          />
+        </div>
+
+        {whatsappStatus?.devProviderEnabled && (
+          <div className="mt-3 text-xs text-warning">
+            Dev-only Baileys provider toggle is ENABLED. Production must keep
+            <code> WHATSAPP_DEV_PROVIDER_ENABLED=false</code>.
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
@@ -127,6 +235,26 @@ function ControlCard({ icon: Icon, title, desc, tone, children }: any) {
       </div>
       <div className="font-display text-lg font-semibold">{title}</div>
       <div className="text-xs text-muted-foreground">{desc}</div>
+    </div>
+  );
+}
+
+interface WabaStatFieldProps {
+  label: string;
+  value: string;
+  tone: "success" | "warning" | "info" | "neutral";
+}
+
+function WabaStatField({ label, value, tone }: WabaStatFieldProps) {
+  return (
+    <div className="rounded-xl bg-muted/40 px-3 py-3">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
+        {label}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium truncate">{value}</span>
+        <StatusPill tone={tone}>{tone}</StatusPill>
+      </div>
     </div>
   );
 }

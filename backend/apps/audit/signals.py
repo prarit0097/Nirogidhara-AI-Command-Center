@@ -111,6 +111,25 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.message_queued": "message-circle",
     "whatsapp.broadcast.requested": "megaphone",
     "whatsapp.escalation.requested": "alert-triangle",
+    # Phase 5A — WhatsApp Live Sender Foundation lifecycle kinds.
+    "whatsapp.message.queued": "send",
+    "whatsapp.message.sent": "send",
+    "whatsapp.message.delivered": "check-check",
+    "whatsapp.message.read": "eye",
+    "whatsapp.message.failed": "alert-octagon",
+    "whatsapp.template.sent": "file-text",
+    "whatsapp.send.blocked": "ban",
+    "whatsapp.webhook.received": "webhook",
+    "whatsapp.inbound.received": "message-circle",
+    "whatsapp.inbound.escalated": "alert-triangle",
+    "whatsapp.consent.updated": "user-check",
+    "whatsapp.opt_out.received": "user-x",
+    "whatsapp.connection.configured": "plug",
+    "whatsapp.connection.status_changed": "activity",
+    "whatsapp.connection.error": "x-circle",
+    "whatsapp.template.synced": "refresh-cw",
+    "whatsapp.template.activated": "play",
+    "whatsapp.template.deactivated": "pause",
 }
 
 

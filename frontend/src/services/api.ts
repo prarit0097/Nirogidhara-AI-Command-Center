@@ -90,6 +90,17 @@ import type {
   Shipment,
   ShipmentCreatePayload,
   UpdateLeadPayload,
+  SendWhatsAppTemplatePayload,
+  SendWhatsAppTemplateResponse,
+  WhatsAppConnection,
+  WhatsAppConsentPatchPayload,
+  WhatsAppConsentSummary,
+  WhatsAppConversation,
+  WhatsAppMessage,
+  WhatsAppProviderStatus,
+  WhatsAppTemplate,
+  WhatsAppTemplateSyncPayload,
+  WhatsAppTemplateSyncResult,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -565,6 +576,160 @@ export const api = {
       dailySpendUsd: "0",
       monthlySpendUsd: "0",
     })),
+
+  // ---------- Phase 5A — WhatsApp Live Sender Foundation ----------
+  getWhatsAppProviderStatus: () =>
+    safeFetch<WhatsAppProviderStatus>(
+      "/whatsapp/provider/status/",
+      () => M.WHATSAPP_PROVIDER_STATUS as WhatsAppProviderStatus,
+    ),
+  listWhatsAppConnections: () =>
+    safeFetch<WhatsAppConnection[]>(
+      "/whatsapp/connections/",
+      () => M.WHATSAPP_CONNECTIONS as WhatsAppConnection[],
+    ),
+  listWhatsAppTemplates: (params?: {
+    actionKey?: string;
+    category?: string;
+    status?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.actionKey) qs.set("actionKey", params.actionKey);
+    if (params?.category) qs.set("category", params.category);
+    if (params?.status) qs.set("status", params.status);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return safeFetch<WhatsAppTemplate[]>(
+      `/whatsapp/templates/${suffix}`,
+      () => M.WHATSAPP_TEMPLATES as WhatsAppTemplate[],
+    );
+  },
+  syncWhatsAppTemplates: (payload: WhatsAppTemplateSyncPayload = {}) =>
+    safeMutate<WhatsAppTemplateSyncResult>(
+      "/whatsapp/templates/sync/",
+      "POST",
+      payload,
+      () => ({
+        connectionId: (M.WHATSAPP_CONNECTIONS[0] as WhatsAppConnection).id,
+        createdCount: 0,
+        updatedCount: (M.WHATSAPP_TEMPLATES as WhatsAppTemplate[]).length,
+        totalProcessed: (M.WHATSAPP_TEMPLATES as WhatsAppTemplate[]).length,
+        actor: "mock",
+      }),
+    ),
+  listWhatsAppConversations: (params?: { customerId?: string; status?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.customerId) qs.set("customerId", params.customerId);
+    if (params?.status) qs.set("status", params.status);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return safeFetch<WhatsAppConversation[]>(
+      `/whatsapp/conversations/${suffix}`,
+      () => M.WHATSAPP_CONVERSATIONS as WhatsAppConversation[],
+    );
+  },
+  getWhatsAppConversationMessages: (conversationId: string) =>
+    safeFetch<WhatsAppMessage[]>(
+      `/whatsapp/conversations/${conversationId}/messages/`,
+      () =>
+        (M.WHATSAPP_MESSAGES as WhatsAppMessage[]).filter(
+          (m) => m.conversationId === conversationId,
+        ),
+    ),
+  listWhatsAppMessages: (params?: {
+    customerId?: string;
+    conversationId?: string;
+    status?: string;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.customerId) qs.set("customerId", params.customerId);
+    if (params?.conversationId) qs.set("conversationId", params.conversationId);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return safeFetch<WhatsAppMessage[]>(
+      `/whatsapp/messages/${suffix}`,
+      () => M.WHATSAPP_MESSAGES as WhatsAppMessage[],
+    );
+  },
+  sendWhatsAppTemplate: (payload: SendWhatsAppTemplatePayload) =>
+    safeMutate<SendWhatsAppTemplateResponse>(
+      "/whatsapp/send-template/",
+      "POST",
+      payload,
+      () => optimisticWhatsAppSendResponse(payload),
+    ),
+  retryWhatsAppMessage: (id: string) =>
+    safeMutate<WhatsAppMessage>(
+      `/whatsapp/messages/${id}/retry/`,
+      "POST",
+      {},
+      () => {
+        const base = (M.WHATSAPP_MESSAGES as WhatsAppMessage[]).find(
+          (m) => m.id === id,
+        );
+        if (!base) {
+          return optimisticWhatsAppMessage({
+            id,
+            customerId: "NRG-MOCK",
+            actionKey: "whatsapp.payment_reminder",
+          });
+        }
+        return { ...base, status: "queued", attemptCount: base.attemptCount + 1 };
+      },
+    ),
+  getWhatsAppConsent: (customerId: string) =>
+    safeFetch<WhatsAppConsentSummary>(
+      `/whatsapp/consent/${customerId}/`,
+      () => ({
+        customerId,
+        consentWhatsapp: true,
+        history: {
+          customerId,
+          consentState: "granted",
+          grantedAt: null,
+          revokedAt: null,
+          optOutKeyword: "",
+          expiresAt: null,
+          lastInboundAt: null,
+          source: "mock",
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+    ),
+  patchWhatsAppConsent: (
+    customerId: string,
+    payload: WhatsAppConsentPatchPayload,
+  ) =>
+    safeMutate<WhatsAppConsentSummary>(
+      `/whatsapp/consent/${customerId}/`,
+      "PATCH",
+      payload,
+      () => ({
+        customerId,
+        consentWhatsapp: payload.consentState === "granted",
+        history: {
+          customerId,
+          consentState: payload.consentState,
+          grantedAt:
+            payload.consentState === "granted"
+              ? new Date().toISOString()
+              : null,
+          revokedAt:
+            payload.consentState === "granted"
+              ? null
+              : new Date().toISOString(),
+          optOutKeyword: "",
+          expiresAt: null,
+          lastInboundAt: null,
+          source: payload.source ?? "operator",
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -876,6 +1041,62 @@ function optimisticSchedulerStatus(): AiSchedulerStatus {
     fallbacks: ["openai", "anthropic"],
     lastCostUsd: null,
     lastFallbackUsed: false,
+  };
+}
+
+// ---------- Phase 5A — WhatsApp optimistic helpers ----------
+
+function optimisticWhatsAppMessage(args: {
+  id?: string;
+  customerId: string;
+  actionKey: string;
+  templateId?: string;
+  variables?: Record<string, string | number>;
+}): WhatsAppMessage {
+  const id = args.id ?? `WAM-MOCK-${Date.now()}`;
+  const now = new Date().toISOString();
+  return {
+    id,
+    conversationId: `WCV-MOCK-${args.customerId}`,
+    customerId: args.customerId,
+    providerMessageId: `wamid.MOCK_${id}`,
+    direction: "outbound",
+    status: "sent",
+    type: "template",
+    body: `Mock template ${args.actionKey}`,
+    templateId: args.templateId ?? "WAT-MOCK-1",
+    templateVariables: { ...(args.variables ?? {}) },
+    mediaUrl: "",
+    aiGenerated: false,
+    approvalRequestId: null,
+    errorMessage: "",
+    errorCode: "",
+    attemptCount: 1,
+    idempotencyKey: `wsp:${id}`,
+    metadata: { trigger: "mock" },
+    queuedAt: now,
+    sentAt: now,
+    deliveredAt: null,
+    readAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function optimisticWhatsAppSendResponse(
+  payload: SendWhatsAppTemplatePayload,
+): SendWhatsAppTemplateResponse {
+  const message = optimisticWhatsAppMessage({
+    customerId: payload.customerId,
+    actionKey: payload.actionKey,
+    templateId: payload.templateId,
+    variables: payload.variables,
+  });
+  return {
+    message,
+    conversationId: message.conversationId,
+    approvalRequestId: null,
+    autoApproved: true,
   };
 }
 

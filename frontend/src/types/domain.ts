@@ -767,3 +767,206 @@ export interface RescueAttemptUpdatePayload {
   outcome: RescueOutcome;
   notes?: string;
 }
+
+// ---------- Phase 5A — WhatsApp Live Sender Foundation ----------
+
+export type WhatsAppProvider = "mock" | "meta_cloud" | "baileys_dev";
+export type WhatsAppConnectionStatus = "connected" | "disconnected" | "error";
+export type WhatsAppTemplateCategory =
+  | "AUTHENTICATION"
+  | "MARKETING"
+  | "UTILITY";
+export type WhatsAppTemplateStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "DISABLED";
+export type WhatsAppConsentState =
+  | "unknown"
+  | "granted"
+  | "revoked"
+  | "opted_out";
+export type WhatsAppConversationStatus =
+  | "open"
+  | "pending"
+  | "resolved"
+  | "escalated_to_human";
+export type WhatsAppConversationAiStatus =
+  | "disabled"
+  | "suggest"
+  | "pending_approval"
+  | "auto_after_approval";
+export type WhatsAppMessageDirection = "inbound" | "outbound";
+export type WhatsAppMessageStatus =
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "read"
+  | "failed";
+export type WhatsAppMessageType =
+  | "text"
+  | "template"
+  | "image"
+  | "document"
+  | "audio"
+  | "location"
+  | "interactive"
+  | "system";
+
+export interface WhatsAppConnection {
+  id: string;
+  provider: WhatsAppProvider;
+  displayName: string;
+  phoneNumber: string;
+  phoneNumberId: string;
+  businessAccountId: string;
+  status: WhatsAppConnectionStatus;
+  lastConnectedAt: string | null;
+  lastHealthCheckAt: string | null;
+  lastError: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppTemplate {
+  id: string;
+  connectionId: string;
+  name: string;
+  language: string;
+  category: WhatsAppTemplateCategory;
+  status: WhatsAppTemplateStatus;
+  bodyComponents: Array<Record<string, unknown>>;
+  variablesSchema: Record<string, unknown>;
+  actionKey: string;
+  claimVaultRequired: boolean;
+  isActive: boolean;
+  lastSyncedAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppConsent {
+  customerId: string;
+  consentState: WhatsAppConsentState;
+  grantedAt: string | null;
+  revokedAt: string | null;
+  optOutKeyword: string;
+  expiresAt: string | null;
+  lastInboundAt: string | null;
+  source: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppConsentSummary {
+  customerId: string;
+  consentWhatsapp: boolean;
+  history: WhatsAppConsent;
+}
+
+export interface WhatsAppConversation {
+  id: string;
+  customerId: string;
+  connectionId: string;
+  assignedToId: number | null;
+  status: WhatsAppConversationStatus;
+  aiStatus: WhatsAppConversationAiStatus;
+  unreadCount: number;
+  lastMessageText: string;
+  lastMessageAt: string | null;
+  lastInboundAt: string | null;
+  subject: string;
+  tags: string[];
+  resolvedAt: string | null;
+  resolvedById: number | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppMessage {
+  id: string;
+  conversationId: string;
+  customerId: string;
+  providerMessageId: string;
+  direction: WhatsAppMessageDirection;
+  status: WhatsAppMessageStatus;
+  type: WhatsAppMessageType;
+  body: string;
+  templateId: string | null;
+  templateVariables: Record<string, unknown>;
+  mediaUrl: string;
+  aiGenerated: boolean;
+  approvalRequestId: string | null;
+  errorMessage: string;
+  errorCode: string;
+  attemptCount: number;
+  idempotencyKey: string;
+  metadata: Record<string, unknown>;
+  queuedAt: string | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppProviderStatus {
+  provider: WhatsAppProvider;
+  configured: boolean;
+  healthy: boolean;
+  detail: string;
+  connection: {
+    id: string;
+    displayName: string;
+    phoneNumber: string;
+    phoneNumberId: string;
+    businessAccountId: string;
+    status: WhatsAppConnectionStatus;
+    lastConnectedAt: string | null;
+    lastHealthCheckAt: string | null;
+  } | null;
+  accessTokenSet: boolean;
+  verifyTokenSet: boolean;
+  appSecretSet: boolean;
+  apiVersion: string;
+  devProviderEnabled: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface SendWhatsAppTemplatePayload {
+  customerId: string;
+  actionKey: string;
+  templateId?: string;
+  variables?: Record<string, string | number>;
+  triggeredBy?: string;
+  idempotencyKey?: string;
+}
+
+export interface SendWhatsAppTemplateResponse {
+  message: WhatsAppMessage;
+  conversationId: string;
+  approvalRequestId: string | null;
+  autoApproved: boolean;
+}
+
+export interface WhatsAppConsentPatchPayload {
+  consentState: WhatsAppConsentState;
+  source?: string;
+  note?: string;
+}
+
+export interface WhatsAppTemplateSyncPayload {
+  data?: Array<Record<string, unknown>>;
+}
+
+export interface WhatsAppTemplateSyncResult {
+  connectionId: string;
+  createdCount: number;
+  updatedCount: number;
+  totalProcessed: number;
+  actor: string;
+}

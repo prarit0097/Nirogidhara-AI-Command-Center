@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, UserCircle2, PhoneCall, Workflow, ClipboardCheck,
   CreditCard, Truck, ShieldAlert, Bot, Sparkles, Gavel, Trophy,
   GraduationCap, FileBadge2, BarChart3, Settings2, Leaf, ChevronLeft,
-  AlarmClock, ShieldCheck,
+  AlarmClock, ShieldCheck, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,7 @@ const NAV = [
   { to: "/learning", label: "Call Learning Studio", icon: GraduationCap, group: "Governance" },
   { to: "/claims", label: "Claim Vault", icon: FileBadge2, group: "Governance" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, group: "Insights" },
+  { to: "/whatsapp-templates", label: "WhatsApp Templates", icon: MessageSquare, group: "Messaging" },
   { to: "/settings", label: "Settings & Control", icon: Settings2, group: "System" },
 ];
 

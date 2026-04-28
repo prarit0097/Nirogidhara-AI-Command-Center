@@ -612,19 +612,28 @@ Locked addendum (sections S–GG) to `docs/WHATSAPP_INTEGRATION_PLAN.md`. **Zero
 
 **Phase 5A implementation must read §S–§DD of the integration plan** before designing models / provider / service contracts — `WhatsAppConversation.metadata.address_collection` needs a home; `WhatsAppMessage` must carry context for the Chat Agent path; the provider interface must serve both lifecycle templates (5A) and AI-driven chat (5C); the discount audit table is anticipated by the model name space.
 
-### Phase 5A — WhatsApp Live Sender Foundation (NEXT)
+### ✅ Phase 5A — WhatsApp Live Sender Foundation (DONE)
 
-Per `docs/WHATSAPP_INTEGRATION_PLAN.md` §C / §D / §E / §O:
+Implemented per `docs/WHATSAPP_INTEGRATION_PLAN.md` §C / §D / §E / §O:
 
-- New `apps.whatsapp` app: 8 models (`WhatsAppConnection`, `WhatsAppTemplate`, `WhatsAppConsent`, `WhatsAppConversation`, `WhatsAppMessage`, `WhatsAppMessageAttachment`, `WhatsAppMessageStatusEvent`, `WhatsAppWebhookEvent`, `WhatsAppSendLog`).
-- Provider interface (`base.py`) + `MockProvider` (default for tests / dev).
-- **Real Meta Cloud client** (the reference repo's Meta Cloud is stubbed — we build from scratch): `send_template_message`, `send_text_message` (Phase 5B+ flag), `verify_webhook` with `X-Hub-Signature-256` + replay-window check, `parse_webhook_event` for `entry[].changes[].value.{messages,statuses,errors,contacts}`, `get_message_status`, `health_check`.
-- Service layer + Celery `send_whatsapp_message_task` with `bind=True, autoretry_for=(httpx.HTTPError, RateLimitError), retry_backoff=True, retry_jitter=True, max_retries=5`. Idempotency key on every send.
-- Webhook receiver at `/api/webhooks/whatsapp/meta/` (GET handshake + signed POST). HMAC-verified, replay-window-checked, idempotent on `WhatsAppWebhookEvent.provider_event_id`.
-- Consent enforcement (`Customer.consent.whatsapp` + `WhatsAppConsent.consent_state`). Claim Vault enforcement for `claim_vault_required` templates.
-- Approval matrix integration: every send routes through `approval_engine.enforce_or_queue` first.
-- Frontend: Settings → WABA Connection section + WhatsAppTemplates page (read-only mirror of Meta-approved templates).
-- 9 backend test groups + 5 frontend tests; existing 351 backend + 13 frontend tests stay green.
+- ✅ New `apps.whatsapp` Django app added to `INSTALLED_APPS`. 8 models: `WhatsAppConnection`, `WhatsAppTemplate`, `WhatsAppConsent`, `WhatsAppConversation`, `WhatsAppMessage`, `WhatsAppMessageAttachment`, `WhatsAppMessageStatusEvent`, `WhatsAppWebhookEvent`, `WhatsAppSendLog`. Migration `0001_initial`.
+- ✅ Provider interface in `apps/whatsapp/integrations/whatsapp/base.py` with `ProviderSendResult`, `ProviderWebhookEvent`, `ProviderStatusResult`, `ProviderHealth` dataclasses + `ProviderError` exception.
+- ✅ `MockProvider` (default for tests / dev) — deterministic `wamid.MOCK_<idempotency_key>`, no network.
+- ✅ Real `MetaCloudProvider` (Nirogidhara-built — the reference repo's was stubbed): `send_template_message` posting to `https://graph.facebook.com/{version}/{phone_number_id}/messages`, lazy `requests` import, `verify_webhook` HMAC-SHA256 against `META_WA_APP_SECRET` (or `WHATSAPP_WEBHOOK_SECRET`) + replay-window check, `parse_webhook_event` for Meta's `entry[].changes[].value.{messages,statuses}` shape, `get_message_status` (informational), `health_check` against `GET /v20.0/{phone_number_id}`.
+- ✅ `BaileysDevProvider` dev-only stub — refuses to load when `DEBUG=False` AND `WHATSAPP_DEV_PROVIDER_ENABLED!=true`. Has no production transport.
+- ✅ Service layer `apps.whatsapp.services` — `queue_template_message` runs the full safety stack (no consent → block; opt-out → block; template not approved/inactive → block; Claim Vault required + no row → block; CAIO actor → block; `enforce_or_queue` matrix gate; idempotency key dedupe). `send_queued_message` drives the queued row through the provider once and writes a `WhatsAppSendLog`. **Failed sends never mutate Order/Payment/Shipment.**
+- ✅ Celery task `apps.whatsapp.tasks.send_whatsapp_message` with `bind=True, autoretry_for=(ProviderError,), retry_backoff=True, retry_backoff_max=300, retry_jitter=True, max_retries=5`. Idempotent on entry.
+- ✅ Webhook receiver at `/api/webhooks/whatsapp/meta/` (GET handshake + signed POST). HMAC-verified, replay-window-checked, idempotent on `WhatsAppWebhookEvent.provider_event_id`. Failed-signature attempts are still persisted as `processing_status=rejected` for audit visibility.
+- ✅ Consent enforcement in `apps.whatsapp.consent` — `has_whatsapp_consent`, `grant_whatsapp_consent`, `revoke_whatsapp_consent`, `record_opt_out` (cancels queued sends), `detect_opt_out_keyword` matches `STOP / UNSUBSCRIBE / BAND KARO / BAND / CANCEL` (case-insensitive substring).
+- ✅ Claim Vault enforcement: `claim_vault_required=True` templates must match a `apps.compliance.Claim` row whose `approved` list is non-empty for the customer's `product_interest`.
+- ✅ Approval matrix integration — 9 new entries: `whatsapp.payment_reminder` (auto_with_consent), `whatsapp.confirmation_reminder` (auto_with_consent), `whatsapp.delivery_reminder` (auto_with_consent), `whatsapp.rto_rescue` (auto_with_consent), `whatsapp.usage_explanation` (approval_required by compliance), `whatsapp.reorder_reminder` (auto_with_consent), `whatsapp.support_complaint_ack` (auto_with_consent), `whatsapp.greeting` (auto_with_consent), plus the existing `whatsapp.broadcast_or_campaign` (approval_required) and `whatsapp.support_handover_to_human` (human_escalation).
+- ✅ 18 new audit kinds in `apps/audit/signals.py` ICON_BY_KIND. Phase 4A WebSocket fanout picks them up automatically.
+- ✅ 13 API endpoints under `/api/whatsapp/` (provider/status, connections, templates list / sync, conversations + messages, send-template, retry, consent get/patch). Permissions split: admin-only for sync + provider status; operations+ for send + consent patch + retry; viewer+ for reads.
+- ✅ `python manage.py sync_whatsapp_templates` command — seeds 8 default templates when run with no flags; accepts `--from-file <meta-payload.json>` for real WABA syncs.
+- ✅ Frontend: types under `frontend/src/types/domain.ts`, API methods under `frontend/src/services/api.ts` (with mock-fallback), Settings → WABA section, read-only `/whatsapp-templates` page, sidebar entry.
+- ✅ **50 new backend tests + 13 frontend tests, all green.** Total backend: 401.
+
+**Out of scope for Phase 5A (deferred to 5B/5C/5D/5E/5F):** WhatsApp AI Chat Sales Agent (Phase 5C), inbound auto-reply, chat-to-call handoff, Order booking from chat, lifecycle automation triggers, rescue discount, broadcast/campaigns. Phase 5A is the safe foundation — no AI freestyle, no automatic outbound on lifecycle events, manual operator-triggered sends only.
 
 ### Phase 5B — Inbound Inbox + Customer 360 timeline
 

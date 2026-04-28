@@ -661,3 +661,112 @@ export const DASHBOARD_METRICS = {
   ceoAlerts: { value: 4 },
   caioAlerts: { value: 2 },
 };
+
+/* ---------------- Phase 5A — WhatsApp mock fallbacks ---------------- */
+export const WHATSAPP_PROVIDER_STATUS = {
+  provider: "mock",
+  configured: true,
+  healthy: true,
+  detail: "mock provider always healthy",
+  connection: {
+    id: "WAC-MOCK-1",
+    displayName: "Nirogidhara WhatsApp (mock)",
+    phoneNumber: "+91 90000 99999",
+    phoneNumberId: "**…**",
+    businessAccountId: "**…**",
+    status: "connected",
+    lastConnectedAt: null,
+    lastHealthCheckAt: null,
+  },
+  accessTokenSet: false,
+  verifyTokenSet: false,
+  appSecretSet: false,
+  apiVersion: "v20.0",
+  devProviderEnabled: false,
+  metadata: { mode: "mock" },
+};
+
+export const WHATSAPP_CONNECTIONS = [
+  {
+    id: "WAC-MOCK-1",
+    provider: "mock",
+    displayName: "Nirogidhara WhatsApp (mock)",
+    phoneNumber: "+91 90000 99999",
+    phoneNumberId: "",
+    businessAccountId: "",
+    status: "connected",
+    lastConnectedAt: null,
+    lastHealthCheckAt: null,
+    lastError: "",
+    metadata: {},
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+export const WHATSAPP_TEMPLATES = [
+  {
+    id: "WAT-MOCK-1",
+    connectionId: "WAC-MOCK-1",
+    name: "nrg_payment_reminder",
+    language: "hi",
+    category: "UTILITY",
+    status: "APPROVED",
+    bodyComponents: [
+      { type: "BODY", text: "Hi {{1}}, your payment for {{2}} is pending." },
+    ],
+    variablesSchema: {
+      required: ["customer_name", "context"],
+      order: ["customer_name", "context"],
+    },
+    actionKey: "whatsapp.payment_reminder",
+    claimVaultRequired: false,
+    isActive: true,
+    lastSyncedAt: null,
+    metadata: { seeded: true },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "WAT-MOCK-2",
+    connectionId: "WAC-MOCK-1",
+    name: "nrg_delivery_reminder",
+    language: "hi",
+    category: "UTILITY",
+    status: "APPROVED",
+    bodyComponents: [
+      { type: "BODY", text: "Hi {{1}}, your order arrives today." },
+    ],
+    variablesSchema: { required: ["customer_name"], order: ["customer_name"] },
+    actionKey: "whatsapp.delivery_reminder",
+    claimVaultRequired: false,
+    isActive: true,
+    lastSyncedAt: null,
+    metadata: { seeded: true },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "WAT-MOCK-3",
+    connectionId: "WAC-MOCK-1",
+    name: "nrg_usage_explanation",
+    language: "hi",
+    category: "UTILITY",
+    status: "APPROVED",
+    bodyComponents: [
+      { type: "BODY", text: "{{1}}'s usage instructions" },
+    ],
+    variablesSchema: { required: ["customer_name"], order: ["customer_name"] },
+    actionKey: "whatsapp.usage_explanation",
+    claimVaultRequired: true,
+    isActive: true,
+    lastSyncedAt: null,
+    metadata: { seeded: true },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+export const WHATSAPP_CONVERSATIONS: Array<Record<string, unknown>> = [];
+
+export const WHATSAPP_MESSAGES: Array<Record<string, unknown>> = [];

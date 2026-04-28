@@ -28,10 +28,12 @@ api_patterns = [
     path("rewards/", include("apps.rewards.urls")),
     path("learning/", include("apps.learning_engine.urls")),
     path("catalog/", include("apps.catalog.urls")),
+    path("whatsapp/", include("apps.whatsapp.urls")),
     path("webhooks/", include("apps.payments.webhook_urls")),
     path("webhooks/", include("apps.shipments.webhook_urls")),
     path("webhooks/", include("apps.calls.webhook_urls")),
     path("webhooks/", include("apps.crm.webhook_urls")),
+    path("webhooks/", include("apps.whatsapp.webhook_urls")),
 ]
 
 urlpatterns = [

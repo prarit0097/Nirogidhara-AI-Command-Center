@@ -24,6 +24,7 @@ import AnalyticsPage from "./pages/Analytics";
 import SchedulerPage from "./pages/Scheduler";
 import GovernancePage from "./pages/Governance";
 import SettingsPage from "./pages/Settings";
+import WhatsAppTemplatesPage from "./pages/WhatsAppTemplates";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/ai-scheduler" element={<SchedulerPage />} />
             <Route path="/ai-governance" element={<GovernancePage />} />
+            <Route path="/whatsapp-templates" element={<WhatsAppTemplatesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />

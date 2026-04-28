@@ -7,7 +7,7 @@ direction.
 
 Item | Status
 --- | ---
-All 19 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page (no new pages added in 3E — backend-only phase). Phase 4B enhanced the existing Rewards page with agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button. **Phase 4C** appended an Approval queue table on the Governance page (Action / Mode / Approver / Target / Status / Proposed payload / Approve + Reject controls + decision-note input). **Phase 4D** added an Execution column + Execute button on approved rows (admin/director only on the API; backend remains the final permission enforcer). **Phase 4A** added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed (snapshot + per-event push, dedupe by id, capped at 25 rows) and the Governance "Approval queue" (live `refresh()` on `ai.approval.* / ai.agent_run.approval_requested / ai.prompt_version.* / ai.sandbox.* / ai.budget.*`); status pill shows `connecting` / `realtime` / `reconnecting` / `polling fallback`. **Phase 4E** is backend-only; the Governance Execute button + execution-status column already render the discount and sandbox-disable handler results verbatim — no React-side business logic needed.
+All 20 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page (no new pages added in 3E — backend-only phase). Phase 4B enhanced the existing Rewards page with agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button. **Phase 4C** appended an Approval queue table on the Governance page (Action / Mode / Approver / Target / Status / Proposed payload / Approve + Reject controls + decision-note input). **Phase 4D** added an Execution column + Execute button on approved rows. **Phase 4A** added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed and the Governance "Approval queue" (snapshot + per-event push, dedupe by id, capped at 25 rows). **Phase 4E** is backend-only. **Phase 5A** adds a read-only `/whatsapp-templates` page (Meta-mirrored templates, claim-vault flag, sync button — admin/director only on the API), a Settings → WABA section showing provider / health / phone-number-id (masked) / app-secret + verify-token + access-token configured flags / API version / dev-provider toggle warning, and a sidebar entry under a new "Messaging" group.
 Pages go through `src/services/api.ts` only | done — no page imports `mockData.ts` directly
 TypeScript shared types in `src/types/domain.ts` | done
 Sidebar collapse layout | done — shared collapsed state
@@ -63,6 +63,7 @@ cd ../frontend && npm run dev
 | `/learning` | `Learning.tsx` | 1 | Call Learning Studio |
 | `/claims` | `Claims.tsx` | 1 | Claim Vault |
 | `/analytics` | `Analytics.tsx` | 1 | Analytics |
-| `/settings` | `Settings.tsx` | 1 | Settings & Control |
+| `/whatsapp-templates` | `WhatsAppTemplates.tsx` | 5A | Meta-mirrored WhatsApp templates (read-only) + Sync from Meta button |
+| `/settings` | `Settings.tsx` | 1 / 5A | Settings & Control + WABA section |
 
-19 pages total. Sidebar groups: Overview · Sales · Operations · AI Layer (now 5 entries: Agents Center, CEO AI Briefing, CAIO Audit Center, AI Scheduler & Cost, AI Governance) · Governance · Insights · System.
+20 pages total. Sidebar groups: Overview · Sales · Operations · AI Layer (5 entries: Agents Center, CEO AI Briefing, CAIO Audit Center, AI Scheduler & Cost, AI Governance) · Governance · Insights · Messaging (Phase 5A) · System.

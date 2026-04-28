@@ -134,6 +134,15 @@ backend/apps/audit/consumers.py ← Phase 4A: AuditEventConsumer (read-only fano
 backend/apps/audit/routing.py ← Phase 4A: WebSocket URL routes for the audit app
 backend/config/routing.py ← Phase 4A: top-level WebSocket router consumed by config/asgi.py ProtocolTypeRouter
 frontend/src/services/realtime.ts ← Phase 4A: buildWebSocketUrl + connectAuditEvents (snapshot + per-event push, exponential reconnect, dedupe by id, never throws)
+backend/apps/whatsapp/                ← Phase 5A WhatsApp Live Sender Foundation
+backend/apps/whatsapp/models.py       ← 8 tables (WhatsAppConnection / Template / Consent / Conversation / Message / MessageAttachment / MessageStatusEvent / WebhookEvent / SendLog)
+backend/apps/whatsapp/services.py     ← queue_template_message, send_queued_message, handle_inbound_message_event, handle_status_event (consent + Claim Vault + matrix + CAIO gates)
+backend/apps/whatsapp/integrations/whatsapp/ ← provider interface (base.py) + mock.py (default) + meta_cloud_client.py (Nirogidhara-built Graph client) + baileys_dev.py (dev-only stub, refuses on DEBUG=False)
+backend/apps/whatsapp/tasks.py        ← Celery send_whatsapp_message (autoretry_for=ProviderError, retry_backoff=True, retry_jitter=True, max_retries=5)
+backend/apps/whatsapp/webhooks.py     ← /api/webhooks/whatsapp/meta/ (HMAC-SHA256 + replay-window + idempotent on provider_event_id; Meta GET handshake)
+backend/apps/whatsapp/template_registry.py ← Meta-mirrored templates + Claim-Vault flag
+backend/apps/whatsapp/consent.py      ← granted / revoked / opted_out + STOP / UNSUBSCRIBE / BAND keywords
+backend/apps/whatsapp/management/commands/sync_whatsapp_templates.py ← seeds defaults; --from-file accepts a Meta-style payload
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -142,9 +151,9 @@ docs/FUTURE_BACKEND_PLAN.md         ← Phase 2+ roadmap
 nd.md                               ← full project handoff (read this if you need depth)
 ```
 
-15 Django apps: `accounts`, `audit`, `crm`, `calls`, `orders`, `payments`, `shipments`, `agents`, `ai_governance`, `compliance`, `rewards`, `learning_engine`, `analytics`, `dashboards`, `catalog` (Phase 3E).
+16 Django apps: `accounts`, `audit`, `crm`, `calls`, `orders`, `payments`, `shipments`, `agents`, `ai_governance`, `compliance`, `rewards`, `learning_engine`, `analytics`, `dashboards`, `catalog` (Phase 3E), `whatsapp` (Phase 5A).
 
-19 frontend pages: Dashboard, Leads CRM, Customer 360, AI Calling, Orders Pipeline, Confirmation Queue, Payments, Delhivery Tracking, RTO Rescue, AI Agents Center, CEO AI Briefing, CAIO Audit, AI Scheduler & Cost (Phase 3C), AI Governance (Phase 3D), Reward & Penalty, Human Call Learning, Claim Vault, Analytics, Settings.
+20 frontend pages: Dashboard, Leads CRM, Customer 360, AI Calling, Orders Pipeline, Confirmation Queue, Payments, Delhivery Tracking, RTO Rescue, AI Agents Center, CEO AI Briefing, CAIO Audit, AI Scheduler & Cost (Phase 3C), AI Governance (Phase 3D), Reward & Penalty, Human Call Learning, Claim Vault, Analytics, WhatsApp Templates (Phase 5A), Settings.
 
 ---
 
@@ -193,7 +202,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 351 tests today
+python -m pytest -q                 # 401 tests today
 
 # Frontend
 cd frontend

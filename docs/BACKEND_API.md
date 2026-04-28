@@ -398,6 +398,27 @@ These shape behaviour but expose no new HTTP endpoints. They are imported by ser
 | POST | `/api/webhooks/vapi/` | Vapi voice events (Phase 2D). HMAC-verified via `VAPI_WEBHOOK_SECRET` (`X-Vapi-Signature`) when configured; signature is skipped when the secret is empty so dev/test fixtures stay simple. Idempotent on `event.id` via `calls.WebhookEvent`. Event types handled: `call.started` / `call.ended` / `transcript.updated` / `transcript.final` / `analysis.completed` / `call.failed`. `analysis.completed` records `handoff_flags` (medical_emergency, side_effect_complaint, very_angry_customer, human_requested, low_confidence, legal_or_refund_threat); the service falls back to keyword matching on the transcript when Vapi omits the explicit flags. |
 | GET | `/api/webhooks/meta/leads/` | Meta Lead Ads subscription handshake (Phase 2E). Echoes `hub.challenge` only when `hub.mode == "subscribe"` and `hub.verify_token == META_VERIFY_TOKEN`; otherwise 403. |
 | POST | `/api/webhooks/meta/leads/` | Meta Lead Ads delivery (Phase 2E). HMAC-verified via `META_WEBHOOK_SECRET` (or `META_APP_SECRET` as fallback) on `X-Hub-Signature-256` when configured. Idempotent on `leadgen_id` via `crm.MetaLeadEvent`. `META_MODE=mock` (default) parses the inbound body directly; `test`/`live` expand each `leadgen_id` via the Graph API (`v20.0` by default). Each accepted leadgen creates or refreshes a `Lead` and writes a `lead.meta_ingested` AuditEvent. |
+| GET | `/api/webhooks/whatsapp/meta/` | Meta WhatsApp Cloud subscription handshake (Phase 5A). Echoes `hub.challenge` only when `hub.mode == "subscribe"` and `hub.verify_token == META_WA_VERIFY_TOKEN`; otherwise 403. |
+| POST | `/api/webhooks/whatsapp/meta/` | Meta WhatsApp Cloud delivery (Phase 5A). HMAC-verified via `META_WA_APP_SECRET` (or `WHATSAPP_WEBHOOK_SECRET` override) on `X-Hub-Signature-256`. Optional replay-window check via `X-Hub-Timestamp` (default 300 s). Idempotent on a SHA1-of-body / `entry[].id` composite via `whatsapp.WhatsAppWebhookEvent.provider_event_id`. Inbound message events create / update `WhatsAppConversation` + `WhatsAppMessage`, run opt-out detection (`STOP / UNSUBSCRIBE / BAND KARO / BAND / CANCEL`), and write `whatsapp.inbound.received`. Status events update the matching outbound message and write `whatsapp.message.delivered/read/failed`. |
+
+### WhatsApp (Phase 5A)
+
+`apps.whatsapp` adds a single-tenant WhatsApp Cloud (Meta) sender / inbox foundation. Every send must be **consent + approved-template + Claim-Vault gated** server-side; failed sends never mutate `Order` / `Payment` / `Shipment`. CAIO can never originate a customer-facing send (refused at engine + service entry). The provider is selected via `WHATSAPP_PROVIDER` (`mock` / `meta_cloud` / `baileys_dev`). Templates are mirrored from Meta — only `status=APPROVED && is_active=True` rows can be used for live sends.
+
+| Method | Path | Auth / role | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/whatsapp/provider/status/` | admin / director only | Redacted status of the configured provider (`provider`, `healthy`, `connection`, `accessTokenSet`, `verifyTokenSet`, `appSecretSet`, `apiVersion`). Tokens are **never** exposed; ids are masked. |
+| GET | `/api/whatsapp/connections/` | authenticated | List configured `WhatsAppConnection` rows. |
+| GET | `/api/whatsapp/templates/` | authenticated | List Meta-approved templates. Filters: `actionKey`, `category`, `status`. |
+| POST | `/api/whatsapp/templates/sync/` | admin / director only | Refresh the local mirror from a Meta WABA payload (`{"data": [...]}`). With no payload the command falls back to seeding the canonical lifecycle templates so dev / CI always has working rows. Writes a `whatsapp.template.synced` audit per row. |
+| GET | `/api/whatsapp/conversations/` | authenticated | List threads. Filters: `customerId`, `status`. |
+| GET | `/api/whatsapp/conversations/{id}/` | authenticated | Conversation detail. |
+| GET | `/api/whatsapp/conversations/{id}/messages/` | authenticated | Last 200 messages on a conversation. |
+| GET | `/api/whatsapp/messages/` | authenticated | Cross-conversation message search. Filters: `conversationId`, `customerId`, `status`, `limit`. |
+| POST | `/api/whatsapp/send-template/` | operations+ | Body `{customerId, actionKey, templateId?, variables?, triggeredBy?, idempotencyKey?}`. Runs consent → template → Claim Vault → matrix gates, then enqueues. Returns `{message, conversationId, approvalRequestId, autoApproved}`. |
+| POST | `/api/whatsapp/messages/{id}/retry/` | operations+ | Re-queue a failed outbound message. 409 if the message is already in a non-retryable state. |
+| GET | `/api/whatsapp/consent/{customer_id}/` | authenticated | Live `Customer.consent_whatsapp` boolean + the lifecycle history row. |
+| PATCH | `/api/whatsapp/consent/{customer_id}/` | operations+ | Body `{consentState, source?, note?}`. Only `granted / revoked / opted_out` are settable; flips both the live gate and the history. |
 
 ### Permissions
 

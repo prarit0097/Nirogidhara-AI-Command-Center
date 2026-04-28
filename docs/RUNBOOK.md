@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 351 tests (Phase 1 → 4E inclusive)
+python -m pytest -q                     # 401 tests (Phase 1 → 5A inclusive)
 
 # Frontend
 cd ../frontend
@@ -423,6 +423,76 @@ daphne -b 0.0.0.0 -p 8000 config.asgi:application
 The polling endpoints (`/api/dashboard/activity/`,
 `/api/ai/approvals/`) stay live as fallback — frontend pages keep
 working when the WebSocket is unreachable.
+
+## Phase 5A — WhatsApp (Meta Cloud) live sender
+
+The local stack defaults to `WHATSAPP_PROVIDER=mock` so neither
+`graph.facebook.com` nor a real WABA number is ever touched in dev / CI.
+The mock provider mints deterministic `wamid.MOCK_<sha1>` ids and accepts
+any non-empty webhook signature so test fixtures stay simple.
+
+### Switching to Meta Cloud (production target)
+
+1. **Create a Meta Business app** at <https://developers.facebook.com/apps/> and add the **WhatsApp** product.
+2. Note the **WABA id** (`META_WA_BUSINESS_ACCOUNT_ID`), **phone-number id** (`META_WA_PHONE_NUMBER_ID`), and **system-user access token** (`META_WA_ACCESS_TOKEN`).
+3. Open **App settings → Basic** and copy the **App secret** (`META_WA_APP_SECRET`). Optionally set `WHATSAPP_WEBHOOK_SECRET` to use a separate value just for the webhook.
+4. Set a **verify token** (`META_WA_VERIFY_TOKEN`) to any random string — Meta echoes it during the GET handshake.
+5. Update `backend/.env`:
+   ```bash
+   WHATSAPP_PROVIDER=meta_cloud
+   META_WA_PHONE_NUMBER_ID=...
+   META_WA_BUSINESS_ACCOUNT_ID=...
+   META_WA_ACCESS_TOKEN=...
+   META_WA_VERIFY_TOKEN=...
+   META_WA_APP_SECRET=...
+   ```
+6. Configure the webhook subscription in Meta to point at `https://<your-host>/api/webhooks/whatsapp/meta/`.
+
+### Sync templates
+
+```bash
+cd backend
+python manage.py sync_whatsapp_templates           # seeds 8 default lifecycle templates
+python manage.py sync_whatsapp_templates --from-file path/to/meta-templates.json
+```
+
+The command writes a `whatsapp.template.synced` audit per row. Only
+`status=APPROVED && is_active=True` rows can be used for live sends.
+
+### Trigger a manual send
+
+```bash
+curl -X POST -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" \
+  http://localhost:8000/api/whatsapp/send-template/ \
+  -d '{"customerId":"NRG-CUST-1","actionKey":"whatsapp.payment_reminder","variables":{"customer_name":"Aditi","context":"₹499"}}'
+```
+
+The pipeline checks consent + approved-template + Claim Vault + approval
+matrix + idempotency before queuing. With `CELERY_TASK_ALWAYS_EAGER=true`
+(local default) the Celery task runs synchronously and the response
+already shows the `sent` status with the provider message id.
+
+### Webhook test (mock-mode)
+
+```bash
+curl -X POST http://localhost:8000/api/webhooks/whatsapp/meta/ \
+  -H 'X-Hub-Signature-256: sha256=anything' \
+  -H 'Content-Type: application/json' \
+  -d '{"object":"whatsapp_business_account","entry":[{"id":"E1","changes":[{"field":"messages","value":{"metadata":{"phone_number_id":"PNID"},"messages":[{"id":"wamid.IN1","from":"919999900001","type":"text","text":{"body":"hi"},"timestamp":"1714290000"}]}}]}]}'
+```
+
+Mock mode accepts any non-empty signature. Production (`WHATSAPP_PROVIDER=meta_cloud`) refuses any
+signature mismatch and rejects bodies older than `WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS` (default 300 s).
+
+### Locked safety rules (Phase 5A)
+
+- Production target is **Meta Cloud**. Baileys is dev/demo only and refuses to load
+  unless `DJANGO_DEBUG=true AND WHATSAPP_DEV_PROVIDER_ENABLED=true`.
+- Every send runs through **consent + approved template + Claim Vault + approval matrix**.
+- Failed sends NEVER mutate `Order` / `Payment` / `Shipment`.
+- CAIO can never originate a customer-facing send.
+- Phase 5A does NOT implement the AI Chat Agent (5C), inbound auto-reply, chat-to-call handoff,
+  Order booking from chat, lifecycle automation triggers, rescue discount, or campaigns.
 
 ## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
 

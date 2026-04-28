@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.dashboards",
     "apps.catalog",
+    "apps.whatsapp",
 ]
 
 MIDDLEWARE = [
@@ -308,6 +309,40 @@ GROK_MODEL = os.environ.get("GROK_MODEL", "")
 # is queried. Flipping the toggle later goes through PATCH
 # /api/ai/sandbox/status/ (admin/director only).
 AI_SANDBOX_MODE = _bool(os.environ.get("AI_SANDBOX_MODE"), default=False)
+
+
+# ----- Phase 5A — WhatsApp (Meta Cloud API) -----
+# Three-mode dispatch matching every other gateway adapter:
+#   mock        — deterministic, no network. Default for tests / dev.
+#   meta_cloud  — Meta WhatsApp Business Cloud API (production target).
+#                 Calls https://graph.facebook.com/{version}/{phone_number_id}/messages.
+#                 HMAC-SHA256 webhook verification via META_WA_APP_SECRET.
+#   baileys_dev — explicit dev-only stub. Refuses to load when
+#                 DJANGO_DEBUG=False AND WHATSAPP_DEV_PROVIDER_ENABLED!=true.
+#                 Never use in production.
+#
+# COMPLIANCE HARD STOP (Master Blueprint §26):
+#   Every WhatsApp send must be consent + approved-template + Claim-Vault
+#   gated server-side. Failed sends never mutate Order / Payment / Shipment.
+#   CAIO never sends customer messages — refused at engine + bridge +
+#   execute layer + an explicit guard at the WhatsApp service entry.
+WHATSAPP_PROVIDER = (os.environ.get("WHATSAPP_PROVIDER") or "mock").lower()
+META_WA_PHONE_NUMBER_ID = os.environ.get("META_WA_PHONE_NUMBER_ID", "")
+META_WA_BUSINESS_ACCOUNT_ID = os.environ.get("META_WA_BUSINESS_ACCOUNT_ID", "")
+META_WA_ACCESS_TOKEN = os.environ.get("META_WA_ACCESS_TOKEN", "")
+META_WA_VERIFY_TOKEN = os.environ.get("META_WA_VERIFY_TOKEN", "")
+META_WA_APP_SECRET = os.environ.get("META_WA_APP_SECRET", "")
+META_WA_API_VERSION = os.environ.get("META_WA_API_VERSION", "v20.0")
+WHATSAPP_WEBHOOK_SECRET = os.environ.get("WHATSAPP_WEBHOOK_SECRET", "")
+WHATSAPP_DEV_PROVIDER_ENABLED = _bool(
+    os.environ.get("WHATSAPP_DEV_PROVIDER_ENABLED"), default=False
+)
+# Webhook replay window (seconds). Meta does not strictly require this for the
+# Cloud API but it's defense in depth — when the request arrives with a
+# timestamp header older than this window it's rejected.
+WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS = _safe_int(
+    os.environ.get("WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS"), default=300
+)
 
 
 # ----- Phase 4A — Real-time WebSockets via Django Channels -----

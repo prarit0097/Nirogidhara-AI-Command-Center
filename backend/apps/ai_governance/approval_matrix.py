@@ -123,13 +123,76 @@ APPROVAL_MATRIX: tuple[Mapping[str, Any], ...] = (
             "shipment."
         ),
     },
-    # WhatsApp (Phase 3E design — no live integration yet)
+    # WhatsApp (Phase 5A — Live Sender Foundation lifecycle templates)
     {
         "action": "whatsapp.payment_reminder",
         "approver": "auto",
         "mode": "auto_with_consent",
         "description": (
             "Send a WhatsApp payment reminder. Requires customer consent."
+        ),
+    },
+    {
+        "action": "whatsapp.confirmation_reminder",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Send a WhatsApp order confirmation reminder. Requires consent."
+        ),
+    },
+    {
+        "action": "whatsapp.delivery_reminder",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Send a WhatsApp delivery reminder when the courier marks the "
+            "shipment out for delivery. Requires customer consent."
+        ),
+    },
+    {
+        "action": "whatsapp.rto_rescue",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Send a WhatsApp RTO rescue reminder for low/medium-risk "
+            "shipments. High-risk Orders must use the manual rescue flow "
+            "with operator approval."
+        ),
+    },
+    {
+        "action": "whatsapp.usage_explanation",
+        "approver": "compliance",
+        "mode": "approval_required",
+        "description": (
+            "Send a WhatsApp usage / dosage explanation. Claim Vault "
+            "grounding required before send (Phase 5A enforcement)."
+        ),
+    },
+    {
+        "action": "whatsapp.reorder_reminder",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Send a WhatsApp reorder reminder (MARKETING template tier). "
+            "Requires explicit marketing opt-in."
+        ),
+    },
+    {
+        "action": "whatsapp.support_complaint_ack",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Auto-acknowledge an inbound WhatsApp complaint and queue "
+            "human follow-up. The acknowledgement body is fixed."
+        ),
+    },
+    {
+        "action": "whatsapp.greeting",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Phase 5A-1 locked greeting template — first reply on a new "
+            "inbound thread. Fixed Hindi UTILITY string."
         ),
     },
     {
