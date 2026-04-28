@@ -593,6 +593,25 @@ paths action-by-action.
 Shipped via `docs: add whatsapp integration audit and phase 5a plan`.
 Audit of [`prarit0097/Whatsapp-sales-dashboard`](https://github.com/prarit0097/Whatsapp-sales-dashboard) at SHA `273b57a3`. Every backend module, frontend page, and Node service file mapped to a `reuse / adapt / replace / avoid` decision. Locked decisions (Production Meta Cloud only; Baileys dev/demo only; Claim Vault + consent + approval matrix gates server-side; CAIO blocked end-to-end). Full integration plan with Sections A-R, model specs, provider interface, allowed message types, audit kinds, env vars, test plan, and migration sequence lives in **`docs/WHATSAPP_INTEGRATION_PLAN.md`**. **Zero runtime code changes.**
 
+### ✅ Phase 5A-1 — WhatsApp AI Chat Agent + Discount Rescue Policy Addendum (DONE, doc-only)
+
+Shipped via `docs: add whatsapp ai chat agent and discount rescue policy`.
+Locked addendum (sections S–GG) to `docs/WHATSAPP_INTEGRATION_PLAN.md`. **Zero runtime code changes.** Key product direction shifts:
+
+- **WhatsApp module direction widened** from "lifecycle reminder sender" to "**inbound-first AI Chat Sales Agent + lifecycle messaging**" mirroring the AI Calling Agent's business objective (greet → category detection → Claim-Vault-grounded explanation → objection handling → address collection → order booking → payment-link handoff → confirmation / delivery / RTO / reorder lifecycle → chat-to-call handoff).
+- **Greeting rule locked.** Generic intro → fixed Hindi UTILITY template ("*Namaskar, Nirogidhara Ayurvedic Sanstha mai aapka swagat hai. Bataye mai aapki kya help kar sakta/sakti hu?*"). No freestyle on first reply.
+- **First-phase mode = `auto-reply` with guardrails.** "Auto-reply" means the AI replies without operator click — it does NOT bypass the matrix, Claim Vault, or approval engine. Every send still flows through `enforce_or_queue` first; CAIO never sends; sandbox stamps live; budgets gate.
+- **Address collection** in chat is stateful per `WhatsAppConversation.metadata.address_collection` with required fields and Delhivery pincode validation. Failure → handoff.
+- **Category detection (locked):** before any product-specific text, the agent must identify a `apps.catalog.ProductCategory` slug; the category-detection prompt is itself a Meta UTILITY template (not freestyle); product explanation thereafter must use `apps.compliance.Claim.approved` only.
+- **Chat-to-call handoff triggers (locked):** explicit call request, low confidence on two consecutive turns, address / payment / pincode clarification failure, six existing handoff flags (medical / side-effect / very-angry / human-requested / low-confidence / legal-or-refund), high-risk RTO rescue.
+- **Discount discipline (THE locked Prarit rule):** **AI never offers a discount upfront.** Lead with standard ₹3000/30-capsule price; do not mention discount unless customer asks; on first ask, handle the underlying objection (value / trust / benefit / brand / doctor / ingredients / lifestyle); only after 2–3 customer pushes may the AI offer a discount within Phase 3E `validate_discount` bands. **Refusal-based rescue is the only proactive offer path** — eligible at three stages: A) order-booking refusal (Sales/Chat/Call), B) confirmation refusal (Confirmation AI), C) delivery / RTO refusal (Delivery / RTO AI).
+- **50% total discount hard cap (LOCKED).** Across all stages combined, the total discount on a single order must NEVER exceed 50%. Examples: 20+20+10=50% allowed; 20+20+20=60% blocked. Scope: every AI workflow that can offer a discount (Chat / Calling / Confirmation / RTO / Customer Success / any future). Enforcement (Phase 5C/5D code work) layers a new `validate_total_discount_cap(order, additional_pct)` check on top of the existing `validate_discount` policy, in front of `apply_order_discount` in the Phase 4D execute layer; over-cap requests convert to a director-only `discount.above_50_director_override` `ApprovalRequest` row.
+- **Discount audit fields locked** (Phase 5C/5D `DiscountOfferLog` table): customer / order / conversation / agent / channel / stage / trigger / current+proposed+final pct / cap-check / policy band / approval state / estimated profit impact / Reward-Penalty signal / `AuditEvent` id.
+- **Future model + API planning notes** (NOT implemented in 5A-1 or 5A): `WhatsAppAIReplySuggestion`, `WhatsAppChatAgentRun`, `WhatsAppHandoffToCall`, `WhatsAppConversationOutcome`, `WhatsAppEscalation`, `WhatsAppLearningCandidate`, `DiscountOfferLog`. Future endpoints `POST /api/whatsapp/conversations/{id}/ai-reply/`, `POST /handoff-to-call/`, `POST /orders/draft-from-chat/`, `POST /discount-offers/`, `GET /timeline/`.
+- **Learning loop scope (locked):** may improve tone / timing / objection handling / closing style / discount-offer timing / handoff timing / category-question phrasing / address-collection wording. **Must NOT create** new medical claims, product promises, cure statements, side-effect advice, refund/legal commitments, new outbound templates, or discount offers above the per-stage band or the 50% cap.
+
+**Phase 5A implementation must read §S–§DD of the integration plan** before designing models / provider / service contracts — `WhatsAppConversation.metadata.address_collection` needs a home; `WhatsAppMessage` must carry context for the Chat Agent path; the provider interface must serve both lifecycle templates (5A) and AI-driven chat (5C); the discount audit table is anticipated by the model name space.
+
 ### Phase 5A — WhatsApp Live Sender Foundation (NEXT)
 
 Per `docs/WHATSAPP_INTEGRATION_PLAN.md` §C / §D / §E / §O:
@@ -610,24 +629,38 @@ Per `docs/WHATSAPP_INTEGRATION_PLAN.md` §C / §D / §E / §O:
 ### Phase 5B — Inbound Inbox + Customer 360 timeline
 
 - WhatsAppInbox three-pane page (port the reference repo's UX shape; replace data layer with Nirogidhara API).
-- Customer 360 WhatsApp tab.
+- Customer 360 WhatsApp tab (the same conversation surface the Chat Agent will speak through in 5C).
 - Internal notes per conversation.
 - Live refresh via Phase 4A `connectAuditEvents` (filter on `kind.startsWith("whatsapp.")`) — no separate WebSocket channel.
 
-### Phase 5C — AI Suggestions + Learning Loop
+### Phase 5C — WhatsApp AI Chat Sales Agent (per Phase 5A-1 addendum)
 
-- Port `learned_memory.py` from the reference repo wholesale (the cleanest file in that repo — explicit human-vetted gate, no auto-promotion).
-- AI suggestions become `apps.ai_governance.ApprovalRequest` rows of action `whatsapp.<message_type>`. Admin / director approves → Phase 4D execute layer dispatches via the existing service helper.
-- Claim Vault filter wraps the AI path: any LLM-emitted text not present in `apps.compliance.Claim.approved` for the relevant product is dropped + escalates to human handoff.
-- CAIO refused at engine + AgentRun bridge + execute layer (carry-through Phase 4D pre-checks).
+- Port `learned_memory.py` from the reference repo wholesale (explicit human-vetted gate, no auto-promotion).
+- Claim-Vault-bound LLM path: post-LLM filter rejects any sentence containing strings outside `apps.compliance.Claim.approved` for the relevant product.
+- Suggest mode + auto-reply mode (both still routed through `enforce_or_queue`). Auto-reply means the AI replies without operator click; it does NOT bypass the matrix.
+- Greeting / category-detection / discovery / explanation / objection-handling prompts wired (see addendum §U–§Z).
+- Address collection state machine on `WhatsAppConversation.metadata.address_collection`.
+- AI suggestions become `apps.ai_governance.ApprovalRequest` rows of action `whatsapp.<message_type>` for the approval-required paths. Admin / director approves → Phase 4D execute layer dispatches via the existing service helper.
+- New `WhatsAppAIReplySuggestion` + `WhatsAppChatAgentRun` models linking to `AgentRun`.
+- CAIO refused at engine + AgentRun bridge + execute layer + WhatsApp service entry guard.
 
-### Phase 5D — Lifecycle automation
+### Phase 5D — Chat-to-Call Handoff + Lifecycle Automation
 
+- Chat-to-call handoff (per addendum §Y) wired to `apps.calls.services.trigger_call_for_lead`. New `WhatsAppHandoffToCall` model captures the handoff record; `whatsapp.handoff.call_triggered` audit fires.
+- Reverse handoff: AI Calling Agent can fire one approved template back into chat.
 - Order / Payment / Shipment state-change signals fire `enforce_or_queue` for the matching template.
 - Auto-approved (consent-gated) lifecycle messages flow without operator action.
 - Operations / admin can still manually pre-empt or send.
 
-### Phase 5E — Campaign system (gated, later)
+### Phase 5E — Confirmation / Delivery / RTO / Reorder automation + Discount Rescue
+
+- Refusal-based rescue discount flow (per addendum §AA) wired into Confirmation / Delivery / RTO AI paths.
+- New `validate_total_discount_cap(order, additional_pct)` policy module enforces the **50% total cap** (per addendum §BB). Layered on top of the existing Phase 3E `validate_discount`. Runs before `apply_order_discount` in the Phase 4D execute layer.
+- New `DiscountOfferLog` model (per addendum §CC) records every offer (accepted / rejected / blocked) with the locked field set.
+- New matrix row `discount.above_50_director_override` (director-only + human-escalation). Over-cap rescue requests convert to this `ApprovalRequest` rather than failing silently.
+- `WhatsAppConversationOutcome` + `WhatsAppEscalation` finalize the conversation lifecycle.
+
+### Phase 5F — Campaign system (gated, later)
 
 - Director-approved broadcast campaigns.
 - Meta MARKETING template tier required.

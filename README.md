@@ -91,8 +91,9 @@ cd frontend && npm test
 **Next:**
 
 - ⏭ **Phase 5A-0** ✅ done (doc-only): WhatsApp compatibility audit of [`prarit0097/Whatsapp-sales-dashboard`](https://github.com/prarit0097/Whatsapp-sales-dashboard) → integration plan in [`docs/WHATSAPP_INTEGRATION_PLAN.md`](docs/WHATSAPP_INTEGRATION_PLAN.md). Locked: production target is Meta Cloud API (the reference repo's Meta Cloud provider is stubbed); Baileys is dev/demo only.
+- ⏭ **Phase 5A-1** ✅ done (doc-only): **WhatsApp AI Chat Agent + Discount Rescue Policy Addendum** (sections S–GG of the integration plan). WhatsApp scope widens from "lifecycle reminder sender" to **inbound-first AI Chat Sales Agent + lifecycle messaging** mirroring the AI Calling Agent. Locked: greeting rule (fixed Hindi UTILITY template), address collection in chat, category detection before product text, chat-to-call handoff, **AI never offers discount upfront** (rescue-only at order-booking / confirmation / delivery-RTO refusal), **50% total-discount hard cap across all AI workflows**.
 - ⏭ **Phase 5A** — WhatsApp Live Sender Foundation: build Meta Cloud client from scratch, 8 new models under `apps/whatsapp/`, consent + approved-template + Claim-Vault gates server-side, signed webhook + replay-window check, Celery send task with retry/jitter/idempotency, Settings → WABA section + read-only WhatsAppTemplates page.
-- ⏭ **Phase 5B–5E** — Inbound inbox + Customer 360 timeline (5B); AI suggestions + learning loop (5C; AI suggestions become ApprovalRequests); lifecycle automation (5D); approval-gated campaigns (5E).
+- ⏭ **Phase 5B–5F** — Inbound inbox + Customer 360 timeline (5B); WhatsApp AI Chat Sales Agent with Claim-Vault-bound LLM + `learned_memory.py` ported wholesale (5C); chat-to-call handoff + lifecycle automation (5D); confirmation/delivery/RTO/reorder automation with rescue-discount flow + 50% cap enforcement in code (5E); approval-gated campaigns (5F).
 
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
 Detailed handoff: [`nd.md`](nd.md).
