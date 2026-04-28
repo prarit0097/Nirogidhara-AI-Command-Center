@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 219 tests (Phase 1 → 3E)
+python -m pytest -q                     # 244 tests (Phase 1 → 4B)
 
 # Frontend
 cd ../frontend
@@ -223,6 +223,39 @@ backend-only phase. Highlights:
   read via `GET /api/ai/approval-matrix/`. Phase 4C middleware enforces it.
 - **WhatsApp design scaffold** (`apps.crm.whatsapp_design`): no live sender;
   the constants drive the future Phase 4+ integration.
+
+## Phase 4B — Reward / Penalty Engine
+
+Phase 4B turns the Phase 3E pure scoring formula into persisted, auditable
+per-order events. Headline points:
+
+- **Scope**: AI agents only — no human staff scoring in this phase.
+- **Eligible stages**: Delivered (rewards), RTO + Cancelled (penalties).
+- **CEO AI net accountability**: every delivered / RTO / cancelled order
+  generates a CEO AI event. Always present, every sweep.
+- **CAIO is excluded** from business scoring (audit-only).
+- **Idempotent**: re-running a sweep updates rows in place via
+  `unique_key = phase4b_engine:{order_id}:{agent_id}:{event_type}`.
+
+Manual sweep (no Redis required):
+
+```bash
+python manage.py calculate_reward_penalties
+python manage.py calculate_reward_penalties --order-id NRG-20410
+python manage.py calculate_reward_penalties --dry-run
+python manage.py calculate_reward_penalties --start-date 2026-04-01 --end-date 2026-04-28
+```
+
+Celery (production):
+```bash
+# Already wired; pulled in by the existing worker / beat command.
+celery -A config worker -B --loglevel=info
+```
+
+Frontend Rewards page at `/rewards` shows the agent-wise leaderboard,
+order-wise scoring events table, sweep summary cards, and Run Sweep
+button (admin / director only on the API; viewer / operations / anonymous
+are blocked).
 
 ## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
 

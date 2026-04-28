@@ -9,7 +9,7 @@
 
 Full-stack AI Business Operating System for Nirogidhara Private Limited (Ayurvedic medicine D2C). React 18 + Vite + TS frontend talks to Django 5 + DRF backend. Director: Prarit Sidana — final authority for high-risk decisions. Reference: *Nirogidhara AI Command Center — Master Blueprint v1.0* (PDF in repo).
 
-Status: Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E complete (CRM data layer, write APIs, all four gateway integrations, AgentRun + 7 per-agent runtime services, Celery beat at 09:00 + 18:00 IST, OpenAI → Anthropic fallback, model-wise USD cost tracking, sandbox toggle + versioned prompts with rollback + per-agent USD budgets, Scheduler + Governance frontend pages, **Phase 3E business config: catalog admin app + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty deterministic scoring + approval matrix table + WhatsApp design scaffold**). **219 backend tests + 8 frontend tests**, all green. Next: Phase 4A WebSockets, Phase 4B reward/penalty engine wiring, Phase 4C approval-matrix middleware enforcement.
+Status: Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B complete (CRM data layer, write APIs, all four gateway integrations, AgentRun + 7 per-agent runtime services, Celery beat at 09:00 + 18:00 IST, OpenAI → Anthropic fallback, model-wise USD cost tracking, sandbox toggle + versioned prompts with rollback + per-agent USD budgets, Scheduler + Governance frontend pages, Phase 3E business config: catalog admin app + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty deterministic scoring + approval matrix table + WhatsApp design scaffold, **Phase 4B reward/penalty engine wiring: AI-agents-only scoring, CEO AI net accountability rule, /api/rewards/{events,summary,sweep}/ endpoints, calculate_reward_penalties management command, run_reward_penalty_sweep_task Celery task, Rewards page now shows agent-wise leaderboard + order-wise scoring events**). **244 backend tests + 8 frontend tests**, all green. Next: Phase 4A WebSockets, Phase 4C approval-matrix middleware enforcement, live WhatsApp sender.
 
 GitHub: https://github.com/prarit0097/Nirogidhara-AI-Command-Center
 
@@ -104,7 +104,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 219 tests today
+python -m pytest -q                    # 244 tests today
 
 # Frontend
 cd frontend
@@ -157,6 +157,11 @@ git push origin main
 | Reward/Penalty scoring (Phase 3E) | `backend/apps/rewards/scoring.py` (`calculate_order_reward_penalty`) |
 | Approval Matrix policy (Phase 3E) | `backend/apps/ai_governance/approval_matrix.py` (read at `/api/ai/approval-matrix/`) |
 | WhatsApp design scaffold (Phase 3E) | `backend/apps/crm/whatsapp_design.py` |
+| Reward/Penalty engine (Phase 4B) | `backend/apps/rewards/engine.py` |
+| RewardPenaltyEvent model | `backend/apps/rewards/models.py` |
+| Reward/Penalty Celery task | `backend/apps/rewards/tasks.py` |
+| `calculate_reward_penalties` command | `backend/apps/rewards/management/commands/calculate_reward_penalties.py` |
+| Reward sweep / events / summary endpoints | `backend/apps/rewards/views.py` (`/api/rewards/{events,summary,sweep}/`) |
 | Master Event Ledger receivers | `backend/apps/audit/signals.py` |
 | Permissions (role-based) | `backend/apps/accounts/permissions.py` |
 | Order state machine | `backend/apps/orders/services.py` (`ALLOWED_TRANSITIONS`) |

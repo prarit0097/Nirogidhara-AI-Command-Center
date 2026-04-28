@@ -368,6 +368,71 @@ export interface RewardPenalty {
   reward: number;
   penalty: number;
   net: number;
+  // Phase 4B fields (optional for backward compat with mock fixtures).
+  agentId?: string;
+  agentType?: string;
+  rewardedOrders?: number;
+  penalizedOrders?: number;
+  lastCalculatedAt?: string | null;
+}
+
+// Phase 4B — per-order, per-AI-agent scoring event.
+export interface RewardPenaltyEventComponent {
+  code: string;
+  label: string;
+  points: number;
+}
+
+export interface RewardPenaltyEvent {
+  id: string;
+  orderId: string | null;
+  orderIdSnapshot: string;
+  agentId: string | null;
+  agentName: string;
+  agentType: string;
+  eventType: "reward" | "penalty" | "mixed";
+  rewardScore: number;
+  penaltyScore: number;
+  netScore: number;
+  components: RewardPenaltyEventComponent[];
+  missingData: string[];
+  attribution: Record<string, unknown>;
+  source: string;
+  triggeredBy: string;
+  calculatedAt: string;
+  metadata: Record<string, unknown>;
+  uniqueKey: string;
+}
+
+export interface RewardPenaltySummary {
+  evaluatedOrders: number;
+  totalReward: number;
+  totalPenalty: number;
+  netScore: number;
+  lastSweepAt: string | null;
+  lastSweepPayload: Record<string, unknown> | null;
+  missingDataWarnings: string[];
+  agentLeaderboard: RewardPenalty[];
+}
+
+export interface RewardPenaltySweepPayload {
+  startDate?: string | null;
+  endDate?: string | null;
+  orderId?: string;
+  dryRun?: boolean;
+}
+
+export interface RewardPenaltySweepResult {
+  evaluatedOrders: number;
+  createdEvents: number;
+  updatedEvents: number;
+  skippedOrders: number;
+  totalReward: number;
+  totalPenalty: number;
+  netScore: number;
+  dryRun: boolean;
+  leaderboardUpdated: boolean;
+  missingDataWarnings: string[];
 }
 
 export interface Claim {

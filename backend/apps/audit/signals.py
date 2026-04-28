@@ -68,6 +68,13 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.sandbox.disabled": "shield-off",
     "ai.budget.warning": "gauge",
     "ai.budget.blocked": "ban",
+    # Phase 4B — reward / penalty engine.
+    "ai.reward.calculated": "award",
+    "ai.penalty.applied": "minus-circle",
+    "ai.reward_penalty.sweep_started": "play",
+    "ai.reward_penalty.sweep_completed": "check-circle",
+    "ai.reward_penalty.sweep_failed": "x-circle",
+    "ai.reward_penalty.leaderboard_updated": "trophy",
     # Phase 3E — catalog admin + business policy events.
     "catalog.category.created": "folder-plus",
     "catalog.category.updated": "folder-edit",

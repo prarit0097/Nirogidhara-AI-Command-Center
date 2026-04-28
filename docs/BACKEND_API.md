@@ -264,6 +264,32 @@ Behavior of the budget guard inside `run_readonly_agent_analysis`:
 3. Else if spend ≥ `alert_threshold_pct`% of either cap → write `ai.budget.warning` and continue.
 4. Snapshot of the budget check is stamped onto every `AgentRun.budget_snapshot`.
 
+### Reward / Penalty Engine (Phase 4B)
+
+The legacy `GET /api/rewards/` list endpoint stays public and now returns the agent-level rollup with Phase 4B fields (`agentId`, `agentType`, `rewardedOrders`, `penalizedOrders`, `lastCalculatedAt`) appended in camelCase. Three new endpoints power the per-order scoring view:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/rewards/` | Agent-level leaderboard (camelCase). Public read; backwards-compatible. |
+| GET | `/api/rewards/events/` | Per-order, per-AI-agent scoring events. **Admin/director only.** Query params: `agent` (substring match on agent name), `orderId` (exact), `eventType` (`reward`/`penalty`/`mixed`), `limit` (default 200, max 1000). |
+| GET | `/api/rewards/summary/` | Top-line totals + last sweep snapshot + agent leaderboard + missing-data warnings. **Admin/director only.** |
+| POST | `/api/rewards/sweep/` | Trigger a sweep. **Admin/director only.** Body `{ startDate?, endDate?, orderId?, dryRun? }`. Returns `{ evaluatedOrders, createdEvents, updatedEvents, skippedOrders, totalReward, totalPenalty, netScore, dryRun, leaderboardUpdated, missingDataWarnings }`. |
+
+**Locked rules** (Master Blueprint §10.2 + §26 + Prarit Apr 2026):
+- AI-agents only — no human staff scoring.
+- Eligible stages: `Delivered` (rewards), `RTO` + `Cancelled` (penalties); other stages skipped.
+- **CEO AI net accountability** — every delivered order generates a CEO AI reward event mirroring the order's reward total; every RTO / cancelled order generates a CEO AI penalty event mirroring the order's penalty total. Always present, every sweep.
+- **CAIO excluded** from business reward / penalty (audit-only).
+- **Idempotent** — re-running a sweep updates rows in place via `unique_key = phase4b_engine:{order_id}:{agent_id}:{event_type}`.
+- **Missing data is recorded, never invented** — `missing_data` JSON on every event; `missingDataWarnings` aggregated in the summary endpoint.
+
+Cron / one-off:
+- `python manage.py calculate_reward_penalties [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--order-id NRG-...] [--dry-run] [--rebuild-leaderboard]` — no Redis required.
+- Celery task `apps.rewards.tasks.run_reward_penalty_sweep_task` runs the all-eligible sweep + leaderboard rebuild. Eager mode for dev / tests; production picks it up via the existing worker.
+
+Audit kinds (Phase 4B):
+- `ai.reward.calculated`, `ai.penalty.applied`, `ai.reward_penalty.sweep_started`, `ai.reward_penalty.sweep_completed`, `ai.reward_penalty.sweep_failed`, `ai.reward_penalty.leaderboard_updated`.
+
 ### Catalog (Phase 3E)
 
 Reads stay public; writes are admin/director-only via `RoleBasedPermission` (anonymous → 401, viewer/operations → 403).

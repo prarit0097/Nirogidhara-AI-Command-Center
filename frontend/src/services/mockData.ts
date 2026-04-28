@@ -342,8 +342,104 @@ export const CAIO_AUDITS = [
 /* ---------------- Reward / Penalty ---------------- */
 export const REWARD_LEADERBOARD = AGENTS
   .filter((a) => a.reward > 0)
-  .map((a) => ({ name: a.name, reward: a.reward, penalty: a.penalty, net: a.reward - a.penalty }))
+  .map((a) => ({
+    name: a.name,
+    reward: a.reward,
+    penalty: a.penalty,
+    net: a.reward - a.penalty,
+    agentId: a.id,
+    agentType: a.group?.toLowerCase?.() ?? "",
+    rewardedOrders: Math.max(0, Math.round(a.reward / 30)),
+    penalizedOrders: Math.max(0, Math.round(a.penalty / 30)),
+    lastCalculatedAt: null,
+  }))
   .sort((a, b) => b.net - a.net);
+
+/* Phase 4B per-order scoring events (mock fallback). Engine writes camelCase
+ * keys; frontend renders them verbatim. */
+export const REWARD_PENALTY_EVENTS = [
+  {
+    id: "phase4b_engine:NRG-20410:ceo:reward",
+    orderId: "NRG-20410",
+    orderIdSnapshot: "NRG-20410",
+    agentId: "ceo",
+    agentName: "CEO AI Agent",
+    agentType: "command",
+    eventType: "reward",
+    rewardScore: 70,
+    penaltyScore: 0,
+    netScore: 70,
+    components: [
+      { code: "ceo_net_accountability_reward", label: "CEO AI net accountability (delivered order)", points: 70 },
+    ],
+    missingData: ["customer_satisfaction", "reorder_potential"],
+    attribution: { rule: "ceo_ai_net_accountability", stage: "Delivered" },
+    source: "phase4b_engine",
+    triggeredBy: "manual-sweep",
+    calculatedAt: new Date().toISOString(),
+    metadata: { stage: "Delivered", rto_risk: "Low", discount_pct: 12 },
+    uniqueKey: "phase4b_engine:NRG-20410:ceo:reward",
+  },
+  {
+    id: "phase4b_engine:NRG-20431:ceo:penalty",
+    orderId: "NRG-20431",
+    orderIdSnapshot: "NRG-20431",
+    agentId: "ceo",
+    agentName: "CEO AI Agent",
+    agentType: "command",
+    eventType: "penalty",
+    rewardScore: 0,
+    penaltyScore: 50,
+    netScore: -50,
+    components: [
+      { code: "ceo_net_accountability_penalty", label: "CEO AI net accountability (failed order)", points: -50 },
+    ],
+    missingData: ["customer_satisfaction", "reorder_potential"],
+    attribution: { rule: "ceo_ai_net_accountability", stage: "RTO" },
+    source: "phase4b_engine",
+    triggeredBy: "manual-sweep",
+    calculatedAt: new Date().toISOString(),
+    metadata: { stage: "RTO", rto_risk: "High", discount_pct: 22 },
+    uniqueKey: "phase4b_engine:NRG-20431:ceo:penalty",
+  },
+  {
+    id: "phase4b_engine:NRG-20431:rto:penalty",
+    orderId: "NRG-20431",
+    orderIdSnapshot: "NRG-20431",
+    agentId: "rto",
+    agentName: "RTO Prevention Agent",
+    agentType: "operations",
+    eventType: "penalty",
+    rewardScore: 0,
+    penaltyScore: 30,
+    netScore: -30,
+    components: [
+      { code: "rto_after_dispatch", label: "Order RTO after dispatch", points: -30 },
+    ],
+    missingData: [],
+    attribution: { rule: "phase4b_failed_attribution", agent_id: "rto" },
+    source: "phase4b_engine",
+    triggeredBy: "manual-sweep",
+    calculatedAt: new Date().toISOString(),
+    metadata: { stage: "RTO", rto_risk: "High", discount_pct: 22 },
+    uniqueKey: "phase4b_engine:NRG-20431:rto:penalty",
+  },
+] as const;
+
+export const REWARD_PENALTY_SUMMARY = {
+  evaluatedOrders: 2,
+  totalReward: 70,
+  totalPenalty: 80,
+  netScore: -10,
+  lastSweepAt: null,
+  lastSweepPayload: null,
+  missingDataWarnings: [
+    "NRG-20410:customer_satisfaction",
+    "NRG-20410:reorder_potential",
+    "NRG-20431:customer_satisfaction",
+  ],
+  agentLeaderboard: REWARD_LEADERBOARD,
+};
 
 /* ---------------- Claim Vault ---------------- */
 export const CLAIM_VAULT = [

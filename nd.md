@@ -12,8 +12,8 @@
 - **Owner / Director:** Prarit Sidana — final authority for high-risk decisions.
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
-- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E done):** **15 Django apps** scaffolded (catalog added in 3E), **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D) + product catalog read/write + approval matrix read endpoint (3E)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + WhatsApp sales/support design scaffold**, seed command, frontend wired with **automatic mock fallback** (19 pages). **219 backend tests + 8 frontend tests** all green.
-- **What's next (Phase 4+):** Real-time WebSockets (4A), reward / penalty engine wiring on top of Phase 3E scoring (4B), approval-matrix middleware enforcement (4C) — then learning loop pipeline, multi-tenant SaaS.
+- **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B done):** **15 Django apps** scaffolded, **25 read + 16 write endpoints + Razorpay/Delhivery/Vapi/Meta Lead Ads webhooks + AgentRun (3A) + 8 per-agent runtime endpoints (3B) + scheduler-status (3C) + sandbox + prompt-version + budget endpoints (3D) + product catalog read/write + approval matrix read endpoint (3E) + reward-penalty events / summary / sweep endpoints (4B)** live, Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, **all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency**, **AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + WhatsApp sales/support design scaffold + Phase 4B reward/penalty engine (AI agents only, CEO AI net accountability) + Rewards page now shows agent-wise leaderboard and order-wise scoring events**, seed command, frontend wired with **automatic mock fallback** (19 pages). **244 backend tests + 8 frontend tests** all green.
+- **What's next (Phase 4+):** Real-time WebSockets (4A), approval-matrix middleware enforcement (4C), live WhatsApp sender — then learning loop pipeline, multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -474,6 +474,37 @@ Final Reward Score =
 - 7 new tests in `tests/test_ai_config.py` confirm: disabled default, unknown-provider fallback, per-provider key isolation (no cross-leak), enable-only-with-key, OpenAI / Anthropic / Grok routing.
 - **Compliance hard stop documented in code:** every AI module has a header comment reiterating Master Blueprint §26 #4 — AI must speak only from `apps.compliance.Claim`.
 
+### ✅ Phase 4B — Reward / Penalty Engine wiring (built this session)
+
+- **`apps.rewards` extended**: new `RewardPenaltyEvent` model (per-order, per-AI-agent scoring event with `unique_key` for idempotency, `components` / `missing_data` / `attribution` JSON, `event_type` reward/penalty/mixed). `RewardPenalty` rollup row gains Phase 4B fields (`agent_id`, `agent_type`, `rewarded_orders`, `penalized_orders`, `last_calculated_at`). Migration `0002_phase4b_reward_events`.
+- **`apps/rewards/engine.py`** — the wiring layer. `build_reward_context(order)` derives only signals provable from the DB (no inventions); `calculate_for_order(order, ...)` calls the Phase 3E pure scoring formula then **fans the result across the 10 in-scope AI agents** (CEO AI / Ads / Marketing / Sales Growth / Calling AI / Confirmation AI / RTO / Customer Success / Data Quality / Compliance). Sweep helpers: `calculate_for_delivered_orders`, `calculate_for_failed_orders`, `calculate_for_all_eligible_orders` (delivered + RTO + cancelled), `rebuild_agent_leaderboard`. Eligible stages: `Delivered` (rewards), `RTO` + `Cancelled` (penalties). Other stages skipped.
+- **CEO AI net accountability rule (locked)** — every delivered order generates a CEO AI **reward** event mirroring the order's reward total; every RTO / cancelled order generates a CEO AI **penalty** event mirroring the order's penalty total. Always present, every sweep.
+- **CAIO excluded** — `EXCLUDED_AGENTS = {"caio"}` and CAIO is intentionally absent from `AI_AGENT_BY_ID`. CAIO never receives a business reward / penalty.
+- **Idempotency** — `unique_key` `phase4b_engine:{order_id}:{agent_id}:{event_type}` is enforced as a unique DB constraint. Re-running the sweep updates rows in place; the response surfaces `createdEvents` vs `updatedEvents`.
+- **3 backend endpoints** (under `/api/rewards/`):
+  - `GET /api/rewards/events/` — admin/director only. Filters: `agent`, `orderId`, `eventType`, `limit`.
+  - `GET /api/rewards/summary/` — admin/director only. Returns `evaluatedOrders`, `totalReward`, `totalPenalty`, `netScore`, `lastSweepAt`, `agentLeaderboard`, `missingDataWarnings`.
+  - `POST /api/rewards/sweep/` — admin/director only. Body `{ startDate?, endDate?, orderId?, dryRun? }`. Anonymous → 401, viewer / operations → 403.
+  - `GET /api/rewards/` is unchanged in shape (the legacy leaderboard list); new fields ride alongside as optional camelCase keys for forward compat.
+- **Management command** `python manage.py calculate_reward_penalties` with `--start-date`, `--end-date`, `--order-id`, `--dry-run`, `--rebuild-leaderboard` flags. No Redis required.
+- **Celery task** `apps.rewards.tasks.run_reward_penalty_sweep_task` runs the all-eligible sweep + leaderboard rebuild. Eager-mode safe; production Celery worker / beat will pick it up unchanged.
+- **6 new audit kinds** — `ai.reward.calculated`, `ai.penalty.applied`, `ai.reward_penalty.sweep_started` / `.sweep_completed` / `.sweep_failed` / `.leaderboard_updated`. The engine never spams the ledger: per-order events are persisted on the `RewardPenaltyEvent` table, while sweep lifecycle + leaderboard rebuild are summarized as audit rows.
+- **Frontend Rewards page enhanced** — agent-wise leaderboard table (Agent / Type / Reward / Penalty / Net / +Orders / −Orders / Last calculated), order-wise scoring events table (Order / Agent / Type / Reward / Penalty / Net / Components / Missing / Calculated), 4 sweep summary cards (Reward total / Penalty total / Net AI score / Last sweep time + Run sweep + Dry run buttons), missing-data warnings strip. **No business logic in React** — every value comes from the API; the Run Sweep button calls `POST /api/rewards/sweep/` and refreshes the three derived views.
+- **Frontend types + api.ts** — `RewardPenaltyEvent`, `RewardPenaltySummary`, `RewardPenaltySweepPayload`, `RewardPenaltySweepResult` typed; new methods `api.getRewardPenaltyEvents()`, `api.getRewardPenaltySummary()`, `api.runRewardPenaltySweep()` with deterministic mock fallback so dev never crashes when backend is offline.
+- **25 new pytest tests** (`tests/test_phase4b.py`) covering: per-order event creation, idempotent re-runs, delivered → CEO reward, RTO → CEO penalty, cancelled → CEO penalty, CAIO excluded, AI-agents-only scope, missing data recorded (not invented), reward / penalty caps respected, full sweep idempotency, audit firing, dry-run no-persistence, leaderboard rebuild, management command (incl. `--dry-run` + `--order-id`), Celery task in eager mode, public list endpoint camelCase, admin-only events / summary endpoints, sweep endpoint role gating (anonymous / viewer / operations all blocked, admin / director allowed), sweep with `orderId`, sweep dry-run no-persist.
+
+**Locked Phase 4B decisions (Prarit, Apr 2026):**
+1. Reward / penalty scoring is **AI-agents only** in this phase — no human staff scoring.
+2. Every RTO / cancelled order penalty **always** routes a CEO AI net accountability event.
+3. The Rewards page must show **both** the agent-wise leaderboard **and** the order-wise scoring events.
+
+**Compliance hard stop preserved (Master Blueprint §26):** The engine is read-and-derive only. It NEVER writes to Lead / Order / Payment / Shipment / Call rows. Reward / penalty is based on **delivered profitable quality orders**, never on order-punching count alone. Missing signals are recorded explicitly in `missing_data`; nothing is invented. CAIO remains audit-only. Phase 4A WebSockets, Phase 4C approval middleware, and live WhatsApp sender are still pending.
+
+| Command | Result |
+| --- | --- |
+| `python -m pytest -q` | **244 passed** (219 + 25 phase4b) |
+| `python manage.py check` | 0 issues |
+
 ### ✅ Phase 3E — Business Configuration Foundation (built this session)
 
 - **New `apps.catalog` Django app** — `ProductCategory`, `Product`, `ProductSKU` models with admin/director-managed CRUD via Django admin (`ProductSKUInline` under Product), public read endpoints + admin/director-gated write endpoints under `/api/catalog/`. Migration `0001_initial`.
@@ -681,7 +712,7 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 219 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 15 phase3d + 29 phase3e)
+cd backend && python -m pytest -q   # 244 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 15 phase3d + 29 phase3e + 25 phase4b)
 
 # Frontend
 cd frontend && npm test             # 8 tests
@@ -782,9 +813,11 @@ SandboxState singleton + versioned PromptVersion (one active per agent + rollbac
 ### ✅ Phase 3E — Business configuration foundation (DONE)
 Product Catalog admin (`apps.catalog`) + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty deterministic scoring (capped at +100/-100) + approval matrix policy table + WhatsApp sales/support design scaffold + production infra targets documented, 29 new tests. See §8.
 
-### Phase 4 — Real-time + reward / penalty + approval middleware (NEXT)
+### ✅ Phase 4B — Reward / Penalty Engine wiring (DONE)
+`RewardPenaltyEvent` model + `apps.rewards.engine` (AI-agents-only attribution, CEO AI net accountability rule) + `/api/rewards/{events,summary,sweep}/` endpoints + `calculate_reward_penalties` management command + `run_reward_penalty_sweep_task` Celery task + Rewards page upgraded with leaderboard / events / sweep button, 25 new tests. See §8.
+
+### Phase 4 — Real-time + approval middleware (NEXT)
 - **Phase 4A — Real-time WebSockets**: Django Channels for live AuditEvent push.
-- **Phase 4B — Reward/Penalty Engine**: wire `apps.rewards.scoring` (Phase 3E) into a sweep that evaluates delivered orders + writes to `RewardPenalty` leaderboard.
 - **Phase 4C — Approval Matrix Middleware**: enforce `apps.ai_governance.approval_matrix` (Phase 3E) so dry-run AgentRun suggestions can finally turn into business writes after the right approver signs off.
 
 ### Phase 2 — Other gateways / credentials (slot when needed)
@@ -931,4 +964,4 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
-_End of `nd.md`. Last updated after Phase 3E business configuration foundation (catalog + discount + advance + scoring + approval matrix + WhatsApp scaffold)._
+_End of `nd.md`. Last updated after Phase 4B reward / penalty engine wiring (AI-agents only, CEO AI net accountability, agent + order-event Rewards page)._

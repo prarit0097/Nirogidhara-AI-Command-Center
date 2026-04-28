@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E are shipped (see `nd.md` §8 for the full checkpoint trail).
+Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4B are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —
 ordered per blueprint Section 25 (`CRM → Workflow → Integrations → Voice AI →
@@ -295,25 +295,52 @@ Shipped via `feat: add business configuration foundation`.
 read-only, the Approved Claim Vault still gates every medical AI call,
 no live messaging or order writes are executed by the Phase 3E modules.
 
-## Phase 4 — Real-time + reward / penalty + approval middleware (NEXT)
+## Phase 4 — Real-time + reward / penalty + approval middleware
 
-### Phase 4A — Real-time WebSockets
+### Phase 4A — Real-time WebSockets (NEXT)
 
 - Django Channels + WebSockets to push `AuditEvent` rows to subscribed
   dashboards.
 - Replace polling on the dashboard's activity feed.
 - Frontend already polls via React Query — adding push is purely additive.
 
-### Phase 4B — Reward/Penalty Engine
+### ✅ Phase 4B — Reward / Penalty Engine wiring (DONE)
 
-- Wire `apps.rewards.scoring.calculate_order_reward_penalty` (Phase 3E)
-  into a Celery sweep that walks delivered orders + writes leaderboard
-  rollup rows to `apps.rewards.RewardPenalty`.
-- Master Blueprint §10.2 is now encoded in the scoring module; the engine
-  is the call-and-persist layer.
-- Audit kinds: `ai.reward.calculated`, `ai.penalty.applied`.
+Shipped via `feat: add reward penalty engine`.
 
-### Phase 4C — Approval Matrix Middleware
+- New `RewardPenaltyEvent` model (per-order, per-AI-agent) with
+  `unique_key` for idempotency. `RewardPenalty` rollup row gets
+  Phase 4B columns (`agent_id`, `agent_type`, `rewarded_orders`,
+  `penalized_orders`, `last_calculated_at`).
+- `apps/rewards/engine.py` wires the Phase 3E pure formula
+  (`apps.rewards.scoring.calculate_order_reward_penalty`) into per-order
+  attribution across the 10 in-scope AI agents (CEO AI, Ads, Marketing,
+  Sales Growth, Calling AI, Confirmation AI, RTO, Customer Success, Data
+  Quality, Compliance). Helpers: `build_reward_context`, `calculate_for_order`,
+  `calculate_for_delivered_orders`, `calculate_for_failed_orders`,
+  `calculate_for_all_eligible_orders`, `rebuild_agent_leaderboard`.
+- **Locked rule**: every RTO / cancelled order generates a CEO AI net
+  accountability **penalty** event; every delivered order generates a
+  CEO AI **reward** event. CAIO is excluded from business scoring.
+- 3 new endpoints under `/api/rewards/`: `GET events/`, `GET summary/`,
+  `POST sweep/` — admin/director only. Existing `GET /api/rewards/`
+  remains public and backwards-compatible.
+- Management command `python manage.py calculate_reward_penalties`
+  with `--start-date`, `--end-date`, `--order-id`, `--dry-run`,
+  `--rebuild-leaderboard` flags. No Redis required.
+- Celery task `apps.rewards.tasks.run_reward_penalty_sweep_task`
+  (eager-mode safe).
+- 6 new audit kinds: `ai.reward.calculated`, `ai.penalty.applied`,
+  `ai.reward_penalty.sweep_started` / `.sweep_completed` /
+  `.sweep_failed` / `.leaderboard_updated`.
+- Frontend Rewards page upgraded with agent-wise leaderboard, order-wise
+  scoring events table, sweep summary cards, and a Run Sweep button.
+- 25 new pytest tests cover idempotency, CEO AI accountability rules,
+  CAIO exclusion, missing-data preservation, reward / penalty caps,
+  audit firing, dry-run no-persistence, management command, Celery
+  task in eager mode, and full role-gating across the new endpoints.
+
+### Phase 4C — Approval Matrix Middleware (NEXT)
 
 - Read `apps.ai_governance.approval_matrix.APPROVAL_MATRIX` (Phase 3E)
   before every business write. Block / queue / route to approver per

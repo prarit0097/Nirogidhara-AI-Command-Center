@@ -78,6 +78,10 @@ import type {
   RescueAttemptCreatePayload,
   RescueAttemptUpdatePayload,
   RewardPenalty,
+  RewardPenaltyEvent,
+  RewardPenaltySummary,
+  RewardPenaltySweepPayload,
+  RewardPenaltySweepResult,
   Shipment,
   ShipmentCreatePayload,
   UpdateLeadPayload,
@@ -234,6 +238,31 @@ export const api = {
   // Rewards / Compliance / Learning
   getRewardPenaltyScores: () =>
     safeFetch<RewardPenalty[]>("/rewards/", () => M.REWARD_LEADERBOARD as RewardPenalty[]),
+  // Phase 4B — per-order, per-AI-agent scoring events.
+  getRewardPenaltyEvents: (params?: { agent?: string; orderId?: string; eventType?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.agent) qs.set("agent", params.agent);
+    if (params?.orderId) qs.set("orderId", params.orderId);
+    if (params?.eventType) qs.set("eventType", params.eventType);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return safeFetch<RewardPenaltyEvent[]>(
+      `/rewards/events/${suffix}`,
+      () => M.REWARD_PENALTY_EVENTS as RewardPenaltyEvent[],
+    );
+  },
+  getRewardPenaltySummary: () =>
+    safeFetch<RewardPenaltySummary>(
+      "/rewards/summary/",
+      () => M.REWARD_PENALTY_SUMMARY as RewardPenaltySummary,
+    ),
+  runRewardPenaltySweep: (payload: RewardPenaltySweepPayload = {}) =>
+    safeMutate<RewardPenaltySweepResult>(
+      "/rewards/sweep/",
+      "POST",
+      payload,
+      () => optimisticSweepResult(payload),
+    ),
   getClaimVault: () => safeFetch<Claim[]>("/compliance/claims/", () => M.CLAIM_VAULT as Claim[]),
   getHumanCallLearningItems: () =>
     safeFetch<LearningRecording[]>("/learning/recordings/", () => M.LEARNING_RECORDINGS as LearningRecording[]),
@@ -679,6 +708,21 @@ function optimisticPromptVersion(payload: PromptVersionCreatePayload): PromptVer
     activatedAt: null,
     rolledBackAt: null,
     rollbackReason: "",
+  };
+}
+
+function optimisticSweepResult(payload: RewardPenaltySweepPayload): RewardPenaltySweepResult {
+  return {
+    evaluatedOrders: 0,
+    createdEvents: 0,
+    updatedEvents: 0,
+    skippedOrders: 0,
+    totalReward: 0,
+    totalPenalty: 0,
+    netScore: 0,
+    dryRun: payload.dryRun ?? false,
+    leaderboardUpdated: false,
+    missingDataWarnings: [],
   };
 }
 
