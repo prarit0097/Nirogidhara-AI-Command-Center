@@ -117,6 +117,33 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5E-Hotfix-2 — Strengthened demo Claim Vault seed
+
+The first VPS coverage report after Phase 5E flagged Blood Purification
+(`approved=1, usage=no`) and Lungs Detox (`approved=2, usage=no`) as
+`weak`. Hotfix-2 merges four universal safe usage-guidance phrases
+into every demo seed row and widens the coverage keyword list so the
+detector recognises label / hydration / practitioner phrasing.
+
+After pulling Hotfix-2 on the VPS:
+
+```bash
+# Refresh demo-v1 rows to demo-v2. Real admin claims are NEVER touched.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py seed_default_claims --reset-demo
+
+# Confirm coverage no longer flags any demo row as weak.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py check_claim_vault_coverage
+```
+
+Expected: every seeded category reports `demo_ok`, not `weak`. If a
+product still reports `weak`, that row is a real admin-added claim
+whose `approved` list lacks usage keywords — replace it via the Django
+admin with a doctor-approved phrase. Production must still ship real
+doctor-approved claims before flipping any rescue / lifecycle / chat
+auto-reply flag to true.
+
 ### Phase 5E-Hotfix — Migration drift gate
 
 After Phase 5E shipped, the VPS first-deploy reported "models in app(s)

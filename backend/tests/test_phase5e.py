@@ -215,6 +215,140 @@ def test_seed_default_claims_no_blocked_phrases(db) -> None:
                 )
 
 
+# ---------------------------------------------------------------------------
+# 1b. Phase 5E-Hotfix-2 — strengthened demo Claim Vault coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "product",
+    [
+        "Weight Management",
+        "Blood Purification",
+        "Men Wellness",
+        "Women Wellness",
+        "Immunity",
+        "Lungs Detox",
+        "Body Detox",
+        "Joint Care",
+    ],
+)
+def test_every_demo_seed_passes_usage_check(db, product: str) -> None:
+    """All 8 categories must report ``demo_ok`` (not ``weak``) post-seed."""
+    call_command("seed_default_claims")
+    coverage = coverage_for_product(product)
+    assert coverage.has_approved_claims is True, product
+    assert coverage.missing_required_usage_claims is False, product
+    assert coverage.risk == "demo_ok", product
+    assert coverage.is_demo_default is True, product
+
+
+def test_blood_purification_seed_includes_usage_hint(db) -> None:
+    call_command("seed_default_claims")
+    claim = Claim.objects.get(product="Blood Purification")
+    blob = " ".join(claim.approved).lower()
+    # Either the original capsule wording OR the new label / hydration
+    # / practitioner phrasing must be present.
+    assert any(
+        keyword in blob
+        for keyword in (
+            "directed on the label",
+            "label",
+            "hydration",
+            "practitioner",
+        )
+    )
+    coverage = coverage_for_product("Blood Purification")
+    assert coverage.risk == "demo_ok"
+    assert "missing_usage_hint" not in coverage.notes
+
+
+def test_lungs_detox_seed_includes_usage_hint(db) -> None:
+    call_command("seed_default_claims")
+    claim = Claim.objects.get(product="Lungs Detox")
+    blob = " ".join(claim.approved).lower()
+    assert any(
+        keyword in blob
+        for keyword in (
+            "directed",
+            "practitioner",
+            "hydration",
+            "balanced diet",
+        )
+    )
+    coverage = coverage_for_product("Lungs Detox")
+    assert coverage.risk == "demo_ok"
+    assert "missing_usage_hint" not in coverage.notes
+
+
+def test_demo_seed_includes_common_safe_usage_phrases(db) -> None:
+    """Universal usage-guidance phrases must be in every demo seed."""
+    from apps.compliance.management.commands.seed_default_claims import (
+        COMMON_SAFE_USAGE_PHRASES,
+    )
+
+    call_command("seed_default_claims")
+    for claim in Claim.objects.filter(version__startswith="demo-"):
+        for safe_phrase in COMMON_SAFE_USAGE_PHRASES:
+            assert safe_phrase in claim.approved, (
+                f"Demo seed for {claim.product} missing universal phrase: {safe_phrase!r}"
+            )
+
+
+def test_demo_seed_does_not_duplicate_phrases_on_double_run(db) -> None:
+    """Idempotent re-seed must not duplicate the merged universal phrases."""
+    call_command("seed_default_claims")
+    pre = {
+        c.product: list(c.approved) for c in Claim.objects.filter(version__startswith="demo-")
+    }
+    call_command("seed_default_claims")
+    post = {
+        c.product: list(c.approved) for c in Claim.objects.filter(version__startswith="demo-")
+    }
+    for product, phrases in pre.items():
+        assert post[product] == phrases, (
+            f"{product} approved list changed across idempotent re-seeds"
+        )
+        # No phrase should appear twice within a single demo row.
+        assert len(set(p.lower() for p in phrases)) == len(phrases), (
+            f"{product} demo seed has duplicate phrases: {phrases!r}"
+        )
+
+
+def test_reset_demo_refreshes_v1_seeds_to_v2(db) -> None:
+    """Old demo-v1 rows are upgraded to demo-v2 only via --reset-demo."""
+    Claim.objects.create(
+        product="Weight Management",
+        approved=["Old wording from demo-v1"],
+        disallowed=["Guaranteed cure"],
+        doctor="Demo Default",
+        compliance="Demo Default",
+        version="demo-v1",
+    )
+    call_command("seed_default_claims")  # no --reset-demo → skipped
+    row = Claim.objects.get(product="Weight Management")
+    assert row.version == "demo-v1"
+    assert row.approved == ["Old wording from demo-v1"]
+
+    call_command("seed_default_claims", "--reset-demo")
+    row = Claim.objects.get(product="Weight Management")
+    assert row.version == "demo-v2"
+    assert "Old wording from demo-v1" not in row.approved
+
+
+def test_check_claim_vault_coverage_command_no_weak_after_seed(db) -> None:
+    """check_claim_vault_coverage must not flag missing_usage_hint post-seed."""
+    call_command("seed_default_claims")
+    out = io.StringIO()
+    call_command("check_claim_vault_coverage", stdout=out)
+    output = out.getvalue()
+    # Demo seeds should be reported as ok / demo_ok, never weak.
+    assert "weak" not in output.split("=")[-1].split()[0:1]  # summary line
+    # And the per-row dump should not surface missing_usage_hint anywhere
+    # because every seeded category now carries a usage hint.
+    assert "missing_usage_hint" not in output
+
+
 def test_coverage_report_surfaces_demo_count(db) -> None:
     call_command("seed_default_claims")
     report = build_coverage_report()

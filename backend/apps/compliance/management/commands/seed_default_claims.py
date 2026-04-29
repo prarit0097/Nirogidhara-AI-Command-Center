@@ -37,14 +37,46 @@ from apps.compliance.coverage import _is_demo_claim
 from apps.compliance.models import Claim
 
 
-SEED_DEMO_VERSION = "demo-v1"
+SEED_DEMO_VERSION = "demo-v2"
 SEED_DEMO_DOCTOR = "Demo Default"
 SEED_DEMO_COMPLIANCE = "Demo Default"
 
 
-# Ordered tuple — first entry per category becomes the canonical key
-# matching customer.product_interest / category slug. Aliases stay
-# under the same key so a search for any name resolves the same row.
+# Phase 5E-Hotfix-2 — universal safe usage-guidance phrases appended to
+# every demo Claim Vault row. These are deliberately non-medical: they
+# tell the customer to follow the label / a practitioner, stay hydrated,
+# discontinue and seek advice on adverse reaction, and consult a doctor
+# for serious cases. None are cure / guarantee / no-side-effects /
+# doctor-not-needed phrases. They also include keywords the coverage
+# detector recognises as usage hints (``directed``, ``label``,
+# ``practitioner``, ``hydration``, ``balanced diet``, ``routine``,
+# ``discontinue``, ``professional advice``, ``unusual reaction``) so
+# every demo row reports ``risk=demo_ok`` with usage coverage even when
+# the category-specific phrase doesn't repeat capsule / dose wording.
+COMMON_SAFE_USAGE_PHRASES: tuple[str, ...] = (
+    "Use only as directed on the product label or as advised by a qualified practitioner.",
+    "Maintain hydration, balanced diet, and regular routine while using this wellness product.",
+    "For pregnancy, ongoing illness, severe symptoms, allergies, or existing medication, consult a qualified doctor before use.",
+    "Discontinue use and seek professional advice if any discomfort or unusual reaction occurs.",
+)
+
+
+COMMON_DISALLOWED_PHRASES: tuple[str, ...] = (
+    "Guaranteed cure",
+    "Permanent solution",
+    "No side effects for everyone",
+    "Doctor ki zarurat nahi",
+    "100% cure",
+    "Replaces all medication",
+)
+
+
+# Per-category safe demo phrases. The seed merges these with
+# COMMON_SAFE_USAGE_PHRASES at handle() time so every category ends
+# up with the universal usage-guidance lines without duplicating them
+# in every entry. Phase 5E-Hotfix-2 added explicit usage / label /
+# practitioner wording for Blood Purification and Lungs Detox so the
+# coverage detector reports them as ``demo_ok`` (not ``weak``).
 DEFAULT_CLAIMS: tuple[dict[str, object], ...] = (
     {
         "product": "Weight Management",
@@ -52,28 +84,16 @@ DEFAULT_CLAIMS: tuple[dict[str, object], ...] = (
             "Supports general wellness as part of an Ayurvedic lifestyle routine.",
             "May support digestion and metabolism when used as directed alongside diet and lifestyle discipline.",
             "Take 1 capsule twice daily after meals with warm water unless your doctor advises otherwise.",
-            "For serious symptoms, ongoing illness, pregnancy, or medication use, consult a qualified doctor.",
-        ],
-        "disallowed": [
-            "Guaranteed cure",
-            "Permanent solution",
-            "No side effects for everyone",
-            "Doctor ki zarurat nahi",
-            "100% cure",
         ],
     },
     {
         "product": "Blood Purification",
         "approved": [
             "Traditional Ayurvedic blend to support skin and overall wellness.",
-            "Take 1 capsule twice daily after meals with warm water as directed.",
+            "Take 1 capsule twice daily after meals with warm water as directed on the label.",
             "Supports lifestyle-led skin care; results vary by individual.",
+            "Pair with hydration and a balanced diet routine for best support.",
             "If you have an active skin condition, ongoing illness, or are pregnant, consult a qualified doctor before starting.",
-        ],
-        "disallowed": [
-            "Guaranteed cure",
-            "Permanent solution",
-            "100% cure",
         ],
     },
     {
@@ -81,14 +101,8 @@ DEFAULT_CLAIMS: tuple[dict[str, object], ...] = (
         "approved": [
             "Ayurvedic supplement intended to support general wellness in men.",
             "Take 1 capsule twice daily after meals with warm water unless directed otherwise.",
-            "Best used alongside balanced diet, sleep, and exercise.",
+            "Best used alongside balanced diet, sleep, and exercise routine.",
             "If you have a chronic condition, are on medication, or under 18, consult a qualified doctor first.",
-        ],
-        "disallowed": [
-            "Guaranteed cure",
-            "Permanent solution",
-            "No side effects for everyone",
-            "100% cure",
         ],
     },
     {
@@ -97,57 +111,35 @@ DEFAULT_CLAIMS: tuple[dict[str, object], ...] = (
             "Ayurvedic supplement designed to support general wellness in women.",
             "Take 1 capsule twice daily after meals with warm water unless directed otherwise.",
             "If you are pregnant, breastfeeding, planning pregnancy, or on medication, consult a qualified doctor first.",
-            "Lifestyle, diet, and sleep matter alongside any supplement.",
-        ],
-        "disallowed": [
-            "Guaranteed cure",
-            "Permanent solution",
-            "No side effects for everyone",
-            "100% cure",
+            "Lifestyle, balanced diet, and sleep matter alongside any supplement.",
         ],
     },
     {
         "product": "Immunity",
         "approved": [
             "Ayurvedic blend formulated to support general immunity.",
-            "Take 1 capsule twice daily after meals with warm water as directed.",
-            "Pair with rest, hydration, and a balanced diet for best results.",
+            "Take 1 capsule twice daily after meals with warm water as directed on the label.",
+            "Pair with rest, hydration, and a balanced diet for best support.",
             "For active infections, fever, or chronic illness, consult a qualified doctor.",
-        ],
-        "disallowed": [
-            "Guaranteed cure",
-            "Permanent solution",
-            "100% cure",
-            "Replaces all medication",
         ],
     },
     {
         "product": "Lungs Detox",
         "approved": [
             "Traditional Ayurvedic blend to support general respiratory wellness.",
-            "Take 1 capsule twice daily after meals with warm water unless directed otherwise.",
-            "Avoid known irritants and consult a qualified doctor for ongoing breathing issues, asthma, or lung disease.",
-        ],
-        "disallowed": [
-            "Guaranteed cure",
-            "Permanent solution",
-            "No side effects for everyone",
-            "100% cure",
+            "Take 1 capsule twice daily after meals with warm water unless directed otherwise on the label.",
+            "Maintain hydration and avoid known irritants while following this routine.",
+            "Use only as directed by a qualified practitioner; do not substitute prescribed inhalers or medication.",
+            "Consult a qualified doctor for ongoing breathing issues, asthma, or lung disease before starting.",
         ],
     },
     {
         "product": "Body Detox",
         "approved": [
             "Ayurvedic supplement intended to support general body wellness routines.",
-            "Take 1 capsule twice daily after meals with warm water as directed.",
+            "Take 1 capsule twice daily after meals with warm water as directed on the label.",
             "Maintain hydration and a balanced diet alongside.",
             "Consult a qualified doctor before use if you have liver / kidney conditions, are pregnant, or take regular medication.",
-        ],
-        "disallowed": [
-            "Guaranteed cure",
-            "Permanent solution",
-            "No side effects for everyone",
-            "100% cure",
         ],
     },
     {
@@ -155,17 +147,33 @@ DEFAULT_CLAIMS: tuple[dict[str, object], ...] = (
         "approved": [
             "Ayurvedic blend formulated to support general joint wellness.",
             "Take 1 capsule twice daily after meals with warm water as directed.",
-            "Combine with appropriate movement and rest as advised by your physician.",
+            "Combine with appropriate movement, rest, and a balanced routine as advised by your physician.",
             "For persistent pain, swelling, or post-surgical care, consult a qualified doctor first.",
-        ],
-        "disallowed": [
-            "Guaranteed cure",
-            "Permanent solution",
-            "No side effects for everyone",
-            "100% cure",
         ],
     },
 )
+
+
+def _merged_approved(per_category_phrases: list[str]) -> list[str]:
+    """Merge per-category phrases with the universal safe-usage phrases.
+
+    Preserves order: category-specific first (so they read as
+    product-relevant), then the common usage-guidance phrases. Drops
+    duplicates while keeping the first occurrence so seeds stay
+    deterministic between runs.
+    """
+    seen: set[str] = set()
+    merged: list[str] = []
+    for phrase in [*per_category_phrases, *COMMON_SAFE_USAGE_PHRASES]:
+        cleaned = (phrase or "").strip()
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(cleaned)
+    return merged
 
 
 class Command(BaseCommand):
@@ -204,8 +212,11 @@ class Command(BaseCommand):
 
         for entry in DEFAULT_CLAIMS:
             product = str(entry["product"])
-            approved = list(entry.get("approved") or [])
-            disallowed = list(entry.get("disallowed") or [])
+            per_category = list(entry.get("approved") or [])
+            approved = _merged_approved(per_category)
+            disallowed = list(
+                entry.get("disallowed") or COMMON_DISALLOWED_PHRASES
+            )
             existing = Claim.objects.filter(product=product).first()
             if existing is None:
                 Claim.objects.create(

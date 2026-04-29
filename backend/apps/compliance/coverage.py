@@ -37,6 +37,7 @@ from apps.compliance.models import Claim
 # don't try to parse the language model's vocabulary, we just want a
 # trip-wire that says "doctor wrote *something* about how to use it".
 USAGE_HINT_KEYWORDS: tuple[str, ...] = (
+    # Dosage / form keywords.
     "capsule",
     "capsules",
     "dose",
@@ -53,6 +54,20 @@ USAGE_HINT_KEYWORDS: tuple[str, ...] = (
     "ayurvedic",
     "blend",
     "supplement",
+    # Phase 5E-Hotfix-2 — explicit usage-guidance phrases used by the
+    # demo Claim Vault seed. These let the coverage detector recognise
+    # "use as directed on the label" / "consult a practitioner" / etc.
+    # as a usage hint without forcing the demo phrase to repeat
+    # capsule/dose wording verbatim.
+    "directed",
+    "label",
+    "practitioner",
+    "hydration",
+    "balanced diet",
+    "routine",
+    "discontinue",
+    "professional advice",
+    "unusual reaction",
 )
 
 

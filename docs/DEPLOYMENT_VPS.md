@@ -124,6 +124,15 @@ sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py migrate
 sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py makemigrations --check --dry-run
+
+# Phase 5E-Hotfix-2 — refresh demo Claim Vault rows to demo-v2 once.
+# Real admin / doctor-approved claims are NEVER overwritten.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py seed_default_claims --reset-demo
+
+# Confirm no demo row is reported as weak.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py check_claim_vault_coverage
 ```
 
 Expected output: `No changes detected`. If the `--check` reports
