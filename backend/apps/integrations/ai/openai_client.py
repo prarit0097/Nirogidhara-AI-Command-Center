@@ -33,6 +33,32 @@ def _resolve_model(config: AIConfig) -> str:
     )
 
 
+def build_request_kwargs(
+    *,
+    messages: list[dict[str, str]],
+    model: str,
+    config: AIConfig,
+) -> dict[str, Any]:
+    """Phase 5E-Smoke-Fix-2 — assemble the kwargs for
+    ``client.chat.completions.create(...)``.
+
+    Modern OpenAI Chat Completions models (gpt-4o, gpt-5, o1, o3, …)
+    REJECT the legacy ``max_tokens`` parameter and require
+    ``max_completion_tokens``. We always use ``max_completion_tokens``;
+    callers running deprecated gpt-3.5 / gpt-4-original models can swap
+    via env or move to a supported model.
+
+    Never sends both ``max_tokens`` and ``max_completion_tokens`` —
+    OpenAI rejects the combination.
+    """
+    return {
+        "model": model,
+        "messages": list(messages),
+        "temperature": config.temperature,
+        "max_completion_tokens": int(config.max_tokens or 0) or None,
+    }
+
+
 def dispatch(messages: list[dict[str, str]], *, config: AIConfig) -> AdapterResult:
     """Send ``messages`` to OpenAI and return the normalised result.
 
@@ -72,13 +98,15 @@ def dispatch(messages: list[dict[str, str]], *, config: AIConfig) -> AdapterResu
         client_kwargs["organization"] = org_id
 
     started = time.monotonic()
+    request_kwargs = build_request_kwargs(
+        messages=messages, model=model, config=config
+    )
+    # Drop None-valued keys so OpenAI doesn't reject explicit nulls.
+    request_kwargs = {k: v for k, v in request_kwargs.items() if v is not None}
     try:
         client = OpenAI(**client_kwargs)
         response = client.chat.completions.create(  # pragma: no cover
-            model=model,
-            messages=messages,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            **request_kwargs,
         )
     except Exception as exc:  # pragma: no cover - real-network path
         return AdapterResult(
@@ -146,4 +174,4 @@ def dispatch(messages: list[dict[str, str]], *, config: AIConfig) -> AdapterResu
     )
 
 
-__all__ = ("dispatch",)
+__all__ = ("build_request_kwargs", "dispatch")

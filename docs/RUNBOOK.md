@@ -117,6 +117,31 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5E-Smoke-Fix-2 — OpenAI Chat Completions token-parameter hotfix
+
+Modern OpenAI Chat Completions models (gpt-4o, gpt-5, o1, o3, …)
+**reject** the legacy `max_tokens` parameter and require
+`max_completion_tokens`. The adapter at
+`apps.integrations.ai.openai_client.dispatch` now builds its request
+kwargs through a unit-testable helper:
+
+```python
+from apps.integrations.ai.openai_client import build_request_kwargs
+
+kwargs = build_request_kwargs(messages=msgs, model="gpt-5.1", config=config)
+# kwargs["max_completion_tokens"] == config.max_tokens
+# "max_tokens" not in kwargs  ← never sent
+```
+
+If you see *"Unsupported parameter: 'max_tokens' is not supported"* in
+the smoke harness's `providerError` field again, the adapter has
+regressed — re-run `python -m pytest tests/test_phase5e_smoke_fix2.py`
+to confirm the kwargs-shape contract.
+
+VPS rebuild is **required** after this commit so the new adapter code
+lands in the backend image. Then re-run the OpenAI smoke and confirm
+`detail.openaiSucceeded=true`.
+
 ### Phase 5E-Smoke-Fix — OpenAI provider semantics
 
 The Phase 5E-Smoke harness adds four new detail fields to the

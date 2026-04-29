@@ -140,6 +140,12 @@ sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
 sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py run_controlled_ai_smoke_test --scenario all --json
 
+# Phase 5E-Smoke-Fix-2 — adapter code change. Modern OpenAI Chat
+# models (gpt-4o, gpt-5, o1, o3, …) reject 'max_tokens' and require
+# 'max_completion_tokens'. The adapter now always uses the modern
+# parameter. After this commit, rebuild + restart so the new adapter
+# code lands in the backend image, then re-run the OpenAI smoke.
+
 # Phase 5E-Smoke-Fix — when the requirements.txt changes (e.g. the
 # openai SDK was added), rebuild the backend image so pip install
 # picks up the new dep, then re-run the OpenAI provider smoke. The
