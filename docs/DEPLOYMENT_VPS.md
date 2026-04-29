@@ -1,0 +1,345 @@
+# Deploying Nirogidhara AI Command Center to Hostinger VPS
+
+> Target domain: **`ai.nirogidhara.com`**
+> App folder on VPS: **`/opt/nirogidhara-command`**
+> Stack: isolated Postgres + Redis + Daphne backend + Celery worker + Celery beat + Nginx (Vite SPA)
+> Compose project name: **`nirogidhara-command`**
+
+This runbook is the authoritative production deploy path. Every command
+below runs on the VPS unless explicitly marked _(local)_. Local dev keeps
+using `python manage.py runserver` + `npm run dev` — Docker is **production
+only**.
+
+---
+
+## 0. Why this stack
+
+| Need | Choice | Why |
+| --- | --- | --- |
+| HTTP + WebSockets in one process | Daphne ASGI | Phase 4A `/ws/audit/events/` requires Channels. Gunicorn alone would not work. |
+| Background tasks + cron | Celery worker + beat | Phase 3C scheduler + Phase 5A retry/backoff/jitter on WhatsApp sends. |
+| Database | Postgres 16 (container) | SQLite is dev only. Postgres handles concurrent webhooks (Razorpay / Delhivery / Vapi / Meta / WhatsApp). |
+| Cache + broker + Channels layer | Redis 7 (container) | Three indices (0/1/2) used by Celery broker / Celery results / Channels group fan-out. |
+| Static assets + reverse proxy | Nginx (container) with built Vite SPA | Single host port (18020) serves the SPA + proxies API/WS/admin to the backend container. |
+| Host-port isolation | **18020 → 80** | Existing Postzyo / OpenClaw containers already use other host ports. 18020 is free. The host Nginx / Hostinger Traefik then proxies `ai.nirogidhara.com → 127.0.0.1:18020`. |
+
+---
+
+## 1. Prerequisites on the VPS
+
+```bash
+# Already present from Postzyo / OpenClaw — just verify.
+docker --version          # >= 24
+docker compose version    # v2 plugin
+git --version             # any
+```
+
+If Docker is missing, install via Docker's official `get.docker.com`
+script. **Do not** add this user to the `docker` group on a shared VPS
+without confirming with the team — the existing setup may already use
+`sudo docker`.
+
+---
+
+## 2. Initial setup (one-time)
+
+```bash
+# Clone into the production folder.
+sudo mkdir -p /opt
+cd /opt
+sudo git clone https://github.com/prarit0097/Nirogidhara-AI-Command-Center.git nirogidhara-command
+cd /opt/nirogidhara-command
+
+# Stamp the production env file from the example.
+sudo cp .env.production.example .env.production
+sudo chmod 600 .env.production
+sudo nano .env.production
+```
+
+Inside `.env.production`, fill in at minimum:
+
+- `DJANGO_SECRET_KEY` — `python -c "import secrets; print(secrets.token_urlsafe(64))"`
+- `JWT_SIGNING_KEY` — different long random string
+- `POSTGRES_PASSWORD` — strong; reflect the same string into `DATABASE_URL`
+- `DJANGO_ALLOWED_HOSTS` — `ai.nirogidhara.com,localhost,127.0.0.1`
+- `CORS_ALLOWED_ORIGINS` — `https://ai.nirogidhara.com`
+- `CSRF_TRUSTED_ORIGINS` — `https://ai.nirogidhara.com`
+
+Leave `WHATSAPP_PROVIDER=mock`, `RAZORPAY_MODE=mock`, `DELHIVERY_MODE=mock`,
+`VAPI_MODE=mock`, `META_MODE=mock`, `AI_PROVIDER=disabled` until the
+production credentials for each are confirmed by Prarit. Switching them
+to live before keys are valid will fail closed (the adapters refuse to
+load), but configuring them prematurely with the wrong values risks
+sending a customer message during a smoke test — keep them mocked.
+
+> **Never commit `.env.production`.** It is gitignored at the repo root.
+
+---
+
+## 3. First boot
+
+```bash
+cd /opt/nirogidhara-command
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+Compose builds two images (`nirogidhara/backend`, `nirogidhara/nginx`)
+and starts six containers:
+
+```
+nirogidhara-db          postgres:16-alpine        internal-only
+nirogidhara-redis       redis:7-alpine            internal-only
+nirogidhara-backend     custom (Daphne :8000)     internal-only
+nirogidhara-worker      custom (celery worker)    internal-only
+nirogidhara-beat        custom (celery beat)      internal-only
+nirogidhara-nginx       custom (vite + nginx)     127.0.0.1:18020 → 80
+```
+
+Wait ~60 seconds for the healthchecks, then verify:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml ps
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production logs -f backend
+```
+
+Expected output: `db reachable at postgres:5432 → redis reachable at redis:6379 → migrate → collectstatic → daphne listening on 0.0.0.0:8000`.
+
+---
+
+## 4. Migrate + create superuser
+
+The backend entrypoint already runs `migrate` on every restart, but the
+first boot may not have a Django admin user. Create one:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py createsuperuser
+```
+
+Optional demo seed (do **not** run on a live customer DB):
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py seed_demo_data --reset
+```
+
+Sync the canonical lifecycle WhatsApp templates so the `/whatsapp-templates`
+page has working rows:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py sync_whatsapp_templates
+```
+
+---
+
+## 5. Smoke tests
+
+```bash
+# Backend health (DRF)
+curl -fsS http://127.0.0.1:18020/api/healthz/
+# {"status":"ok","service":"nirogidhara-backend"}
+
+# Frontend SPA root
+curl -fsSI http://127.0.0.1:18020/
+
+# WebSocket route exists (will 426 / 400 without a proper Upgrade header)
+curl -fsSI http://127.0.0.1:18020/ws/audit/events/ | head -1
+```
+
+Browser tour (after the host Nginx / Traefik step in §6):
+
+- `https://ai.nirogidhara.com/` — Command Center dashboard
+- `https://ai.nirogidhara.com/whatsapp-inbox` — Phase 5B inbox (manual-only)
+- `https://ai.nirogidhara.com/admin/` — Django admin (login with the superuser above)
+
+---
+
+## 6. DNS + TLS for `ai.nirogidhara.com`
+
+### 6.1 DNS
+
+Add an A record at the registrar:
+
+```
+Type:  A
+Host:  ai
+Value: <Hostinger VPS public IP>     # e.g. 187.127.132.106
+TTL:   300
+```
+
+Wait for propagation (`dig +short ai.nirogidhara.com`) before requesting
+a TLS cert.
+
+### 6.2 Option A — Host-level Nginx + Certbot (recommended)
+
+This is the cleanest path on a Hostinger VPS that already runs other
+Docker projects. Each project keeps its own internal Nginx and exposes
+one host port; the host Nginx terminates TLS and routes by domain.
+
+```bash
+sudo apt update
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+sudo tee /etc/nginx/sites-available/ai.nirogidhara.com >/dev/null <<'NGINX'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ai.nirogidhara.com;
+
+    client_max_body_size 25m;
+
+    location / {
+        proxy_pass http://127.0.0.1:18020;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
+    }
+}
+NGINX
+
+sudo ln -sf /etc/nginx/sites-available/ai.nirogidhara.com /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# Auto-issues + auto-renews. Pick redirect-to-HTTPS when prompted.
+sudo certbot --nginx -d ai.nirogidhara.com
+```
+
+After certbot completes, browse to `https://ai.nirogidhara.com/`.
+
+### 6.3 Option B — Hostinger Traefik / Docker Manager
+
+If the VPS is managed entirely through Hostinger's Docker UI, point the
+`ai.nirogidhara.com` route at this project's container port `80` (the
+inner Nginx). Hostinger's Traefik handles TLS via Let's Encrypt
+automatically. The container's host port (`18020`) is unchanged so it
+stays compatible with the host-Nginx fallback above.
+
+> Pick **one** of A or B — running both at the same time leaks the same
+> upstream behind two domains and confuses CSRF / consent telemetry.
+
+---
+
+## 7. Daily operations
+
+### 7.1 Logs
+
+```bash
+cd /opt/nirogidhara-command
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production logs -f backend
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production logs -f worker
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production logs -f beat
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production logs -f nginx
+```
+
+### 7.2 Restart / stop
+
+```bash
+# Restart everything (keeps volumes + data).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production restart
+
+# Stop the stack (keeps volumes + data).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production down
+
+# Stop + delete volumes (DANGER — wipes DB + Redis state).
+# Only on explicit user confirmation.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production down -v
+```
+
+### 7.3 Update deployment
+
+```bash
+cd /opt/nirogidhara-command
+sudo git pull origin main
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production exec backend python manage.py migrate
+```
+
+The entrypoint also runs `migrate` automatically, but invoking it
+explicitly makes the deploy log easier to scan for migration warnings.
+
+### 7.4 Backups (recommended before going live)
+
+```bash
+# Postgres dump → host filesystem.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec -T postgres pg_dump -U nirogidhara nirogidhara | gzip > \
+    /opt/nirogidhara-command/backups/db-$(date +%F).sql.gz
+
+# Static + media (rarely needed but cheap to copy).
+sudo docker run --rm \
+    -v nirogidhara_static_volume:/from \
+    -v /opt/nirogidhara-command/backups:/to alpine \
+    sh -c 'cd /from && tar czf /to/static-$(date +%F).tgz .'
+```
+
+Schedule via cron once the customer DB is live.
+
+---
+
+## 8. Resource safety on a shared VPS
+
+Postzyo + OpenClaw already run on this host. Do **not** prune Docker
+state globally without checking with the user.
+
+```bash
+# Safe — read-only.
+docker stats
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production ps
+docker system df
+docker network ls
+docker volume ls | grep nirogidhara
+
+# DANGER — deletes images, networks, volumes for ALL stacks.
+# docker system prune -a --volumes      ← only on explicit user approval.
+```
+
+Tuning knobs that are safe to dial up after watching `docker stats` for
+a day:
+
+- `worker.command` → bump `--concurrency=1` to 2 once memory is stable.
+- `nirogidhara-redis` → keep `--appendonly yes`; rotate `appendonly.aof`
+  via Redis if it grows past a few hundred MB.
+- Postgres → 16-alpine ships sensible defaults; only tune
+  `max_connections` if observed contention happens.
+
+---
+
+## 9. Security checklist before customers go live
+
+- [ ] `DJANGO_SECRET_KEY` and `JWT_SIGNING_KEY` are unique, long, and never committed.
+- [ ] `DEBUG=false` everywhere in `.env.production`.
+- [ ] `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS` all include `ai.nirogidhara.com` and nothing wildcarded.
+- [ ] Postgres password is strong and matches the value embedded in `DATABASE_URL`.
+- [ ] `WHATSAPP_PROVIDER`, `RAZORPAY_MODE`, `DELHIVERY_MODE`, `VAPI_MODE`, `META_MODE` all stay `mock` until Prarit confirms each integration's live credentials.
+- [ ] `AI_PROVIDER` stays `disabled` until OpenAI / Anthropic keys are in place.
+- [ ] `WHATSAPP_DEV_PROVIDER_ENABLED=false` (the Baileys stub refuses to load anyway when DEBUG=false, but this is belt + braces).
+- [ ] Postgres `pg_dump` backup taken before the first real customer payment / order.
+- [ ] Host Nginx (or Traefik) terminates TLS; HTTP 80 either redirects to HTTPS or is closed at the firewall.
+- [ ] `docker stats` confirms the new stack is leaving headroom for Postzyo + OpenClaw.
+
+---
+
+## 10. What's intentionally NOT here
+
+This deployment scaffold ships **only** Phase 1 → 5B. The following stay
+locked out at the application layer regardless of how the container is
+configured:
+
+- AI Chat Sales Agent (Phase 5C)
+- WhatsApp inbound auto-reply
+- Chat-to-call handoff
+- Order booking from WhatsApp chat
+- Discount automation / rescue-discount flow
+- Campaign / broadcast WhatsApp sends
+- Freeform outbound WhatsApp text
+- CAIO-originated customer messages
+
+If the deploy somehow turns those on, **stop the rollout** and re-read
+`docs/WHATSAPP_INTEGRATION_PLAN.md` and `nd.md` §2 hard stops.

@@ -155,6 +155,15 @@ CORS_ALLOWED_ORIGINS = _csv(os.environ.get("CORS_ALLOWED_ORIGINS")) or [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+# CSRF trusted origins — required when the browser submits to a different
+# scheme/host than ``ALLOWED_HOSTS`` covers (e.g. https://ai.nirogidhara.com
+# proxied to the container). The env var takes precedence; defaults match
+# the dev CORS origins so local POSTs keep working.
+CSRF_TRUSTED_ORIGINS = _csv(os.environ.get("CSRF_TRUSTED_ORIGINS")) or [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+
 
 def _safe_float(value: str | None, default: float) -> float:
     try:

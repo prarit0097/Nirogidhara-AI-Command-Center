@@ -6,12 +6,17 @@ django-filter>=24.2,<25.0
 python-dotenv>=1.0,<2.0
 dj-database-url>=2.1,<3.0
 
-# Optional Postgres driver — installed only when DATABASE_URL points at Postgres.
-# psycopg[binary]>=3.1,<4.0
+# Postgres driver — required for the production Docker image (DATABASE_URL
+# points at Postgres). Local dev still works with DATABASE_URL=sqlite:/// .
+psycopg[binary]>=3.1,<4.0
 
 # Phase 2B — Razorpay payment-link integration. The SDK is imported lazily so
 # RAZORPAY_MODE=mock works even when this package is missing.
 razorpay>=1.4,<2.0
+
+# Phase 2C/2D — production HTTP client for Delhivery / Vapi / Meta integrations.
+# Imported lazily by each adapter, so dev/CI in mock mode runs without it.
+requests>=2.32,<3.0
 
 # Phase 3C — Celery scheduler + Redis broker. Tests run in eager mode
 # (CELERY_TASK_ALWAYS_EAGER=true) so neither Redis nor a worker has to be

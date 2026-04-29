@@ -42,6 +42,26 @@ back to the deterministic mock fixtures in
 
 Full setup detail in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
+## Production deploy (Hostinger VPS — `ai.nirogidhara.com`)
+
+Production runs as an isolated Docker Compose stack that does NOT
+collide with Postzyo / OpenClaw on the same VPS. One host port (`18020`),
+six containers (`nirogidhara-db`, `nirogidhara-redis`, `nirogidhara-backend`,
+`nirogidhara-worker`, `nirogidhara-beat`, `nirogidhara-nginx`), domain
+TLS terminated by host Nginx + Certbot or Hostinger Traefik.
+
+```bash
+cd /opt
+git clone https://github.com/prarit0097/Nirogidhara-AI-Command-Center.git nirogidhara-command
+cd /opt/nirogidhara-command
+cp .env.production.example .env.production
+nano .env.production                               # fill secrets, ALLOWED_HOSTS
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+Step-by-step runbook (DNS, TLS, smoke tests, backups, security
+checklist): [`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md).
+
 ## Architecture rule
 
 The frontend never holds business logic. It calls the API service layer

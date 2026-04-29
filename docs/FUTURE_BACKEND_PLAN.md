@@ -651,6 +651,30 @@ Implemented per Prarit's locked decisions (manual-only inbox, AI suggestions pla
 
 **Out of scope for Phase 5B (deferred to 5C/5D/5E/5F):** AI Chat Agent, inbound auto-reply, chat-to-call handoff, order booking from chat, rescue discount automation, escalation automation, campaigns, freeform outbound text.
 
+### ✅ Phase 5B-Deploy — Production Docker scaffold (DONE)
+
+Pure deployment scaffold. **No business logic changed; 434 backend + 13
+frontend tests stay green.**
+
+- ✅ `docker-compose.prod.yml` — project `nirogidhara-command`, six isolated containers (`nirogidhara-db` Postgres 16-alpine, `nirogidhara-redis` Redis 7-alpine AOF, `nirogidhara-backend` Daphne ASGI :8000, `nirogidhara-worker` Celery worker concurrency=1, `nirogidhara-beat` Celery beat, `nirogidhara-nginx` Vite SPA + reverse proxy). Host port `18020:80` to avoid colliding with Postzyo / OpenClaw on the same VPS.
+- ✅ `backend/Dockerfile` — Python 3.11 slim + tini + libpq + non-root uid 10001. Same image runs backend / worker / beat; the runtime command comes from compose.
+- ✅ `deploy/backend/entrypoint.sh` — role-aware. Daphne role waits for Postgres + Redis, runs `migrate --noinput` and `collectstatic --noinput`, then `exec`s the supplied command. Worker / beat skip migrate (backend container owns schema) but still wait for DB + Redis.
+- ✅ `frontend/Dockerfile` — multi-stage node 20 → nginx 1.27 alpine. Build context = repo root so the runtime stage can read `deploy/nginx/nirogidhara.conf`. Bakes `VITE_API_BASE_URL=/api` + empty `VITE_WS_BASE_URL` so production stays same-origin.
+- ✅ `deploy/nginx/nirogidhara.conf` — serves SPA from `/usr/share/nginx/html`, proxies `/api/` + `/admin/` + `/ws/` to `backend:8000` (with WebSocket upgrade headers + Forwarded-* + X-Real-IP), gzip + 25 MB upload cap, hashed-asset caching + `index.html` no-cache.
+- ✅ `.env.production.example` — covers every env var read by `backend/config/settings.py`. Mock-mode defaults locked; `AI_PROVIDER=disabled`. Production callback URLs (Razorpay, Vapi) point at `https://ai.nirogidhara.com/...` placeholders.
+- ✅ `backend/config/settings.py` — `CSRF_TRUSTED_ORIGINS` is now env-driven (defaults to the dev CORS origins when unset). Same pattern as the existing `CORS_ALLOWED_ORIGINS`.
+- ✅ `backend/requirements.txt` — adds `psycopg[binary]` (Postgres driver) and `requests` (used lazily by Vapi / Delhivery / Meta Cloud / WhatsApp adapters).
+- ✅ `.gitignore` extended: `.env.production`, `*.pem / *.key / *.crt`, `certbot/`, `deploy/secrets/`. Allow-list keeps `.env.production.example` tracked.
+- ✅ `.dockerignore` (repo root + backend) — keeps secrets, sqlite, dev artifacts, git history out of every image.
+- ✅ `docs/DEPLOYMENT_VPS.md` — end-to-end runbook: prerequisites, clone into `/opt/nirogidhara-command`, env stamping, first boot, migrate + createsuperuser + sync_whatsapp_templates, smoke tests, DNS A-record, host Nginx + Certbot **or** Hostinger Traefik, daily logs / restart / update / Postgres backup commands, security checklist, shared-VPS resource-safety notes, and an explicit "intentionally NOT here" list (Phase 5C+).
+
+**Locked safety:**
+
+- Project / network / container / volume / host-port names are all namespaced (`nirogidhara-*`) so the new stack cannot accidentally touch Postzyo or OpenClaw.
+- `.env.production` is gitignored. The repo carries only the `*.example`.
+- Worker concurrency starts at 1; bump only after `docker stats` confirms headroom.
+- All integration adapters keep their three-mode (mock / test / live) dispatch. The first deploy ships every adapter in `mock` so a misconfiguration cannot send a live customer message.
+
 ### Phase 5C — WhatsApp AI Chat Sales Agent (per Phase 5A-1 addendum)
 
 - Port `learned_memory.py` from the reference repo wholesale (explicit human-vetted gate, no auto-promotion).

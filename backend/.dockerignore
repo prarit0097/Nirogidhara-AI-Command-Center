@@ -1,0 +1,29 @@
+# Backend Dockerfile build context — keep the image lean and avoid
+# accidentally baking secrets / dev artifacts.
+
+# Local virtualenvs / caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local SQLite + collected static (regenerated in the entrypoint).
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+
+# Secrets — must never enter the image.
+.env
+.env.*
+
+# Editor / OS noise
+.DS_Store
+.vscode/
+.idea/
+*.log

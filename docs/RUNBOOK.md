@@ -531,6 +531,23 @@ The frontend `/whatsapp-inbox` page refreshes itself in real time via
 the existing Phase 4A `/ws/audit/events/` channel filtered on
 `whatsapp.*` audit kinds — no new WebSocket route was added.
 
+## Production deploy (Hostinger VPS)
+
+For the live `ai.nirogidhara.com` deployment see
+[`docs/DEPLOYMENT_VPS.md`](DEPLOYMENT_VPS.md). Highlights:
+
+- Six isolated containers under Docker Compose project name
+  `nirogidhara-command` (Postgres / Redis / Daphne backend / Celery worker
+  / Celery beat / Nginx serving the Vite SPA).
+- One host port: `18020 → 80`. The host Nginx (or Hostinger Traefik)
+  terminates TLS and proxies `ai.nirogidhara.com → 127.0.0.1:18020`.
+- All `*_MODE` env vars default to `mock` / `disabled` so the first
+  deploy never sends a live message.
+- Existing Postzyo / OpenClaw containers must not be touched.
+
+The runbook covers DNS, TLS via Certbot, smoke tests, backups, security
+checklist, and shared-VPS resource notes.
+
 ## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
 
 The repo currently runs on SQLite + Celery eager mode + no Redis. The

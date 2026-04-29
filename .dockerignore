@@ -1,0 +1,44 @@
+# Repo-root Dockerfile build context (used by `frontend/Dockerfile` which
+# sets `context: .` so it can copy both `frontend/` and `deploy/nginx/`).
+
+# Node / Vite
+**/node_modules/
+**/dist/
+**/build/
+**/.vite/
+
+# Python / Django
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/db.sqlite3
+**/db.sqlite3-journal
+**/staticfiles/
+**/media/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.coverage
+**/htmlcov/
+
+# Secrets — must never enter any image.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Docs that don't need to ship with the image (the backend still pulls
+# the full repo so docs-only changes still rebuild deterministically).
+.github/

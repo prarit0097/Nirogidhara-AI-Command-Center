@@ -10,6 +10,7 @@ venv/
 .env
 .env.*
 !.env.example
+!.env.production.example
 __pycache__/
 *.pyc
 *.pyo
@@ -36,3 +37,12 @@ yarn-error.log*
 
 # Local agent/runtime state
 .omx/
+
+# Production deployment — secrets, TLS material, certbot state.
+# `.env.production` is the live VPS config; never commit it.
+.env.production
+*.pem
+*.key
+*.crt
+certbot/
+deploy/secrets/

@@ -13,7 +13,8 @@
 - **Stack:** React 18 + Vite + TypeScript (frontend) ↔ Django 5 + DRF (backend), JWT auth, SQLite (dev) / Postgres (prod-ready).
 - **Repo layout:** monorepo — `frontend/`, `backend/`, `docs/`.
 - **Status today (Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4A + 4B + 4C + 4D + 4E + 5A-0 + 5A-1 + 5A + 5B done):** **16 Django apps** scaffolded (Phase 5A adds `apps.whatsapp`, Phase 5B adds the `WhatsAppInternalNote` model + 6 inbox endpoints inside it), the full Phase 1–4E surface from earlier sessions, plus the **Phase 5A WhatsApp Live Sender Foundation**: 8 new models (`WhatsAppConnection` / `Template` / `Consent` / `Conversation` / `Message` / `MessageAttachment` / `MessageStatusEvent` / `WebhookEvent` / `SendLog`), three providers (`mock` default for tests, `meta_cloud` Nirogidhara-built Graph client, `baileys_dev` dev-only stub that refuses to load when `DEBUG=False AND WHATSAPP_DEV_PROVIDER_ENABLED!=true`), service layer (`queue_template_message` + `send_queued_message`) gating consent + approved-template + Claim Vault + approval matrix + CAIO hard stop + idempotency, Celery `send_whatsapp_message` task with `autoretry_for=ProviderError, retry_backoff=True, retry_jitter=True, max_retries=5`, signed Meta webhook at `/api/webhooks/whatsapp/meta/` (HMAC-SHA256 + replay-window + provider-event-id idempotency + GET handshake), 9 read + 4 write API endpoints under `/api/whatsapp/`, `python manage.py sync_whatsapp_templates` command, frontend Settings → WABA section + read-only `/whatsapp-templates` page + sidebar entry. **Failed sends never mutate Order/Payment/Shipment.** Earlier-phase surface unchanged: Master Event Ledger via signals + explicit service writes, JWT auth + role-based permissions, order state machine, all four gateway integrations with three-mode (mock/test/live) adapters + HMAC-verified webhooks + idempotency, AgentRun foundation + 7 per-agent runtime services + Celery beat at 09:00 + 18:00 IST + provider fallback (OpenAI → Anthropic) + model-wise USD cost tracking + Phase 3D sandbox toggle + versioned prompts (rollback) + per-agent USD budget guards + Governance page + Phase 3E product catalog admin + discount policy (10/20% bands) + ₹499 fixed advance + reward/penalty scoring formula + approval matrix policy + Phase 4B reward/penalty engine (AI agents only, CEO AI net accountability) + Rewards page agent leaderboard + Phase 4C approval-matrix middleware enforcement + Phase 4D Approved Action Execution Layer + Phase 4A Django Channels live `/ws/audit/events/` WebSocket + Phase 4E execution registry expansion (discount.up_to_10 / discount.11_to_20 / ai.sandbox.disable). Phase 5B added the **Inbound WhatsApp Inbox + Customer 360 Timeline**: new `WhatsAppInternalNote` model, six new endpoints (`GET /api/whatsapp/inbox/`, `PATCH /api/whatsapp/conversations/{id}/`, `POST /api/whatsapp/conversations/{id}/{mark-read,send-template}/`, `GET + POST /api/whatsapp/conversations/{id}/notes/`, `GET /api/whatsapp/customers/{customer_id}/timeline/`), six new audit kinds (`whatsapp.conversation.opened/updated/assigned/read`, `whatsapp.internal_note.created`, `whatsapp.template.manual_send_requested`), conversation list filters (`unread=true / assignedTo / q`), conversation serializer extended with `customerName / customerPhone / assignedToUsername` + message serializer with `templateName`. Per-conversation send-template routes through Phase 5A's `queue_template_message`, so consent + approved-template + Claim Vault + approval matrix + CAIO + idempotency gates all stay in force. Frontend wired with automatic mock fallback (21 pages now — WhatsApp Inbox + WhatsApp Templates). The new `/whatsapp-inbox` page is a three-pane layout (filters / conversation list / thread + internal notes + manual template send modal + AI-suggestions-disabled placeholder) with live refresh via Phase 4A `connectAuditEvents` filtered on `whatsapp.*`. Customer 360 grew a WhatsApp tab listing the customer's WhatsApp timeline + AI-disabled placeholder + a one-click link to the inbox. **434 backend tests + 13 frontend tests** all green.
-- **What's next:** Phase 5C AI Chat Sales Agent with `learned_memory.py` ported wholesale + Claim-Vault-bound LLM + suggest/auto modes (per Phase 5A-1 addendum locked rules: greeting template, category detection, address collection in chat, **discount discipline — never upfront, rescue-only**, **50% total discount cap**); 5D chat-to-call handoff + lifecycle automation; 5E confirmation/delivery/RTO/reorder automation with rescue-discount flow + 50% cap enforcement in code; 5F approval-gated campaigns; learning loop pipeline; multi-tenant SaaS.
+- **Production deployment scaffold added (Phase 5B-Deploy):** `docker-compose.prod.yml` (six isolated containers — `nirogidhara-db` Postgres + `nirogidhara-redis` + `nirogidhara-backend` Daphne ASGI + `nirogidhara-worker` Celery + `nirogidhara-beat` + `nirogidhara-nginx` serving the Vite SPA), `backend/Dockerfile` + `frontend/Dockerfile`, `deploy/nginx/nirogidhara.conf` (proxies `/api/`, `/admin/`, `/ws/` with WebSocket upgrade), `.env.production.example`, full deploy runbook at `docs/DEPLOYMENT_VPS.md`. Target domain `ai.nirogidhara.com`, host port `18020:80` to avoid colliding with Postzyo / OpenClaw on the same VPS. All `*_MODE` env vars default to `mock` so the first deploy never sends a live message. CSRF_TRUSTED_ORIGINS now env-driven.
+- **What's next:** Run the deploy on Hostinger (DNS A record → VPS IP, host Nginx + Certbot for `ai.nirogidhara.com`), then Phase 5C AI Chat Sales Agent with `learned_memory.py` ported wholesale + Claim-Vault-bound LLM + suggest/auto modes (per Phase 5A-1 addendum locked rules: greeting template, category detection, address collection in chat, **discount discipline — never upfront, rescue-only**, **50% total discount cap**); 5D chat-to-call handoff + lifecycle automation; 5E confirmation/delivery/RTO/reorder automation with rescue-discount flow + 50% cap enforcement in code; 5F approval-gated campaigns; learning loop pipeline; multi-tenant SaaS.
 - **Run it:** `cd backend && python manage.py runserver` + `cd frontend && npm run dev` → open `http://localhost:8080`.
 
 ---
@@ -121,7 +122,7 @@ nirogidhara-command/
 │   ├── public/
 │   └── src/
 │       ├── main.tsx
-│       ├── App.tsx                # Router + 19 routes
+│       ├── App.tsx                # Router + 21 routes
 │       ├── index.css              # Tailwind tokens
 │       ├── types/domain.ts        # ← TS contract (every type below maps 1:1 to a Django serializer)
 │       ├── services/
@@ -1183,6 +1184,38 @@ The external [`prarit0097/Whatsapp-sales-dashboard`](https://github.com/prarit00
 
 The plan is the single source for Phase 5A scoping. Next: Phase 5A WhatsApp Live Sender Foundation.
 
+### ✅ Phase 5B-Deploy — Production Docker scaffold for ai.nirogidhara.com (DONE, this session)
+
+Pure deploy scaffold. **No business logic changed.** Production target is
+`ai.nirogidhara.com` on a Hostinger VPS that already runs Postzyo and
+OpenClaw, so everything is namespaced (project `nirogidhara-command`,
+containers `nirogidhara-*`, network `nirogidhara_network`, host port
+`18020 → 80`).
+
+**What shipped:**
+
+- `docker-compose.prod.yml` — six isolated services: `nirogidhara-db` (Postgres 16-alpine), `nirogidhara-redis` (Redis 7-alpine, AOF on), `nirogidhara-backend` (Daphne ASGI on :8000), `nirogidhara-worker` (Celery worker, concurrency=1 initially), `nirogidhara-beat` (Celery beat), `nirogidhara-nginx` (Vite SPA + reverse proxy). Healthchecks on Postgres / Redis / backend. Volumes: `nirogidhara_postgres_data / _redis_data / _static_volume / _media_volume`.
+- `backend/Dockerfile` — Python 3.11 slim + tini + libpq + non-root user (uid 10001). Single image is reused by backend / worker / beat services; the runtime command comes from compose.
+- `deploy/backend/entrypoint.sh` — role-aware. Daphne role waits for Postgres + Redis, runs `migrate --noinput` and `collectstatic --noinput`, then `exec`s Daphne. Worker / beat skip migrate (the backend container owns schema) but still wait for DB + Redis.
+- `frontend/Dockerfile` — multi-stage build: node 20 alpine builds the Vite SPA (build context is repo root so it can also read `deploy/nginx/...`); nginx 1.27 alpine serves the dist + the project nginx config. Build args: `VITE_API_BASE_URL=/api`, `VITE_WS_BASE_URL=` (empty so `realtime.ts` derives the WS URL from the page origin).
+- `deploy/nginx/nirogidhara.conf` — serves the SPA from `/usr/share/nginx/html`, proxies `/api/` + `/admin/` + `/ws/` to `backend:8000`, sets WebSocket upgrade headers + Forwarded-* headers, gzip + 25 MB upload cap, hashed-asset caching + `index.html` no-cache.
+- `.env.production.example` — full coverage of every env var read by `backend/config/settings.py`. All integration `*_MODE` and `WHATSAPP_PROVIDER` default to `mock`; `AI_PROVIDER=disabled`. `CSRF_TRUSTED_ORIGINS` documented (the env var is now consumed by `settings.py`). Production-flavored `RAZORPAY_CALLBACK_URL` and `VAPI_CALLBACK_URL` already point at `https://ai.nirogidhara.com/...` placeholders.
+- `backend/config/settings.py` extended: `CSRF_TRUSTED_ORIGINS` now env-driven (defaults to the dev CORS list when unset).
+- `backend/requirements.txt` adds `psycopg[binary]` + `requests` (both required for production; the existing lazy imports keep dev/CI lean).
+- `.gitignore` extended: `.env.production`, `*.pem / *.key / *.crt`, `certbot/`, `deploy/secrets/`. Allow-list keeps `.env.production.example` tracked.
+- `.dockerignore` (repo root + backend) — keeps secrets, sqlite, dev artifacts, git history out of every image.
+- `docs/DEPLOYMENT_VPS.md` — end-to-end runbook: prerequisites, `git clone /opt/nirogidhara-command`, `.env.production` template, first boot, migrate + createsuperuser + sync_whatsapp_templates, smoke tests, DNS A-record, host Nginx + Certbot OR Hostinger Traefik, daily logs / restart / update flow, Postgres backup commands, security checklist before going live, resource-safety notes for the shared VPS, and an explicit "intentionally NOT here" list (Phase 5C+).
+
+**Locked safety:**
+
+- Existing Postzyo / OpenClaw containers must not be touched. Project name + container prefixes + network + volumes + host port are all namespaced.
+- `.env.production` is gitignored. The repo only carries `.env.production.example` with placeholders.
+- Mock-mode defaults are the safe rollout: WhatsApp / Razorpay / Delhivery / Vapi / Meta Lead Ads / AI provider all stay `mock` / `disabled` until each integration's live credentials are confirmed by Prarit.
+- Worker concurrency = 1 initially. Bump only after `docker stats` confirms memory headroom on the shared VPS.
+- No application-level changes. Phase 5C is still locked out at the matrix + service-entry level (CAIO refusal, AI auto-reply not wired, etc.).
+
+Tests stay at 434 backend / 13 frontend. The deploy scaffold doesn't add code paths — every change is config / Docker / docs.
+
 ### ✅ Phase 5B — Inbound WhatsApp Inbox + Customer 360 Timeline (DONE, this session)
 
 The first runtime inbox phase. Phase 5B is **manual-only** — no AI auto-reply, no chat-to-call handoff, no order booking from chat, no rescue discount, no campaigns. Operations users can read inbound conversations, leave internal notes, mark conversations read, change status / assignment / tags / subject, and click a button to queue an approved-template send (which still flows through Phase 5A's gates).
@@ -1239,12 +1272,10 @@ The audit found no runtime bugs — the missing env vars all had safe
 in-code defaults, so the gap was purely documentation drift. Phase 5B
 implementation can start from a clean baseline.
 
-_End of `nd.md`. Last updated after **Phase 5B — Inbound WhatsApp
-Inbox + Customer 360 Timeline** (new `WhatsAppInternalNote` model,
-six new endpoints — inbox summary / PATCH conversation / mark-read /
-notes GET+POST / per-conversation send-template / customer timeline,
-six new audit kinds, three-pane `/whatsapp-inbox` page with manual
-template send + internal notes + AI-suggestions-disabled placeholder,
-Customer 360 WhatsApp tab. Manual-only — no AI auto-reply, no
-chat-to-call, no rescue discount, no campaigns. 33 new tests; total
-434 backend + 13 frontend, all green)._
+_End of `nd.md`. Last updated after **Phase 5B-Deploy** — production
+Docker scaffold for ai.nirogidhara.com (six isolated containers,
+host port 18020, Postgres + Redis + Daphne ASGI + Celery worker +
+beat + Nginx serving the Vite SPA, deploy runbook at
+`docs/DEPLOYMENT_VPS.md`). Phase 5B (Inbound WhatsApp Inbox + Customer
+360 Timeline) shipped earlier this session. **No business logic
+changed in 5B-Deploy** — 434 backend + 13 frontend tests still green._

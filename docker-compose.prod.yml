@@ -1,0 +1,160 @@
+# Nirogidhara AI Command Center — production Compose stack.
+#
+# Target VPS: Hostinger, already running other Docker projects (Postzyo /
+# OpenClaw). All container names + the host port (18020) are namespaced
+# so this stack does NOT collide with anything that already exists.
+#
+# Usage on the VPS:
+#
+#     cd /opt/nirogidhara-command
+#     cp .env.production.example .env.production
+#     nano .env.production                     # fill secrets, ALLOWED_HOSTS, etc.
+#     docker compose -f docker-compose.prod.yml \
+#         --env-file .env.production up -d --build
+#
+# Detailed runbook: docs/DEPLOYMENT_VPS.md.
+#
+# Hard rules:
+#  - .env.production is gitignored. Never bake secrets into images.
+#  - The backend container is the ONLY service that runs migrations.
+#  - The worker concurrency starts at 1; bump after observing memory.
+#  - Existing Postzyo / OpenClaw containers must not be touched.
+
+name: nirogidhara-command
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nirogidhara-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nirogidhara}
+      POSTGRES_USER: ${POSTGRES_USER:-nirogidhara}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+    volumes:
+      - nirogidhara_postgres_data:/var/lib/postgresql/data
+    networks:
+      - nirogidhara_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nirogidhara} -d ${POSTGRES_DB:-nirogidhara}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No host port — only sibling containers reach this DB.
+
+  redis:
+    image: redis:7-alpine
+    container_name: nirogidhara-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - nirogidhara_redis_data:/data
+    networks:
+      - nirogidhara_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No host port — only sibling containers reach Redis.
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: nirogidhara/backend:latest
+    container_name: nirogidhara-backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - nirogidhara_static_volume:/app/staticfiles
+      - nirogidhara_media_volume:/app/media
+    networks:
+      - nirogidhara_network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/healthz/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # No host port — Nginx is the only public face.
+
+  worker:
+    image: nirogidhara/backend:latest
+    container_name: nirogidhara-worker
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      backend:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nirogidhara_network
+    # Conservative concurrency for the shared VPS — bump only after
+    # observing memory headroom via `docker stats`.
+    command: ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=1"]
+
+  beat:
+    image: nirogidhara/backend:latest
+    container_name: nirogidhara-beat
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      backend:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nirogidhara_network
+    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
+
+  nginx:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_WS_BASE_URL: ""
+    image: nirogidhara/nginx:latest
+    container_name: nirogidhara-nginx
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      # Host 18020 → container 80. Domain Nginx / Traefik on the host
+      # proxies ai.nirogidhara.com to 127.0.0.1:18020.
+      - "18020:80"
+    volumes:
+      - nirogidhara_static_volume:/var/www/static:ro
+      - nirogidhara_media_volume:/var/www/media:ro
+    networks:
+      - nirogidhara_network
+
+networks:
+  nirogidhara_network:
+    name: nirogidhara_network
+    driver: bridge
+
+volumes:
+  nirogidhara_postgres_data:
+    name: nirogidhara_postgres_data
+  nirogidhara_redis_data:
+    name: nirogidhara_redis_data
+  nirogidhara_static_volume:
+    name: nirogidhara_static_volume
+  nirogidhara_media_volume:
+    name: nirogidhara_media_volume
