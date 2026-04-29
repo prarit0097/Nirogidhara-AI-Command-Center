@@ -123,7 +123,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 579 tests today
+python -m pytest -q                    # 581 tests today
 
 # Frontend
 cd frontend

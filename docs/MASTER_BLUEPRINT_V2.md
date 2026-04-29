@@ -15,7 +15,7 @@
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
 | Completed phase range | Phase 1 → Phase 5E-Hotfix-2 |
-| Last verified test baseline | 579 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
+| Last verified test baseline | 581 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
 | Live deployment stack | Docker Compose (six containers) on Hostinger VPS, host port 18020 → host Nginx + Certbot SSL |
 | GitHub repo | https://github.com/prarit0097/Nirogidhara-AI-Command-Center |
 | VPS path | `/opt/nirogidhara-command` |
@@ -639,7 +639,7 @@ A flag flip is reversible — if anything looks wrong on the audit stream, set t
 cd backend
 python manage.py makemigrations --check --dry-run    # MUST report "No changes detected"
 python manage.py check                                # 0 issues
-python -m pytest -q                                   # 579 tests today
+python -m pytest -q                                   # 581 tests today
 
 # Frontend
 cd ../frontend
@@ -699,11 +699,12 @@ for e in AuditEvent.objects.order_by('-occurred_at')[:50]:
 
 | Stage | Status |
 | --- | --- |
-| Phase 1 → Phase 5E-Hotfix-2 | ✅ **Completed and live in production.** |
-| Controlled Mock + OpenAI Testing | 🔜 **Next.** Verify AI Chat Sales Agent + lifecycle + rescue discount on a staging copy with `WHATSAPP_PROVIDER=mock` + `AI_PROVIDER=openai`. |
-| Limited Live Meta WhatsApp One-Number Test | 🔜 After OpenAI / mock pass. Single approved test number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. |
-| Limited Production Rollout | 🔜 Small approved customer cohort. 48+ hours of soak. Audit-stream review before scaling. |
-| Phase 5F — Approval-gated Campaigns / Growth Automation | 🔜 Director-approved broadcast campaigns. Meta MARKETING template tier. Per-campaign rate limit + dry-run + audit. Frontend Campaigns page (Director + Admin only). |
+| Phase 1 → Phase 5E-Smoke-Fix | ✅ **Completed and live in production.** |
+| OpenAI provider hotfix verification | 🔜 **Next on VPS.** Rebuild the backend image so `openai>=1.0,<2.0` lands in the container; confirm `from openai import OpenAI` works; re-run `python manage.py run_controlled_ai_smoke_test --scenario ai-reply --use-openai --json` and require `detail.openaiSucceeded=true` + `detail.providerPassed=true` + `overallPassed=true`. |
+| OpenAI smoke retest on VPS | 🔜 Run the full `--scenario all --json` sweep with the rebuilt image. Every scenario must `passed=true`. Audit `system.smoke_test.completed` rows before moving on. |
+| Limited Live Meta WhatsApp One-Number Test | 🔜 After the VPS smoke + OpenAI retest both pass. Flip `WHATSAPP_PROVIDER=meta_cloud` with `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` + exactly one approved number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting + payment reminder + confirmation reminder templates manually. |
+| Limited Production Rollout | 🔜 Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED=true` for a small approved customer cohort. 48+ hours of soak. Audit-stream review before scaling. |
+| Phase 5F — Approval-gated Campaigns / Growth Automation | 🔜 After the limited rollout soaks cleanly. Director-approved broadcast campaigns. Meta MARKETING template tier. Per-campaign rate limit + dry-run + audit. Frontend Campaigns page (Director + Admin only). |
 | Phase 6 — Recording / QA / Learning Loop pipeline | 🔜 Speech-to-text → speaker separation → QA scoring → Compliance review → CAIO audit → sandbox test → live `PromptVersion` promotion. No automatic promotion. |
 | Phase 7 — Multi-tenant SaaS readiness | 🔜 Tenant model + middleware that scopes every queryset; same backend serves Android / iOS apps. |
 

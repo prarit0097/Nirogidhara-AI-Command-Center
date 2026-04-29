@@ -467,6 +467,14 @@ def run_ai_reply_scenario(
     )
     provider_passed = (not openai_attempted) or openai_succeeded
     safe_failure = openai_attempted and not openai_succeeded
+    # Surface the adapter / handoff error string so operators don't
+    # have to dig through nested outcome fields. Empty when the
+    # provider succeeded.
+    provider_error = (
+        outcome.handoff_reason
+        if (openai_attempted and not openai_succeeded)
+        else ""
+    )
 
     result.audit_events_emitted = new_audit
     result.new_audit_kinds = new_kinds
@@ -500,6 +508,8 @@ def run_ai_reply_scenario(
         "openaiSucceeded": openai_succeeded,
         "providerPassed": provider_passed,
         "safeFailure": safe_failure,
+        "providerError": provider_error,
+        "blockedReason": outcome.blocked_reason,
     }
 
     if outcome.handoff_required and outcome.blocked_reason in {
@@ -552,10 +562,12 @@ def run_ai_reply_scenario(
     # is wrong" while the safe-defaults made everything look fine.
     if safe_failure:
         result.warnings.append(
-            f"OpenAI provider did not execute successfully "
-            f"(blockedReason={outcome.blocked_reason!r}); customer send "
-            "remained safely blocked. Treat as PROVIDER FAILURE — fix "
-            "the OpenAI integration before flipping any automation flag."
+            "OpenAI provider did not execute successfully; customer "
+            "send remained safely blocked. "
+            f"(blockedReason={outcome.blocked_reason!r}, "
+            f"providerError={provider_error!r}). Treat as PROVIDER "
+            "FAILURE — fix the OpenAI integration before flipping any "
+            "automation flag."
         )
         result.next_action = (
             "Install the OpenAI SDK (pip install 'openai>=1.0,<2.0'), "

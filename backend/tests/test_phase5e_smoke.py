@@ -479,6 +479,73 @@ def test_use_openai_safe_failure_audit_failed_kind_emitted(
     assert AuditEvent.objects.filter(kind="system.smoke_test.failed").exists()
 
 
+@override_settings(OPENAI_API_KEY="test-smoke-key", AI_PROVIDER="openai")
+def test_use_openai_safe_failure_surfaces_provider_error(
+    db, monkeypatch
+) -> None:
+    """Adapter error message must be surfaced as detail.providerError so
+    operators don't need to dig through nested outcome fields. Empty
+    when the provider succeeded."""
+    from apps.integrations.ai.base import AdapterResult, AdapterStatus
+
+    def _fake_dispatch(_messages):
+        return AdapterResult(
+            status=AdapterStatus.FAILED,
+            provider="openai",
+            model="gpt-test",
+            error_message="openai SDK not installed: No module named 'openai'",
+        )
+
+    monkeypatch.setattr(
+        "apps.whatsapp.ai_orchestration.dispatch_messages", _fake_dispatch
+    )
+    result = run_smoke_harness(
+        scenario="ai-reply", language="hinglish", use_openai=True
+    )
+    detail = result.scenarios[0].detail
+    assert detail["providerError"]
+    assert "openai SDK not installed" in detail["providerError"]
+    assert detail["blockedReason"] == "adapter_failed"
+    # Warning text must spell out the exact spec phrasing.
+    warning = " ".join(result.scenarios[0].warnings)
+    assert "OpenAI provider did not execute successfully" in warning
+    assert "customer send remained safely blocked" in warning
+
+
+@override_settings(OPENAI_API_KEY="test-smoke-key", AI_PROVIDER="openai")
+def test_use_openai_success_leaves_provider_error_empty(
+    db, monkeypatch
+) -> None:
+    """When the OpenAI adapter succeeds, providerError must be empty."""
+    from apps.integrations.ai.base import AdapterResult, AdapterStatus
+    from apps.whatsapp.smoke_harness import _scripted_ai_decision_payload
+
+    def _fake_dispatch(_messages):
+        import json as _json
+
+        return AdapterResult(
+            status=AdapterStatus.SUCCESS,
+            provider="openai",
+            model="gpt-test",
+            output={
+                "text": _json.dumps(_scripted_ai_decision_payload()),
+                "finish_reason": "stop",
+            },
+            raw={"id": "real"},
+            latency_ms=12,
+        )
+
+    monkeypatch.setattr(
+        "apps.whatsapp.ai_orchestration.dispatch_messages", _fake_dispatch
+    )
+    result = run_smoke_harness(
+        scenario="ai-reply", language="hinglish", use_openai=True
+    )
+    detail = result.scenarios[0].detail
+    assert detail["providerError"] == ""
+    assert detail["openaiSucceeded"] is True
+
+
 def test_no_real_whatsapp_send_during_use_openai_safe_failure(
     db, monkeypatch
 ) -> None:
