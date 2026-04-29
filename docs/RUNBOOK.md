@@ -117,6 +117,37 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5E-Hotfix — Migration drift gate
+
+After Phase 5E shipped, the VPS first-deploy reported "models in app(s)
+'orders', 'whatsapp' have changes that are not yet reflected in a
+migration" because the Phase 5D / 5E migrations hand-rolled short
+index names that don't match Django's auto-suffix form. The hotfix
+adds two `RenameIndex` migrations under `apps/orders/migrations/0004_*`
+and `apps/whatsapp/migrations/0004_*` — pure metadata renames, no
+schema rewrite.
+
+**Working agreement now requires** the migration drift gate before
+every commit:
+
+```bash
+cd backend
+python manage.py makemigrations --check --dry-run    # MUST report "No changes detected"
+```
+
+If new migrations include custom index names, generate them via
+`python manage.py makemigrations` (or copy the auto-suffix form
+verbatim from `--dry-run -v 3`); never hand-roll a short name like
+`whatsapp_wh_status_h0_idx` again.
+
+VPS deploy sequence after every `git pull`:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend python manage.py migrate
+docker compose -f docker-compose.prod.yml exec backend python manage.py makemigrations --check --dry-run
+# Expected: "No changes detected"
+```
+
 ### Phase 5E — Rescue Discount + Day-20 Reorder
 
 ```bash

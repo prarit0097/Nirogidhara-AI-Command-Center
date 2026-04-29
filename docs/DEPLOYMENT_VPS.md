@@ -116,6 +116,29 @@ sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py createsuperuser
 ```
 
+After **every** `git pull` on the VPS, run the migration drift gate so
+schema drift is caught at deploy time, not at the next dev session:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py migrate
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py makemigrations --check --dry-run
+```
+
+Expected output: `No changes detected`. If the `--check` reports
+pending migrations, **stop the deploy** — a hand-rolled migration
+drifted from the model definition. Generate the missing migration
+locally with `python manage.py makemigrations`, push the new
+`apps/<app>/migrations/0XXX_*.py` file, then re-pull on the VPS.
+
+Phase 5E-Hotfix is the canonical example of this drift: Phase 5D / 5E
+shipped with hand-rolled short index names (`whatsapp_wh_convers_h0_idx`,
+`orders_disc_order_i_dol_idx`, …) that did not match Django's auto-suffix
+form, and the VPS first-deploy after commit `8374863` reported pending
+migrations until two `RenameIndex` migrations (`0004_rename_*`) were
+generated locally and re-pulled.
+
 Optional demo seed (do **not** run on a live customer DB):
 
 ```bash
