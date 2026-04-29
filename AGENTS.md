@@ -282,9 +282,9 @@ cd frontend && npm run lint && npm test && npm run build
 
 ## When in doubt
 
-1. Read `nd.md` (the project handoff). Section index is at the top.
-2. Read the relevant blueprint section (`Nirogidhara AI Command Center — Master Blueprint v1.0`, PDF in repo).
+1. Read `nd.md` first (the project handoff + operational source of truth). Section index is at the top.
+2. Then read the relevant section of [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) — current strategic blueprint (v2.0 supersedes the v1.0 PDF, which is historical only).
 3. Run the health check above.
 4. Ask Prarit before doing anything that touches: ad budgets, real medical claims, payment flows, customer messaging, kill-switch states, or production data.
 
-The blueprint wins. Every decision in this codebase traces back to a section there.
+`nd.md` and `MASTER_BLUEPRINT_V2.md` together are the contract. If they diverge on any detail, **`nd.md` wins** and the blueprint must be updated to match.

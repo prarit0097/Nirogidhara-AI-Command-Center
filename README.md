@@ -128,8 +128,23 @@ cd frontend && npm test
 - ⏭ **Phase 5F** — Director-approved broadcast / sales campaigns (gated, MARKETING template tier).
 - ⏭ **Phase 6** — Recording / QA / learning loop pipeline (speech-to-text → compliance review → CAIO audit → sandbox test → live promotion).
 
+## Documentation index
+
+| File | What it is |
+| --- | --- |
+| [`nd.md`](nd.md) | Operational handoff and **single source of truth** for the project state. Read this first. |
+| [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) | **Master Blueprint v2.0** — current strategic blueprint (supersedes the v1.0 PDF, which is historical only). |
+| [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | Local dev / run commands. |
+| [`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md) | Production deployment runbook (`/opt/nirogidhara-command`). |
+| [`docs/BACKEND_API.md`](docs/BACKEND_API.md) | Endpoint reference. |
+| [`docs/FRONTEND_AUDIT.md`](docs/FRONTEND_AUDIT.md) | Frontend page status + open improvements. |
+| [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md) | Phased roadmap with acceptance criteria. |
+| [`docs/WHATSAPP_INTEGRATION_PLAN.md`](docs/WHATSAPP_INTEGRATION_PLAN.md) | WhatsApp + AI Chat Sales Agent design plan. |
+| [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) | AI agent guardrails (read on every session). |
+
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
 Detailed handoff: [`nd.md`](nd.md).
+Strategic blueprint: [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md).
 
 ## Stack
 

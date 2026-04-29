@@ -2,7 +2,7 @@
 
 > Read this file end-to-end before touching the repo.
 > If you are a coding agent: this is your single source of truth.
-> Reference doc: **Nirogidhara AI Command Center — Master Blueprint v1.0** (PDF in repo).
+> Strategic mirror: [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) — Master Blueprint v2.0 (supersedes the v1.0 PDF, which is historical reference only). If `nd.md` and the blueprint disagree on any detail, **`nd.md` wins** and the blueprint must be updated to match.
 
 ---
 
