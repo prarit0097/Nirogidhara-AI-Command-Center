@@ -791,21 +791,30 @@ def _has_approved_claim_for(
 def _build_idempotency_key(
     *,
     customer: Customer,
-    template: WhatsAppTemplate,
+    template: WhatsAppTemplate | None,
     variables: Mapping[str, Any],
     action_key: str,
 ) -> str:
-    """Stable key per (customer, template, variables hash, day) tuple."""
+    """Stable key per (customer, template, variables hash, day) tuple.
+
+    ``template`` is optional — Phase 5C freeform AI replies pass
+    ``None`` because they're TEXT messages, not templates.
+    """
     import hashlib
     import json
 
     blob = json.dumps(
         {
             "customer_id": customer.id,
-            "template_id": template.id,
+            "template_id": getattr(template, "id", "freeform"),
             "variables": variables,
             "action_key": action_key,
             "day": timezone.now().date().isoformat(),
+            # Add nanoseconds for freeform sends so back-to-back AI
+            # replies in the same minute still mint distinct keys.
+            "ts_us": (
+                timezone.now().timestamp() if template is None else 0
+            ),
         },
         sort_keys=True,
         default=str,
@@ -962,7 +971,54 @@ def handle_inbound_message_event(
             "opt_out_keyword": keyword or "",
         },
     )
+
+    # Phase 5C — fire the WhatsApp AI Chat Agent task on commit so the
+    # webhook returns 200 immediately and the LLM dispatch happens out
+    # of band. The orchestrator handles its own consent / safety gates;
+    # the dispatch here is opt-out-only — sending the inbound through
+    # the AI never blocks the inbound persistence above.
+    if not keyword:
+        _enqueue_ai_run(convo.id, message.id)
+
     return message
+
+
+def _enqueue_ai_run(conversation_id: str, inbound_message_id: str) -> None:
+    """Schedule ``run_whatsapp_ai_agent_for_conversation``.
+
+    In Celery **eager mode** (default for tests + local dev) the task
+    runs synchronously inside the current process; we dispatch
+    immediately so the orchestrator sees the just-persisted inbound and
+    the test transaction sees the AI audit rows.
+
+    In **real broker mode** (production) we wrap the dispatch in
+    ``transaction.on_commit`` so the broker only learns about the
+    inbound after the DB commit completes. In both modes a missing
+    broker / dispatch error must never break the webhook write path.
+    """
+    from django.conf import settings
+
+    eager_mode = bool(getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False))
+
+    def _send():
+        try:
+            from .tasks import run_whatsapp_ai_agent_for_conversation
+
+            run_whatsapp_ai_agent_for_conversation.delay(
+                conversation_id, inbound_message_id, triggered_by="inbound"
+            )
+        except Exception:  # noqa: BLE001 - defensive; never break webhook
+            pass
+
+    if eager_mode:
+        # Eager mode: dispatch right away — the inbound row is already
+        # persisted at this point in ``handle_inbound_message_event``.
+        _send()
+        return
+    try:
+        transaction.on_commit(_send)
+    except Exception:  # noqa: BLE001 - also defensive
+        pass
 
 
 @transaction.atomic
@@ -1125,6 +1181,180 @@ def _envelope_event_id(payload: Mapping[str, Any]) -> str:
     return ""
 
 
+def send_freeform_text_message(
+    *,
+    customer: Customer,
+    conversation: WhatsAppConversation,
+    body: str,
+    actor_role: str = "ai_chat",
+    actor_agent: str = "ai_chat",
+    ai_generated: bool = True,
+    metadata: Mapping[str, Any] | None = None,
+) -> WhatsAppMessage:
+    """Phase 5C — send a freeform text reply through the configured provider.
+
+    Used by the WhatsApp AI Chat Agent for non-template replies (after
+    the locked greeting template has been delivered, the LLM continues
+    in the customer's language with freeform messages).
+
+    Hard rules (Phase 5C / Master Blueprint §26):
+    - CAIO can never originate a customer-facing send (refused here).
+    - No consent / opted-out → block + audit + raise.
+    - Failed provider calls never mutate Order / Payment / Shipment.
+    - Caller is responsible for Claim Vault + blocked-phrase validation;
+      see :mod:`apps.whatsapp.ai_orchestration` for the reference path.
+    """
+    actor_agent_lower = (actor_agent or "").lower()
+    if actor_agent_lower == CAIO_AGENT_TOKEN:
+        _block(
+            customer,
+            action_key="whatsapp.freeform_reply",
+            reason=(
+                "CAIO can never originate a customer-facing WhatsApp "
+                "send (Master Blueprint §26 #5)."
+            ),
+            block_reason="caio_no_send",
+            extra={"actor_agent": actor_agent_lower},
+        )
+        raise WhatsAppServiceError(
+            "CAIO cannot send WhatsApp messages.",
+            http_status=403,
+            block_reason="caio_no_send",
+        )
+
+    if not customer.phone:
+        raise WhatsAppServiceError(
+            "Customer has no phone number on record.",
+            http_status=400,
+            block_reason="missing_phone",
+        )
+
+    if not has_whatsapp_consent(customer):
+        _block(
+            customer,
+            action_key="whatsapp.freeform_reply",
+            reason="Customer has not opted in to WhatsApp.",
+            block_reason="consent_missing",
+        )
+        raise WhatsAppServiceError(
+            "Customer has not opted in to WhatsApp.",
+            http_status=403,
+            block_reason="consent_missing",
+        )
+
+    body_clean = (body or "").strip()
+    if not body_clean:
+        raise WhatsAppServiceError(
+            "Empty body — refusing to send.",
+            http_status=400,
+            block_reason="empty_body",
+        )
+
+    provider = get_provider()
+    started = timezone.now()
+    idempotency = _build_idempotency_key(
+        customer=customer,
+        template=None,
+        variables={"body": body_clean[:120]},
+        action_key="whatsapp.freeform_reply",
+    )
+
+    with transaction.atomic():
+        message = WhatsAppMessage.objects.create(
+            id=next_id("WAM", WhatsAppMessage, base=100001),
+            conversation=conversation,
+            customer=customer,
+            direction=WhatsAppMessage.Direction.OUTBOUND,
+            status=WhatsAppMessage.Status.QUEUED,
+            type=WhatsAppMessage.Type.TEXT,
+            body=body_clean[:4096],
+            template=None,
+            template_variables={},
+            ai_generated=bool(ai_generated),
+            metadata={
+                "actor_agent": actor_agent_lower,
+                "actor_role": (actor_role or "").lower(),
+                "trigger": "ai_chat",
+                **dict(metadata or {}),
+            },
+            idempotency_key=idempotency,
+            queued_at=started,
+        )
+
+    try:
+        result = provider.send_text_message(
+            to_phone=customer.phone,
+            body=body_clean,
+            idempotency_key=message.idempotency_key,
+        )
+    except ProviderError as exc:
+        _record_send_log(
+            message=message,
+            attempt=1,
+            provider_name=getattr(provider, "name", "unknown"),
+            request_payload={"to": customer.phone, "type": "text"},
+            response_status=0,
+            response_payload={"error": str(exc), "code": exc.error_code},
+            started_at=started,
+            error_code=exc.error_code,
+        )
+        _mark_failed_locally(
+            message,
+            error_message=str(exc),
+            error_code=exc.error_code or "provider_error",
+            attempt=1,
+        )
+        raise WhatsAppServiceError(
+            f"Provider send failed: {exc}",
+            http_status=502,
+            block_reason="provider_error",
+        ) from exc
+
+    completed = timezone.now()
+    _record_send_log(
+        message=message,
+        attempt=1,
+        provider_name=result.provider,
+        request_payload=dict(result.request_payload),
+        response_status=result.response_status,
+        response_payload=dict(result.response_payload),
+        started_at=started,
+        completed_at=completed,
+        latency_ms=result.latency_ms,
+    )
+    message.status = WhatsAppMessage.Status.SENT
+    message.provider_message_id = result.provider_message_id
+    message.attempt_count = 1
+    message.sent_at = completed
+    message.save(
+        update_fields=[
+            "status",
+            "provider_message_id",
+            "attempt_count",
+            "sent_at",
+            "updated_at",
+        ]
+    )
+    write_event(
+        kind="whatsapp.message.sent",
+        text=(
+            f"WhatsApp message {message.id} sent (freeform) · "
+            f"provider_message_id={result.provider_message_id}"
+        ),
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "message_id": message.id,
+            "provider_message_id": result.provider_message_id,
+            "conversation_id": conversation.id,
+            "customer_id": customer.id,
+            "provider": result.provider,
+            "latency_ms": result.latency_ms,
+            "ai_generated": True,
+        },
+    )
+    return message
+
+
 __all__ = (
     "QueuedMessage",
     "WhatsAppServiceError",
@@ -1136,5 +1366,6 @@ __all__ = (
     "provider_status",
     "queue_template_message",
     "record_webhook_envelope",
+    "send_freeform_text_message",
     "send_queued_message",
 )

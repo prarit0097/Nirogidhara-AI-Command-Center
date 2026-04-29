@@ -1,0 +1,1277 @@
+"""Phase 5C — WhatsApp AI Chat Sales Agent orchestration.
+
+End-to-end pipeline triggered by an inbound message:
+
+1. Idempotency check on the inbound message id.
+2. Conversation context build (recent messages, customer 360, recent
+   order/payment, Claim Vault for the detected category, current AI
+   state).
+3. Greeting fast-path — if the inbound matches a generic intro AND the
+   conversation has no prior outbound, send the locked greeting
+   template via :mod:`apps.whatsapp.services.queue_template_message`.
+4. LLM dispatch via :mod:`apps.integrations.ai.dispatch.dispatch_messages`
+   when ``AI_PROVIDER != "disabled"``. Prompt is built locally (this
+   module) and grounded against the Approved Claim Vault.
+5. JSON schema validation via :mod:`.ai_schema`.
+6. Auto-send rate gate. Failures → suggestion stored, conversation
+   flagged, no customer-facing send.
+7. Order booking when ``action == 'book_order'`` AND all gates pass.
+8. ₹499 advance payment link (Razorpay) when the LLM marks
+   ``payment.shouldCreateAdvanceLink``.
+
+Hard rules:
+- ``AI_PROVIDER == 'disabled'`` → run is recorded but no auto-send.
+- Claim Vault missing → fail closed; no medical content sent.
+- CAIO actor token → refused at the WhatsApp service entry.
+- Failed sends NEVER mutate Order / Payment / Shipment.
+"""
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import Any, Mapping
+
+from django.conf import settings
+from django.db import transaction
+from django.utils import timezone
+
+from apps.audit.models import AuditEvent
+from apps.audit.signals import write_event
+from apps.compliance.models import Claim
+from apps.crm.models import Customer
+from apps.integrations.ai.base import AdapterStatus
+from apps.integrations.ai.dispatch import dispatch_messages
+
+from . import services
+from .ai_schema import (
+    BLOCKED_CLAIM_PHRASES,
+    ChatAgentDecision,
+    ChatAgentSchemaError,
+    SALES_STAGES,
+    SUPPORTED_CATEGORIES,
+    parse_decision,
+    reply_contains_blocked_phrase,
+)
+from .consent import has_whatsapp_consent
+from .discount_policy import (
+    PROACTIVE_RESCUE_TRIGGERS,
+    TOTAL_DISCOUNT_HARD_CAP_PCT,
+    evaluate_whatsapp_discount,
+)
+from .language import (
+    LANG_HINDI,
+    LANG_HINGLISH,
+    LANGUAGE_CHOICES,
+    detect_from_history,
+    normalize_language,
+)
+from .models import (
+    WhatsAppConversation,
+    WhatsAppMessage,
+    WhatsAppTemplate,
+)
+from .order_booking import OrderBookingError, book_order_from_decision
+from .template_registry import (
+    GREETING_LOCKED_HINDI,
+    TemplateRegistryError,
+    get_template_for_action,
+    language_to_template_tag,
+)
+
+
+logger = logging.getLogger(__name__)
+
+
+GREETING_TRIGGER_KEYWORDS: tuple[str, ...] = (
+    "hi",
+    "hello",
+    "hii",
+    "hey",
+    "namaste",
+    "namaskar",
+    "namaskaar",
+    "hola",
+    "help",
+    "info",
+    "details",
+    "good morning",
+    "good evening",
+    "नमस्ते",
+    "नमस्कार",
+)
+
+
+@dataclass
+class OrchestrationOutcome:
+    """Result of :func:`run_whatsapp_ai_agent`. Used by the API layer + tests."""
+
+    conversation_id: str
+    inbound_message_id: str
+    action: str = "no_action"
+    sent: bool = False
+    sent_message_id: str = ""
+    handoff_required: bool = False
+    handoff_reason: str = ""
+    order_id: str = ""
+    payment_id: str = ""
+    payment_url: str = ""
+    detection_language: str = ""
+    detected_category: str = ""
+    stage: str = ""
+    decision: ChatAgentDecision | None = None
+    blocked_reason: str = ""
+    confidence: float = 0.0
+    notes: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Public entrypoint
+# ---------------------------------------------------------------------------
+
+
+def run_whatsapp_ai_agent(
+    *,
+    conversation_id: str,
+    inbound_message_id: str = "",
+    triggered_by: str = "auto",
+    actor_role: str = "ai_chat",
+    force: bool = False,
+) -> OrchestrationOutcome:
+    """Drive the AI Chat Agent for one conversation turn.
+
+    The function is idempotent on ``inbound_message_id`` — the same
+    inbound message will not produce two AI runs unless ``force=True``
+    (used by the operator-triggered ``run-ai`` endpoint).
+    """
+    convo = (
+        WhatsAppConversation.objects.select_related("customer", "connection")
+        .filter(pk=conversation_id)
+        .first()
+    )
+    if convo is None:
+        raise ValueError(f"Conversation {conversation_id!r} not found.")
+
+    inbound = None
+    if inbound_message_id:
+        inbound = (
+            WhatsAppMessage.objects.filter(
+                pk=inbound_message_id,
+                conversation=convo,
+                direction=WhatsAppMessage.Direction.INBOUND,
+            ).first()
+        )
+        if inbound is None:
+            raise ValueError(
+                f"Inbound message {inbound_message_id!r} not found on conversation "
+                f"{conversation_id!r}."
+            )
+    else:
+        inbound = (
+            WhatsAppMessage.objects.filter(
+                conversation=convo,
+                direction=WhatsAppMessage.Direction.INBOUND,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+    outcome = OrchestrationOutcome(
+        conversation_id=convo.id,
+        inbound_message_id=inbound.id if inbound else "",
+    )
+
+    ai_state = _read_ai_state(convo)
+    outcome.stage = ai_state.get("stage") or "greeting"
+
+    # Idempotency on inbound id (skip if already processed unless force).
+    if inbound is not None and not force:
+        if inbound.id in (ai_state.get("processedMessageIds") or []):
+            outcome.notes.append("idempotent_skip")
+            return outcome
+
+    write_event(
+        kind="whatsapp.ai.run_started",
+        text=f"WhatsApp AI run started · conversation={convo.id}",
+        tone=AuditEvent.Tone.INFO,
+        payload={
+            "conversation_id": convo.id,
+            "inbound_message_id": inbound.id if inbound else "",
+            "triggered_by": triggered_by,
+        },
+    )
+
+    # ---- Hard-stop guards ----
+    if not has_whatsapp_consent(convo.customer):
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason="consent_missing",
+            handoff_reason="Customer has not opted in to WhatsApp.",
+        )
+
+    # AI suggestions disabled → just record + skip dispatch.
+    if not _is_ai_enabled(convo, ai_state):
+        outcome.notes.append("ai_disabled_for_conversation")
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason="ai_disabled",
+        )
+
+    # ---- Detect language up front. ----
+    detection = detect_from_history(convo, inbound_message=inbound)
+    outcome.detection_language = detection.language
+    write_event(
+        kind="whatsapp.ai.language_detected",
+        text=f"Language detected · {detection.language}",
+        tone=AuditEvent.Tone.INFO,
+        payload={
+            "conversation_id": convo.id,
+            "language": detection.language,
+            "devanagari_ratio": detection.devanagari_ratio,
+            "marker_hits": detection.hinglish_marker_hits,
+        },
+    )
+
+    # ---- Greeting fast-path ----
+    inbound_body = (inbound.body if inbound else "").strip()
+    convo_has_outbound = WhatsAppMessage.objects.filter(
+        conversation=convo,
+        direction=WhatsAppMessage.Direction.OUTBOUND,
+    ).exists()
+
+    if (
+        not convo_has_outbound
+        and _looks_like_greeting(inbound_body)
+    ):
+        return _send_greeting(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            language=detection.language,
+            triggered_by=triggered_by,
+            actor_role=actor_role,
+        )
+
+    # ---- AI provider gate ----
+    provider = (getattr(settings, "AI_PROVIDER", "disabled") or "disabled").lower()
+    if provider == "disabled":
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason="ai_provider_disabled",
+            handoff_reason="AI provider disabled in settings.",
+        )
+
+    # ---- Build context + prompt ----
+    try:
+        context = _build_context(convo, inbound, detection.language, ai_state)
+        messages = _build_prompt(convo, inbound, context)
+    except _ClaimVaultMissingError as exc:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason="claim_vault_missing",
+            handoff_reason=str(exc),
+        )
+
+    # ---- Dispatch ----
+    try:
+        result = dispatch_messages(messages)
+    except Exception as exc:  # noqa: BLE001 - defensive
+        logger.warning("WhatsApp AI dispatch raised: %s", exc)
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason="dispatch_error",
+            handoff_reason=f"AI dispatch error: {exc}",
+        )
+
+    if result.status != AdapterStatus.SUCCESS:
+        reason_msg = (
+            result.error_message
+            or (result.raw or {}).get("reason")
+            or "AI dispatch did not succeed"
+        )
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason=f"adapter_{result.status}",
+            handoff_reason=str(reason_msg),
+        )
+
+    # ---- Parse + validate JSON ----
+    response_text = str((result.output or {}).get("text") or "").strip()
+    try:
+        decision = parse_decision(_extract_json(response_text))
+    except (ChatAgentSchemaError, ValueError) as exc:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason="schema_invalid",
+            handoff_reason=f"AI returned invalid JSON: {exc}",
+        )
+
+    outcome.decision = decision
+    outcome.confidence = decision.confidence
+    outcome.detected_category = decision.category
+    if decision.category and decision.category != "unknown":
+        write_event(
+            kind="whatsapp.ai.category_detected",
+            text=f"Category detected · {decision.category}",
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "conversation_id": convo.id,
+                "category": decision.category,
+            },
+        )
+
+    # ---- Safety gates ----
+    blocker = _safety_block(decision)
+    if blocker:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason=blocker,
+            handoff_reason=decision.handoff_reason or blocker,
+        )
+
+    # ---- Discount discipline (if the model proposed one) ----
+    if decision.order_draft.get("discountPct", 0) > 0:
+        rescue_trigger = (ai_state.get("refusalTrigger") or "").strip()
+        eval_result = evaluate_whatsapp_discount(
+            proposed_pct=decision.order_draft.get("discountPct", 0),
+            current_total_pct=ai_state.get("totalDiscountPct") or 0,
+            discount_ask_count=ai_state.get("discountAskCount") or 0,
+            refusal_trigger=rescue_trigger,
+            actor_role="operations",
+        )
+        if not eval_result.allowed:
+            kind = (
+                "whatsapp.ai.discount_blocked"
+                if eval_result.handoff_required or eval_result.band == "blocked"
+                else "whatsapp.ai.discount_objection_handled"
+            )
+            write_event(
+                kind=kind,
+                text=f"Discount evaluation · {eval_result.reason}",
+                tone=AuditEvent.Tone.WARNING,
+                payload={
+                    "conversation_id": convo.id,
+                    "proposed_pct": eval_result.proposed_pct,
+                    "current_total_pct": eval_result.current_total_pct,
+                    "final_total_pct": eval_result.final_total_pct,
+                    "band": eval_result.band,
+                    "notes": list(eval_result.notes),
+                },
+            )
+            if eval_result.handoff_required:
+                return _finalize_run(
+                    convo,
+                    outcome,
+                    ai_state,
+                    inbound,
+                    decision=decision,
+                    blocked_reason="discount_blocked",
+                    handoff_reason=eval_result.reason,
+                )
+            # Strip the offer from the order draft and let the agent
+            # continue without offering.
+            decision.order_draft["discountPct"] = 0
+        else:
+            write_event(
+                kind="whatsapp.ai.discount_offered",
+                text=(
+                    f"Discount offered · {eval_result.proposed_pct}% "
+                    f"(total {eval_result.final_total_pct}%)"
+                ),
+                tone=AuditEvent.Tone.INFO,
+                payload={
+                    "conversation_id": convo.id,
+                    "proposed_pct": eval_result.proposed_pct,
+                    "current_total_pct": eval_result.current_total_pct,
+                    "final_total_pct": eval_result.final_total_pct,
+                    "band": eval_result.band,
+                },
+            )
+
+    # ---- Auto-send rate gate ----
+    rate_block = _rate_limit_block(convo)
+    if rate_block:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason=rate_block,
+            handoff_reason=f"Rate limit hit: {rate_block}",
+        )
+
+    # ---- Confidence + auto-send config ----
+    threshold = float(
+        getattr(settings, "WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD", 0.75)
+    )
+    auto_enabled = bool(
+        getattr(settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False)
+    )
+    confidence_ok = decision.confidence >= threshold
+
+    if not auto_enabled:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason="auto_reply_disabled",
+            handoff_reason=(
+                "Auto reply disabled in settings; suggestion stored for "
+                "operator review."
+            ),
+        )
+    if not confidence_ok:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason="low_confidence",
+            handoff_reason=(
+                f"AI confidence {decision.confidence:.2f} below threshold "
+                f"{threshold:.2f}; suggestion stored."
+            ),
+        )
+
+    # ---- Reply path (after all gates) ----
+    if decision.action == "send_reply" or decision.action == "ask_question":
+        return _send_freeform_reply(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            actor_role=actor_role,
+        )
+
+    if decision.action == "book_order":
+        return _attempt_book_order(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            actor_role=actor_role,
+        )
+
+    if decision.action == "handoff":
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason="ai_handoff_requested",
+            handoff_reason=decision.handoff_reason or "AI requested handoff.",
+        )
+
+    # action == 'no_action' or unknown — store + done.
+    outcome.notes.append("no_action_from_ai")
+    return _finalize_run(
+        convo,
+        outcome,
+        ai_state,
+        inbound,
+        decision=decision,
+        blocked_reason="no_action",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+class _ClaimVaultMissingError(Exception):
+    """Internal — raised when product context lacks an approved Claim row."""
+
+
+def _is_ai_enabled(
+    convo: WhatsAppConversation, ai_state: Mapping[str, Any]
+) -> bool:
+    enabled = ai_state.get("aiEnabled")
+    if enabled is None:
+        return True  # default-on for new conversations
+    return bool(enabled)
+
+
+def _looks_like_greeting(text: str) -> bool:
+    cleaned = (text or "").strip().lower()
+    if not cleaned:
+        return False
+    if len(cleaned) <= 3 and any(ch.isalpha() for ch in cleaned):
+        return True
+    for kw in GREETING_TRIGGER_KEYWORDS:
+        if cleaned == kw or cleaned.startswith(kw + " ") or cleaned == f"{kw}!":
+            return True
+    return False
+
+
+def _read_ai_state(convo: WhatsAppConversation) -> dict[str, Any]:
+    """Return a defensive copy of the conversation's ai metadata."""
+    metadata = dict(convo.metadata or {})
+    ai = dict(metadata.get("ai") or {})
+    ai.setdefault("aiEnabled", True)
+    ai.setdefault("aiMode", "auto")
+    ai.setdefault("stage", "greeting")
+    ai.setdefault("discountAskCount", 0)
+    ai.setdefault("totalDiscountPct", 0)
+    ai.setdefault("offeredDiscountPct", 0)
+    ai.setdefault("processedMessageIds", [])
+    ai.setdefault("handoffRequired", False)
+    return ai
+
+
+def _write_ai_state(
+    convo: WhatsAppConversation, ai_state: Mapping[str, Any]
+) -> None:
+    metadata = dict(convo.metadata or {})
+    metadata["ai"] = dict(ai_state)
+    convo.metadata = metadata
+    convo.save(update_fields=["metadata", "updated_at"])
+
+
+def _send_greeting(
+    convo: WhatsAppConversation,
+    outcome: OrchestrationOutcome,
+    ai_state: dict[str, Any],
+    inbound: WhatsAppMessage | None,
+    *,
+    language: str,
+    triggered_by: str,
+    actor_role: str,
+) -> OrchestrationOutcome:
+    """Send the locked greeting template — fail closed if it isn't synced."""
+    template_lang = language_to_template_tag(language)
+    try:
+        template = get_template_for_action(
+            action_key="whatsapp.greeting",
+            language=template_lang,
+            connection=convo.connection,
+        )
+    except TemplateRegistryError as exc:
+        write_event(
+            kind="whatsapp.ai.greeting_blocked",
+            text=f"Greeting template missing · {exc}",
+            tone=AuditEvent.Tone.DANGER,
+            payload={
+                "conversation_id": convo.id,
+                "language": language,
+                "template_lang": template_lang,
+            },
+        )
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason="greeting_template_missing",
+            handoff_reason=str(exc),
+        )
+
+    try:
+        queued = services.queue_template_message(
+            customer=convo.customer,
+            action_key="whatsapp.greeting",
+            template=template,
+            variables={},
+            triggered_by=triggered_by or "ai_greeting",
+            actor_role=actor_role,
+            actor_agent="ai_chat",
+            extra_metadata={
+                "ai_generated": True,
+                "ai_stage": "greeting",
+                "language": language,
+            },
+        )
+    except services.WhatsAppServiceError as exc:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            blocked_reason=f"greeting_send_blocked:{exc.block_reason}",
+            handoff_reason=str(exc),
+        )
+
+    # Schedule the actual send (eager-mode dev runs sync).
+    from .tasks import send_whatsapp_message
+
+    send_whatsapp_message.delay(queued.message.id)
+
+    write_event(
+        kind="whatsapp.ai.greeting_sent",
+        text=f"Greeting sent · conversation={convo.id} · language={language}",
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "conversation_id": convo.id,
+            "message_id": queued.message.id,
+            "language": language,
+            "template_id": template.id,
+        },
+    )
+
+    ai_state["stage"] = "discovery"
+    ai_state.setdefault("processedMessageIds", [])
+    if inbound and inbound.id not in ai_state["processedMessageIds"]:
+        ai_state["processedMessageIds"].append(inbound.id)
+    ai_state["lastGreetingAt"] = timezone.now().isoformat()
+    ai_state["lastAiAction"] = "greeting"
+    ai_state["lastAiConfidence"] = 1.0
+    ai_state["aiMode"] = "auto"
+    _write_ai_state(convo, ai_state)
+
+    outcome.action = "send_reply"
+    outcome.sent = True
+    outcome.sent_message_id = queued.message.id
+    outcome.stage = "discovery"
+    outcome.confidence = 1.0
+    outcome.notes.append("greeting_sent")
+
+    write_event(
+        kind="whatsapp.ai.run_completed",
+        text=f"AI run completed · conversation={convo.id} · greeting",
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "conversation_id": convo.id,
+            "action": "greeting",
+            "stage": "discovery",
+        },
+    )
+    return outcome
+
+
+def _safety_block(decision: ChatAgentDecision) -> str:
+    safety = decision.safety
+    if safety.get("medicalEmergency"):
+        return "medical_emergency"
+    if safety.get("sideEffectComplaint"):
+        return "side_effect_complaint"
+    if safety.get("legalThreat"):
+        return "legal_threat"
+    if safety.get("angryCustomer") and decision.action != "handoff":
+        return "angry_customer"
+    if not safety.get("claimVaultUsed"):
+        # If the model says it didn't ground the answer, demand handoff.
+        return "claim_vault_not_used"
+    blocked = reply_contains_blocked_phrase(decision.reply_text)
+    if blocked:
+        return f"blocked_phrase:{blocked}"
+    return ""
+
+
+def _rate_limit_block(convo: WhatsAppConversation) -> str:
+    """Cheap rate limit using AuditEvent counts.
+
+    Phase 5C uses the audit ledger as the rate-limit oracle (already
+    persisted, already indexed). Production can swap in Redis later.
+    """
+    now = timezone.now()
+    hour_ago = now - timedelta(hours=1)
+    day_ago = now - timedelta(days=1)
+    max_turns = int(
+        getattr(settings, "WHATSAPP_AI_MAX_TURNS_PER_CONVERSATION_PER_HOUR", 10)
+    )
+    max_msgs = int(
+        getattr(settings, "WHATSAPP_AI_MAX_MESSAGES_PER_CUSTOMER_PER_DAY", 30)
+    )
+
+    convo_turns = AuditEvent.objects.filter(
+        kind="whatsapp.ai.reply_auto_sent",
+        occurred_at__gte=hour_ago,
+        payload__conversation_id=convo.id,
+    ).count()
+    if convo_turns >= max_turns:
+        return "conversation_hourly_cap"
+
+    customer_msgs = AuditEvent.objects.filter(
+        kind="whatsapp.ai.reply_auto_sent",
+        occurred_at__gte=day_ago,
+        payload__customer_id=convo.customer_id,
+    ).count()
+    if customer_msgs >= max_msgs:
+        return "customer_daily_cap"
+    return ""
+
+
+def _send_freeform_reply(
+    convo: WhatsAppConversation,
+    outcome: OrchestrationOutcome,
+    ai_state: dict[str, Any],
+    inbound: WhatsAppMessage | None,
+    *,
+    decision: ChatAgentDecision,
+    actor_role: str,
+) -> OrchestrationOutcome:
+    """Persist + send the freeform AI reply through the WhatsApp service."""
+    if not decision.reply_text:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason="empty_reply_text",
+            handoff_reason="AI returned send_reply with empty body.",
+        )
+
+    # We do NOT call queue_template_message for freeform — the message
+    # is a Type.TEXT outbound. We persist directly via service helpers
+    # so consent, idempotency, and CAIO guards all stay in force.
+    try:
+        message = services.send_freeform_text_message(
+            customer=convo.customer,
+            conversation=convo,
+            body=decision.reply_text,
+            actor_role=actor_role,
+            actor_agent="ai_chat",
+            ai_generated=True,
+            metadata={
+                "ai_stage": ai_state.get("stage"),
+                "language": decision.language,
+                "category": decision.category,
+                "confidence": decision.confidence,
+            },
+        )
+    except services.WhatsAppServiceError as exc:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason=f"freeform_send_blocked:{exc.block_reason}",
+            handoff_reason=str(exc),
+        )
+
+    write_event(
+        kind="whatsapp.ai.reply_auto_sent",
+        text=f"AI reply auto-sent · conversation={convo.id}",
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "conversation_id": convo.id,
+            "customer_id": convo.customer_id,
+            "message_id": message.id,
+            "language": decision.language,
+            "category": decision.category,
+            "confidence": decision.confidence,
+            "preview": decision.reply_text[:160],
+        },
+    )
+
+    # Update sales stage based on action.
+    next_stage = ai_state.get("stage") or "discovery"
+    if decision.action == "ask_question":
+        if decision.category != "unknown":
+            next_stage = "discovery"
+    elif decision.action == "send_reply":
+        if decision.category != "unknown" and ai_state.get("stage") in {
+            "greeting",
+            "discovery",
+        }:
+            next_stage = "category_detection"
+    ai_state["stage"] = next_stage
+    ai_state["lastAiAction"] = decision.action
+    ai_state["lastAiConfidence"] = decision.confidence
+    ai_state["lastReplyPreview"] = decision.reply_text[:240]
+    ai_state.setdefault("processedMessageIds", [])
+    if inbound and inbound.id not in ai_state["processedMessageIds"]:
+        ai_state["processedMessageIds"].append(inbound.id)
+    _write_ai_state(convo, ai_state)
+
+    outcome.action = decision.action
+    outcome.sent = True
+    outcome.sent_message_id = message.id
+    outcome.stage = next_stage
+
+    write_event(
+        kind="whatsapp.ai.run_completed",
+        text=f"AI run completed · conversation={convo.id}",
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "conversation_id": convo.id,
+            "action": decision.action,
+            "stage": next_stage,
+            "confidence": decision.confidence,
+        },
+    )
+    return outcome
+
+
+def _attempt_book_order(
+    convo: WhatsAppConversation,
+    outcome: OrchestrationOutcome,
+    ai_state: dict[str, Any],
+    inbound: WhatsAppMessage | None,
+    *,
+    decision: ChatAgentDecision,
+    actor_role: str,
+) -> OrchestrationOutcome:
+    inbound_text = (inbound.body if inbound else "").strip().lower()
+    confirmation_words = {
+        "yes",
+        "ok",
+        "okay",
+        "confirm",
+        "haan",
+        "han",
+        "ji haan",
+        "ji",
+        "book",
+        "book it",
+        "book kar",
+        "book karo",
+        "order",
+        "order karo",
+        "order kar do",
+        "kar do",
+    }
+    has_confirmation = any(w in inbound_text for w in confirmation_words)
+    if not has_confirmation:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason="missing_explicit_confirmation",
+            handoff_reason=(
+                "AI proposed book_order but customer has not explicitly "
+                "confirmed in this turn."
+            ),
+        )
+
+    try:
+        booking = book_order_from_decision(
+            conversation=convo,
+            decision=decision,
+            actor_role=actor_role,
+        )
+    except OrderBookingError as exc:
+        return _finalize_run(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason=f"order_booking_blocked:{exc.code}",
+            handoff_reason=str(exc),
+        )
+
+    ai_state["stage"] = "order_booked"
+    ai_state["orderId"] = booking.order_id
+    ai_state["lastAiAction"] = "book_order"
+    ai_state.setdefault("processedMessageIds", [])
+    if inbound and inbound.id not in ai_state["processedMessageIds"]:
+        ai_state["processedMessageIds"].append(inbound.id)
+    if booking.payment_id:
+        ai_state["paymentId"] = booking.payment_id
+        ai_state["paymentLink"] = booking.payment_url
+    elif decision.payment.get("shouldCreateAdvanceLink"):
+        ai_state["paymentLinkPending"] = True
+    _write_ai_state(convo, ai_state)
+
+    outcome.action = "book_order"
+    outcome.order_id = booking.order_id
+    outcome.payment_id = booking.payment_id
+    outcome.payment_url = booking.payment_url
+    outcome.stage = "order_booked"
+    outcome.sent = bool(booking.confirmation_message_id)
+    outcome.sent_message_id = booking.confirmation_message_id
+
+    write_event(
+        kind="whatsapp.ai.run_completed",
+        text=f"AI run completed · order booked · {booking.order_id}",
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "conversation_id": convo.id,
+            "action": "book_order",
+            "order_id": booking.order_id,
+            "payment_id": booking.payment_id,
+        },
+    )
+    return outcome
+
+
+def _finalize_run(
+    convo: WhatsAppConversation,
+    outcome: OrchestrationOutcome,
+    ai_state: dict[str, Any],
+    inbound: WhatsAppMessage | None,
+    *,
+    decision: ChatAgentDecision | None = None,
+    blocked_reason: str = "",
+    handoff_reason: str = "",
+) -> OrchestrationOutcome:
+    """Mark a run finished. Stores suggestion + handoff state when applicable."""
+    handoff = bool(blocked_reason and blocked_reason not in {"no_action"})
+    if blocked_reason in {
+        "ai_disabled",
+        "ai_provider_disabled",
+        "auto_reply_disabled",
+        "low_confidence",
+        "no_action",
+    }:
+        handoff = blocked_reason in {
+            "ai_disabled",
+            "ai_provider_disabled",
+        }
+        # low_confidence + auto_reply_disabled = suggestion stored,
+        # but conversation stays open (no human escalation).
+
+    if decision is not None:
+        outcome.confidence = decision.confidence
+        outcome.detection_language = decision.language
+        outcome.detected_category = decision.category
+        write_event(
+            kind="whatsapp.ai.suggestion_stored",
+            text=(
+                f"AI suggestion stored · conversation={convo.id} · "
+                f"reason={blocked_reason or 'unknown'}"
+            ),
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "conversation_id": convo.id,
+                "blocked_reason": blocked_reason,
+                "confidence": decision.confidence,
+                "action": decision.action,
+                "preview": decision.reply_text[:160],
+                "language": decision.language,
+                "category": decision.category,
+            },
+        )
+        ai_state["lastSuggestion"] = {
+            "action": decision.action,
+            "replyText": decision.reply_text[:1024],
+            "category": decision.category,
+            "language": decision.language,
+            "confidence": decision.confidence,
+            "blockedReason": blocked_reason,
+        }
+
+    if handoff:
+        ai_state["handoffRequired"] = True
+        ai_state["handoffReason"] = handoff_reason or blocked_reason
+        write_event(
+            kind="whatsapp.ai.handoff_required",
+            text=f"AI handoff · conversation={convo.id} · {blocked_reason}",
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": convo.id,
+                "reason": blocked_reason,
+                "handoff_reason": handoff_reason,
+            },
+        )
+        # Bump conversation status to escalated_to_human only for the
+        # serious safety blocks; soft blocks keep status=open so ops
+        # can still reply manually.
+        if blocked_reason in {
+            "medical_emergency",
+            "side_effect_complaint",
+            "legal_threat",
+        }:
+            convo.status = WhatsAppConversation.Status.ESCALATED
+            convo.save(update_fields=["status", "updated_at"])
+    elif blocked_reason:
+        # auto_reply_disabled / low_confidence / no_action → record but
+        # don't escalate.
+        write_event(
+            kind="whatsapp.ai.reply_blocked",
+            text=f"AI reply blocked · conversation={convo.id} · {blocked_reason}",
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "conversation_id": convo.id,
+                "reason": blocked_reason,
+            },
+        )
+
+    if inbound is not None:
+        ai_state.setdefault("processedMessageIds", [])
+        if inbound.id not in ai_state["processedMessageIds"]:
+            ai_state["processedMessageIds"].append(inbound.id)
+    _write_ai_state(convo, ai_state)
+
+    outcome.handoff_required = handoff
+    outcome.handoff_reason = handoff_reason
+    outcome.blocked_reason = blocked_reason
+
+    if blocked_reason and blocked_reason not in {"no_action"}:
+        write_event(
+            kind="whatsapp.ai.run_completed",
+            text=f"AI run completed · {blocked_reason}",
+            tone=AuditEvent.Tone.WARNING if handoff else AuditEvent.Tone.INFO,
+            payload={
+                "conversation_id": convo.id,
+                "blocked_reason": blocked_reason,
+                "handoff": handoff,
+            },
+        )
+    return outcome
+
+
+def _build_context(
+    convo: WhatsAppConversation,
+    inbound: WhatsAppMessage | None,
+    language: str,
+    ai_state: Mapping[str, Any],
+) -> dict[str, Any]:
+    customer = convo.customer
+    recent_qs = (
+        WhatsAppMessage.objects.filter(conversation=convo)
+        .order_by("-created_at")[:8]
+    )
+    history = [
+        {
+            "id": m.id,
+            "direction": m.direction,
+            "body": (m.body or "")[:400],
+            "at": m.created_at.isoformat() if m.created_at else "",
+        }
+        for m in reversed(list(recent_qs))
+    ]
+
+    last_order = None
+    try:
+        from apps.orders.models import Order  # local to avoid app cycles
+
+        order_qs = (
+            Order.objects.filter(phone=customer.phone)
+            .order_by("-created_at")[:1]
+        )
+        if order_qs:
+            o = order_qs[0]
+            last_order = {
+                "id": o.id,
+                "stage": o.stage,
+                "amount": int(o.amount or 0),
+                "discount_pct": int(o.discount_pct or 0),
+                "product": o.product,
+                "city": o.city,
+                "state": o.state,
+            }
+    except Exception:  # noqa: BLE001 - defensive
+        last_order = None
+
+    detected_category = ai_state.get("detectedCategory") or "unknown"
+    claims = _claims_for_category(detected_category, customer)
+    if not claims:
+        # Phase 5C — only enforce Claim Vault grounding when we actually
+        # need product text. The greeting fast-path already returned
+        # before we get here, so the orchestration is heading toward
+        # discovery / product explanation. If the customer hasn't named
+        # a product yet, allow discovery questions WITHOUT a vault row.
+        if detected_category != "unknown":
+            raise _ClaimVaultMissingError(
+                f"No approved Claim Vault entry for category '{detected_category}'."
+            )
+
+    return {
+        "customer": {
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone,
+            "city": customer.city,
+            "state": customer.state,
+            "language": language,
+            "product_interest": customer.product_interest,
+            "consent_whatsapp": bool(customer.consent_whatsapp),
+        },
+        "conversation": {
+            "id": convo.id,
+            "status": convo.status,
+            "stage": ai_state.get("stage"),
+            "discountAskCount": ai_state.get("discountAskCount") or 0,
+            "totalDiscountPct": ai_state.get("totalDiscountPct") or 0,
+            "language": language,
+            "addressCollection": ai_state.get("addressCollection") or {},
+        },
+        "history": history,
+        "inbound": (
+            {
+                "id": inbound.id,
+                "body": (inbound.body or "")[:1000],
+            }
+            if inbound is not None
+            else None
+        ),
+        "lastOrder": last_order,
+        "claims": [
+            {
+                "product": c.product,
+                "approved": list(c.approved or []),
+                "disallowed": list(c.disallowed or []),
+            }
+            for c in claims
+        ],
+        "settings": {
+            "standardPriceInr": 3000,
+            "advanceAmountInr": 499,
+            "totalDiscountCapPct": TOTAL_DISCOUNT_HARD_CAP_PCT,
+        },
+    }
+
+
+def _claims_for_category(category: str, customer: Customer) -> list[Claim]:
+    qs = Claim.objects.all()
+    if category and category != "unknown":
+        # Match against Claim.product (case-insensitive contains).
+        return list(qs.filter(product__icontains=category)) or list(
+            qs.filter(product__icontains=customer.product_interest or "")
+        )
+    if customer.product_interest:
+        return list(qs.filter(product__icontains=customer.product_interest))
+    return []
+
+
+def _build_prompt(
+    convo: WhatsAppConversation,
+    inbound: WhatsAppMessage | None,
+    context: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    system_policy = (
+        "You are the Nirogidhara WhatsApp Sales AI Agent. You are a "
+        "customer-facing chat agent for an Ayurvedic medicine D2C "
+        "company. You operate under Master Blueprint v1.0 hard stops:\n"
+        "\n"
+        "1) APPROVED CLAIM VAULT ONLY. Speak about products only using "
+        "the approved phrases in the 'claims' block. Never use any of: "
+        "'Guaranteed cure', 'Permanent solution', 'No side effects for "
+        "everyone', 'Doctor ki zarurat nahi', '100% cure', or any "
+        "'cures X disease' wording. If a claim isn't in the vault, do "
+        "not say it.\n"
+        "2) NEVER OFFER A DISCOUNT UPFRONT. Lead with the standard "
+        "₹3000 / 30 capsule price. Only after the customer has asked "
+        "for a discount at least 2 times AND objection-handling has "
+        "been tried, you may offer one within 0–20%. Total discount "
+        "across all stages must NEVER exceed 50%.\n"
+        "3) ORDER BOOKING needs an explicit customer 'yes / haan / "
+        "confirm / order' AND complete address + pincode + phone.\n"
+        "4) HANDOFF on medical emergency, side-effect complaint, "
+        "very angry customer, legal/refund threat, or repeated "
+        "address/payment confusion. Set safety flags + action='handoff'.\n"
+        "5) REPLY LANGUAGE matches the conversation 'language' "
+        "({hindi, hinglish, english}). Keep replies short (1–3 short "
+        "lines) and friendly.\n"
+    )
+
+    schema_instructions = (
+        "Return a SINGLE JSON OBJECT (no prose) with this exact shape:\n"
+        "{\n"
+        '  "action": "send_reply" | "ask_question" | "book_order" | '
+        '"handoff" | "no_action",\n'
+        '  "language": "hindi" | "hinglish" | "english",\n'
+        '  "category": '
+        "\"weight-management\" | \"blood-purification\" | \"men-wellness\""
+        " | \"women-wellness\" | \"immunity\" | \"lungs-detox\""
+        " | \"body-detox\" | \"joint-care\" | \"unknown\",\n"
+        '  "confidence": <float 0.0..1.0>,\n'
+        '  "replyText": "<the message you would send to the customer>",\n'
+        '  "needsTemplate": false,\n'
+        '  "handoffReason": "<short reason if action=handoff>",\n'
+        '  "orderDraft": {\n'
+        '    "customerName": "...", "phone": "...", "product": "...",\n'
+        '    "skuId": "", "quantity": 1, "address": "...",\n'
+        '    "pincode": "...", "city": "...", "state": "...",\n'
+        '    "landmark": "", "discountPct": 0, "amount": 3000\n'
+        "  },\n"
+        '  "payment": {"shouldCreateAdvanceLink": false, "amount": 499},\n'
+        '  "safety": {\n'
+        '    "claimVaultUsed": true, "medicalEmergency": false,\n'
+        '    "sideEffectComplaint": false, "legalThreat": false,\n'
+        '    "angryCustomer": false\n'
+        "  }\n"
+        "}\n"
+        "If you are uncertain about ANY safety check, set "
+        "action='handoff' and the relevant safety flag to true."
+    )
+
+    claims_block = "\n".join(
+        f"- {c['product']}: APPROVED {'; '.join(c['approved']) or '(none)'}; "
+        f"DISALLOWED {'; '.join(c['disallowed']) or '(none)'}"
+        for c in context["claims"]
+    ) or "(no Claim Vault entries surfaced for this conversation yet)"
+
+    user_block = (
+        "Conversation context (JSON):\n"
+        + json.dumps(
+            {
+                "customer": context["customer"],
+                "conversation": context["conversation"],
+                "lastOrder": context["lastOrder"],
+                "history": context["history"],
+                "inbound": context["inbound"],
+                "settings": context["settings"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n\nApproved Claim Vault for this conversation:\n"
+        + claims_block
+        + "\n\n"
+        + schema_instructions
+    )
+
+    return [
+        {"role": "system", "content": system_policy},
+        {"role": "user", "content": user_block},
+    ]
+
+
+def _extract_json(text: str) -> dict[str, Any]:
+    """Best-effort JSON extractor — most providers wrap JSON in code fences."""
+    if not text:
+        raise ValueError("Empty AI response.")
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+    if not cleaned:
+        raise ValueError("Empty JSON body.")
+    # Locate the outermost {...} if there is leading prose.
+    if cleaned[0] != "{":
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError("No JSON object in AI response.")
+        cleaned = cleaned[start : end + 1]
+    return json.loads(cleaned)
+
+
+__all__ = (
+    "GREETING_TRIGGER_KEYWORDS",
+    "OrchestrationOutcome",
+    "run_whatsapp_ai_agent",
+)

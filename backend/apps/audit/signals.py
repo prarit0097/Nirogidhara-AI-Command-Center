@@ -137,6 +137,25 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.conversation.read": "check",
     "whatsapp.internal_note.created": "sticky-note",
     "whatsapp.template.manual_send_requested": "send",
+    # Phase 5C — WhatsApp AI Chat Sales Agent.
+    "whatsapp.ai.run_started": "play",
+    "whatsapp.ai.run_completed": "check-circle",
+    "whatsapp.ai.run_failed": "x-circle",
+    "whatsapp.ai.reply_auto_sent": "send",
+    "whatsapp.ai.reply_blocked": "ban",
+    "whatsapp.ai.suggestion_stored": "lightbulb",
+    "whatsapp.ai.greeting_sent": "hand",
+    "whatsapp.ai.greeting_blocked": "ban",
+    "whatsapp.ai.language_detected": "languages",
+    "whatsapp.ai.category_detected": "tag",
+    "whatsapp.ai.address_updated": "map-pin",
+    "whatsapp.ai.order_draft_created": "file-text",
+    "whatsapp.ai.order_booked": "shopping-bag",
+    "whatsapp.ai.payment_link_created": "link",
+    "whatsapp.ai.handoff_required": "alert-triangle",
+    "whatsapp.ai.discount_objection_handled": "message-circle",
+    "whatsapp.ai.discount_offered": "percent",
+    "whatsapp.ai.discount_blocked": "ban",
 }
 
 

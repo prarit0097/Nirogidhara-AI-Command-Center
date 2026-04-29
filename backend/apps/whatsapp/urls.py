@@ -4,11 +4,17 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    WhatsAppAiStatusView,
     WhatsAppConnectionViewSet,
     WhatsAppConsentView,
+    WhatsAppConversationAiModeView,
+    WhatsAppConversationAiRunsView,
+    WhatsAppConversationHandoffView,
     WhatsAppConversationMarkReadView,
     WhatsAppConversationMessagesView,
     WhatsAppConversationNotesView,
+    WhatsAppConversationResumeAiView,
+    WhatsAppConversationRunAiView,
     WhatsAppConversationSendTemplateView,
     WhatsAppConversationViewSet,
     WhatsAppCustomerTimelineView,
@@ -67,5 +73,32 @@ urlpatterns = [
         "customers/<str:customer_id>/timeline/",
         WhatsAppCustomerTimelineView.as_view(),
         name="whatsapp-customer-timeline",
+    ),
+    # Phase 5C — WhatsApp AI Chat Sales Agent.
+    path("ai/status/", WhatsAppAiStatusView.as_view(), name="whatsapp-ai-status"),
+    path(
+        "conversations/<str:pk>/ai-mode/",
+        WhatsAppConversationAiModeView.as_view(),
+        name="whatsapp-conversation-ai-mode",
+    ),
+    path(
+        "conversations/<str:pk>/run-ai/",
+        WhatsAppConversationRunAiView.as_view(),
+        name="whatsapp-conversation-run-ai",
+    ),
+    path(
+        "conversations/<str:pk>/ai-runs/",
+        WhatsAppConversationAiRunsView.as_view(),
+        name="whatsapp-conversation-ai-runs",
+    ),
+    path(
+        "conversations/<str:pk>/handoff/",
+        WhatsAppConversationHandoffView.as_view(),
+        name="whatsapp-conversation-handoff",
+    ),
+    path(
+        "conversations/<str:pk>/resume-ai/",
+        WhatsAppConversationResumeAiView.as_view(),
+        name="whatsapp-conversation-resume-ai",
     ),
 ] + router.urls

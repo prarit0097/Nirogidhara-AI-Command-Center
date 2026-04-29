@@ -537,14 +537,7 @@ class WhatsAppInboxView(APIView):
                     conversations, many=True
                 ).data,
                 "counts": counts,
-                "aiSuggestions": {
-                    "enabled": False,
-                    "status": "disabled",
-                    "message": (
-                        "AI WhatsApp suggestions are planned for Phase 5C. "
-                        "Phase 5B is manual-only."
-                    ),
-                },
+                "aiSuggestions": _ai_suggestions_status(),
             }
         )
 
@@ -851,23 +844,357 @@ class WhatsAppCustomerTimelineView(APIView):
                     conversations, many=True
                 ).data,
                 "items": items[:limit],
-                "aiSuggestions": {
-                    "enabled": False,
-                    "status": "disabled",
-                    "message": (
-                        "AI WhatsApp suggestions are planned for Phase 5C."
+                "aiSuggestions": _ai_suggestions_status(),
+            }
+        )
+
+
+def _ai_suggestions_status() -> dict[str, Any]:
+    """Phase 5C — global AI status block returned by inbox + timeline."""
+    from django.conf import settings
+
+    auto_enabled = bool(
+        getattr(settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False)
+    )
+    provider = (getattr(settings, "AI_PROVIDER", "disabled") or "disabled").lower()
+
+    if provider == "disabled":
+        return {
+            "enabled": False,
+            "status": "provider_disabled",
+            "message": (
+                "AI provider is disabled (settings.AI_PROVIDER). Enable "
+                "OpenAI / Anthropic and set WHATSAPP_AI_AUTO_REPLY_ENABLED "
+                "to turn on the WhatsApp Chat Sales Agent."
+            ),
+            "provider": provider,
+            "autoReplyEnabled": auto_enabled,
+            "confidenceThreshold": float(
+                getattr(
+                    settings,
+                    "WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD",
+                    0.75,
+                )
+            ),
+        }
+    if not auto_enabled:
+        return {
+            "enabled": False,
+            "status": "auto_reply_off",
+            "message": (
+                "AI suggestions are computed but auto-reply is OFF. The "
+                "agent stores a suggestion on each inbound; ops can review "
+                "and approve manually. Set "
+                "WHATSAPP_AI_AUTO_REPLY_ENABLED=true to activate."
+            ),
+            "provider": provider,
+            "autoReplyEnabled": auto_enabled,
+            "confidenceThreshold": float(
+                getattr(
+                    settings,
+                    "WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD",
+                    0.75,
+                )
+            ),
+        }
+    return {
+        "enabled": True,
+        "status": "auto",
+        "message": (
+            "AI Chat Sales Agent runs in auto mode. Backend gates "
+            "(consent + Claim Vault + approval matrix + safety + rate "
+            "limits) still apply on every send."
+        ),
+        "provider": provider,
+        "autoReplyEnabled": auto_enabled,
+        "confidenceThreshold": float(
+            getattr(
+                settings,
+                "WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD",
+                0.75,
+            )
+        ),
+    }
+
+
+# ============================================================================
+# Phase 5C — WhatsApp AI Chat Sales Agent endpoints.
+# ============================================================================
+
+
+class WhatsAppAiStatusView(APIView):
+    """``GET /api/whatsapp/ai/status/`` — global AI agent status."""
+
+    permission_classes = [_ReadAuthRequired]
+
+    def get(self, _request):
+        from django.conf import settings
+
+        return Response(
+            {
+                **_ai_suggestions_status(),
+                "rateLimits": {
+                    "maxTurnsPerConversationPerHour": int(
+                        getattr(
+                            settings,
+                            "WHATSAPP_AI_MAX_TURNS_PER_CONVERSATION_PER_HOUR",
+                            10,
+                        )
+                    ),
+                    "maxMessagesPerCustomerPerDay": int(
+                        getattr(
+                            settings,
+                            "WHATSAPP_AI_MAX_MESSAGES_PER_CUSTOMER_PER_DAY",
+                            30,
+                        )
                     ),
                 },
             }
         )
 
 
+class WhatsAppConversationAiModeView(APIView):
+    """``PATCH /api/whatsapp/conversations/{id}/ai-mode/`` — toggle per-convo AI."""
+
+    permission_classes = [_OperationsWritePermission]
+
+    def patch(self, request, pk: str):
+        convo = _get_conversation_or_404(pk)
+        ai_state = dict((convo.metadata or {}).get("ai") or {})
+        body = request.data or {}
+
+        changed = False
+        if "aiEnabled" in body:
+            ai_state["aiEnabled"] = bool(body.get("aiEnabled"))
+            changed = True
+        if "aiMode" in body:
+            mode = str(body.get("aiMode") or "").lower().strip()
+            if mode not in {"auto", "suggest", "disabled"}:
+                return Response(
+                    {"detail": "aiMode must be one of auto/suggest/disabled."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            ai_state["aiMode"] = mode
+            changed = True
+        if not changed:
+            return Response(
+                {"detail": "No supported fields supplied."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        metadata = dict(convo.metadata or {})
+        metadata["ai"] = ai_state
+        convo.metadata = metadata
+        convo.save(update_fields=["metadata", "updated_at"])
+
+        write_event(
+            kind="whatsapp.conversation.updated",
+            text=f"AI mode updated · conversation={convo.id}",
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "conversation_id": convo.id,
+                "ai_enabled": ai_state.get("aiEnabled"),
+                "ai_mode": ai_state.get("aiMode"),
+                "by": getattr(request.user, "username", "") or "",
+            },
+        )
+        return Response(_ai_state_payload(convo, ai_state))
+
+
+class WhatsAppConversationRunAiView(APIView):
+    """``POST /api/whatsapp/conversations/{id}/run-ai/`` — manual trigger."""
+
+    permission_classes = [_OperationsWritePermission]
+
+    def post(self, request, pk: str):
+        from .ai_orchestration import run_whatsapp_ai_agent
+
+        convo = _get_conversation_or_404(pk)
+        outcome = run_whatsapp_ai_agent(
+            conversation_id=convo.id,
+            triggered_by=f"manual:{getattr(request.user, 'username', '')}",
+            actor_role=getattr(request.user, "role", "operations") or "operations",
+            force=True,
+        )
+        return Response(
+            {
+                "conversationId": outcome.conversation_id,
+                "inboundMessageId": outcome.inbound_message_id,
+                "action": outcome.action,
+                "sent": outcome.sent,
+                "sentMessageId": outcome.sent_message_id,
+                "handoffRequired": outcome.handoff_required,
+                "handoffReason": outcome.handoff_reason,
+                "blockedReason": outcome.blocked_reason,
+                "stage": outcome.stage,
+                "confidence": outcome.confidence,
+                "language": outcome.detection_language,
+                "category": outcome.detected_category,
+                "orderId": outcome.order_id,
+                "paymentId": outcome.payment_id,
+            }
+        )
+
+
+class WhatsAppConversationAiRunsView(APIView):
+    """``GET /api/whatsapp/conversations/{id}/ai-runs/`` — recent AI activity."""
+
+    permission_classes = [_ReadAuthRequired]
+
+    def get(self, _request, pk: str):
+        convo = _get_conversation_or_404(pk)
+        ai_state = dict((convo.metadata or {}).get("ai") or {})
+        # Pull the most recent AI-related audit rows for this conversation.
+        kinds = [
+            "whatsapp.ai.run_started",
+            "whatsapp.ai.run_completed",
+            "whatsapp.ai.run_failed",
+            "whatsapp.ai.reply_auto_sent",
+            "whatsapp.ai.reply_blocked",
+            "whatsapp.ai.suggestion_stored",
+            "whatsapp.ai.greeting_sent",
+            "whatsapp.ai.greeting_blocked",
+            "whatsapp.ai.language_detected",
+            "whatsapp.ai.category_detected",
+            "whatsapp.ai.address_updated",
+            "whatsapp.ai.order_draft_created",
+            "whatsapp.ai.order_booked",
+            "whatsapp.ai.payment_link_created",
+            "whatsapp.ai.handoff_required",
+            "whatsapp.ai.discount_objection_handled",
+            "whatsapp.ai.discount_offered",
+            "whatsapp.ai.discount_blocked",
+        ]
+        rows = (
+            AuditEvent.objects.filter(
+                kind__in=kinds, payload__conversation_id=convo.id
+            )
+            .order_by("-occurred_at")[:50]
+        )
+        return Response(
+            {
+                "ai": _ai_state_payload(convo, ai_state)["ai"],
+                "events": [
+                    {
+                        "id": r.pk,
+                        "kind": r.kind,
+                        "text": r.text,
+                        "tone": r.tone,
+                        "occurredAt": r.occurred_at.isoformat(),
+                        "payload": dict(r.payload or {}),
+                    }
+                    for r in rows
+                ],
+            }
+        )
+
+
+class WhatsAppConversationHandoffView(APIView):
+    """``POST /api/whatsapp/conversations/{id}/handoff/`` — operator forces handoff."""
+
+    permission_classes = [_OperationsWritePermission]
+
+    def post(self, request, pk: str):
+        convo = _get_conversation_or_404(pk)
+        reason = str((request.data or {}).get("reason") or "").strip() or "operator_handoff"
+        ai_state = dict((convo.metadata or {}).get("ai") or {})
+        ai_state["handoffRequired"] = True
+        ai_state["handoffReason"] = reason
+        ai_state["aiEnabled"] = False
+        metadata = dict(convo.metadata or {})
+        metadata["ai"] = ai_state
+        convo.metadata = metadata
+        convo.status = WhatsAppConversation.Status.ESCALATED
+        convo.save(update_fields=["metadata", "status", "updated_at"])
+
+        write_event(
+            kind="whatsapp.ai.handoff_required",
+            text=f"Operator handoff · conversation={convo.id} · {reason}",
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": convo.id,
+                "reason": reason,
+                "by": getattr(request.user, "username", "") or "",
+                "manual": True,
+            },
+        )
+        return Response(_ai_state_payload(convo, ai_state))
+
+
+class WhatsAppConversationResumeAiView(APIView):
+    """``POST /api/whatsapp/conversations/{id}/resume-ai/`` — re-enable AI."""
+
+    permission_classes = [_OperationsWritePermission]
+
+    def post(self, request, pk: str):
+        convo = _get_conversation_or_404(pk)
+        ai_state = dict((convo.metadata or {}).get("ai") or {})
+        ai_state["handoffRequired"] = False
+        ai_state["handoffReason"] = ""
+        ai_state["aiEnabled"] = True
+        metadata = dict(convo.metadata or {})
+        metadata["ai"] = ai_state
+        convo.metadata = metadata
+        # Only flip status back if the conversation was escalated.
+        if convo.status == WhatsAppConversation.Status.ESCALATED:
+            convo.status = WhatsAppConversation.Status.OPEN
+            convo.save(
+                update_fields=["metadata", "status", "updated_at"]
+            )
+        else:
+            convo.save(update_fields=["metadata", "updated_at"])
+
+        write_event(
+            kind="whatsapp.conversation.updated",
+            text=f"AI resumed · conversation={convo.id}",
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "conversation_id": convo.id,
+                "ai_resumed": True,
+                "by": getattr(request.user, "username", "") or "",
+            },
+        )
+        return Response(_ai_state_payload(convo, ai_state))
+
+
+def _ai_state_payload(
+    convo: WhatsAppConversation, ai_state: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    state = dict(ai_state or (convo.metadata or {}).get("ai") or {})
+    return {
+        "conversationId": convo.id,
+        "ai": {
+            "aiEnabled": bool(state.get("aiEnabled", True)),
+            "aiMode": state.get("aiMode") or "auto",
+            "stage": state.get("stage") or "greeting",
+            "detectedLanguage": state.get("detectedLanguage") or "",
+            "detectedCategory": state.get("detectedCategory") or "",
+            "lastAiAction": state.get("lastAiAction") or "",
+            "lastAiConfidence": state.get("lastAiConfidence") or 0.0,
+            "discountAskCount": state.get("discountAskCount") or 0,
+            "totalDiscountPct": state.get("totalDiscountPct") or 0,
+            "offeredDiscountPct": state.get("offeredDiscountPct") or 0,
+            "handoffRequired": bool(state.get("handoffRequired") or False),
+            "handoffReason": state.get("handoffReason") or "",
+            "orderId": state.get("orderId") or "",
+            "paymentId": state.get("paymentId") or "",
+            "paymentLink": state.get("paymentLink") or "",
+            "lastSuggestion": state.get("lastSuggestion") or None,
+        },
+    }
+
+
 __all__ = (
+    "WhatsAppAiStatusView",
     "WhatsAppConnectionViewSet",
     "WhatsAppConsentView",
+    "WhatsAppConversationAiModeView",
+    "WhatsAppConversationAiRunsView",
+    "WhatsAppConversationHandoffView",
     "WhatsAppConversationMarkReadView",
     "WhatsAppConversationMessagesView",
     "WhatsAppConversationNotesView",
+    "WhatsAppConversationResumeAiView",
+    "WhatsAppConversationRunAiView",
     "WhatsAppConversationSendTemplateView",
     "WhatsAppConversationViewSet",
     "WhatsAppCustomerTimelineView",

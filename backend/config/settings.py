@@ -354,6 +354,29 @@ WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS = _safe_int(
 )
 
 
+# ----- Phase 5C — WhatsApp AI Chat Sales Agent -----
+# Auto-reply behaviour. Defaults are SAFE (off) so a fresh deploy never
+# auto-replies to a customer until ops explicitly opt in. Production is
+# expected to flip the env var to true once the WhatsApp team verifies
+# the conversation flow on a controlled set of test numbers.
+WHATSAPP_AI_AUTO_REPLY_ENABLED = _bool(
+    os.environ.get("WHATSAPP_AI_AUTO_REPLY_ENABLED"), default=False
+)
+WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD = _safe_float(
+    os.environ.get("WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD"),
+    default=0.75,
+)
+# Per-conversation + per-customer rate limits to bound runaway loops.
+WHATSAPP_AI_MAX_TURNS_PER_CONVERSATION_PER_HOUR = _safe_int(
+    os.environ.get("WHATSAPP_AI_MAX_TURNS_PER_CONVERSATION_PER_HOUR"),
+    default=10,
+)
+WHATSAPP_AI_MAX_MESSAGES_PER_CUSTOMER_PER_DAY = _safe_int(
+    os.environ.get("WHATSAPP_AI_MAX_MESSAGES_PER_CUSTOMER_PER_DAY"),
+    default=30,
+)
+
+
 # ----- Phase 4A — Real-time WebSockets via Django Channels -----
 # Local dev / pytest default to the in-memory channel layer so neither
 # Redis nor the daphne ASGI runner is required for the test suite. To

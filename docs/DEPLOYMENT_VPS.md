@@ -395,6 +395,7 @@ The backend should boot cleanly and `migrate` should be a no-op.
 - [ ] Postgres `pg_dump` backup taken before the first real customer payment / order.
 - [ ] Host Nginx (or Traefik) terminates TLS; HTTP 80 either redirects to HTTPS or is closed at the firewall.
 - [ ] `docker stats` confirms the new stack is leaving headroom for Postzyo + OpenClaw.
+- [ ] **Phase 5C — WhatsApp AI Chat Sales Agent.** `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` until: (a) `AI_PROVIDER=openai` + `OPENAI_API_KEY` set, (b) the locked greeting template (`whatsapp.greeting`) is synced and approved, (c) `Claim` rows exist for every product the agent must explain, (d) a controlled run on test numbers passes. Flip the env to `true` and restart the backend / worker / beat containers to enable auto-mode.
 
 ---
 

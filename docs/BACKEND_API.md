@@ -436,6 +436,23 @@ Phase 5B adds the operator inbox surface. Inbox is **manual-only**: AI auto-repl
 
 Conversation list filters now accept `?unread=true`, `?assignedTo=<user_pk>`, `?q=<search>` (icontains over customer name / phone / last_message_text / subject). The conversation serializer exposes `customerName / customerPhone / assignedToUsername`, and the message serializer exposes `templateName`. New audit kinds: `whatsapp.conversation.opened/updated/assigned/read`, `whatsapp.internal_note.created`, `whatsapp.template.manual_send_requested`.
 
+#### Phase 5C — WhatsApp AI Chat Sales Agent endpoints
+
+Phase 5C wires the OpenAI-backed Chat Sales Agent on top of Phase 5A's send pipeline + Phase 5B's inbox. Auto-reply defaults to OFF (`WHATSAPP_AI_AUTO_REPLY_ENABLED=false`). Backend gates remain final on every send: consent + approved-template (greeting) / Claim Vault (freeform) + blocked-phrase filter + discount discipline + 50% total cap + matrix + CAIO refusal + idempotency + per-conversation/per-customer rate limits.
+
+| Method | Path | Auth / role | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/whatsapp/ai/status/` | authenticated | Returns the global AI runtime state. `{ enabled, status: "auto" / "auto_reply_off" / "provider_disabled", message, provider, autoReplyEnabled, confidenceThreshold, rateLimits: { maxTurnsPerConversationPerHour, maxMessagesPerCustomerPerDay } }`. |
+| PATCH | `/api/whatsapp/conversations/{id}/ai-mode/` | operations+ | Body `{ aiEnabled?, aiMode? }` where `aiMode ∈ {auto, suggest, disabled}`. Persists into `WhatsAppConversation.metadata.ai`. Writes `whatsapp.conversation.updated`. |
+| POST | `/api/whatsapp/conversations/{id}/run-ai/` | operations+ | Manual one-shot trigger of the AI orchestrator on the latest inbound. Honours all gates; returns the orchestrator outcome (`action, sent, sentMessageId, handoffRequired, blockedReason, stage, confidence, language, category, orderId, paymentId`). |
+| GET | `/api/whatsapp/conversations/{id}/ai-runs/` | authenticated | Returns `{ ai: <state>, events: [<latest 50 whatsapp.ai.* audit rows>] }`. Frontend polls this for the AI Agent panel. |
+| POST | `/api/whatsapp/conversations/{id}/handoff/` | operations+ | Operator forces handoff. Sets `metadata.ai.handoffRequired=true / aiEnabled=false` and flips conversation to `escalated_to_human`. Body `{ reason? }`. Writes `whatsapp.ai.handoff_required`. |
+| POST | `/api/whatsapp/conversations/{id}/resume-ai/` | operations+ | Re-enables AI on a previously handed-off conversation. Sets `metadata.ai.aiEnabled=true / handoffRequired=false`. Flips `escalated_to_human → open`. |
+
+Inbound webhook flow: `services.handle_inbound_message_event` now enqueues `tasks.run_whatsapp_ai_agent_for_conversation` after persisting the inbound row (eager mode dispatches synchronously; production uses `transaction.on_commit` + Redis-backed Celery). The orchestrator is idempotent on `inbound_message_id` — duplicate webhooks never produce duplicate AI runs.
+
+New audit kinds (18): `whatsapp.ai.run_started`, `whatsapp.ai.run_completed`, `whatsapp.ai.run_failed`, `whatsapp.ai.reply_auto_sent`, `whatsapp.ai.reply_blocked`, `whatsapp.ai.suggestion_stored`, `whatsapp.ai.greeting_sent`, `whatsapp.ai.greeting_blocked`, `whatsapp.ai.language_detected`, `whatsapp.ai.category_detected`, `whatsapp.ai.address_updated`, `whatsapp.ai.order_draft_created`, `whatsapp.ai.order_booked`, `whatsapp.ai.payment_link_created`, `whatsapp.ai.handoff_required`, `whatsapp.ai.discount_objection_handled`, `whatsapp.ai.discount_offered`, `whatsapp.ai.discount_blocked`.
+
 ### Permissions
 
 `apps/accounts/permissions.py` exposes:

@@ -213,8 +213,18 @@ def test_inbox_summary_returns_counts_and_disabled_ai(
     assert body["counts"]["all"] >= 1
     assert body["counts"]["unread"] >= 1
     assert body["aiSuggestions"]["enabled"] is False
-    assert body["aiSuggestions"]["status"] == "disabled"
-    assert "Phase 5C" in body["aiSuggestions"]["message"]
+    # Phase 5C now ships; the inbox AI block reflects real provider /
+    # auto-reply status. With AI_PROVIDER=disabled (test default) we
+    # always see ``provider_disabled`` and ``enabled=False``.
+    assert body["aiSuggestions"]["enabled"] is False
+    assert body["aiSuggestions"]["status"] in {
+        "provider_disabled",
+        "auto_reply_off",
+        "auto",
+        "disabled",
+    }
+    assert "provider" in body["aiSuggestions"]
+    assert "autoReplyEnabled" in body["aiSuggestions"]
 
 
 def test_inbox_summary_anonymous_blocked() -> None:

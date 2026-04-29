@@ -931,8 +931,117 @@ export interface WhatsAppInternalNote {
 
 export interface WhatsAppAiSuggestionStatus {
   enabled: boolean;
-  status: "disabled" | "suggest" | "auto" | "pending_approval";
+  /** Phase 5C statuses include the live runtime states. */
+  status:
+    | "disabled"
+    | "suggest"
+    | "auto"
+    | "auto_reply_off"
+    | "provider_disabled"
+    | "pending_approval";
   message: string;
+  provider?: string;
+  autoReplyEnabled?: boolean;
+  confidenceThreshold?: number;
+}
+
+// ---------- Phase 5C — WhatsApp AI Chat Sales Agent ----------
+
+export type WhatsAppAiMode = "auto" | "suggest" | "disabled";
+
+export type WhatsAppAiStage =
+  | "greeting"
+  | "discovery"
+  | "category_detection"
+  | "product_explanation"
+  | "objection_handling"
+  | "price_presented"
+  | "discount_negotiation"
+  | "address_collection"
+  | "order_confirmation"
+  | "order_booked"
+  | "handoff_required";
+
+export type WhatsAppAiLanguage = "hindi" | "hinglish" | "english" | "unknown" | "";
+
+export interface WhatsAppAiLastSuggestion {
+  action: string;
+  replyText: string;
+  category: string;
+  language: string;
+  confidence: number;
+  blockedReason: string;
+}
+
+export interface WhatsAppConversationAiState {
+  aiEnabled: boolean;
+  aiMode: WhatsAppAiMode;
+  stage: WhatsAppAiStage;
+  detectedLanguage: WhatsAppAiLanguage;
+  detectedCategory: string;
+  lastAiAction: string;
+  lastAiConfidence: number;
+  discountAskCount: number;
+  totalDiscountPct: number;
+  offeredDiscountPct: number;
+  handoffRequired: boolean;
+  handoffReason: string;
+  orderId: string;
+  paymentId: string;
+  paymentLink: string;
+  lastSuggestion: WhatsAppAiLastSuggestion | null;
+}
+
+export interface WhatsAppConversationAiPayload {
+  conversationId: string;
+  ai: WhatsAppConversationAiState;
+}
+
+export interface WhatsAppAiGlobalStatus extends WhatsAppAiSuggestionStatus {
+  rateLimits: {
+    maxTurnsPerConversationPerHour: number;
+    maxMessagesPerCustomerPerDay: number;
+  };
+}
+
+export interface WhatsAppAiRunSummary {
+  conversationId: string;
+  inboundMessageId: string;
+  action: string;
+  sent: boolean;
+  sentMessageId: string;
+  handoffRequired: boolean;
+  handoffReason: string;
+  blockedReason: string;
+  stage: string;
+  confidence: number;
+  language: string;
+  category: string;
+  orderId: string;
+  paymentId: string;
+}
+
+export interface WhatsAppAiAuditEvent {
+  id: number;
+  kind: string;
+  text: string;
+  tone: "success" | "info" | "warning" | "danger";
+  occurredAt: string;
+  payload: Record<string, unknown>;
+}
+
+export interface WhatsAppAiRunsResponse {
+  ai: WhatsAppConversationAiState;
+  events: WhatsAppAiAuditEvent[];
+}
+
+export interface UpdateWhatsAppAiModePayload {
+  aiEnabled?: boolean;
+  aiMode?: WhatsAppAiMode;
+}
+
+export interface WhatsAppAiHandoffPayload {
+  reason?: string;
 }
 
 export interface WhatsAppInboxCounts {

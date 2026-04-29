@@ -8,7 +8,10 @@ import { api } from "@/services/api";
 import { connectAuditEvents } from "@/services/realtime";
 import type {
   ActivityEvent,
+  WhatsAppAiGlobalStatus,
+  WhatsAppAiRunsResponse,
   WhatsAppConversation,
+  WhatsAppConversationAiState,
   WhatsAppInboxCounts,
   WhatsAppInboxSummary,
   WhatsAppInternalNote,
@@ -16,16 +19,22 @@ import type {
   WhatsAppTemplate,
 } from "@/types/domain";
 import {
+  Bot,
   CheckCheck,
   Clock,
   Eye,
+  Languages,
   MessageCircle,
+  PauseCircle,
+  PlayCircle,
   RefreshCw,
   Search,
   Send,
   ShieldCheck,
   Sparkles,
   StickyNote,
+  Tag,
+  UserCheck,
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -61,6 +70,9 @@ export default function WhatsAppInboxPage() {
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [showSendModal, setShowSendModal] = useState(false);
+  const [aiStatus, setAiStatus] = useState<WhatsAppAiGlobalStatus | null>(null);
+  const [aiRuns, setAiRuns] = useState<WhatsAppAiRunsResponse | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
 
   const refreshInbox = useCallback(async () => {
     const data = await api.getWhatsAppInbox();
@@ -69,6 +81,11 @@ export default function WhatsAppInboxPage() {
       setActiveId(data.conversations[0].id);
     }
   }, [activeId]);
+
+  const refreshAiRuns = useCallback(async (id: string) => {
+    const data = await api.getWhatsAppConversationAiRuns(id);
+    setAiRuns(data);
+  }, []);
 
   const refreshThread = useCallback(async (id: string) => {
     const [m, n] = await Promise.all([
@@ -84,12 +101,14 @@ export default function WhatsAppInboxPage() {
     void api.listWhatsAppTemplates({ status: "APPROVED" }).then((rows) => {
       setTemplates(rows.filter((t) => t.isActive));
     });
+    void api.getWhatsAppAiStatus().then(setAiStatus);
   }, [refreshInbox]);
 
   useEffect(() => {
     if (!activeId) return;
     void refreshThread(activeId);
-  }, [activeId, refreshThread]);
+    void refreshAiRuns(activeId);
+  }, [activeId, refreshThread, refreshAiRuns]);
 
   // Realtime — refresh on whatsapp.* AuditEvents.
   useEffect(() => {
@@ -100,11 +119,14 @@ export default function WhatsAppInboxPage() {
         void refreshInbox();
         if (activeId) {
           void refreshThread(activeId);
+          if (event.kind.startsWith("whatsapp.ai.")) {
+            void refreshAiRuns(activeId);
+          }
         }
       },
     });
     return () => controller.close();
-  }, [activeId, refreshInbox, refreshThread]);
+  }, [activeId, refreshInbox, refreshThread, refreshAiRuns]);
 
   const filteredConversations = useMemo(() => {
     if (!inbox) return [];
@@ -252,10 +274,75 @@ export default function WhatsAppInboxPage() {
               onAddNote={handleAddNote}
               onMarkRead={handleMarkRead}
               onSendClick={() => setShowSendModal(true)}
-              aiMessage={
-                inbox?.aiSuggestions.message ??
-                "AI WhatsApp suggestions are planned for Phase 5C."
-              }
+              aiStatus={aiStatus}
+              aiState={aiRuns?.ai ?? null}
+              aiBusy={aiBusy}
+              onAiToggle={async (enabled) => {
+                if (!activeConversation) return;
+                setAiBusy(true);
+                try {
+                  await api.updateWhatsAppConversationAiMode(
+                    activeConversation.id,
+                    { aiEnabled: enabled, aiMode: enabled ? "auto" : "disabled" },
+                  );
+                  await refreshAiRuns(activeConversation.id);
+                  toast.success(`AI ${enabled ? "enabled" : "disabled"} for this conversation`);
+                } catch (error) {
+                  toast.error(`AI toggle failed: ${(error as Error).message}`);
+                } finally {
+                  setAiBusy(false);
+                }
+              }}
+              onAiRunNow={async () => {
+                if (!activeConversation) return;
+                setAiBusy(true);
+                try {
+                  const res = await api.runWhatsAppConversationAi(
+                    activeConversation.id,
+                  );
+                  if (res.sent) toast.success(`AI sent · ${res.action}`);
+                  else if (res.handoffRequired)
+                    toast.warning(`AI handoff · ${res.handoffReason || res.blockedReason}`);
+                  else
+                    toast.info(`AI did not send · ${res.blockedReason || "no_action"}`);
+                  await refreshAiRuns(activeConversation.id);
+                  await refreshThread(activeConversation.id);
+                } catch (error) {
+                  toast.error(`AI run failed: ${(error as Error).message}`);
+                } finally {
+                  setAiBusy(false);
+                }
+              }}
+              onAiHandoff={async () => {
+                if (!activeConversation) return;
+                setAiBusy(true);
+                try {
+                  await api.handoffWhatsAppConversation(activeConversation.id, {
+                    reason: "operator_handoff",
+                  });
+                  await refreshInbox();
+                  await refreshAiRuns(activeConversation.id);
+                  toast.success("Conversation handed off to human");
+                } catch (error) {
+                  toast.error(`Handoff failed: ${(error as Error).message}`);
+                } finally {
+                  setAiBusy(false);
+                }
+              }}
+              onAiResume={async () => {
+                if (!activeConversation) return;
+                setAiBusy(true);
+                try {
+                  await api.resumeWhatsAppConversationAi(activeConversation.id);
+                  await refreshInbox();
+                  await refreshAiRuns(activeConversation.id);
+                  toast.success("AI resumed");
+                } catch (error) {
+                  toast.error(`Resume failed: ${(error as Error).message}`);
+                } finally {
+                  setAiBusy(false);
+                }
+              }}
             />
           )}
         </div>
@@ -368,7 +455,13 @@ interface ThreadPaneProps {
   onAddNote: () => void;
   onMarkRead: () => void;
   onSendClick: () => void;
-  aiMessage: string;
+  aiStatus: WhatsAppAiGlobalStatus | null;
+  aiState: WhatsAppConversationAiState | null;
+  aiBusy: boolean;
+  onAiToggle: (enabled: boolean) => void | Promise<void>;
+  onAiRunNow: () => void | Promise<void>;
+  onAiHandoff: () => void | Promise<void>;
+  onAiResume: () => void | Promise<void>;
 }
 
 function ThreadPane({
@@ -381,7 +474,13 @@ function ThreadPane({
   onAddNote,
   onMarkRead,
   onSendClick,
-  aiMessage,
+  aiStatus,
+  aiState,
+  aiBusy,
+  onAiToggle,
+  onAiRunNow,
+  onAiHandoff,
+  onAiResume,
 }: ThreadPaneProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -431,18 +530,15 @@ function ThreadPane({
 
       <div className="border-t border-border bg-background">
         <div className="px-5 py-3 space-y-2">
-          <div className="rounded-lg bg-muted/40 p-2.5 text-xs flex items-start gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <span className="font-medium text-foreground">
-                AI suggestions
-              </span>{" "}
-              <StatusPill tone="neutral">disabled</StatusPill>
-              <span className="block text-muted-foreground mt-0.5">
-                {aiMessage}
-              </span>
-            </div>
-          </div>
+          <AiAgentPanel
+            aiStatus={aiStatus}
+            aiState={aiState}
+            aiBusy={aiBusy}
+            onAiToggle={onAiToggle}
+            onAiRunNow={onAiRunNow}
+            onAiHandoff={onAiHandoff}
+            onAiResume={onAiResume}
+          />
           <div className="rounded-lg border border-border p-2.5">
             <div className="flex items-center gap-1.5 mb-1.5 text-xs font-medium text-muted-foreground">
               <StickyNote className="h-3.5 w-3.5" /> Internal note
@@ -492,6 +588,186 @@ function ThreadPane({
   );
 }
 
+interface AiAgentPanelProps {
+  aiStatus: WhatsAppAiGlobalStatus | null;
+  aiState: WhatsAppConversationAiState | null;
+  aiBusy: boolean;
+  onAiToggle: (enabled: boolean) => void | Promise<void>;
+  onAiRunNow: () => void | Promise<void>;
+  onAiHandoff: () => void | Promise<void>;
+  onAiResume: () => void | Promise<void>;
+}
+
+function AiAgentPanel({
+  aiStatus,
+  aiState,
+  aiBusy,
+  onAiToggle,
+  onAiRunNow,
+  onAiHandoff,
+  onAiResume,
+}: AiAgentPanelProps) {
+  const aiEnabled = aiState?.aiEnabled ?? true;
+  const handoffRequired = aiState?.handoffRequired ?? false;
+  const stage = aiState?.stage ?? "greeting";
+  const detectedLanguage = aiState?.detectedLanguage || "—";
+  const detectedCategory = aiState?.detectedCategory || "—";
+  const lastConfidence = aiState?.lastAiConfidence ?? 0;
+  const lastSuggestion = aiState?.lastSuggestion ?? null;
+  const orderId = aiState?.orderId ?? "";
+
+  const globalEnabled = aiStatus?.enabled ?? false;
+  const globalStatus = aiStatus?.status ?? "provider_disabled";
+
+  return (
+    <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <Bot className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium text-foreground inline-flex items-center gap-1.5">
+              AI Chat Sales Agent
+              <StatusPill
+                tone={
+                  globalEnabled
+                    ? "success"
+                    : globalStatus === "auto_reply_off"
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {globalEnabled ? "auto" : globalStatus}
+              </StatusPill>
+            </div>
+            <div className="text-muted-foreground text-[11px] leading-snug mt-0.5">
+              {aiStatus?.message ??
+                "AI Chat Sales Agent (Phase 5C). Backend gates remain final."}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {handoffRequired ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1"
+              disabled={aiBusy}
+              onClick={() => void onAiResume()}
+            >
+              <PlayCircle className="h-3 w-3" /> Resume
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1"
+              disabled={aiBusy}
+              onClick={() => void onAiHandoff()}
+            >
+              <UserCheck className="h-3 w-3" /> Handoff
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={aiEnabled ? "outline" : "secondary"}
+            className="gap-1"
+            disabled={aiBusy}
+            onClick={() => void onAiToggle(!aiEnabled)}
+          >
+            <PauseCircle className="h-3 w-3" />
+            {aiEnabled ? "Disable" : "Enable"}
+          </Button>
+          <Button
+            size="sm"
+            className="gap-1 bg-gradient-hero text-primary-foreground"
+            disabled={aiBusy}
+            onClick={() => void onAiRunNow()}
+          >
+            <RefreshCw className={`h-3 w-3 ${aiBusy ? "animate-spin" : ""}`} />
+            Run AI now
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        <Stat label="Stage" value={stage} icon={Sparkles} />
+        <Stat
+          label="Language"
+          value={detectedLanguage}
+          icon={Languages}
+        />
+        <Stat label="Category" value={detectedCategory} icon={Tag} />
+        <Stat
+          label="Confidence"
+          value={
+            lastConfidence > 0 ? `${(lastConfidence * 100).toFixed(0)}%` : "—"
+          }
+          icon={ShieldCheck}
+        />
+      </div>
+
+      {handoffRequired && (
+        <div className="rounded-md bg-warning/10 border border-warning/30 px-2 py-1.5 text-[11px] leading-snug text-foreground">
+          <span className="font-medium">Handoff required:</span>{" "}
+          {aiState?.handoffReason || "AI flagged this conversation for human review."}
+        </div>
+      )}
+
+      {orderId && (
+        <div className="rounded-md bg-success/10 border border-success/30 px-2 py-1.5 text-[11px] leading-snug">
+          AI booked order <span className="font-mono">{orderId}</span>
+          {aiState?.paymentLink ? (
+            <>
+              {" · "}
+              <a
+                href={aiState.paymentLink}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                payment link
+              </a>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {lastSuggestion && (
+        <div className="rounded-md bg-background border border-border px-2 py-1.5 text-[11px] leading-snug">
+          <div className="text-muted-foreground">
+            Last suggestion · {lastSuggestion.action} ·{" "}
+            {(lastSuggestion.confidence * 100).toFixed(0)}% ·{" "}
+            {lastSuggestion.blockedReason || "stored"}
+          </div>
+          {lastSuggestion.replyText && (
+            <div className="mt-0.5 text-foreground/90 break-words">
+              "{lastSuggestion.replyText}"
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface StatProps {
+  label: string;
+  value: string;
+  icon: typeof Sparkles;
+}
+
+function Stat({ label, value, icon: Icon }: StatProps) {
+  return (
+    <div className="rounded-md bg-background border border-border px-2 py-1">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1">
+        <Icon className="h-2.5 w-2.5" />
+        {label}
+      </div>
+      <div className="text-[12px] font-medium text-foreground truncate">{value}</div>
+    </div>
+  );
+}
+
 interface MessageBubbleProps {
   message: WhatsAppMessage;
 }
@@ -510,13 +786,18 @@ function MessageBubble({ message }: MessageBubbleProps) {
             : "bg-background border border-border"
         }`}
       >
-        {message.templateName && (
+        {(message.templateName || message.aiGenerated) && (
           <div
-            className={`text-[10px] uppercase tracking-wider mb-0.5 ${
+            className={`text-[10px] uppercase tracking-wider mb-0.5 inline-flex items-center gap-1.5 ${
               outbound ? "text-primary-foreground/80" : "text-muted-foreground"
             }`}
           >
-            template · {message.templateName}
+            {message.templateName && <span>template · {message.templateName}</span>}
+            {message.aiGenerated && (
+              <span className="inline-flex items-center gap-0.5">
+                <Bot className="h-2.5 w-2.5" /> AI Auto
+              </span>
+            )}
           </div>
         )}
         <div className="whitespace-pre-wrap break-words">{message.body}</div>

@@ -675,16 +675,23 @@ frontend tests stay green.**
 - Worker concurrency starts at 1; bump only after `docker stats` confirms headroom.
 - All integration adapters keep their three-mode (mock / test / live) dispatch. The first deploy ships every adapter in `mock` so a misconfiguration cannot send a live customer message.
 
-### Phase 5C — WhatsApp AI Chat Sales Agent (per Phase 5A-1 addendum)
+### ✅ Phase 5C — WhatsApp AI Chat Sales Agent (DONE)
 
-- Port `learned_memory.py` from the reference repo wholesale (explicit human-vetted gate, no auto-promotion).
-- Claim-Vault-bound LLM path: post-LLM filter rejects any sentence containing strings outside `apps.compliance.Claim.approved` for the relevant product.
-- Suggest mode + auto-reply mode (both still routed through `enforce_or_queue`). Auto-reply means the AI replies without operator click; it does NOT bypass the matrix.
-- Greeting / category-detection / discovery / explanation / objection-handling prompts wired (see addendum §U–§Z).
-- Address collection state machine on `WhatsAppConversation.metadata.address_collection`.
-- AI suggestions become `apps.ai_governance.ApprovalRequest` rows of action `whatsapp.<message_type>` for the approval-required paths. Admin / director approves → Phase 4D execute layer dispatches via the existing service helper.
-- New `WhatsAppAIReplySuggestion` + `WhatsAppChatAgentRun` models linking to `AgentRun`.
-- CAIO refused at engine + AgentRun bridge + execute layer + WhatsApp service entry guard.
+Shipped per Phase 5A-1 addendum + Prarit's locked Phase 5C decisions (auto mode, locked greeting template, multilingual replies, order booking from chat, no shipment). Tests: 35 new pytest cases; 469 backend + 13 frontend, all green.
+
+- ✅ `apps/whatsapp/ai_orchestration.py` — `run_whatsapp_ai_agent` end-to-end pipeline (idempotency → language detection → greeting fast-path → AI provider gate → Claim Vault context → prompt build → dispatch → JSON validation → safety + discount + rate gates → freeform send / order booking / handoff). Fail-closed when `AI_PROVIDER=disabled` / `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` / Claim Vault missing.
+- ✅ `apps/whatsapp/language.py` — deterministic Hindi/Hinglish/English heuristic + persistence helper.
+- ✅ `apps/whatsapp/ai_schema.py` — strict JSON schema + `BLOCKED_CLAIM_PHRASES` defence in depth.
+- ✅ `apps/whatsapp/discount_policy.py` — wraps Phase 3E `validate_discount` with the never-upfront rule (`MIN_OBJECTION_TURNS_BEFORE_OFFER=2`), refusal-rescue unlock, and the locked 50% total cap (`validate_total_discount_cap`).
+- ✅ `apps/whatsapp/order_booking.py` — `book_order_from_decision` validates address completeness + discount cap, calls `apps.orders.services.create_order` (existing service path), optionally creates ₹499 advance link via `apps.payments.services.create_payment_link`. Never touches `apps.shipments`.
+- ✅ `apps/whatsapp/services.py` adds `send_freeform_text_message` (TEXT messages) — gated identically to `queue_template_message` (consent + CAIO refusal + idempotency).
+- ✅ `apps/whatsapp/tasks.py` adds `run_whatsapp_ai_agent_for_conversation` Celery task. Inbound webhook fires it on commit (eager-mode safe).
+- ✅ Six new HTTP endpoints under `/api/whatsapp/ai/*` and per-conversation `ai-mode / run-ai / ai-runs / handoff / resume-ai`. Viewer read-only; operations+ for writes.
+- ✅ 18 new audit kinds wired into `apps/audit/signals.ICON_BY_KIND`.
+- ✅ Frontend `AiAgentPanel` inside `WhatsAppInbox.tsx` + AI Auto badge on AI-generated message bubbles + Customer 360 status pill update.
+- ✅ Settings: `WHATSAPP_AI_AUTO_REPLY_ENABLED` (off by default), `WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD=0.75`, `WHATSAPP_AI_MAX_TURNS_PER_CONVERSATION_PER_HOUR=10`, `WHATSAPP_AI_MAX_MESSAGES_PER_CUSTOMER_PER_DAY=30`. Documented in both `.env.example` and `.env.production.example`.
+
+**Out of scope (still deferred):** `learned_memory.py` port, `WhatsAppAIReplySuggestion` / `WhatsAppChatAgentRun` separate tables, chat-to-call handoff (Phase 5D), lifecycle automation (Phase 5D), confirmation / delivery / RTO / reorder rescue automation (Phase 5E), campaigns (Phase 5F).
 
 ### Phase 5D — Chat-to-Call Handoff + Lifecycle Automation
 

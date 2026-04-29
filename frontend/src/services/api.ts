@@ -107,6 +107,13 @@ import type {
   CreateInternalNotePayload,
   UpdateWhatsAppConversationPayload,
   SendConversationTemplatePayload,
+  WhatsAppAiGlobalStatus,
+  WhatsAppAiHandoffPayload,
+  WhatsAppAiRunSummary,
+  WhatsAppAiRunsResponse,
+  WhatsAppConversationAiPayload,
+  WhatsAppConversationAiState,
+  UpdateWhatsAppAiModePayload,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -802,6 +809,60 @@ export const api = {
       `/whatsapp/customers/${customerId}/timeline/`,
       () => emptyCustomerTimeline(customerId),
     ),
+
+  // ---------- Phase 5C — WhatsApp AI Chat Sales Agent ----------
+  getWhatsAppAiStatus: () =>
+    safeFetch<WhatsAppAiGlobalStatus>(
+      "/whatsapp/ai/status/",
+      () => emptyAiGlobalStatus(),
+    ),
+  updateWhatsAppConversationAiMode: (
+    id: string,
+    payload: UpdateWhatsAppAiModePayload,
+  ) =>
+    safeMutate<WhatsAppConversationAiPayload>(
+      `/whatsapp/conversations/${id}/ai-mode/`,
+      "PATCH",
+      payload,
+      () => optimisticAiPayload(id, payload),
+    ),
+  runWhatsAppConversationAi: (id: string) =>
+    safeMutate<WhatsAppAiRunSummary>(
+      `/whatsapp/conversations/${id}/run-ai/`,
+      "POST",
+      {},
+      () => emptyAiRunSummary(id),
+    ),
+  getWhatsAppConversationAiRuns: (id: string) =>
+    safeFetch<WhatsAppAiRunsResponse>(
+      `/whatsapp/conversations/${id}/ai-runs/`,
+      () => ({ ai: defaultAiState(), events: [] }),
+    ),
+  handoffWhatsAppConversation: (
+    id: string,
+    payload: WhatsAppAiHandoffPayload = {},
+  ) =>
+    safeMutate<WhatsAppConversationAiPayload>(
+      `/whatsapp/conversations/${id}/handoff/`,
+      "POST",
+      payload,
+      () =>
+        optimisticAiPayload(id, {
+          aiEnabled: false,
+          aiMode: "disabled",
+        }),
+    ),
+  resumeWhatsAppConversationAi: (id: string) =>
+    safeMutate<WhatsAppConversationAiPayload>(
+      `/whatsapp/conversations/${id}/resume-ai/`,
+      "POST",
+      {},
+      () =>
+        optimisticAiPayload(id, {
+          aiEnabled: true,
+          aiMode: "auto",
+        }),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -1278,6 +1339,79 @@ function emptyCustomerTimeline(customerId: string): WhatsAppCustomerTimeline {
 }
 
 export type Api = typeof api;
+
+// ---------- Phase 5C — WhatsApp AI optimistic helpers ----------
+
+function defaultAiState(): WhatsAppConversationAiState {
+  return {
+    aiEnabled: true,
+    aiMode: "auto",
+    stage: "greeting",
+    detectedLanguage: "",
+    detectedCategory: "",
+    lastAiAction: "",
+    lastAiConfidence: 0,
+    discountAskCount: 0,
+    totalDiscountPct: 0,
+    offeredDiscountPct: 0,
+    handoffRequired: false,
+    handoffReason: "",
+    orderId: "",
+    paymentId: "",
+    paymentLink: "",
+    lastSuggestion: null,
+  };
+}
+
+function optimisticAiPayload(
+  conversationId: string,
+  patch: UpdateWhatsAppAiModePayload,
+): WhatsAppConversationAiPayload {
+  const base = defaultAiState();
+  return {
+    conversationId,
+    ai: {
+      ...base,
+      ...(patch.aiEnabled !== undefined ? { aiEnabled: patch.aiEnabled } : {}),
+      ...(patch.aiMode !== undefined ? { aiMode: patch.aiMode } : {}),
+    },
+  };
+}
+
+function emptyAiRunSummary(conversationId: string): WhatsAppAiRunSummary {
+  return {
+    conversationId,
+    inboundMessageId: "",
+    action: "no_action",
+    sent: false,
+    sentMessageId: "",
+    handoffRequired: false,
+    handoffReason: "",
+    blockedReason: "ai_provider_disabled",
+    stage: "greeting",
+    confidence: 0,
+    language: "",
+    category: "",
+    orderId: "",
+    paymentId: "",
+  };
+}
+
+function emptyAiGlobalStatus(): WhatsAppAiGlobalStatus {
+  return {
+    enabled: false,
+    status: "provider_disabled",
+    message:
+      "AI provider is disabled (mock fallback). Set AI_PROVIDER and WHATSAPP_AI_AUTO_REPLY_ENABLED in production.",
+    provider: "disabled",
+    autoReplyEnabled: false,
+    confidenceThreshold: 0.75,
+    rateLimits: {
+      maxTurnsPerConversationPerHour: 10,
+      maxMessagesPerCustomerPerDay: 30,
+    },
+  };
+}
 
 /**
  * Test-only export — lets vitest assert that the mock fallback fires when the

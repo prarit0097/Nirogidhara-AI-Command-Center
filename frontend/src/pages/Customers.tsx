@@ -238,7 +238,19 @@ function WhatsAppTab({ timeline, loading }: WhatsAppTabProps) {
           <Sparkles className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
           <div>
             <span className="font-medium text-foreground">AI suggestions</span>{" "}
-            <StatusPill tone="neutral">disabled</StatusPill>
+            <StatusPill
+              tone={
+                timeline.aiSuggestions.enabled
+                  ? "success"
+                  : timeline.aiSuggestions.status === "auto_reply_off"
+                    ? "warning"
+                    : "neutral"
+              }
+            >
+              {timeline.aiSuggestions.enabled
+                ? "auto"
+                : timeline.aiSuggestions.status}
+            </StatusPill>
             <p className="text-muted-foreground mt-1">
               {timeline.aiSuggestions.message}
             </p>

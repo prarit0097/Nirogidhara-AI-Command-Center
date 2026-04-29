@@ -1236,5 +1236,26 @@ Phase 5A-1 updates the following documents in addition to this addendum:
 
 ---
 
-_End of Phase 5A-1 addendum. The full Phase 5A scope (Meta Cloud client, send pipeline, models, webhook, 7 templates) remains the next implementation phase. The AI Chat Agent + discount rescue policy enforcement land in Phase 5C–5E._
+_End of Phase 5A-1 addendum._
+
+---
+
+## HH. Phase 5C — Implementation note (post-ship)
+
+The full Phase 5A scope shipped (Meta Cloud client, send pipeline, 9 models, webhook, 8 templates).
+Phase 5B shipped (Inbound Inbox + Customer 360 timeline).
+**Phase 5C — WhatsApp AI Chat Sales Agent — shipped.** Implementation lives in:
+
+- `backend/apps/whatsapp/ai_orchestration.py` — `run_whatsapp_ai_agent` end-to-end pipeline.
+- `backend/apps/whatsapp/language.py` — deterministic Hindi/Hinglish/English detection.
+- `backend/apps/whatsapp/ai_schema.py` — strict JSON schema + blocked-phrase filter.
+- `backend/apps/whatsapp/discount_policy.py` — never-upfront + 50% total cap (§AA + §BB).
+- `backend/apps/whatsapp/order_booking.py` — chat-to-order via existing service layer; never touches `apps.shipments`.
+- `backend/apps/whatsapp/services.send_freeform_text_message` — TEXT replies through the same gates as templates.
+- `backend/apps/whatsapp/tasks.run_whatsapp_ai_agent_for_conversation` — Celery task wired from inbound webhook.
+- `backend/apps/whatsapp/views.py` — six new endpoints (`ai/status`, per-conversation `ai-mode / run-ai / ai-runs / handoff / resume-ai`).
+
+Auto-reply is gated by `WHATSAPP_AI_AUTO_REPLY_ENABLED` (default off). The locked Hindi greeting (§U), category-detection-before-product-text rule (§X), discount discipline (§AA), and 50% total cap (§BB) are all enforced server-side.
+
+Phase 5D — chat-to-call handoff + lifecycle automation — is the next runtime phase. Phase 5E adds rescue-discount automation; Phase 5F adds approval-gated campaigns.
 

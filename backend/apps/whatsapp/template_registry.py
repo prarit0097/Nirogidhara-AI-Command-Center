@@ -57,6 +57,34 @@ class TemplateRegistryError(Exception):
     """Raised when a template lookup / sync fails."""
 
 
+# Phase 5C — locked Hindi greeting body, used when the canonical
+# template has not been synced yet OR when ops want to seed a default
+# greeting locally. The send pipeline ALWAYS prefers a Meta-approved
+# template row; this string is a documented fallback for tests / dev.
+GREETING_LOCKED_HINDI = (
+    "Namaskar, Nirogidhara Ayurvedic Sanstha mein aapka swagat hai. "
+    "Batayein, main aapki kya help kar sakta/sakti hoon?"
+)
+
+
+def language_to_template_tag(language: str) -> str:
+    """Map the Phase 5C language vocabulary to template ``language`` codes.
+
+    The template registry stores ``hi``, ``en``, ``en_US`` (whatever Meta
+    approved). Hinglish typically reuses the ``hi`` template since Meta
+    does not support a dedicated Hinglish locale — the LLM later replies
+    in Hinglish freeform after the greeting.
+    """
+    norm = (language or "").lower().strip()
+    if norm in {"hindi", "hi", "hin"}:
+        return "hi"
+    if norm in {"hinglish", "hin-eng", "hindlish"}:
+        return "hi"
+    if norm in {"english", "en", "eng"}:
+        return "en"
+    return "hi"
+
+
 def get_template_for_action(
     *,
     action_key: str,
@@ -270,7 +298,13 @@ def _ordered_variable_values(
 
 
 def _seed_default_templates() -> list[Mapping[str, Any]]:
-    """Generate canonical seed entries for mock-mode sync."""
+    """Generate canonical seed entries for mock-mode sync.
+
+    Greeting templates seed both Hindi (locked Phase 5A-1 string) AND
+    English so the Phase 5C language detector has a row for either path.
+    Hinglish reuses the Hindi row by convention (Meta does not approve
+    a separate Hinglish locale).
+    """
     seeds: list[Mapping[str, Any]] = []
     for action_key, name in DEFAULT_TEMPLATE_NAMES.items():
         category = (
@@ -278,6 +312,47 @@ def _seed_default_templates() -> list[Mapping[str, Any]]:
             if action_key == "whatsapp.reorder_reminder"
             else WhatsAppTemplate.Category.UTILITY
         )
+        if action_key == "whatsapp.greeting":
+            # Locked Hindi greeting per Phase 5A-1 §U.
+            seeds.append(
+                {
+                    "name": name,
+                    "language": "hi",
+                    "category": WhatsAppTemplate.Category.UTILITY,
+                    "status": WhatsAppTemplate.Status.APPROVED,
+                    "components": [
+                        {"type": "BODY", "text": GREETING_LOCKED_HINDI},
+                    ],
+                    "variables_schema": {"required": [], "order": []},
+                    "action_key": action_key,
+                    "claim_vault_required": False,
+                    "metadata": {"seeded": True, "locked_text": True},
+                }
+            )
+            # English fallback for English-only customers; the Hinglish
+            # path uses the Hindi row above.
+            seeds.append(
+                {
+                    "name": name,
+                    "language": "en",
+                    "category": WhatsAppTemplate.Category.UTILITY,
+                    "status": WhatsAppTemplate.Status.APPROVED,
+                    "components": [
+                        {
+                            "type": "BODY",
+                            "text": (
+                                "Welcome to Nirogidhara Ayurvedic Sanstha. "
+                                "Please tell us how we can help you today."
+                            ),
+                        },
+                    ],
+                    "variables_schema": {"required": [], "order": []},
+                    "action_key": action_key,
+                    "claim_vault_required": False,
+                    "metadata": {"seeded": True, "locked_text": True},
+                }
+            )
+            continue
         seeds.append(
             {
                 "name": name,
@@ -302,7 +377,9 @@ def _seed_default_templates() -> list[Mapping[str, Any]]:
 __all__ = (
     "DEFAULT_CLAIM_VAULT_REQUIRED",
     "DEFAULT_TEMPLATE_NAMES",
+    "GREETING_LOCKED_HINDI",
     "TemplateRegistryError",
+    "language_to_template_tag",
     "get_template_for_action",
     "render_template_components",
     "sync_templates_from_provider",

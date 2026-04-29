@@ -77,7 +77,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 434 tests (Phase 1 → 5B inclusive)
+python -m pytest -q                     # 469 tests (Phase 1 → 5C inclusive)
 
 # Frontend
 cd ../frontend
@@ -537,6 +537,57 @@ curl -H "Authorization: Bearer <jwt>" http://localhost:8000/api/whatsapp/custome
 The frontend `/whatsapp-inbox` page refreshes itself in real time via
 the existing Phase 4A `/ws/audit/events/` channel filtered on
 `whatsapp.*` audit kinds — no new WebSocket route was added.
+
+## Phase 5C — WhatsApp AI Chat Sales Agent
+
+The agent runs automatically on every inbound but **auto-reply is OFF
+by default** (`WHATSAPP_AI_AUTO_REPLY_ENABLED=false`). With auto-reply
+off, every inbound still produces a stored AI suggestion + audit row;
+operators can review via `GET /api/whatsapp/conversations/{id}/ai-runs/`
+and trigger the same path manually with `POST .../run-ai/`.
+
+### Local dev quick checks
+
+```bash
+# Inspect the global runtime state.
+curl -H "Authorization: Bearer <jwt>" http://localhost:8000/api/whatsapp/ai/status/
+
+# Toggle a single conversation's AI mode (operations+).
+curl -X PATCH -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" \
+  http://localhost:8000/api/whatsapp/conversations/<id>/ai-mode/ \
+  -d '{"aiEnabled": true, "aiMode": "auto"}'
+
+# Manual trigger of the orchestrator.
+curl -X POST -H "Authorization: Bearer <jwt>" \
+  http://localhost:8000/api/whatsapp/conversations/<id>/run-ai/
+
+# Recent AI events for the conversation.
+curl -H "Authorization: Bearer <jwt>" http://localhost:8000/api/whatsapp/conversations/<id>/ai-runs/
+
+# Operator-driven handoff and resume.
+curl -X POST -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" \
+  http://localhost:8000/api/whatsapp/conversations/<id>/handoff/ -d '{"reason":"manual review"}'
+curl -X POST -H "Authorization: Bearer <jwt>" \
+  http://localhost:8000/api/whatsapp/conversations/<id>/resume-ai/
+```
+
+### Enabling auto-reply in production
+
+1. Set `AI_PROVIDER=openai` and `OPENAI_API_KEY` in `.env.production`.
+2. Sync at least the locked greeting template (`whatsapp.greeting`) — the agent fails closed otherwise.
+3. Verify `Claim` rows exist for the products you sell (the agent refuses product-specific text without them).
+4. Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED=true` and restart the backend container.
+5. Watch `whatsapp.ai.run_completed` / `whatsapp.ai.reply_auto_sent` audit rows for the first hour. If anything looks off, run `POST /conversations/{id}/handoff/` to force-escalate.
+
+Locked safety (still in force at the application layer):
+
+- No medical-emergency replies.
+- No freeform claims outside `apps.compliance.Claim.approved`.
+- No discount on first ask.
+- 50% total discount cap is non-negotiable.
+- Order booking requires explicit customer confirmation in the latest inbound.
+- No shipment / dispatch from chat in Phase 5C.
+- CAIO can never originate a customer-facing send.
 
 ## Production deploy (Hostinger VPS)
 
