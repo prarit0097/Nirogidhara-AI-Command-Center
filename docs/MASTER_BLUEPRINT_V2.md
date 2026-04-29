@@ -15,7 +15,7 @@
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
 | Completed phase range | Phase 1 → Phase 5E-Hotfix-2 |
-| Last verified test baseline | 550 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
+| Last verified test baseline | 573 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
 | Live deployment stack | Docker Compose (six containers) on Hostinger VPS, host port 18020 → host Nginx + Certbot SSL |
 | GitHub repo | https://github.com/prarit0097/Nirogidhara-AI-Command-Center |
 | VPS path | `/opt/nirogidhara-command` |
@@ -124,6 +124,7 @@ curl -fsS https://ai.nirogidhara.com/api/healthz/
 | 5D | ✅ Live | Chat-to-Call Handoff + Lifecycle Automation. `apps.whatsapp.call_handoff` is the single Vapi entry from WhatsApp; idempotent on `(conversation, inbound, reason)`. Safety reasons skip auto-dial. AI-booked orders move directly to confirmation queue. `apps.whatsapp.lifecycle` + `apps.whatsapp.signals` route Order/Payment/Shipment events to approved templates. Claim Vault coverage audit (`check_claim_vault_coverage`, `/api/compliance/claim-coverage/`). Three new endpoints. 11 new audit kinds. | `WHATSAPP_CALL_HANDOFF_ENABLED=false`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false`, `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` defaults. |
 | 5E | ✅ Live | Rescue Discount Flow + Day-20 Reorder + Default Claim Vault Seeds. `apps.orders.rescue_discount` enforces the **50% absolute cumulative cap** with per-stage ladders. `DiscountOfferLog` records every attempt. CEO AI / admin escalation via `discount.rescue.ceo_review` + `discount.above_safe_auto_band` matrix rows. Five new endpoints. 12 new audit kinds. `seed_default_claims` covers the eight categories. | `WHATSAPP_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_REORDER_DAY20_ENABLED=false`, `DEFAULT_CLAIMS_SEED_DEMO_ONLY=true` defaults. CAIO refused at offer entry. |
 | 5E-Hotfix | ✅ Live | Two `RenameIndex` migrations to bring Phase 5D / 5E hand-rolled index names in line with Django's auto-suffix form. Working agreement now requires `python manage.py makemigrations --check --dry-run` to be clean before every commit. | Pure metadata; no schema rewrite. |
+| 5E-Smoke | ✅ Live | Controlled Mock + OpenAI Smoke Testing Harness. New `apps.whatsapp.smoke_harness` + `python manage.py run_controlled_ai_smoke_test --scenario {ai-reply\|claim-vault\|rescue-discount\|vapi-handoff\|reorder-day20\|all}` exercise every Phase 5C / 5D / 5E surface without sending real customer messages. Defaults are SAFE: dry-run, mock-WhatsApp, mock-Vapi, OpenAI off (deterministic mocked LLM decision). `--use-openai` lets the orchestrator hit real OpenAI for the `ai-reply` scenario only; WhatsApp stays mock. Four new audit kinds (`system.smoke_test.{started,completed,failed,warning}`). `--json` flag for CI / log scraping. | Refuses real Meta provider outright. Refuses live Vapi outright in default mode. Auto-reply gate stays OFF inside the harness regardless of caller. |
 | 5E-Hotfix-2 | ✅ Live | Strengthened demo Claim Vault seed. Four universal safe usage-guidance phrases merged into every demo entry. `USAGE_HINT_KEYWORDS` widened. Demo marker bumped to `version="demo-v2"`. After `--reset-demo`, all 8 categories report `risk=demo_ok` (not `weak`). Real admin / doctor-approved claims still never overwritten. | Production still requires real doctor-approved final claims before full live rollout. Automation flags remain OFF until controlled mock + OpenAI testing passes. |
 
 ---
@@ -615,13 +616,14 @@ Two new matrix rows for AI rescue discount escalation:
 
 ### 17.2 Correct rollout sequence (do not skip steps)
 
-1. **Claim Vault coverage check.** `python manage.py check_claim_vault_coverage` must report no `missing` rows for active categories. `weak` rows must be fixed (real admin-added claims should get doctor-approved usage phrasing) or `--reset-demo` should upgrade demo-v1 rows to demo-v2.
-2. **OpenAI mock test.** Configure `AI_PROVIDER=openai` (or `anthropic`) on a staging copy. Run a sample of inbound conversations through the orchestrator with `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`; review every stored suggestion before flipping any flag.
-3. **WhatsApp mock test.** Keep `WHATSAPP_PROVIDER=mock`. Ensure no template / consent / Claim Vault / matrix gates fail on the test conversations.
-4. **Vapi mock test.** Trigger `apps.whatsapp.call_handoff.trigger_vapi_call_from_whatsapp` in mock mode; verify the `WhatsAppHandoffToCall` row + audit kinds + idempotency.
-5. **One-number live Meta test.** Flip `WHATSAPP_PROVIDER=meta_cloud`, keep `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, add exactly one approved test number to `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting, payment reminder, and confirmation reminder templates manually and verify delivery.
-6. **Limited production rollout.** Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED=true` for a small approved customer cohort. Watch the `whatsapp.ai.*` audit stream for at least 48 hours. Resolve every blocked / handoff / suggestion-stored case manually before scaling.
-7. **Gradual scale.** Flip `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=true`, then `WHATSAPP_CALL_HANDOFF_ENABLED=true`, then `WHATSAPP_RESCUE_DISCOUNT_ENABLED=true` and `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=true`, then `WHATSAPP_REORDER_DAY20_ENABLED=true`. One flag at a time, with at least 24 hours of soak between flips.
+1. **Smoke harness sweep.** `python manage.py run_controlled_ai_smoke_test --scenario all --json` must report `overallPassed: true`. Defaults are SAFE — no customer message sent, no real Meta / Vapi call. Run for every change to the orchestrator, lifecycle, rescue discount, handoff, or Day-20 sweep before any flag flip.
+2. **Claim Vault coverage check.** `python manage.py check_claim_vault_coverage` must report no `missing` rows for active categories. `weak` rows must be fixed (real admin-added claims should get doctor-approved usage phrasing) or `--reset-demo` should upgrade demo-v1 rows to demo-v2.
+3. **OpenAI mock test.** Configure `AI_PROVIDER=openai` (or `anthropic`) on a staging copy. Re-run the smoke harness with `--scenario ai-reply --use-openai` to validate the OpenAI path produces JSON-schema-valid decisions; review every stored suggestion before flipping any flag.
+4. **WhatsApp mock test.** Keep `WHATSAPP_PROVIDER=mock`. The smoke harness's `claim-vault` + `ai-reply` scenarios cover the gate stack. Ensure no template / consent / Claim Vault / matrix gates fail on the test conversations.
+5. **Vapi mock test.** The smoke harness's `vapi-handoff` scenario does this — verifies `WhatsAppHandoffToCall` row creation, idempotency, and safety-reason skip in mock mode.
+6. **One-number live Meta test.** Flip `WHATSAPP_PROVIDER=meta_cloud`, keep `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, add exactly one approved test number to `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting, payment reminder, and confirmation reminder templates manually and verify delivery.
+7. **Limited production rollout.** Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED=true` for a small approved customer cohort. Watch the `whatsapp.ai.*` audit stream for at least 48 hours. Resolve every blocked / handoff / suggestion-stored case manually before scaling.
+8. **Gradual scale.** Flip `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=true`, then `WHATSAPP_CALL_HANDOFF_ENABLED=true`, then `WHATSAPP_RESCUE_DISCOUNT_ENABLED=true` and `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=true`, then `WHATSAPP_REORDER_DAY20_ENABLED=true`. One flag at a time, with at least 24 hours of soak between flips.
 
 A flag flip is reversible — if anything looks wrong on the audit stream, set the flag back to `false` and the orchestrator immediately drops into "store suggestion only" mode.
 
@@ -636,7 +638,7 @@ A flag flip is reversible — if anything looks wrong on the audit stream, set t
 cd backend
 python manage.py makemigrations --check --dry-run    # MUST report "No changes detected"
 python manage.py check                                # 0 issues
-python -m pytest -q                                   # 550 tests today
+python -m pytest -q                                   # 573 tests today
 
 # Frontend
 cd ../frontend

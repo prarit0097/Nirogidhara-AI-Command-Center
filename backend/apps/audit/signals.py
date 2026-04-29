@@ -181,6 +181,11 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.lifecycle.reorder_day20_queued": "calendar-clock",
     "whatsapp.lifecycle.reorder_day20_sent": "calendar-check",
     "compliance.default_claims.seeded": "shield-check",
+    # Phase 5E-Smoke — controlled mock + OpenAI smoke testing harness.
+    "system.smoke_test.started": "play",
+    "system.smoke_test.completed": "check-circle",
+    "system.smoke_test.failed": "x-circle",
+    "system.smoke_test.warning": "alert-triangle",
 }
 
 

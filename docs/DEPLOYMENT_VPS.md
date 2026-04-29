@@ -133,6 +133,28 @@ sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
 # Confirm no demo row is reported as weak.
 sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py check_claim_vault_coverage
+
+# Phase 5E-Smoke — controlled smoke harness. Defaults are SAFE
+# (dry-run + mock-WhatsApp + mock-Vapi + OpenAI off). Run before
+# flipping any automation flag. Refuses real Meta provider outright.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_smoke_test --scenario all --json
+
+# Single-scenario examples (use these to debug a specific surface).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_smoke_test --scenario claim-vault --json
+
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_smoke_test --scenario ai-reply --language hinglish --mock-whatsapp --dry-run
+
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_smoke_test --scenario rescue-discount --dry-run --json
+
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_smoke_test --scenario vapi-handoff --mock-vapi --dry-run
+
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_smoke_test --scenario reorder-day20 --dry-run
 ```
 
 Expected output: `No changes detected`. If the `--check` reports

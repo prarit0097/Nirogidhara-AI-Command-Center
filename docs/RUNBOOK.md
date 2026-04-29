@@ -117,6 +117,54 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5E-Smoke — Controlled Mock + OpenAI Smoke Testing Harness
+
+Run before flipping any automation flag in production. Defaults are
+SAFE (dry-run + mock-WhatsApp + mock-Vapi + OpenAI off). The harness
+never sends a real customer message and refuses to use the live Meta
+provider.
+
+```bash
+# Single scenario.
+python manage.py run_controlled_ai_smoke_test --scenario claim-vault --json
+python manage.py run_controlled_ai_smoke_test --scenario ai-reply --language hindi
+python manage.py run_controlled_ai_smoke_test --scenario ai-reply --language hinglish
+python manage.py run_controlled_ai_smoke_test --scenario ai-reply --language english
+python manage.py run_controlled_ai_smoke_test --scenario rescue-discount --json
+python manage.py run_controlled_ai_smoke_test --scenario vapi-handoff --mock-vapi
+python manage.py run_controlled_ai_smoke_test --scenario reorder-day20 --dry-run
+
+# All five scenarios (claim-vault → ai-reply → rescue-discount → vapi-handoff → reorder-day20).
+python manage.py run_controlled_ai_smoke_test --scenario all --json
+
+# Hit real OpenAI for the ai-reply scenario only (WhatsApp stays mock).
+# Requires OPENAI_API_KEY in the environment.
+python manage.py run_controlled_ai_smoke_test --scenario ai-reply --use-openai
+
+# Refresh demo Claim Vault rows before running the coverage scenario.
+python manage.py run_controlled_ai_smoke_test --scenario claim-vault --reset-demo-claims
+```
+
+Recommended rollout sequence (do not skip steps):
+
+1. `WHATSAPP_PROVIDER=mock`, `VAPI_MODE=mock`, `AI_PROVIDER=disabled`.
+2. `python manage.py seed_default_claims --reset-demo` then
+   `python manage.py check_claim_vault_coverage`.
+3. `python manage.py run_controlled_ai_smoke_test --scenario all --json` — must report `overallPassed: true`.
+4. Set `AI_PROVIDER=openai` (key in env), re-run with `--use-openai` for `ai-reply` scenario.
+5. Flip `WHATSAPP_PROVIDER=meta_cloud` with `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` and exactly one number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting + payment reminder + confirmation reminder templates manually.
+6. Enable feature flags one at a time with 24+ hours of soak between flips: `WHATSAPP_AI_AUTO_REPLY_ENABLED` → `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED` → `WHATSAPP_CALL_HANDOFF_ENABLED` → `WHATSAPP_RESCUE_DISCOUNT_ENABLED` → `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED` → `WHATSAPP_REORDER_DAY20_ENABLED`.
+
+The harness emits four audit kinds: `system.smoke_test.{started,completed,failed,warning}`. Look at the latest rows after each run:
+
+```bash
+python manage.py shell -c "
+from apps.audit.models import AuditEvent
+for e in AuditEvent.objects.filter(kind__startswith='system.smoke_test')[:10]:
+    print(e.occurred_at, e.kind, e.text)
+"
+```
+
 ### Phase 5E-Hotfix-2 — Strengthened demo Claim Vault seed
 
 The first VPS coverage report after Phase 5E flagged Blood Purification
