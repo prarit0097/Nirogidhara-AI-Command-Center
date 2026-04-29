@@ -4,7 +4,7 @@ AI Business Operating System for Ayurveda sales, CRM, AI calling, payments,
 Delhivery delivery tracking, RTO control, AI agents, CEO AI, CAIO governance,
 reward/penalty engine, and the human-call learning loop.
 
-> Full vision: see *Nirogidhara AI Command Center — Master Blueprint v1.0*.
+> Full vision: see [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) — Master Blueprint v2.0 (the v1.0 PDF is historical reference only).
 
 ## Monorepo layout
 

@@ -376,7 +376,7 @@ class WhatsAppProvider(Protocol):
 | `whatsapp.delivery_reminder` | "Your order arrives today" | `auto_with_consent` | Triggered by Delhivery `out_for_delivery` event |
 | `whatsapp.rto_rescue` | Rescue contact when high RTO risk | `auto_with_consent` (low-risk) / `approval_required` (high-risk) | Driven by Phase 4B reward-penalty `rto_warning_was_raised` signal |
 | `whatsapp.usage_explanation` | Post-delivery usage instructions | `approval_required` (Compliance approver) | **Claim Vault required** — see §H |
-| `whatsapp.reorder_reminder` | "Time for refill" (Day 25/30/45 cadence) | `auto_with_consent` | Day-N cron via Celery |
+| `whatsapp.reorder_reminder` | "Time for refill" (locked **Day 20** cadence per Phase 5E `whatsapp.reorder_day20_reminder`; window 20–27 days post-delivery) | `auto_with_consent` | Daily Celery beat once `WHATSAPP_REORDER_DAY20_ENABLED=true` |
 | `whatsapp.support_complaint_ack` | Auto-ack of inbound complaint, then handoff to human | `auto_with_consent` | Body is a fixed acknowledgement; complaint detail goes to human queue |
 
 ### Blocked in Phase 5A

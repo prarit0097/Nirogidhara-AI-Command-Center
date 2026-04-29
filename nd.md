@@ -42,7 +42,7 @@ The GitHub remote must mirror local state at the end of every working session. N
 
 ## 1. What is this product?
 
-Nirogidhara sells Ayurvedic medicines across categories like **Weight Management, Blood Purification, Men/Women Wellness, Immunity, Lungs Detox, Body Detox, Joint Care**. Standard product is ₹3000 for 30 capsules; agents may apply 10–30% discount within authority.
+Nirogidhara sells Ayurvedic medicines across categories like **Weight Management, Blood Purification, Men/Women Wellness, Immunity, Lungs Detox, Body Detox, Joint Care**. Standard product is **₹3000 for 30 capsules** with a **₹499 fixed advance** payment. **AI never offers a discount upfront**; refusal-based rescue discounts may surface at the confirmation / delivery / RTO stages within the Phase 3E policy bands and the locked **50% cumulative cap** (see Phase 5E rescue discount engine in §11 of [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md)).
 
 Today the business runs on Google Sheets + a local dialer + manual CRM entry. The current process:
 
@@ -931,7 +931,7 @@ CRM → Workflow → Integrations → Voice AI → Agents → Governance → Lea
                   (Phase 2)     (Phase 3)   (Phase 1) (Phase 1)   (Phase 6)   (Phase 5)
 ```
 
-### ✅ Phase 0 + 1 — Foundation (DONE)
+### ✅ Phase 1 — Foundation (DONE)
 14 apps · 25 endpoints · seed · audit ledger · auth · CORS · tests. See §8.
 
 ### ✅ Phase 2A — Core Write APIs + Workflow State Machine (DONE)
@@ -1099,11 +1099,11 @@ These are blockers for Phase 2+. They need a decision from Prarit before code ca
 
 ## 15. Reference document
 
-**Nirogidhara AI Command Center — Master Blueprint v1.0** (PDF in repo root).
-- 31 pages. Owner: Prarit Sidana. Version: v1.0.
-- Sections referenced throughout this doc: §3 business flow, §5 product modules, §6 agent hierarchy, §10 reward/penalty, §11 learning loop, §12 governance, §13 architecture, §14 entities, §15 app structure, §16 API-first rule, §18 security, §19 dashboard, §20 phased roadmap, §24 open clarifications, §25 build order, §26 locked non-negotiables.
+**Active strategic blueprint:** [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) — Master Blueprint v2.0. Owner: Prarit Sidana. Reflects production reality through Phase 5E-Hotfix-2 (Phase 1 → 5E-Hotfix-2 done, 550 backend tests + 13 frontend tests, live at https://ai.nirogidhara.com).
 
-When in doubt: **the blueprint wins.** Every decision in this codebase traces back to a section there.
+**Historical reference only:** the original *Master Blueprint v1.0* (PDF, pre-Phase 5 design draft) is superseded and kept solely for context. v2.0 supersedes its discount bands (now 50% cumulative cap), reorder cadence (now Day 20), Phase 0–7 roadmap (now Phase 1 → 5E-Hotfix-2 done + controlled rollout + 5F next), and "WhatsApp future" framing (WhatsApp AI Sales engine is shipped and live). Sections of v1.0 that remain valid (CEO AI / CAIO hierarchy, reward / penalty philosophy, learning loop philosophy, KPI definition, locked non-negotiables) have been carried forward into v2.0 in updated language.
+
+When in doubt: **`nd.md` wins** on operational truth, **`docs/MASTER_BLUEPRINT_V2.md` wins** on strategic framing. Every decision in this codebase traces back to a section in one of those two documents.
 
 ---
 

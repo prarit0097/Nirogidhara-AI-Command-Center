@@ -1319,7 +1319,7 @@ def _build_prompt(
     system_policy = (
         "You are the Nirogidhara WhatsApp Sales AI Agent. You are a "
         "customer-facing chat agent for an Ayurvedic medicine D2C "
-        "company. You operate under Master Blueprint v1.0 hard stops:\n"
+        "company. You operate under Master Blueprint v2.0 hard stops:\n"
         "\n"
         "1) APPROVED CLAIM VAULT ONLY. Speak about products only using "
         "the approved phrases in the 'claims' block. Never use any of: "
