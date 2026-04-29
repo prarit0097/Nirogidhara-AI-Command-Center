@@ -15,7 +15,8 @@
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
 | Completed phase range | Phase 1 → Phase 5E-Smoke-Fix-3 |
-| Last verified test baseline | 591 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
+| Last verified test baseline | 619 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
+| Smoke + provider state | Phase 5E-Smoke + Smoke-Fix-1 / Smoke-Fix-2 / Smoke-Fix-3 completed · OpenAI provider smoke test passed on VPS · OpenAI SDK installed (`openai>=1.0,<2.0`) · OpenAI adapter uses `max_completion_tokens` · false `side_effect_complaint` classification fixed |
 | Live deployment stack | Docker Compose (six containers) on Hostinger VPS, host port 18020 → host Nginx + Certbot SSL |
 | GitHub repo | https://github.com/prarit0097/Nirogidhara-AI-Command-Center |
 | VPS path | `/opt/nirogidhara-command` |
@@ -128,7 +129,7 @@ curl -fsS https://ai.nirogidhara.com/api/healthz/
 | 5E-Smoke-Fix-2 | ✅ Live | OpenAI Chat Completions token-parameter hotfix. Modern Chat models (gpt-4o, gpt-5, o1, o3, …) reject the legacy `max_tokens` and require `max_completion_tokens`. Adapter now builds its request kwargs through a unit-testable `build_request_kwargs(messages, model, config)` helper that always sends `max_completion_tokens` and never `max_tokens`. Zero / unset drops the key entirely. 10 new pytest cases pin the kwargs-shape contract. | VPS rebuild required so the new adapter code lands in the backend image. Re-run smoke; require `openaiSucceeded=true`. |
 | 5E-Smoke-Fix | ✅ Live | OpenAI SDK (`openai>=1.0,<2.0`) added to `backend/requirements.txt` so the AI provider chain has a real SDK to import on every deploy. Smoke harness `ai-reply` scenario reports `openaiAttempted` / `openaiSucceeded` / `providerPassed` / `safeFailure` — a safe-failure no longer reports `overallPassed=true`. Pre-seeds an outbound on the smoke conversation so the greeting fast-path no longer bypasses LLM dispatch. | VPS rebuild required (`docker compose build backend`) after the requirements.txt change so the openai package lands inside the backend image. |
 | 5E-Smoke | ✅ Live | Controlled Mock + OpenAI Smoke Testing Harness. New `apps.whatsapp.smoke_harness` + `python manage.py run_controlled_ai_smoke_test --scenario {ai-reply\|claim-vault\|rescue-discount\|vapi-handoff\|reorder-day20\|all}` exercise every Phase 5C / 5D / 5E surface without sending real customer messages. Defaults are SAFE: dry-run, mock-WhatsApp, mock-Vapi, OpenAI off (deterministic mocked LLM decision). `--use-openai` lets the orchestrator hit real OpenAI for the `ai-reply` scenario only; WhatsApp stays mock. Four new audit kinds (`system.smoke_test.{started,completed,failed,warning}`). `--json` flag for CI / log scraping. | Refuses real Meta provider outright. Refuses live Vapi outright in default mode. Auto-reply gate stays OFF inside the harness regardless of caller. |
-| 5E-Hotfix-2 | ✅ Live | Strengthened demo Claim Vault seed. Four universal safe usage-guidance phrases merged into every demo entry. `USAGE_HINT_KEYWORDS` widened. Demo marker bumped to `version="demo-v2"`. After `--reset-demo`, all 8 categories report `risk=demo_ok` (not `weak`). Real admin / doctor-approved claims still never overwritten. | Production still requires real doctor-approved final claims before full live rollout. Automation flags remain OFF until controlled mock + OpenAI testing passes. |
+| 5E-Hotfix-2 | ✅ Live | Strengthened demo Claim Vault seed. Four universal safe usage-guidance phrases merged into every demo entry. `USAGE_HINT_KEYWORDS` widened. Demo marker bumped to `version="demo-v2"`. After `--reset-demo`, all 8 categories report `risk=demo_ok` (not `weak`). Real admin / doctor-approved claims still never overwritten. | Production still requires real doctor-approved final claims before broad live rollout. Automation flags remain OFF until the limited live Meta one-number test passes. |
 
 ---
 
@@ -241,7 +242,7 @@ nirogidhara-command/
 │   ├── Dockerfile                    # python:3.11-slim + tini + non-root
 │   ├── apps/                         # 16 apps (see §8 module catalogue)
 │   ├── config/                       # settings.py / urls.py / asgi.py / routing.py / celery.py
-│   └── tests/                        # 550 pytest cases
+│   └── tests/                        # 619 pytest cases
 └── docs/
     ├── MASTER_BLUEPRINT_V2.md        # ← this file (current strategic blueprint)
     ├── RUNBOOK.md
@@ -286,11 +287,13 @@ nirogidhara-command/
 | Day-20 reorder reminder cadence | `WHATSAPP_REORDER_DAY20_ENABLED` | `false` |
 | Limited live-Meta test mode | `WHATSAPP_LIVE_META_LIMITED_TEST_MODE` | `true` (only test numbers can receive live sends until flipped) |
 
-### 8.3 Needs controlled testing before live rollout
+### 8.3 Needs limited live testing before broad rollout
 
-- Live Meta WhatsApp Cloud API sends to real customer numbers.
+Controlled mock + OpenAI smoke testing is **complete** (Phase 5E-Smoke + Smoke-Fix-1/2/3). What is still pending live verification:
+
+- Limited live Meta WhatsApp one-number test (`WHATSAPP_PROVIDER=meta_cloud` + `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` + exactly one approved number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`).
 - Live Vapi voice calls (only mock + test verified today).
-- AI auto-reply on a real customer thread (must soak with `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` first).
+- AI auto-reply on a real customer thread (must soak under limited Meta test mode first).
 - Lifecycle automation on real Order/Payment/Shipment events.
 - Day-20 reorder sweep against real delivered orders.
 
@@ -604,6 +607,8 @@ Two new matrix rows for AI rescue discount escalation:
 
 ## 17. Automation Feature Flags & Safe Rollout
 
+> **Current state (post Phase 5E-Smoke-Fix-3):** Controlled OpenAI + mock WhatsApp smoke has passed on the VPS (`run_controlled_ai_smoke_test --scenario all` and `--scenario ai-reply --use-openai` both green). All automation flags below remain **default OFF** until the limited live Meta one-number test passes. Flag flips are gated, sequential, and reversible.
+
 ### 17.1 The flags
 
 | Flag | Default | Controls |
@@ -641,7 +646,7 @@ A flag flip is reversible — if anything looks wrong on the audit stream, set t
 cd backend
 python manage.py makemigrations --check --dry-run    # MUST report "No changes detected"
 python manage.py check                                # 0 issues
-python -m pytest -q                                   # 591 tests today
+python -m pytest -q                                   # 619 tests today
 
 # Frontend
 cd ../frontend
@@ -695,17 +700,37 @@ for e in AuditEvent.objects.order_by('-occurred_at')[:50]:
 "
 ```
 
+### 18.6 Required pre-live smoke gate
+
+The controlled smoke harness is the **mandatory gate** before flipping any automation flag or moving to limited live Meta. Run both commands on the VPS (or staging) after every deploy and require `overallPassed=true` in each JSON output:
+
+```bash
+# Full mock sweep — no real customer messaging.
+python manage.py run_controlled_ai_smoke_test --scenario all --json
+
+# OpenAI provider sweep — exercises real OpenAI; WhatsApp stays mock.
+python manage.py run_controlled_ai_smoke_test --scenario ai-reply --language hinglish --use-openai --mock-whatsapp --dry-run --json
+```
+
+For the OpenAI run, additionally require `detail.openaiAttempted=true`, `detail.openaiSucceeded=true`, `detail.providerPassed=true`, `detail.safeFailure=false`. Any `whatsapp.ai.safety_downgraded` audit row in the harness output is **expected** — that means the Phase 5E-Smoke-Fix-3 corrector caught an LLM over-flag before it could silently route a normal inquiry to handoff.
+
+If either run fails, **do not** flip flags or proceed to live Meta testing.
+
 ---
 
 ## 19. Updated Roadmap
 
+**Next immediate work: Limited Live Meta WhatsApp One-Number Test.**
+
 | Stage | Status |
 | --- | --- |
-| Phase 1 → Phase 5E-Smoke-Fix-3 | ✅ **Completed and live in production.** |
-| OpenAI provider hotfix verification | 🔜 **Next on VPS.** Rebuild the backend image so `openai>=1.0,<2.0` lands in the container; confirm `from openai import OpenAI` works; re-run `python manage.py run_controlled_ai_smoke_test --scenario ai-reply --use-openai --json` and require `detail.openaiSucceeded=true` + `detail.providerPassed=true` + `overallPassed=true`. |
-| OpenAI smoke retest on VPS | 🔜 Run the full `--scenario all --json` sweep with the rebuilt image. Every scenario must `passed=true`. Audit `system.smoke_test.completed` rows before moving on. |
-| Limited Live Meta WhatsApp One-Number Test | 🔜 After the VPS smoke + OpenAI retest both pass. Flip `WHATSAPP_PROVIDER=meta_cloud` with `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` + exactly one approved number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting + payment reminder + confirmation reminder templates manually. |
-| Limited Production Rollout | 🔜 Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED=true` for a small approved customer cohort. 48+ hours of soak. Audit-stream review before scaling. |
+| Phase 1 → Phase 5E-Hotfix-2 | ✅ Completed and live in production. |
+| Phase 5E-Smoke | ✅ Completed — Controlled AI smoke testing harness shipped. |
+| Phase 5E-Smoke-Fix | ✅ Completed — OpenAI SDK installed, provider-success semantics fixed. |
+| Phase 5E-Smoke-Fix-2 | ✅ Completed — Adapter switched to `max_completion_tokens`. |
+| Phase 5E-Smoke-Fix-3 | ✅ Completed — False `side_effect_complaint` classification fixed; safety corrector + audit. |
+| Limited Live Meta WhatsApp One-Number Test | 🔜 **Next.** Flip `WHATSAPP_PROVIDER=meta_cloud` with `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` + exactly one approved number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting + payment reminder + confirmation reminder templates manually and verify delivery + audit ledger. |
+| Enable automation flags one-by-one | 🔜 After the live one-number test passes. Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED` first, soak 48+ hours; then `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED`, `WHATSAPP_CALL_HANDOFF_ENABLED`, rescue + reorder flags — one at a time, 24+ hours soak between flips. Reverse on any anomaly in `/ws/audit/events/`. |
 | Phase 5F — Approval-gated Campaigns / Growth Automation | 🔜 After the limited rollout soaks cleanly. Director-approved broadcast campaigns. Meta MARKETING template tier. Per-campaign rate limit + dry-run + audit. Frontend Campaigns page (Director + Admin only). |
 | Phase 6 — Recording / QA / Learning Loop pipeline | 🔜 Speech-to-text → speaker separation → QA scoring → Compliance review → CAIO audit → sandbox test → live `PromptVersion` promotion. No automatic promotion. |
 | Phase 7 — Multi-tenant SaaS readiness | 🔜 Tenant model + middleware that scopes every queryset; same backend serves Android / iOS apps. |
@@ -716,60 +741,40 @@ The original v1.0 long-term SaaS vision remains valid; it is now slated as **fut
 
 ## 20. Current Gaps / Open Risks
 
+Controlled Mock + OpenAI smoke testing is **no longer an open gap** — Phase 5E-Smoke + Smoke-Fix-1/2/3 are complete. What remains:
+
 | Risk | Mitigation owner | Action required |
 | --- | --- | --- |
-| Real doctor-approved Claim Vault rows still pending for some products (Blood Purification, Lungs Detox specifically may still have weak real-admin rows that pre-date demo-v2). | Director + Compliance | Replace each `risk=demo_ok` row with a real doctor-approved row before flipping `WHATSAPP_AI_AUTO_REPLY_ENABLED=true`. |
-| Previous OpenAI key may have leaked in logs. | Director + DevOps | **Rotate `OPENAI_API_KEY`** in `.env.production`. Restart `nirogidhara-backend` + `nirogidhara-worker` containers. Confirm no log surface still carries the old key. |
-| Other secrets pending rotation. | Director + DevOps | Rotate `DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, the Postgres password (`POSTGRES_PASSWORD`), Razorpay live keys, Vapi live key, Meta WA access token. Stagger the rotations so live sessions degrade gracefully. |
-| Live Meta WhatsApp not yet enabled. | Director | After Claim Vault + OpenAI verification, flip `WHATSAPP_PROVIDER=meta_cloud` with `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` and one number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. |
+| Limited Live Meta WhatsApp one-number test pending. | Director | Flip `WHATSAPP_PROVIDER=meta_cloud` with `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` and exactly one approved number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting + payment reminder + confirmation reminder templates manually; verify delivery + audit ledger. |
+| Real Meta credentials / approved number must be verified. | Director + DevOps | Confirm `WHATSAPP_META_*` env block in `.env.production` (access token, phone number id, verify token, app secret) and that the destination number is on the WABA's approved test list. |
+| Automation flags still OFF. | Director | Keep `WHATSAPP_AI_AUTO_REPLY_ENABLED`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED`, `WHATSAPP_CALL_HANDOFF_ENABLED`, `WHATSAPP_RESCUE_DISCOUNT_ENABLED`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED`, `WHATSAPP_REORDER_DAY20_ENABLED` at `false` until the one-number live test soaks cleanly. Flip one at a time with 24+ hours soak between flips. |
+| Real doctor-approved final claims still required before broad rollout. | Director + Compliance | Replace each `risk=demo_ok` row with a real doctor-approved `Claim` row before flipping `WHATSAPP_AI_AUTO_REPLY_ENABLED=true`. Demo seed (`version="demo-v2"`) is for harness coverage only. |
+| Secrets rotation still pending. | Director + DevOps | Rotate `OPENAI_API_KEY`, `DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `POSTGRES_PASSWORD`, Razorpay live keys, Vapi live key, Meta WA access token. Stagger so live sessions degrade gracefully. Confirm no log surface still carries the previous keys. |
 | Real Vapi live rollout still needs controlled test. | Director | Flip `VAPI_MODE=test` first; verify webhook + transcript + handoff flow end-to-end on a sandbox assistant before flipping `live`. |
-| Demo claims should not be treated as final medical claims. | Compliance | Track every `risk=demo_ok` row as a TODO; promote to real `Claim` row with doctor-approved phrasing. |
 | Operator training before enabling automation. | Director + Operations | Run dry-run sessions on the `/whatsapp-inbox` page with `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`; ops must approve every suggestion manually until they're comfortable with the AI's outputs. |
-| Monitoring during first live AI auto-replies. | Director + DevOps | Watch `/ws/audit/events/` filtered on `whatsapp.ai.*` for the first 48 hours. Have a kill-switch ready: flip the flag back to `false`. |
+| Monitoring during first live AI auto-replies. | Director + DevOps | Watch `/ws/audit/events/` filtered on `whatsapp.ai.*` (and the new `whatsapp.ai.safety_downgraded`) for the first 48 hours. Have a kill-switch ready: flip the flag back to `false`. |
 
 ---
 
 ## 21. Updated Learning Loop
 
-The release / verification / deploy / observe / improve cycle is the only way changes land safely:
+The release / verification / deploy / observe / improve cycle is the only way changes land safely. The current state of the loop (post Phase 5E-Smoke-Fix-3) is:
 
 ```
-Feature / hotfix
+Mock smoke passed
   ↓
-Backend + frontend tests (pytest, vitest)
+OpenAI smoke passed
   ↓
-makemigrations --check --dry-run  (must report "No changes detected")
+Limited Meta one-number live test
   ↓
-manage.py check + frontend lint + frontend build
-  ↓
-Update docs (nd.md, CLAUDE.md, AGENTS.md, RUNBOOK, DEPLOYMENT_VPS, BACKEND_API, MASTER_BLUEPRINT_V2 as applicable)
-  ↓
-Commit (Conventional Commit message) + push origin main
-  ↓
-VPS pull
-  ↓
-Docker rebuild (compose pull → up -d --build)
-  ↓
-migrate
-  ↓
-makemigrations --check --dry-run     (production guard)
-  ↓
-seed_default_claims --reset-demo     (refresh demo Claim Vault rows; real claims protected)
-  ↓
-check_claim_vault_coverage           (must show no missing; ideally no weak)
-  ↓
-GET /api/healthz/                    (must return 200 OK)
-  ↓
-Controlled testing (mock / OpenAI / Vapi / one-number Meta)
-  ↓
-Enable feature flags one by one (24+ hours of soak between flips)
+Enable flags one by one (24+ hours of soak between flips)
   ↓
 Monitor audit logs (/ws/audit/events/ + AuditEvent table)
   ↓
-Improve (next iteration)
+Phase 5F (approval-gated campaigns / growth automation)
 ```
 
-Any failure at any step rolls back to the previous green state — never bypass a gate.
+Each step is a hard gate. Any failure rolls back to the previous green state — never bypass a gate. The full release cycle (feature → tests → migration check → docs → commit → VPS pull → docker rebuild → migrate → seed → coverage → healthz → smoke gate § 18.6 → above flow) is enforced by the working agreement in `nd.md` § 0.5.
 
 ---
 
@@ -792,9 +797,22 @@ The original v1.0 vision for a learning loop that ingests human call recordings 
 
 ---
 
-## 23. Current Diagrams
+## 23. Open Clarifications
 
-### 23.1 Production Deployment Architecture
+These are decisions the Director still owns. They are intentionally NOT blocked on engineering; they unblock the next live rollout step.
+
+| Topic | State | What is needed |
+| --- | --- | --- |
+| OpenAI rollout | ✅ No longer unclear — OpenAI smoke passed on the VPS (Phase 5E-Smoke-Fix-3 verified). Adapter uses `max_completion_tokens`; SDK is installed. | None for engineering; key rotation is tracked under § 20 secrets rotation. |
+| Meta live rollout | 🔜 Still needs the first allowed test number. | Director picks one approved WABA test number; DevOps puts it in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` and confirms the `WHATSAPP_META_*` credentials in `.env.production`. |
+| Vapi live rollout | 🔜 Still needs the first internal test number (if not already selected). | Director confirms the internal test number; DevOps flips `VAPI_MODE=test` before any `live`. |
+| Doctor-approved claims workflow | 🔜 Still needs final definition. | Compliance + Director agree on the format and review cadence for promoting `risk=demo_ok` rows to real doctor-approved `Claim` rows. Until then, demo seeds (`version="demo-v2"`) are explicitly NOT final medical claims (see § 13.4). |
+
+---
+
+## 24. Current Diagrams
+
+### 24.1 Production Deployment Architecture
 
 ```mermaid
 flowchart LR
@@ -813,7 +831,7 @@ flowchart LR
   Daphne -->|webhooks| Meta[(Meta Lead Ads + WA Cloud)]
 ```
 
-### 23.2 WhatsApp AI Sales Flow
+### 24.2 WhatsApp AI Sales Flow
 
 ```mermaid
 flowchart TD
@@ -846,7 +864,7 @@ flowchart TD
   Action -->|handoff| MaybeCall[Maybe trigger_vapi_call_from_whatsapp]
 ```
 
-### 23.3 Claim Vault Safety Gate
+### 24.3 Claim Vault Safety Gate
 
 ```mermaid
 flowchart LR
@@ -862,7 +880,7 @@ flowchart LR
   BlockedPhrase -->|no| Send[Send to customer]
 ```
 
-### 23.4 Rescue Discount Flow
+### 24.4 Rescue Discount Flow
 
 ```mermaid
 flowchart TD
@@ -881,7 +899,7 @@ flowchart TD
   RecheckCap -->|ok| MutateOrder[Order.discount_pct updated + audit]
 ```
 
-### 23.5 Feature Flag Rollout Funnel
+### 24.5 Feature Flag Rollout Funnel
 
 ```mermaid
 flowchart TD
@@ -898,7 +916,7 @@ flowchart TD
   Day20 --> Scale[Gradual scale to full customer base]
 ```
 
-### 23.6 Learning Loop
+### 24.6 Learning Loop
 
 ```mermaid
 flowchart LR
@@ -919,7 +937,7 @@ flowchart LR
 
 ---
 
-## 24. Glossary
+## 25. Glossary
 
 | Term | Meaning |
 | --- | --- |
@@ -938,9 +956,9 @@ flowchart LR
 
 ---
 
-## 25. Final Note
+## 26. Final Note
 
-Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 5E-Hotfix-2. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
+Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 5E-Smoke-Fix-3. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
 
 Whenever the system grows, this blueprint must grow with it: new phases, new flags, new audit kinds, new gaps. The contract is — **`nd.md` is the live source of truth; this blueprint is the Director-facing strategic mirror of it.**
 
