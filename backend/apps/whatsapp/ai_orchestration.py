@@ -73,6 +73,7 @@ from .models import (
     WhatsAppTemplate,
 )
 from .order_booking import OrderBookingError, book_order_from_decision
+from .safety_validation import validate_safety_flags
 from .template_registry import (
     GREETING_LOCKED_HINDI,
     TemplateRegistryError,
@@ -340,6 +341,39 @@ def run_whatsapp_ai_agent(
             payload={
                 "conversation_id": convo.id,
                 "category": decision.category,
+            },
+        )
+
+    # ---- Server-side safety flag validation (Phase 5E-Smoke-Fix-3) ----
+    # The LLM occasionally over-flags normal product inquiries as a
+    # safety event. Before evaluating the blockers, downgrade any
+    # flag whose signal vocabulary is absent from the inbound text.
+    # Real safety phrases are left intact.
+    inbound_text_for_safety = (inbound.body if inbound is not None else "") or ""
+    corrected_safety, downgraded_flags = validate_safety_flags(
+        inbound_text_for_safety,
+        decision.safety,
+    )
+    if downgraded_flags:
+        # Mutate in place: ChatAgentDecision is frozen, but its safety
+        # dict is a regular dict. Replace contents so the rest of the
+        # pipeline (and the audit payload below) sees the corrected
+        # values.
+        decision.safety.clear()
+        decision.safety.update(corrected_safety)
+        write_event(
+            kind="whatsapp.ai.safety_downgraded",
+            text=(
+                f"Safety flags downgraded · {', '.join(downgraded_flags)} "
+                f"· no matching signal in inbound"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": convo.id,
+                "downgraded_flags": list(downgraded_flags),
+                "inbound_message_id": inbound.id if inbound is not None else "",
+                "inbound_body_preview": inbound_text_for_safety[:160],
+                "corrected_safety": dict(corrected_safety),
             },
         )
 
@@ -1340,6 +1374,32 @@ def _build_prompt(
         "5) REPLY LANGUAGE matches the conversation 'language' "
         "({hindi, hinglish, english}). Keep replies short (1–3 short "
         "lines) and friendly.\n"
+        "\n"
+        "SAFETY FLAG DISCIPLINE (read carefully — false positives "
+        "break the chat):\n"
+        " - 'sideEffectComplaint' = TRUE only if the customer reports "
+        "an actual adverse reaction AFTER consuming the product. "
+        "Vocabulary that justifies it: 'side effect', 'reaction', "
+        "'allergy / allergic', 'rash', 'swelling', 'itching', "
+        "'vomiting', 'loose motion', 'discomfort', 'ulta asar', "
+        "'problem ho gayi', 'dikkat ho gayi', 'medicine khane ke "
+        "baad', 'tablet lene ke baad', 'capsule lene ke baad'. "
+        "A customer asking about a product, asking the price, asking "
+        "what it does, or asking for benefits is NOT a side-effect "
+        "complaint. Set sideEffectComplaint=false in that case.\n"
+        " - 'medicalEmergency' = TRUE only if the customer mentions "
+        "an active emergency: 'chest pain', 'cannot breathe', "
+        "'unconscious', 'bleeding', 'ambulance', 'hospital', "
+        "'seene me dard', 'saans nahi', 'behosh', 'chakkar'.\n"
+        " - 'legalThreat' = TRUE only if the customer explicitly "
+        "mentions lawyer, court, police, FIR, consumer forum, fraud "
+        "complaint, or a public review threat. A complaint about "
+        "delivery delay is NOT a legal threat.\n"
+        " - 'angryCustomer' = TRUE only on clearly hostile tone. "
+        "Generic price negotiation or 'discount do' is NOT anger.\n"
+        " - When in doubt and the inbound is a normal product / "
+        "price / availability question, ALL safety flags are FALSE "
+        "and you continue the sales conversation.\n"
     )
 
     schema_instructions = (
@@ -1369,8 +1429,12 @@ def _build_prompt(
         '    "angryCustomer": false\n'
         "  }\n"
         "}\n"
-        "If you are uncertain about ANY safety check, set "
-        "action='handoff' and the relevant safety flag to true."
+        "If you are uncertain about ANY safety check, prefer "
+        "action='handoff' WITHOUT inventing a safety flag. Only set a "
+        "safety flag to true when the inbound text contains the "
+        "vocabulary listed in 'SAFETY FLAG DISCIPLINE' above. A "
+        "normal product / price / availability inquiry leaves all "
+        "safety flags false."
     )
 
     claims_block = "\n".join(

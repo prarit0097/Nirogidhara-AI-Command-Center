@@ -117,6 +117,54 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5E-Smoke-Fix-3 — false-positive safety classification fix
+
+The VPS OpenAI smoke run reported `overallPassed=false` because the
+orchestrator wrongly classified a normal product inquiry
+(`Hi mujhe weight loss product ke baare me batana`) as a
+`side_effect_complaint`. Phase 5E-Smoke-Fix-3 adds a server-side
+corrector that runs immediately before the safety blockers are
+evaluated.
+
+```python
+from apps.whatsapp.safety_validation import validate_safety_flags
+
+corrected, downgraded = validate_safety_flags(
+    inbound_text=inbound.body,
+    safety_flags=decision.safety,
+)
+# downgraded == ["sideEffectComplaint"] for the smoke false positive.
+```
+
+For each blocker flag the LLM set true (`sideEffectComplaint`,
+`medicalEmergency`, `legalThreat`), the corrector checks whether the
+inbound text contains the corresponding signal vocabulary
+(English / Hindi / Hinglish). Flags whose vocabulary is absent are
+flipped to false and a `whatsapp.ai.safety_downgraded` audit row is
+emitted; flags whose vocabulary IS present (real complaints) stay
+flagged exactly as the LLM said.
+
+Hard rules:
+
+- Never flips false → true (purely additive correction).
+- Never touches `angryCustomer` or `claimVaultUsed`.
+- The LLM prompt now carries an explicit `SAFETY FLAG DISCIPLINE`
+  block listing required vocabulary per flag — false positives should
+  be rare even before the corrector runs.
+
+VPS rebuild is **required** after this commit so the new orchestrator
++ prompt land in the backend image. After rebuild re-run:
+
+```bash
+python manage.py run_controlled_ai_smoke_test --scenario ai-reply --language hinglish --use-openai --json
+```
+
+…and verify `detail.openaiSucceeded=true`, `detail.providerPassed=true`,
+`overallPassed=true`. If a `whatsapp.ai.safety_downgraded` audit row
+appears in the output, that is **expected** — the LLM over-flagged a
+normal inquiry and the corrector caught it before the customer was
+silently routed to handoff.
+
 ### Phase 5E-Smoke-Fix-2 — OpenAI Chat Completions token-parameter hotfix
 
 Modern OpenAI Chat Completions models (gpt-4o, gpt-5, o1, o3, …)

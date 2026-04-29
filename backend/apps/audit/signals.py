@@ -156,6 +156,8 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.ai.discount_objection_handled": "message-circle",
     "whatsapp.ai.discount_offered": "percent",
     "whatsapp.ai.discount_blocked": "ban",
+    # Phase 5E-Smoke-Fix-3 — server-side safety flag corrector.
+    "whatsapp.ai.safety_downgraded": "shield-off",
     # Phase 5D — Chat-to-call handoff + lifecycle automation.
     "whatsapp.handoff.call_requested": "phone",
     "whatsapp.handoff.call_triggered": "phone-outgoing",
