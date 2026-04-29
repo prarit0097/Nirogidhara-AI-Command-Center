@@ -502,3 +502,39 @@ class WhatsAppSendLog(models.Model):
         indexes = (
             models.Index(fields=("message", "attempt")),
         )
+
+
+class WhatsAppInternalNote(models.Model):
+    """Phase 5B — operator-side notes attached to a WhatsApp conversation.
+
+    Notes are NEVER sent to the customer. They live alongside the message
+    thread for the inbox UI so multiple operators can hand work off
+    safely. Every create writes a ``whatsapp.internal_note.created``
+    audit row.
+    """
+
+    conversation = models.ForeignKey(
+        WhatsAppConversation,
+        on_delete=models.CASCADE,
+        related_name="internal_notes",
+    )
+    author = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="whatsapp_internal_notes",
+    )
+    body = models.TextField()
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("conversation", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"note · {self.conversation_id} · {self.created_at:%Y-%m-%d}"

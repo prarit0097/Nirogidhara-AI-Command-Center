@@ -6,8 +6,13 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     WhatsAppConnectionViewSet,
     WhatsAppConsentView,
+    WhatsAppConversationMarkReadView,
     WhatsAppConversationMessagesView,
+    WhatsAppConversationNotesView,
+    WhatsAppConversationSendTemplateView,
     WhatsAppConversationViewSet,
+    WhatsAppCustomerTimelineView,
+    WhatsAppInboxView,
     WhatsAppMessageRetryView,
     WhatsAppMessageViewSet,
     WhatsAppProviderStatusView,
@@ -36,9 +41,31 @@ urlpatterns = [
         WhatsAppConsentView.as_view(),
         name="whatsapp-consent",
     ),
+    # Phase 5B — Inbox / Customer 360 endpoints.
+    path("inbox/", WhatsAppInboxView.as_view(), name="whatsapp-inbox"),
     path(
         "conversations/<str:pk>/messages/",
         WhatsAppConversationMessagesView.as_view(),
         name="whatsapp-conversation-messages",
+    ),
+    path(
+        "conversations/<str:pk>/notes/",
+        WhatsAppConversationNotesView.as_view(),
+        name="whatsapp-conversation-notes",
+    ),
+    path(
+        "conversations/<str:pk>/mark-read/",
+        WhatsAppConversationMarkReadView.as_view(),
+        name="whatsapp-conversation-mark-read",
+    ),
+    path(
+        "conversations/<str:pk>/send-template/",
+        WhatsAppConversationSendTemplateView.as_view(),
+        name="whatsapp-conversation-send-template",
+    ),
+    path(
+        "customers/<str:customer_id>/timeline/",
+        WhatsAppCustomerTimelineView.as_view(),
+        name="whatsapp-customer-timeline",
     ),
 ] + router.urls

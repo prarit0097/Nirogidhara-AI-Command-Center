@@ -10,7 +10,7 @@ reward/penalty engine, and the human-call learning loop.
 
 ```
 nirogidhara-command/
-  frontend/   # React 18 + Vite + TS + shadcn UI (20 pages)
+  frontend/   # React 18 + Vite + TS + shadcn UI (21 pages)
   backend/    # Django 5 + DRF — 16 apps, implements the api.ts contract
   docs/       # RUNBOOK, BACKEND_API, FRONTEND_AUDIT, FUTURE_BACKEND_PLAN
 ```
@@ -60,7 +60,7 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 ## Tests
 
 ```bash
-# Backend (pytest, 401 tests)
+# Backend (pytest, 434 tests)
 cd backend && python -m pytest -q
 
 # Frontend (vitest, 13 tests)
@@ -90,10 +90,11 @@ cd frontend && npm test
 - ✅ **Phase 5A-0** (doc-only): WhatsApp compatibility audit of [`prarit0097/Whatsapp-sales-dashboard`](https://github.com/prarit0097/Whatsapp-sales-dashboard) → integration plan in [`docs/WHATSAPP_INTEGRATION_PLAN.md`](docs/WHATSAPP_INTEGRATION_PLAN.md). Locked: production target is Meta Cloud API (the reference repo's Meta Cloud provider is stubbed); Baileys is dev/demo only.
 - ✅ **Phase 5A-1** (doc-only): **WhatsApp AI Chat Agent + Discount Rescue Policy Addendum** (sections S–GG of the integration plan). WhatsApp scope widens from "lifecycle reminder sender" to **inbound-first AI Chat Sales Agent + lifecycle messaging**. Locked: greeting rule (fixed Hindi UTILITY template), address collection in chat, category detection before product text, chat-to-call handoff, **AI never offers discount upfront** (rescue-only), **50% total-discount hard cap**.
 - ✅ **Phase 5A** — WhatsApp Live Sender Foundation: new `apps.whatsapp` Django app (8 models — `WhatsAppConnection` / `Template` / `Consent` / `Conversation` / `Message` / `MessageAttachment` / `MessageStatusEvent` / `WebhookEvent` / `SendLog`), provider interface + 3 implementations (`mock` default for tests, `meta_cloud` Nirogidhara-built Graph client, `baileys_dev` dev-only stub that refuses to load when DEBUG=False), service layer (`queue_template_message` + `send_queued_message`) gating consent + approved template + Claim Vault + approval matrix + CAIO hard stop + idempotency, Celery task with `autoretry_for=ProviderError, retry_backoff, retry_jitter, max_retries=5`, signed webhook at `/api/webhooks/whatsapp/meta/` (HMAC-SHA256 + replay-window + provider-event-id idempotency + Meta GET handshake), 9 read + 4 write API endpoints under `/api/whatsapp/`, `python manage.py sync_whatsapp_templates` command, frontend Settings → WABA section + read-only `/whatsapp-templates` page + sidebar entry. Failed sends never mutate Order/Payment/Shipment. **50 new backend tests + 13 frontend tests all green.**
+- ✅ **Phase 5B** — Inbound WhatsApp Inbox + Customer 360 Timeline. New `WhatsAppInternalNote` model + migration. Six new endpoints: `GET /api/whatsapp/inbox/` (conversations + counts + AI-suggestions-disabled placeholder), `PATCH /api/whatsapp/conversations/{id}/` (safe fields: status / assignedToId / tags / subject), `POST /api/whatsapp/conversations/{id}/mark-read/`, `GET + POST /api/whatsapp/conversations/{id}/notes/`, `POST /api/whatsapp/conversations/{id}/send-template/` (routes through Phase 5A `queue_template_message`), `GET /api/whatsapp/customers/{customer_id}/timeline/` (WhatsApp-only items). Six new audit kinds. Frontend ships a three-pane `/whatsapp-inbox` page (filter sidebar / conversation list / thread + internal notes + AI-disabled placeholder + manual template send modal) with live refresh via Phase 4A `connectAuditEvents` filtered on `whatsapp.*`, plus a Customer 360 WhatsApp tab. **AI auto-reply stays disabled.** Operations users can manually send approved templates; backend gates remain final. **33 new backend tests + 13 frontend tests all green.**
 
 **Next:**
 
-- ⏭ **Phase 5B–5F** — Inbound inbox + Customer 360 timeline (5B); WhatsApp AI Chat Sales Agent with Claim-Vault-bound LLM + `learned_memory.py` ported wholesale (5C); chat-to-call handoff + lifecycle automation (5D); confirmation/delivery/RTO/reorder automation with rescue-discount flow + 50% cap enforcement in code (5E); approval-gated campaigns (5F).
+- ⏭ **Phase 5C–5F** — WhatsApp AI Chat Sales Agent with Claim-Vault-bound LLM + `learned_memory.py` ported wholesale (5C); chat-to-call handoff + lifecycle automation (5D); confirmation/delivery/RTO/reorder automation with rescue-discount flow + 50% cap enforcement in code (5E); approval-gated campaigns (5F).
 
 Full roadmap with acceptance criteria: [`docs/FUTURE_BACKEND_PLAN.md`](docs/FUTURE_BACKEND_PLAN.md).
 Detailed handoff: [`nd.md`](nd.md).

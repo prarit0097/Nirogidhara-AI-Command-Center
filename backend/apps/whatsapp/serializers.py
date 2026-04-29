@@ -11,6 +11,7 @@ from .models import (
     WhatsAppConnection,
     WhatsAppConsent,
     WhatsAppConversation,
+    WhatsAppInternalNote,
     WhatsAppMessage,
     WhatsAppMessageStatusEvent,
     WhatsAppSendLog,
@@ -121,6 +122,7 @@ class WhatsAppMessageSerializer(serializers.ModelSerializer):
     customerId = serializers.CharField(source="customer_id")
     providerMessageId = serializers.CharField(source="provider_message_id")
     templateId = serializers.CharField(source="template_id", allow_null=True)
+    templateName = serializers.SerializerMethodField()
     templateVariables = serializers.JSONField(source="template_variables")
     mediaUrl = serializers.CharField(source="media_url")
     aiGenerated = serializers.BooleanField(source="ai_generated")
@@ -150,6 +152,7 @@ class WhatsAppMessageSerializer(serializers.ModelSerializer):
             "type",
             "body",
             "templateId",
+            "templateName",
             "templateVariables",
             "mediaUrl",
             "aiGenerated",
@@ -167,13 +170,19 @@ class WhatsAppMessageSerializer(serializers.ModelSerializer):
             "updatedAt",
         )
 
+    def get_templateName(self, obj: WhatsAppMessage) -> str:
+        return obj.template.name if obj.template_id else ""
+
 
 class WhatsAppConversationSerializer(serializers.ModelSerializer):
     customerId = serializers.CharField(source="customer_id")
+    customerName = serializers.SerializerMethodField()
+    customerPhone = serializers.SerializerMethodField()
     connectionId = serializers.CharField(source="connection_id")
     assignedToId = serializers.IntegerField(
         source="assigned_to_id", allow_null=True
     )
+    assignedToUsername = serializers.SerializerMethodField()
     aiStatus = serializers.CharField(source="ai_status")
     unreadCount = serializers.IntegerField(source="unread_count")
     lastMessageText = serializers.CharField(source="last_message_text")
@@ -195,8 +204,11 @@ class WhatsAppConversationSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "customerId",
+            "customerName",
+            "customerPhone",
             "connectionId",
             "assignedToId",
+            "assignedToUsername",
             "status",
             "aiStatus",
             "unreadCount",
@@ -211,6 +223,43 @@ class WhatsAppConversationSerializer(serializers.ModelSerializer):
             "createdAt",
             "updatedAt",
         )
+
+    def get_customerName(self, obj: WhatsAppConversation) -> str:
+        return getattr(obj.customer, "name", "") or ""
+
+    def get_customerPhone(self, obj: WhatsAppConversation) -> str:
+        return getattr(obj.customer, "phone", "") or ""
+
+    def get_assignedToUsername(self, obj: WhatsAppConversation) -> str:
+        if obj.assigned_to_id is None:
+            return ""
+        return getattr(obj.assigned_to, "username", "") or ""
+
+
+class WhatsAppInternalNoteSerializer(serializers.ModelSerializer):
+    conversationId = serializers.CharField(source="conversation_id")
+    authorId = serializers.IntegerField(source="author_id", allow_null=True)
+    authorName = serializers.SerializerMethodField()
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = WhatsAppInternalNote
+        fields = (
+            "id",
+            "conversationId",
+            "authorId",
+            "authorName",
+            "body",
+            "metadata",
+            "createdAt",
+            "updatedAt",
+        )
+
+    def get_authorName(self, obj: WhatsAppInternalNote) -> str:
+        if obj.author_id is None:
+            return ""
+        return getattr(obj.author, "username", "") or ""
 
 
 class WhatsAppMessageStatusEventSerializer(serializers.ModelSerializer):
@@ -291,13 +340,65 @@ class TemplateSyncPayloadSerializer(serializers.Serializer):
     data = serializers.ListField(child=serializers.DictField(), required=False)
 
 
+class CreateInternalNotePayloadSerializer(serializers.Serializer):
+    """Phase 5B — POST /api/whatsapp/conversations/{id}/notes/."""
+
+    body = serializers.CharField(min_length=1, max_length=4000)
+    metadata = serializers.DictField(required=False)
+
+
+class UpdateConversationPayloadSerializer(serializers.Serializer):
+    """Phase 5B — PATCH /api/whatsapp/conversations/{id}/.
+
+    Accepts only the safe fields. Anything else returns 400.
+    """
+
+    status = serializers.ChoiceField(
+        choices=WhatsAppConversation.Status.choices,
+        required=False,
+    )
+    assignedToId = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1
+    )
+    tags = serializers.ListField(
+        child=serializers.CharField(max_length=40), required=False
+    )
+    subject = serializers.CharField(
+        max_length=240, required=False, allow_blank=True
+    )
+
+
+class SendConversationTemplatePayloadSerializer(serializers.Serializer):
+    """Phase 5B — POST /api/whatsapp/conversations/{id}/send-template/.
+
+    The customer is resolved from the conversation; the operator only
+    picks the template + variables.
+    """
+
+    actionKey = serializers.CharField(max_length=120)
+    templateId = serializers.CharField(
+        max_length=40, required=False, allow_blank=True
+    )
+    variables = serializers.DictField(child=serializers.JSONField(), required=False)
+    triggeredBy = serializers.CharField(
+        max_length=120, required=False, allow_blank=True
+    )
+    idempotencyKey = serializers.CharField(
+        max_length=120, required=False, allow_blank=True
+    )
+
+
 __all__ = (
     "ConsentPatchPayloadSerializer",
+    "CreateInternalNotePayloadSerializer",
+    "SendConversationTemplatePayloadSerializer",
     "SendTemplatePayloadSerializer",
     "TemplateSyncPayloadSerializer",
+    "UpdateConversationPayloadSerializer",
     "WhatsAppConnectionSerializer",
     "WhatsAppConsentSerializer",
     "WhatsAppConversationSerializer",
+    "WhatsAppInternalNoteSerializer",
     "WhatsAppMessageSerializer",
     "WhatsAppMessageStatusEventSerializer",
     "WhatsAppSendLogSerializer",

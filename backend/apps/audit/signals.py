@@ -130,6 +130,13 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.template.synced": "refresh-cw",
     "whatsapp.template.activated": "play",
     "whatsapp.template.deactivated": "pause",
+    # Phase 5B — Inbox / Customer 360 lifecycle audit kinds.
+    "whatsapp.conversation.opened": "message-square",
+    "whatsapp.conversation.updated": "edit-3",
+    "whatsapp.conversation.assigned": "user-plus",
+    "whatsapp.conversation.read": "check",
+    "whatsapp.internal_note.created": "sticky-note",
+    "whatsapp.template.manual_send_requested": "send",
 }
 
 

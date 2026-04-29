@@ -1,16 +1,52 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
-import { Phone, MapPin, Globe, Heart, Star, AlertTriangle, ShieldCheck, MessageSquare, Truck, CreditCard, RefreshCw } from "lucide-react";
+import type {
+  WhatsAppCustomerTimeline,
+  WhatsAppInternalNote,
+  WhatsAppMessage,
+} from "@/types/domain";
+import {
+  AlertTriangle,
+  CheckCheck,
+  CreditCard,
+  Globe,
+  Heart,
+  MapPin,
+  MessageSquare,
+  Phone,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Truck,
+} from "lucide-react";
 
 export default function Customers() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [active, setActive] = useState<any | null>(null);
+  const [waTimeline, setWaTimeline] = useState<WhatsAppCustomerTimeline | null>(
+    null,
+  );
+  const [waLoading, setWaLoading] = useState(false);
 
   useEffect(() => { api.getCustomers().then((c) => { setCustomers(c); setActive(c[0]); }); }, []);
+
+  useEffect(() => {
+    if (!active?.id) {
+      setWaTimeline(null);
+      return;
+    }
+    setWaLoading(true);
+    api
+      .getCustomerWhatsAppTimeline(active.id)
+      .then((data) => setWaTimeline(data))
+      .finally(() => setWaLoading(false));
+  }, [active?.id]);
 
   if (!active) return <div className="h-96 grid place-items-center text-muted-foreground">Loading…</div>;
 
@@ -74,6 +110,7 @@ export default function Customers() {
                 <TabsTrigger value="orders">Orders</TabsTrigger>
                 <TabsTrigger value="payments">Payments</TabsTrigger>
                 <TabsTrigger value="delivery">Delivery</TabsTrigger>
+                <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
                 <TabsTrigger value="consent">Consent</TabsTrigger>
                 <TabsTrigger value="reorder">Reorder</TabsTrigger>
               </TabsList>
@@ -115,6 +152,9 @@ export default function Customers() {
               <TabsContent value="orders" className="surface-card p-6 mt-3"><EmptyTab icon={CreditCard} text="No order history fetched yet." /></TabsContent>
               <TabsContent value="payments" className="surface-card p-6 mt-3"><EmptyTab icon={CreditCard} text="Razorpay & PayU payments will appear here." /></TabsContent>
               <TabsContent value="delivery" className="surface-card p-6 mt-3"><EmptyTab icon={Truck} text="Delhivery shipment history view." /></TabsContent>
+              <TabsContent value="whatsapp" className="surface-card p-6 mt-3">
+                <WhatsAppTab timeline={waTimeline} loading={waLoading} />
+              </TabsContent>
               <TabsContent value="consent" className="surface-card p-6 mt-3">
                 <h3 className="font-display text-lg font-semibold mb-3">Consent & privacy</h3>
                 <ul className="space-y-2 text-sm">
@@ -164,4 +204,185 @@ function EmptyTab({ icon: Icon, text }: { icon: any; text: string }) {
       <div className="text-sm text-muted-foreground">{text}</div>
     </div>
   );
+}
+
+interface WhatsAppTabProps {
+  timeline: WhatsAppCustomerTimeline | null;
+  loading: boolean;
+}
+
+function WhatsAppTab({ timeline, loading }: WhatsAppTabProps) {
+  if (loading) {
+    return (
+      <div className="text-sm text-muted-foreground text-center py-8">
+        Loading WhatsApp timeline…
+      </div>
+    );
+  }
+  if (!timeline) {
+    return (
+      <EmptyTab
+        icon={MessageSquare}
+        text="No WhatsApp conversation yet. Inbound messages or manual templates will appear here."
+      />
+    );
+  }
+  if (timeline.conversations.length === 0) {
+    return (
+      <div className="space-y-4">
+        <EmptyTab
+          icon={MessageSquare}
+          text="No WhatsApp conversation yet. Inbound messages or manual templates will appear here."
+        />
+        <div className="rounded-xl bg-muted/40 p-3 text-xs flex items-start gap-2">
+          <Sparkles className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
+          <div>
+            <span className="font-medium text-foreground">AI suggestions</span>{" "}
+            <StatusPill tone="neutral">disabled</StatusPill>
+            <p className="text-muted-foreground mt-1">
+              {timeline.aiSuggestions.message}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const totalUnread = timeline.conversations.reduce(
+    (sum, c) => sum + c.unreadCount,
+    0,
+  );
+  const messageItems = timeline.items.filter((item) => item.kind === "message");
+  const noteItems = timeline.items.filter(
+    (item) => item.kind === "internal_note",
+  );
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-primary" />
+            WhatsApp timeline
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {timeline.conversations.length} conversation
+            {timeline.conversations.length === 1 ? "" : "s"} · unread:{" "}
+            {totalUnread}
+          </p>
+        </div>
+        <Link to="/whatsapp-inbox">
+          <Button size="sm" variant="outline">
+            Open in Inbox
+          </Button>
+        </Link>
+      </div>
+
+      <div className="rounded-xl bg-muted/40 p-3 text-xs flex items-start gap-2">
+        <Sparkles className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
+        <div>
+          <span className="font-medium text-foreground">AI suggestions</span>{" "}
+          <StatusPill tone="neutral">{timeline.aiSuggestions.status}</StatusPill>
+          <p className="text-muted-foreground mt-1">
+            {timeline.aiSuggestions.message}
+          </p>
+        </div>
+      </div>
+
+      {timeline.conversations.length > 0 && (
+        <div className="rounded-xl bg-background border border-border p-3 text-sm">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <span>Active conversation</span>
+            <StatusPill tone="info">
+              {timeline.conversations[0].status}
+            </StatusPill>
+          </div>
+          <div className="font-medium">
+            {timeline.conversations[0].subject ||
+              timeline.conversations[0].lastMessageText ||
+              "—"}
+          </div>
+        </div>
+      )}
+
+      {messageItems.length > 0 && (
+        <div className="space-y-2 max-h-[320px] overflow-auto scrollbar-thin pr-1">
+          {messageItems.map((item) => {
+            const message = item.data as WhatsAppMessage;
+            const outbound = message.direction === "outbound";
+            return (
+              <div
+                key={item.id}
+                className={`rounded-lg border border-border px-3 py-2 ${
+                  outbound ? "bg-gradient-emerald-soft" : "bg-muted/40"
+                }`}
+              >
+                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span>{outbound ? "Outbound" : "Inbound"}</span>
+                  <span>{relativeTime(item.occurredAt)}</span>
+                </div>
+                {message.templateName && (
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                    template · {message.templateName}
+                  </div>
+                )}
+                <div className="text-sm mt-1 break-words">{message.body}</div>
+                <div className="mt-1">
+                  <StatusPill
+                    tone={
+                      message.status === "delivered" ||
+                      message.status === "read"
+                        ? "success"
+                        : message.status === "failed"
+                          ? "danger"
+                          : "info"
+                    }
+                  >
+                    {message.status === "delivered" && (
+                      <CheckCheck className="h-3 w-3 mr-0.5" />
+                    )}
+                    {message.status}
+                  </StatusPill>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {noteItems.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">
+            Internal notes
+          </div>
+          {noteItems.map((item) => {
+            const note = item.data as WhatsAppInternalNote;
+            return (
+              <div
+                key={item.id}
+                className="rounded-lg bg-muted/30 px-2.5 py-1.5 text-xs"
+              >
+                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span>{note.authorName || "operator"}</span>
+                  <span>{relativeTime(item.occurredAt)}</span>
+                </div>
+                <div className="text-foreground/90 mt-0.5">{note.body}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }

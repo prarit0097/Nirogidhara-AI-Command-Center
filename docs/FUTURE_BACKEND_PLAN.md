@@ -635,12 +635,21 @@ Implemented per `docs/WHATSAPP_INTEGRATION_PLAN.md` §C / §D / §E / §O:
 
 **Out of scope for Phase 5A (deferred to 5B/5C/5D/5E/5F):** WhatsApp AI Chat Sales Agent (Phase 5C), inbound auto-reply, chat-to-call handoff, Order booking from chat, lifecycle automation triggers, rescue discount, broadcast/campaigns. Phase 5A is the safe foundation — no AI freestyle, no automatic outbound on lifecycle events, manual operator-triggered sends only.
 
-### Phase 5B — Inbound Inbox + Customer 360 timeline
+### ✅ Phase 5B — Inbound Inbox + Customer 360 timeline (DONE)
 
-- WhatsAppInbox three-pane page (port the reference repo's UX shape; replace data layer with Nirogidhara API).
-- Customer 360 WhatsApp tab (the same conversation surface the Chat Agent will speak through in 5C).
-- Internal notes per conversation.
-- Live refresh via Phase 4A `connectAuditEvents` (filter on `kind.startsWith("whatsapp.")`) — no separate WebSocket channel.
+Implemented per Prarit's locked decisions (manual-only inbox, AI suggestions placeholder defaults to disabled, separate Customer 360 WhatsApp tab — no unified timeline yet):
+
+- ✅ New `WhatsAppInternalNote` model + migration `0002_whatsappinternalnote`. Notes carry `conversation FK / author FK (User) / body / metadata` and timestamps. Notes are NEVER sent to the customer — only the operator-side audit trail.
+- ✅ Six new endpoints: `GET /api/whatsapp/inbox/`, `PATCH /api/whatsapp/conversations/{id}/` (safe fields only — `status / assignedToId / tags / subject`), `POST /api/whatsapp/conversations/{id}/mark-read/`, `GET + POST /api/whatsapp/conversations/{id}/notes/`, `POST /api/whatsapp/conversations/{id}/send-template/` (routes through Phase 5A's `queue_template_message`), `GET /api/whatsapp/customers/{customer_id}/timeline/` (WhatsApp-only items).
+- ✅ Six new audit kinds wired into `apps/audit/signals.py` ICON_BY_KIND: `whatsapp.conversation.opened/updated/assigned/read`, `whatsapp.internal_note.created`, `whatsapp.template.manual_send_requested`. Phase 4A WebSocket fanout picks them up automatically.
+- ✅ Conversation list filters extended (`?unread=true`, `?assignedTo=`, `?q=`).
+- ✅ Conversation serializer extended with `customerName / customerPhone / assignedToUsername`. Message serializer extended with `templateName`.
+- ✅ Frontend three-pane `/whatsapp-inbox` page (filters / conversation list / thread + internal notes + AI-suggestions-disabled placeholder + manual template send modal). Live refresh via Phase 4A `connectAuditEvents` filtered on `whatsapp.*` — no new WebSocket channel.
+- ✅ Customer 360 WhatsApp tab (separate from Calls/Orders/Payments/Delivery/Consent tabs — Prarit explicitly avoided a unified timeline). Loads `getCustomerWhatsAppTimeline` and renders messages + notes + AI-disabled placeholder + Open in Inbox link.
+- ✅ AI auto-reply stays disabled. Operations users can only send approved templates; backend gates (consent + approved-template + Claim Vault + approval matrix + CAIO + idempotency) remain final.
+- ✅ 33 new pytest cases in `backend/tests/test_phase5b.py`. Existing 401 backend tests stay green; total 434.
+
+**Out of scope for Phase 5B (deferred to 5C/5D/5E/5F):** AI Chat Agent, inbound auto-reply, chat-to-call handoff, order booking from chat, rescue discount automation, escalation automation, campaigns, freeform outbound text.
 
 ### Phase 5C — WhatsApp AI Chat Sales Agent (per Phase 5A-1 addendum)
 

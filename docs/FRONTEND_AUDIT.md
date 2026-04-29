@@ -7,7 +7,7 @@ direction.
 
 Item | Status
 --- | ---
-All 20 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page (no new pages added in 3E — backend-only phase). Phase 4B enhanced the existing Rewards page with agent-wise leaderboard + order-wise scoring events + sweep summary cards + Run Sweep button. **Phase 4C** appended an Approval queue table on the Governance page (Action / Mode / Approver / Target / Status / Proposed payload / Approve + Reject controls + decision-note input). **Phase 4D** added an Execution column + Execute button on approved rows. **Phase 4A** added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed and the Governance "Approval queue" (snapshot + per-event push, dedupe by id, capped at 25 rows). **Phase 4E** is backend-only. **Phase 5A** adds a read-only `/whatsapp-templates` page (Meta-mirrored templates, claim-vault flag, sync button — admin/director only on the API), a Settings → WABA section showing provider / health / phone-number-id (masked) / app-secret + verify-token + access-token configured flags / API version / dev-provider toggle warning, and a sidebar entry under a new "Messaging" group.
+All 21 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page; Phase 4B enhanced the Rewards page; Phase 4C added an Approval queue table on Governance; Phase 4D added an Execute button on approved rows; Phase 4A added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed and the Governance "Approval queue"; Phase 4E is backend-only; Phase 5A added a read-only `/whatsapp-templates` page + Settings → WABA section + new "Messaging" sidebar group; **Phase 5B** adds a three-pane `/whatsapp-inbox` page (filters / conversation list / thread + internal notes + manual template-send modal + AI-suggestions-disabled placeholder), a Customer 360 WhatsApp tab (separate from the existing Calls / Orders / Payments / Delivery / Consent tabs — no unified timeline yet), and a sidebar entry. Inbox is manual-only; live refresh uses the existing Phase 4A WebSocket filtered on `whatsapp.*` audit kinds.
 Pages go through `src/services/api.ts` only | done — no page imports `mockData.ts` directly
 TypeScript shared types in `src/types/domain.ts` | done
 Sidebar collapse layout | done — shared collapsed state
@@ -63,7 +63,8 @@ cd ../frontend && npm run dev
 | `/learning` | `Learning.tsx` | 1 | Call Learning Studio |
 | `/claims` | `Claims.tsx` | 1 | Claim Vault |
 | `/analytics` | `Analytics.tsx` | 1 | Analytics |
+| `/whatsapp-inbox` | `WhatsAppInbox.tsx` | 5B | Three-pane manual-only WhatsApp inbox + internal notes + manual template send + AI-suggestions-disabled placeholder |
 | `/whatsapp-templates` | `WhatsAppTemplates.tsx` | 5A | Meta-mirrored WhatsApp templates (read-only) + Sync from Meta button |
 | `/settings` | `Settings.tsx` | 1 / 5A | Settings & Control + WABA section |
 
-20 pages total. Sidebar groups: Overview · Sales · Operations · AI Layer (5 entries: Agents Center, CEO AI Briefing, CAIO Audit Center, AI Scheduler & Cost, AI Governance) · Governance · Insights · Messaging (Phase 5A) · System.
+21 pages total. Sidebar groups: Overview · Sales · Operations · AI Layer (5 entries: Agents Center, CEO AI Briefing, CAIO Audit Center, AI Scheduler & Cost, AI Governance) · Governance · Insights · Messaging (Phase 5A + 5B) · System.

@@ -96,11 +96,17 @@ import type {
   WhatsAppConsentPatchPayload,
   WhatsAppConsentSummary,
   WhatsAppConversation,
+  WhatsAppCustomerTimeline,
+  WhatsAppInboxSummary,
+  WhatsAppInternalNote,
   WhatsAppMessage,
   WhatsAppProviderStatus,
   WhatsAppTemplate,
   WhatsAppTemplateSyncPayload,
   WhatsAppTemplateSyncResult,
+  CreateInternalNotePayload,
+  UpdateWhatsAppConversationPayload,
+  SendConversationTemplatePayload,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -730,6 +736,72 @@ export const api = {
         },
       }),
     ),
+
+  // ---------- Phase 5B — WhatsApp Inbox + Customer 360 timeline ----------
+  getWhatsAppInbox: (params?: { limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return safeFetch<WhatsAppInboxSummary>(
+      `/whatsapp/inbox/${suffix}`,
+      () => emptyInboxSummary(),
+    );
+  },
+  getWhatsAppConversation: (id: string) =>
+    safeFetch<WhatsAppConversation | null>(
+      `/whatsapp/conversations/${id}/`,
+      () =>
+        (M.WHATSAPP_CONVERSATIONS as WhatsAppConversation[]).find(
+          (c) => c.id === id,
+        ) ?? null,
+    ),
+  getWhatsAppConversationNotes: (id: string) =>
+    safeFetch<WhatsAppInternalNote[]>(
+      `/whatsapp/conversations/${id}/notes/`,
+      () => [],
+    ),
+  createWhatsAppConversationNote: (
+    id: string,
+    payload: CreateInternalNotePayload,
+  ) =>
+    safeMutate<WhatsAppInternalNote>(
+      `/whatsapp/conversations/${id}/notes/`,
+      "POST",
+      payload,
+      () => optimisticInternalNote(id, payload),
+    ),
+  updateWhatsAppConversation: (
+    id: string,
+    payload: UpdateWhatsAppConversationPayload,
+  ) =>
+    safeMutate<WhatsAppConversation>(
+      `/whatsapp/conversations/${id}/`,
+      "PATCH",
+      payload,
+      () => optimisticConversationUpdate(id, payload),
+    ),
+  markWhatsAppConversationRead: (id: string) =>
+    safeMutate<WhatsAppConversation>(
+      `/whatsapp/conversations/${id}/mark-read/`,
+      "POST",
+      {},
+      () => optimisticConversationUpdate(id, { /* unread cleared client-side */ }),
+    ),
+  sendWhatsAppConversationTemplate: (
+    id: string,
+    payload: SendConversationTemplatePayload,
+  ) =>
+    safeMutate<SendWhatsAppTemplateResponse>(
+      `/whatsapp/conversations/${id}/send-template/`,
+      "POST",
+      payload,
+      () => optimisticConversationSendResponse(id, payload),
+    ),
+  getCustomerWhatsAppTimeline: (customerId: string) =>
+    safeFetch<WhatsAppCustomerTimeline>(
+      `/whatsapp/customers/${customerId}/timeline/`,
+      () => emptyCustomerTimeline(customerId),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -1097,6 +1169,111 @@ function optimisticWhatsAppSendResponse(
     conversationId: message.conversationId,
     approvalRequestId: null,
     autoApproved: true,
+  };
+}
+
+function optimisticInternalNote(
+  conversationId: string,
+  payload: CreateInternalNotePayload,
+): WhatsAppInternalNote {
+  const now = new Date().toISOString();
+  return {
+    id: Date.now(),
+    conversationId,
+    authorId: null,
+    authorName: "you",
+    body: payload.body,
+    metadata: payload.metadata ?? {},
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function optimisticConversationUpdate(
+  id: string,
+  patch: UpdateWhatsAppConversationPayload,
+): WhatsAppConversation {
+  const base = (M.WHATSAPP_CONVERSATIONS as WhatsAppConversation[]).find(
+    (c) => c.id === id,
+  );
+  const fallback: WhatsAppConversation = base ?? {
+    id,
+    customerId: "NRG-MOCK",
+    customerName: "Mock customer",
+    customerPhone: "",
+    connectionId: "WAC-MOCK-1",
+    assignedToId: null,
+    assignedToUsername: "",
+    status: "open",
+    aiStatus: "disabled",
+    unreadCount: 0,
+    lastMessageText: "",
+    lastMessageAt: null,
+    lastInboundAt: null,
+    subject: "",
+    tags: [],
+    resolvedAt: null,
+    resolvedById: null,
+    metadata: {},
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  return {
+    ...fallback,
+    ...patch,
+    unreadCount: 0,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function optimisticConversationSendResponse(
+  conversationId: string,
+  payload: SendConversationTemplatePayload,
+): SendWhatsAppTemplateResponse {
+  const message = optimisticWhatsAppMessage({
+    customerId: "NRG-MOCK",
+    actionKey: payload.actionKey,
+    templateId: payload.templateId,
+    variables: payload.variables,
+  });
+  return {
+    message: { ...message, conversationId },
+    conversationId,
+    approvalRequestId: null,
+    autoApproved: true,
+  };
+}
+
+function emptyInboxSummary(): WhatsAppInboxSummary {
+  return {
+    conversations: [],
+    counts: {
+      all: 0,
+      unread: 0,
+      open: 0,
+      pending: 0,
+      resolved: 0,
+      escalatedToHuman: 0,
+    },
+    aiSuggestions: {
+      enabled: false,
+      status: "disabled",
+      message: "AI WhatsApp suggestions are planned for Phase 5C.",
+    },
+  };
+}
+
+function emptyCustomerTimeline(customerId: string): WhatsAppCustomerTimeline {
+  return {
+    customerId,
+    consentWhatsapp: false,
+    conversations: [],
+    items: [],
+    aiSuggestions: {
+      enabled: false,
+      status: "disabled",
+      message: "AI WhatsApp suggestions are planned for Phase 5C.",
+    },
   };
 }
 

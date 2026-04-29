@@ -870,8 +870,11 @@ export interface WhatsAppConsentSummary {
 export interface WhatsAppConversation {
   id: string;
   customerId: string;
+  customerName: string;
+  customerPhone: string;
   connectionId: string;
   assignedToId: number | null;
+  assignedToUsername: string;
   status: WhatsAppConversationStatus;
   aiStatus: WhatsAppConversationAiStatus;
   unreadCount: number;
@@ -897,6 +900,7 @@ export interface WhatsAppMessage {
   type: WhatsAppMessageType;
   body: string;
   templateId: string | null;
+  templateName: string;
   templateVariables: Record<string, unknown>;
   mediaUrl: string;
   aiGenerated: boolean;
@@ -912,6 +916,73 @@ export interface WhatsAppMessage {
   readAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WhatsAppInternalNote {
+  id: number;
+  conversationId: string;
+  authorId: number | null;
+  authorName: string;
+  body: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppAiSuggestionStatus {
+  enabled: boolean;
+  status: "disabled" | "suggest" | "auto" | "pending_approval";
+  message: string;
+}
+
+export interface WhatsAppInboxCounts {
+  all: number;
+  unread: number;
+  open: number;
+  pending: number;
+  resolved: number;
+  escalatedToHuman: number;
+}
+
+export interface WhatsAppInboxSummary {
+  conversations: WhatsAppConversation[];
+  counts: WhatsAppInboxCounts;
+  aiSuggestions: WhatsAppAiSuggestionStatus;
+}
+
+export interface WhatsAppCustomerTimelineItem {
+  kind: "message" | "internal_note" | "status_event";
+  id: string;
+  occurredAt: string;
+  data: WhatsAppMessage | WhatsAppInternalNote | Record<string, unknown>;
+}
+
+export interface WhatsAppCustomerTimeline {
+  customerId: string;
+  consentWhatsapp: boolean;
+  conversations: WhatsAppConversation[];
+  items: WhatsAppCustomerTimelineItem[];
+  aiSuggestions: WhatsAppAiSuggestionStatus;
+}
+
+export interface CreateInternalNotePayload {
+  body: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateWhatsAppConversationPayload {
+  status?: WhatsAppConversationStatus;
+  assignedToId?: number | null;
+  tags?: string[];
+  subject?: string;
+}
+
+export interface SendConversationTemplatePayload {
+  actionKey: string;
+  templateId?: string;
+  variables?: Record<string, string | number>;
+  triggeredBy?: string;
+  idempotencyKey?: string;
 }
 
 export interface WhatsAppProviderStatus {

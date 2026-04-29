@@ -78,7 +78,7 @@ React UI  ──/api/JSON──►  Django + DRF  ──ORM──►  SQLite (de
 frontend/src/services/api.ts        ← service layer (HTTP + mock fallback)
 frontend/src/services/mockData.ts   ← deterministic fixtures (internal)
 frontend/src/types/domain.ts        ← THE TypeScript contract
-frontend/src/pages/                 ← 20 pages, each maps to a route
+frontend/src/pages/                 ← 21 pages, each maps to a route
 frontend/src/components/{ui,layout} ← shadcn UI + app shell
 
 backend/config/settings.py          ← env-driven config
@@ -143,6 +143,10 @@ backend/apps/whatsapp/webhooks.py     ← /api/webhooks/whatsapp/meta/ (HMAC-SHA
 backend/apps/whatsapp/template_registry.py ← Meta-mirrored templates + Claim-Vault flag
 backend/apps/whatsapp/consent.py      ← granted / revoked / opted_out + STOP / UNSUBSCRIBE / BAND keywords
 backend/apps/whatsapp/management/commands/sync_whatsapp_templates.py ← seeds defaults; --from-file accepts a Meta-style payload
+backend/apps/whatsapp/models.py     ← Phase 5B adds `WhatsAppInternalNote` (operator-side notes, never sent to customer)
+backend/apps/whatsapp/views.py      ← Phase 5B adds `WhatsAppInboxView` (inbox summary), `WhatsAppConversationNotesView` (GET/POST), `WhatsAppConversationMarkReadView`, `WhatsAppConversationSendTemplateView` (per-conversation manual template send), `WhatsAppCustomerTimelineView` (WhatsApp-only timeline) + `_patch_conversation` helper for safe-field PATCH at /api/whatsapp/conversations/{id}/
+frontend/src/pages/WhatsAppInbox.tsx ← Phase 5B three-pane manual-only inbox (filters / list / thread + internal notes + AI-suggestions-disabled placeholder + manual template send modal); live refresh via Phase 4A connectAuditEvents filtered on whatsapp.*
+frontend/src/pages/Customers.tsx    ← Phase 5B extends Customer 360 with a WhatsApp tab (timeline, AI-suggestions disabled placeholder, link to inbox)
 backend/apps/dashboards/management/commands/seed_demo_data.py  ← deterministic seed
 
 docs/RUNBOOK.md                     ← how to run the stack
@@ -153,7 +157,7 @@ nd.md                               ← full project handoff (read this if you n
 
 16 Django apps: `accounts`, `audit`, `crm`, `calls`, `orders`, `payments`, `shipments`, `agents`, `ai_governance`, `compliance`, `rewards`, `learning_engine`, `analytics`, `dashboards`, `catalog` (Phase 3E), `whatsapp` (Phase 5A).
 
-20 frontend pages: Dashboard, Leads CRM, Customer 360, AI Calling, Orders Pipeline, Confirmation Queue, Payments, Delhivery Tracking, RTO Rescue, AI Agents Center, CEO AI Briefing, CAIO Audit, AI Scheduler & Cost (Phase 3C), AI Governance (Phase 3D), Reward & Penalty, Human Call Learning, Claim Vault, Analytics, WhatsApp Templates (Phase 5A), Settings.
+21 frontend pages: Dashboard, Leads CRM, Customer 360, AI Calling, Orders Pipeline, Confirmation Queue, Payments, Delhivery Tracking, RTO Rescue, AI Agents Center, CEO AI Briefing, CAIO Audit, AI Scheduler & Cost (Phase 3C), AI Governance (Phase 3D), Reward & Penalty, Human Call Learning, Claim Vault, Analytics, WhatsApp Inbox (Phase 5B), WhatsApp Templates (Phase 5A), Settings.
 
 ---
 
@@ -202,7 +206,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                 # 401 tests today
+python -m pytest -q                 # 434 tests today
 
 # Frontend
 cd frontend

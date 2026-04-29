@@ -70,7 +70,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 401 tests (Phase 1 → 5A inclusive)
+python -m pytest -q                     # 434 tests (Phase 1 → 5B inclusive)
 
 # Frontend
 cd ../frontend
@@ -493,6 +493,43 @@ signature mismatch and rejects bodies older than `WHATSAPP_WEBHOOK_REPLAY_WINDOW
 - CAIO can never originate a customer-facing send.
 - Phase 5A does NOT implement the AI Chat Agent (5C), inbound auto-reply, chat-to-call handoff,
   Order booking from chat, lifecycle automation triggers, rescue discount, or campaigns.
+
+## Phase 5B — Inbox + Customer 360 timeline
+
+The operator inbox at `/whatsapp-inbox` is **manual-only**. AI auto-reply,
+chat-to-call handoff, rescue discount and campaigns all stay deferred to
+Phase 5C–5F. Phase 5B only adds: inbound conversation listing + filters,
+internal notes (never sent to the customer), mark-read, safe-field
+conversation update, and a per-conversation manual template send that
+routes through Phase 5A's `queue_template_message`.
+
+### Quick smoke
+
+```bash
+# Aggregate inbox snapshot (admin / operations / viewer all read).
+curl -H "Authorization: Bearer <jwt>" http://localhost:8000/api/whatsapp/inbox/
+
+# Add an internal note (operations+).
+curl -X POST -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" \
+  http://localhost:8000/api/whatsapp/conversations/<id>/notes/ \
+  -d '{"body":"customer asked for callback"}'
+
+# Mark conversation read (operations+).
+curl -X POST -H "Authorization: Bearer <jwt>" \
+  http://localhost:8000/api/whatsapp/conversations/<id>/mark-read/
+
+# Manual template send (operations+).
+curl -X POST -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" \
+  http://localhost:8000/api/whatsapp/conversations/<id>/send-template/ \
+  -d '{"actionKey":"whatsapp.payment_reminder","variables":{"customer_name":"Aditi","context":"₹499"}}'
+
+# WhatsApp-only customer timeline.
+curl -H "Authorization: Bearer <jwt>" http://localhost:8000/api/whatsapp/customers/<customer_id>/timeline/
+```
+
+The frontend `/whatsapp-inbox` page refreshes itself in real time via
+the existing Phase 4A `/ws/audit/events/` channel filtered on
+`whatsapp.*` audit kinds — no new WebSocket route was added.
 
 ## Production infra targets (for Phase 4+ deployment — NOT shipped yet)
 

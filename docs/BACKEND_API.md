@@ -420,6 +420,22 @@ These shape behaviour but expose no new HTTP endpoints. They are imported by ser
 | GET | `/api/whatsapp/consent/{customer_id}/` | authenticated | Live `Customer.consent_whatsapp` boolean + the lifecycle history row. |
 | PATCH | `/api/whatsapp/consent/{customer_id}/` | operations+ | Body `{consentState, source?, note?}`. Only `granted / revoked / opted_out` are settable; flips both the live gate and the history. |
 
+#### Phase 5B — Inbox + Customer 360 timeline endpoints
+
+Phase 5B adds the operator inbox surface. Inbox is **manual-only**: AI auto-reply / chat-to-call handoff / rescue discount / order-booking-from-chat all stay deferred to Phase 5C–5F. The aggregate inbox response carries an explicit `aiSuggestions` block with `enabled: false, status: "disabled"` so the frontend never invents AI behavior.
+
+| Method | Path | Auth / role | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/whatsapp/inbox/` | authenticated | Inbox snapshot. Returns `{ conversations[], counts: { all, unread, open, pending, resolved, escalatedToHuman }, aiSuggestions: { enabled, status, message } }`. Optional `?limit=` (default 50, max 200). |
+| PATCH | `/api/whatsapp/conversations/{id}/` | operations+ | Safe-field update only — body accepts `status` (open/pending/resolved/escalated_to_human), `assignedToId` (User PK), `tags` (list[str]), `subject`. Anything else is silently ignored by the serializer; an empty payload returns 400. Status flip to `resolved` stamps `resolved_at + resolved_by`. Assignment changes write `whatsapp.conversation.assigned`; every PATCH writes `whatsapp.conversation.updated`. |
+| POST | `/api/whatsapp/conversations/{id}/mark-read/` | operations+ | Resets `unread_count=0`. Idempotent when already 0. Writes `whatsapp.conversation.read`. |
+| GET | `/api/whatsapp/conversations/{id}/notes/` | authenticated | List internal notes (newest first). |
+| POST | `/api/whatsapp/conversations/{id}/notes/` | operations+ | Create an internal note. Body `{ body, metadata? }`. **Notes are NEVER sent to the customer.** Writes `whatsapp.internal_note.created`. |
+| POST | `/api/whatsapp/conversations/{id}/send-template/` | operations+ | Manual operator-triggered template send for the conversation. Body `{ actionKey, templateId?, variables?, triggeredBy?, idempotencyKey? }`. The customer is resolved from the conversation; the call routes through `services.queue_template_message` so consent + approved-template + Claim Vault + approval matrix + CAIO + idempotency gates all stay in force. Writes `whatsapp.template.manual_send_requested` audit before queuing. |
+| GET | `/api/whatsapp/customers/{customer_id}/timeline/` | authenticated | WhatsApp-only timeline. Returns `{ customerId, consentWhatsapp, conversations[], items[], aiSuggestions }` where `items[].kind ∈ {message, internal_note, status_event}` and `items` is sorted by `occurredAt` desc. **Phase 5B intentionally does NOT merge calls / payments / orders.** |
+
+Conversation list filters now accept `?unread=true`, `?assignedTo=<user_pk>`, `?q=<search>` (icontains over customer name / phone / last_message_text / subject). The conversation serializer exposes `customerName / customerPhone / assignedToUsername`, and the message serializer exposes `templateName`. New audit kinds: `whatsapp.conversation.opened/updated/assigned/read`, `whatsapp.internal_note.created`, `whatsapp.template.manual_send_requested`.
+
 ### Permissions
 
 `apps/accounts/permissions.py` exposes:
