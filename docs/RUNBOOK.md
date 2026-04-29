@@ -117,6 +117,44 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5E — Rescue Discount + Day-20 Reorder
+
+```bash
+# Seed conservative demo Claim Vault rows for the 8 current categories.
+# Idempotent. Real admin-added Claim rows are NEVER overwritten.
+python manage.py seed_default_claims
+python manage.py seed_default_claims --reset-demo   # refresh demo seeds
+python manage.py seed_default_claims --json          # machine-readable
+
+# Run the Day-20 reorder reminder sweep. Idempotent — safe on cron.
+python manage.py run_reorder_day20_sweep
+python manage.py run_reorder_day20_sweep --dry-run
+
+# Coverage audit (already shipped Phase 5D, extended for Phase 5E demo rows).
+python manage.py check_claim_vault_coverage          # exits 1 on missing
+python manage.py check_claim_vault_coverage --strict-weak
+```
+
+Phase 5E env flags (all default OFF / SAFE — flip in `backend/.env` after
+the WhatsApp + AI Calling teams verify the flow on a controlled set of
+test numbers):
+
+```
+WHATSAPP_RESCUE_DISCOUNT_ENABLED=false       # confirmation + delivery rescue
+WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false   # RTO automatic rescue offer
+WHATSAPP_REORDER_DAY20_ENABLED=false         # Day-20 reorder reminder cadence
+DEFAULT_CLAIMS_SEED_DEMO_ONLY=true           # surface demo rows as risk=demo_ok
+```
+
+Cumulative cap is **50% absolute hard cap** across confirmation /
+delivery / RTO / reorder stages. AI never offers a discount above the
+cap automatically; over-cap requests mint an `ApprovalRequest` via the
+new `discount.rescue.ceo_review` matrix row (CEO AI / admin) or
+`discount.above_safe_auto_band` (director-only). CAIO is refused at the
+service entry. Customer acceptance applies via the existing
+`apps.orders.services.apply_order_discount` path — no module mutates
+`Order.discount_pct` directly.
+
 Frontend Scheduler Status page lives at `http://localhost:8080/ai-scheduler`
 (admin/director only) — pulls `GET /api/ai/scheduler/status/`.
 

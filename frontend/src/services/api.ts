@@ -119,6 +119,11 @@ import type {
   TriggerWhatsAppCallResponse,
   WhatsAppLifecycleEvent,
   ClaimVaultCoverageReport,
+  DiscountOffer,
+  DiscountOfferListResponse,
+  CreateRescueOfferPayload,
+  ReorderDay20RunResponse,
+  ReorderDay20StatusResponse,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -908,8 +913,69 @@ export const api = {
       okCount: 0,
       weakCount: 0,
       missingCount: 0,
+      demoCount: 0,
       items: [],
     })),
+
+  // ---------- Phase 5E — Rescue Discount Flow + Day-20 Reorder ----------
+  getOrderDiscountOffers: (orderId: string) =>
+    safeFetch<DiscountOfferListResponse>(
+      `/orders/${orderId}/discount-offers/`,
+      () => emptyDiscountOfferList(orderId),
+    ),
+  createRescueDiscountOffer: (
+    orderId: string,
+    payload: CreateRescueOfferPayload,
+  ) =>
+    safeMutate<DiscountOffer>(
+      `/orders/${orderId}/discount-offers/rescue/`,
+      "POST",
+      payload,
+      () => optimisticDiscountOffer(orderId, payload),
+    ),
+  acceptRescueDiscountOffer: (orderId: string, offerId: number) =>
+    safeMutate<DiscountOffer>(
+      `/orders/${orderId}/discount-offers/${offerId}/accept/`,
+      "POST",
+      {},
+      () => optimisticDiscountOfferDecision(orderId, offerId, "accepted"),
+    ),
+  rejectRescueDiscountOffer: (
+    orderId: string,
+    offerId: number,
+    note: string = "",
+  ) =>
+    safeMutate<DiscountOffer>(
+      `/orders/${orderId}/discount-offers/${offerId}/reject/`,
+      "POST",
+      { note },
+      () => optimisticDiscountOfferDecision(orderId, offerId, "rejected"),
+    ),
+  getReorderDay20Status: () =>
+    safeFetch<ReorderDay20StatusResponse>(
+      "/whatsapp/reorder/day20/status/",
+      () => ({
+        enabled: false,
+        lifecycleEnabled: false,
+        lowerBoundDays: 20,
+        upperBoundDays: 27,
+        events: [],
+      }),
+    ),
+  runReorderDay20Sweep: (dryRun: boolean = false) =>
+    safeMutate<ReorderDay20RunResponse>(
+      "/whatsapp/reorder/day20/run/",
+      "POST",
+      { dryRun },
+      () => ({
+        eligible: 0,
+        queued: 0,
+        skipped: 0,
+        blocked: 0,
+        failed: 0,
+        dryRun,
+      }),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -1474,6 +1540,79 @@ function optimisticTriggerCallResponse(
     skipped: true,
     errorMessage: "Backend offline — optimistic stub.",
     message: "Backend offline — optimistic stub.",
+  };
+}
+
+// ---------- Phase 5E — Discount offer optimistic helpers ----------
+
+function emptyDiscountOfferList(orderId: string): DiscountOfferListResponse {
+  return {
+    orderId,
+    currentDiscountPct: 0,
+    cap: {
+      currentTotalPct: 0,
+      capRemainingPct: 50,
+      finalTotalIfAppliedPct: 0,
+      capPassed: true,
+      totalCapPct: 50,
+    },
+    offers: [],
+  };
+}
+
+function optimisticDiscountOffer(
+  orderId: string,
+  payload: CreateRescueOfferPayload,
+): DiscountOffer {
+  const now = new Date().toISOString();
+  const offered = payload.requestedPct ?? 0;
+  return {
+    id: Date.now(),
+    orderId,
+    customerId: "",
+    conversationId: payload.conversationId ?? "",
+    sourceChannel: payload.sourceChannel ?? "operator",
+    stage: payload.stage,
+    triggerReason: payload.triggerReason,
+    previousDiscountPct: 0,
+    offeredAdditionalPct: offered,
+    resultingTotalDiscountPct: offered,
+    capRemainingPct: Math.max(0, 50 - offered),
+    status: "offered",
+    blockedReason: "",
+    offeredByAgent: "operator",
+    approvalRequestId: "",
+    metadata: payload.metadata ?? {},
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function optimisticDiscountOfferDecision(
+  orderId: string,
+  offerId: number,
+  status: "accepted" | "rejected",
+): DiscountOffer {
+  const now = new Date().toISOString();
+  return {
+    id: offerId,
+    orderId,
+    customerId: "",
+    conversationId: "",
+    sourceChannel: "operator",
+    stage: "confirmation",
+    triggerReason: "offline_decision",
+    previousDiscountPct: 0,
+    offeredAdditionalPct: 0,
+    resultingTotalDiscountPct: 0,
+    capRemainingPct: 50,
+    status,
+    blockedReason: "",
+    offeredByAgent: "operator",
+    approvalRequestId: "",
+    metadata: {},
+    createdAt: now,
+    updatedAt: now,
   };
 }
 

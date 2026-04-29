@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Map (object_type, event_kind) → WhatsApp action_key. Keep narrow:
 # Phase 5D ships the four payment / confirmation / delivery / RTO
-# actions; reorder + usage explanation are scaffolded for follow-up.
+# actions; Phase 5E adds the rescue-discount + Day 20 reorder triggers.
 LIFECYCLE_TRIGGERS: dict[tuple[str, str], str] = {
     ("order", "moved_to_confirmation"): "whatsapp.confirmation_reminder",
     ("payment", "link_created"): "whatsapp.payment_reminder",
@@ -49,12 +49,36 @@ LIFECYCLE_TRIGGERS: dict[tuple[str, str], str] = {
     ("shipment", "delivered"): "whatsapp.usage_explanation",
     ("shipment", "ndr"): "whatsapp.rto_rescue",
     ("shipment", "rto_initiated"): "whatsapp.rto_rescue",
+    # Phase 5E — rescue discount actions.
+    ("order", "confirmation_refusal"): "whatsapp.confirmation_rescue_discount",
+    ("shipment", "delivery_refusal"): "whatsapp.delivery_rescue_discount",
+    ("shipment", "rto_risk"): "whatsapp.rto_rescue_discount",
+    # Phase 5E — Day-20 reorder reminder.
+    ("order", "day20"): "whatsapp.reorder_day20_reminder",
 }
 
 # Templates that demand a Claim Vault row before sending.
 CLAIM_VAULT_REQUIRED_ACTIONS: frozenset[str] = frozenset(
     {"whatsapp.usage_explanation"}
 )
+
+# Phase 5E rescue-discount actions: every event still flows through the
+# same ``queue_template_message`` pipeline, but the call site is also
+# expected to create a :class:`apps.orders.DiscountOfferLog` row so the
+# offer is auditable + acceptable.
+RESCUE_DISCOUNT_ACTIONS: frozenset[str] = frozenset(
+    {
+        "whatsapp.confirmation_rescue_discount",
+        "whatsapp.delivery_rescue_discount",
+        "whatsapp.rto_rescue_discount",
+    }
+)
+
+# Phase 5E reorder Day-20 reminder uses MARKETING tier templates, so
+# the Phase 5A approval-matrix row already gates it on consent. The
+# action key here is the lifecycle-service slug; it maps to
+# ``whatsapp.reorder_reminder`` in the matrix.
+REORDER_DAY20_ACTION = "whatsapp.reorder_day20_reminder"
 
 
 class LifecycleError(RuntimeError):
@@ -72,6 +96,20 @@ class LifecycleResult:
 
 def is_lifecycle_enabled() -> bool:
     return bool(getattr(settings, "WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED", False))
+
+
+def is_rescue_enabled(action_key: str) -> bool:
+    """Phase 5E — per-action enable flag for the rescue family."""
+    if action_key in {
+        "whatsapp.confirmation_rescue_discount",
+        "whatsapp.delivery_rescue_discount",
+    }:
+        return bool(getattr(settings, "WHATSAPP_RESCUE_DISCOUNT_ENABLED", False))
+    if action_key == "whatsapp.rto_rescue_discount":
+        return bool(getattr(settings, "WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED", False))
+    if action_key == REORDER_DAY20_ACTION:
+        return bool(getattr(settings, "WHATSAPP_REORDER_DAY20_ENABLED", False))
+    return True
 
 
 def build_idempotency_key(
@@ -126,6 +164,17 @@ def queue_lifecycle_message(
             action_key=action_key,
             customer=customer,
             block_reason="lifecycle_disabled",
+            metadata=metadata,
+        )
+
+    if not is_rescue_enabled(action_key):
+        return _record_skipped(
+            object_type=object_type,
+            object_id=object_id,
+            event_kind=event_kind,
+            action_key=action_key,
+            customer=customer,
+            block_reason=f"{action_key.split('.')[-1]}_disabled",
             metadata=metadata,
         )
 
@@ -227,6 +276,35 @@ def queue_lifecycle_message(
             "customer_id": getattr(customer, "id", ""),
         },
     )
+    # Phase 5E — extra family-specific audit kinds so the operator
+    # surface can filter rescue / reorder activity without parsing the
+    # action key.
+    if action_key in RESCUE_DISCOUNT_ACTIONS:
+        write_event(
+            kind="whatsapp.lifecycle.rescue_discount_queued",
+            text=f"Rescue discount queued · {action_key} · {object_type}:{object_id}",
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "lifecycle_event_id": event_row.pk,
+                "action_key": action_key,
+                "object_type": object_type,
+                "object_id": object_id,
+                "event_kind": event_kind,
+            },
+        )
+    elif action_key == REORDER_DAY20_ACTION:
+        write_event(
+            kind="whatsapp.lifecycle.reorder_day20_queued",
+            text=f"Reorder Day-20 queued · {object_type}:{object_id}",
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "lifecycle_event_id": event_row.pk,
+                "action_key": action_key,
+                "object_type": object_type,
+                "object_id": object_id,
+                "event_kind": event_kind,
+            },
+        )
 
     try:
         queued = services.queue_template_message(
@@ -297,6 +375,34 @@ def queue_lifecycle_message(
             "message_id": queued.message.id,
         },
     )
+    if action_key in RESCUE_DISCOUNT_ACTIONS:
+        write_event(
+            kind="whatsapp.lifecycle.rescue_discount_sent",
+            text=f"Rescue discount sent · {action_key} · message={queued.message.id}",
+            tone=AuditEvent.Tone.SUCCESS,
+            payload={
+                "lifecycle_event_id": event_row.pk,
+                "action_key": action_key,
+                "object_type": object_type,
+                "object_id": object_id,
+                "event_kind": event_kind,
+                "message_id": queued.message.id,
+            },
+        )
+    elif action_key == REORDER_DAY20_ACTION:
+        write_event(
+            kind="whatsapp.lifecycle.reorder_day20_sent",
+            text=f"Reorder Day-20 sent · {object_type}:{object_id} · message={queued.message.id}",
+            tone=AuditEvent.Tone.SUCCESS,
+            payload={
+                "lifecycle_event_id": event_row.pk,
+                "action_key": action_key,
+                "object_type": object_type,
+                "object_id": object_id,
+                "event_kind": event_kind,
+                "message_id": queued.message.id,
+            },
+        )
     return LifecycleResult(
         event_id=event_row.pk,
         status=event_row.status,
@@ -396,9 +502,12 @@ def _record_blocked(
 __all__ = (
     "CLAIM_VAULT_REQUIRED_ACTIONS",
     "LIFECYCLE_TRIGGERS",
+    "REORDER_DAY20_ACTION",
+    "RESCUE_DISCOUNT_ACTIONS",
     "LifecycleError",
     "LifecycleResult",
     "build_idempotency_key",
     "is_lifecycle_enabled",
+    "is_rescue_enabled",
     "queue_lifecycle_message",
 )

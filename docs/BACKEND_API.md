@@ -468,6 +468,40 @@ Lifecycle service (`apps.whatsapp.lifecycle.queue_lifecycle_message`) is the sin
 
 New audit kinds (11): `whatsapp.handoff.call_requested`, `whatsapp.handoff.call_triggered`, `whatsapp.handoff.call_failed`, `whatsapp.handoff.call_skipped`, `whatsapp.handoff.call_skipped_duplicate`, `whatsapp.lifecycle.queued`, `whatsapp.lifecycle.sent`, `whatsapp.lifecycle.blocked`, `whatsapp.lifecycle.skipped_duplicate`, `whatsapp.lifecycle.failed`, `whatsapp.ai.order_moved_to_confirmation`, plus `compliance.claim_coverage.checked` for the coverage endpoint.
 
+#### Phase 5E — Rescue Discount Flow + Day-20 Reorder + Default Claim Vault Seeds
+
+Phase 5E adds the cross-channel rescue discount engine, lifecycle templates for confirmation / delivery / RTO refusal-based rescue + Day-20 reorder reminder, and a default Claim Vault seed for the eight current product categories. All rescue + Day-20 flags default OFF (`WHATSAPP_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_REORDER_DAY20_ENABLED=false`). Cumulative 50% cap is absolute and enforced both at the calculator (`apps.orders.rescue_discount.validate_total_discount_cap`) and at the accept time (re-checks the cap before mutating `Order.discount_pct` via `apply_order_discount`).
+
+| Method | Path | Auth / role | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/orders/{id}/discount-offers/` | authenticated | Returns `{ orderId, currentDiscountPct, cap: { currentTotalPct, capRemainingPct, finalTotalIfAppliedPct, capPassed, totalCapPct }, offers[] }`. ``offers[]`` is the latest 200 `DiscountOfferLog` rows for the order. |
+| POST | `/api/orders/{id}/discount-offers/rescue/` | operations+ | Body `{ sourceChannel, stage, triggerReason, refusalCount?, riskLevel?, requestedPct?, conversationId?, metadata? }`. Calculates the next rescue offer, persists a `DiscountOfferLog`, and (when over band / cap) auto-creates a CEO / admin `ApprovalRequest`. Returns the new offer row. CAIO refused at the service entry. |
+| POST | `/api/orders/{id}/discount-offers/{offer_id}/accept/` | operations+ | Customer accepted → applies the discount via `apps.orders.services.apply_order_discount`, sets log status to `accepted`. Cap is re-validated; over-cap at accept time flips status to `needs_ceo_review`. |
+| POST | `/api/orders/{id}/discount-offers/{offer_id}/reject/` | operations+ | Body `{ note? }`. Records rejection. Never mutates `Order`. |
+| GET | `/api/whatsapp/reorder/day20/status/` | admin / director | Returns `{ enabled, lifecycleEnabled, lowerBoundDays, upperBoundDays, events[] }` — last 50 Day-20 lifecycle rows. |
+| POST | `/api/whatsapp/reorder/day20/run/` | admin / director | Body `{ dryRun? }`. Runs the Day-20 sweep on demand. Returns `{ eligible, queued, skipped, blocked, failed, dryRun }`. |
+
+Lifecycle automation table grows by four (`whatsapp.confirmation_rescue_discount`, `whatsapp.delivery_rescue_discount`, `whatsapp.rto_rescue_discount`, `whatsapp.reorder_day20_reminder`) — all `auto_with_consent` in the matrix. Idempotency keys:
+
+- `lifecycle:whatsapp.confirmation_rescue_discount:order:{id}:confirmation_refusal`
+- `lifecycle:whatsapp.delivery_rescue_discount:shipment:{id}:delivery_refusal`
+- `lifecycle:whatsapp.rto_rescue_discount:shipment:{id}:rto_risk`
+- `lifecycle:whatsapp.reorder_day20_reminder:order:{id}:day20`
+
+The Phase 5C orchestrator now also writes a `DiscountOfferLog` row whenever the WhatsApp AI proposes a discount, regardless of channel — so the orders / analytics surfaces have a single canonical history.
+
+New audit kinds (12): `discount.offer.created`, `discount.offer.sent`, `discount.offer.accepted`, `discount.offer.rejected`, `discount.offer.blocked`, `discount.offer.needs_ceo_review`, `whatsapp.lifecycle.rescue_discount_queued`, `whatsapp.lifecycle.rescue_discount_sent`, `whatsapp.lifecycle.reorder_day20_queued`, `whatsapp.lifecycle.reorder_day20_sent`, `compliance.default_claims.seeded`.
+
+New management commands:
+
+```
+python manage.py seed_default_claims              # idempotent, demo-only seeds
+python manage.py seed_default_claims --reset-demo # refresh demo rows (real claims protected)
+python manage.py seed_default_claims --json       # machine-readable summary
+python manage.py run_reorder_day20_sweep          # Day-20 reorder sweep
+python manage.py run_reorder_day20_sweep --dry-run
+```
+
 ### Permissions
 
 `apps/accounts/permissions.py` exposes:

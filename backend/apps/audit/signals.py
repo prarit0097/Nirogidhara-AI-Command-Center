@@ -169,6 +169,18 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.lifecycle.failed": "alert-octagon",
     "whatsapp.ai.order_moved_to_confirmation": "check-circle-2",
     "compliance.claim_coverage.checked": "shield-check",
+    # Phase 5E — Rescue discount + Day-20 reorder + default claim seeds.
+    "discount.offer.created": "percent",
+    "discount.offer.sent": "send",
+    "discount.offer.accepted": "badge-check",
+    "discount.offer.rejected": "x-circle",
+    "discount.offer.blocked": "ban",
+    "discount.offer.needs_ceo_review": "alert-triangle",
+    "whatsapp.lifecycle.rescue_discount_queued": "percent",
+    "whatsapp.lifecycle.rescue_discount_sent": "percent",
+    "whatsapp.lifecycle.reorder_day20_queued": "calendar-clock",
+    "whatsapp.lifecycle.reorder_day20_sent": "calendar-check",
+    "compliance.default_claims.seeded": "shield-check",
 }
 
 

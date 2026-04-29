@@ -26,6 +26,7 @@ import {
   Languages,
   MessageCircle,
   PauseCircle,
+  Percent,
   Phone,
   PlayCircle,
   RefreshCw,
@@ -744,6 +745,25 @@ function AiAgentPanel({
           }
           icon={ShieldCheck}
         />
+      </div>
+
+      {/* Phase 5E — Rescue discount cap card. */}
+      <div className="rounded-md bg-background border border-border px-2 py-1.5 text-[11px] leading-snug">
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span className="font-medium text-foreground inline-flex items-center gap-1">
+            <Percent className="h-3 w-3" /> Rescue discount cap
+          </span>
+          <span>
+            current {aiState?.totalDiscountPct ?? 0}% · cap{" "}
+            {Math.max(0, 50 - (aiState?.totalDiscountPct ?? 0))}% remaining
+          </span>
+        </div>
+        {(aiState?.discountAskCount ?? 0) > 0 && (
+          <div className="text-muted-foreground/80 mt-0.5">
+            customer has asked {aiState?.discountAskCount} time
+            {(aiState?.discountAskCount ?? 0) === 1 ? "" : "s"}
+          </div>
+        )}
       </div>
 
       {handoffRequired && (

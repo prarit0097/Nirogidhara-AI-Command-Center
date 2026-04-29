@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from .models import Order
+from .models import DiscountOfferLog, Order
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -114,3 +114,80 @@ class OrderConfirmSerializer(serializers.Serializer):
     )
     outcome = serializers.ChoiceField(choices=OUTCOMES)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+# ----- Phase 5E — Discount offer serializers -----
+
+
+class DiscountOfferSerializer(serializers.ModelSerializer):
+    orderId = serializers.CharField(source="order_id", read_only=True)
+    customerId = serializers.CharField(source="customer_id", read_only=True)
+    conversationId = serializers.CharField(
+        source="conversation_id", read_only=True, default=""
+    )
+    sourceChannel = serializers.CharField(source="source_channel")
+    triggerReason = serializers.CharField(source="trigger_reason")
+    previousDiscountPct = serializers.IntegerField(source="previous_discount_pct")
+    offeredAdditionalPct = serializers.IntegerField(source="offered_additional_pct")
+    resultingTotalDiscountPct = serializers.IntegerField(
+        source="resulting_total_discount_pct"
+    )
+    capRemainingPct = serializers.IntegerField(source="cap_remaining_pct")
+    blockedReason = serializers.CharField(source="blocked_reason")
+    offeredByAgent = serializers.CharField(source="offered_by_agent")
+    approvalRequestId = serializers.CharField(
+        source="approval_request_id", default=""
+    )
+    createdAt = serializers.DateTimeField(source="created_at")
+    updatedAt = serializers.DateTimeField(source="updated_at")
+
+    class Meta:
+        model = DiscountOfferLog
+        fields = (
+            "id",
+            "orderId",
+            "customerId",
+            "conversationId",
+            "sourceChannel",
+            "stage",
+            "triggerReason",
+            "previousDiscountPct",
+            "offeredAdditionalPct",
+            "resultingTotalDiscountPct",
+            "capRemainingPct",
+            "status",
+            "blockedReason",
+            "offeredByAgent",
+            "approvalRequestId",
+            "metadata",
+            "createdAt",
+            "updatedAt",
+        )
+
+
+class CreateRescueOfferPayloadSerializer(serializers.Serializer):
+    """Body shape for ``POST /api/orders/{id}/discount-offers/rescue/``."""
+
+    sourceChannel = serializers.ChoiceField(
+        choices=DiscountOfferLog.SourceChannel.choices,
+        default=DiscountOfferLog.SourceChannel.OPERATOR,
+    )
+    stage = serializers.ChoiceField(choices=DiscountOfferLog.Stage.choices)
+    triggerReason = serializers.CharField(max_length=80)
+    refusalCount = serializers.IntegerField(required=False, default=1, min_value=1)
+    riskLevel = serializers.CharField(
+        required=False, allow_blank=True, default=""
+    )
+    requestedPct = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, max_value=100
+    )
+    conversationId = serializers.CharField(
+        required=False, allow_blank=True, default=""
+    )
+    metadata = serializers.JSONField(required=False, default=dict)
+
+
+class RescueOfferDecisionPayloadSerializer(serializers.Serializer):
+    """Body shape for the accept / reject endpoints."""
+
+    note = serializers.CharField(required=False, allow_blank=True, default="")

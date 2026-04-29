@@ -82,3 +82,107 @@ class Order(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.id} · {self.product} · {self.stage}"
+
+
+class DiscountOfferLog(models.Model):
+    """Phase 5E — append-only log of every discount offer attempt.
+
+    Tracks the rescue / chat / call / confirmation / delivery / RTO discount
+    flow end-to-end. Every attempt — accepted, rejected, blocked, skipped,
+    or escalated to CEO review — writes a row so audit + reward / penalty
+    + later analytics can reason about the cumulative cap math without
+    replaying the audit ledger.
+
+    Hard rule (Master Blueprint §26 + Phase 5E lock): cumulative discount
+    across ALL stages on a single order MUST NEVER exceed 50%. The
+    ``resulting_total_discount_pct`` field captures what the order would
+    look like if this offer were applied; ``cap_remaining_pct`` records
+    how many percent are still spendable after the offer.
+    """
+
+    class SourceChannel(models.TextChoices):
+        WHATSAPP_AI = "whatsapp_ai", "whatsapp_ai"
+        AI_CALL = "ai_call", "ai_call"
+        CONFIRMATION = "confirmation", "confirmation"
+        DELIVERY = "delivery", "delivery"
+        RTO = "rto", "rto"
+        OPERATOR = "operator", "operator"
+        SYSTEM = "system", "system"
+
+    class Stage(models.TextChoices):
+        ORDER_BOOKING = "order_booking", "order_booking"
+        CONFIRMATION = "confirmation", "confirmation"
+        DELIVERY = "delivery", "delivery"
+        RTO = "rto", "rto"
+        REORDER = "reorder", "reorder"
+        CUSTOMER_SUCCESS = "customer_success", "customer_success"
+
+    class Status(models.TextChoices):
+        OFFERED = "offered", "offered"
+        ACCEPTED = "accepted", "accepted"
+        REJECTED = "rejected", "rejected"
+        BLOCKED = "blocked", "blocked"
+        SKIPPED = "skipped", "skipped"
+        NEEDS_CEO_REVIEW = "needs_ceo_review", "needs_ceo_review"
+
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="discount_offers",
+    )
+    customer = models.ForeignKey(
+        "crm.Customer",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="discount_offers",
+    )
+    conversation = models.ForeignKey(
+        "whatsapp.WhatsAppConversation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="discount_offers",
+    )
+    source_channel = models.CharField(
+        max_length=24, choices=SourceChannel.choices
+    )
+    stage = models.CharField(max_length=24, choices=Stage.choices)
+    trigger_reason = models.CharField(max_length=80)
+    previous_discount_pct = models.IntegerField(default=0)
+    offered_additional_pct = models.IntegerField(default=0)
+    resulting_total_discount_pct = models.IntegerField(default=0)
+    cap_remaining_pct = models.IntegerField(default=0)
+    status = models.CharField(
+        max_length=24, choices=Status.choices, default=Status.OFFERED
+    )
+    blocked_reason = models.CharField(max_length=80, blank=True, default="")
+    offered_by_agent = models.CharField(max_length=40, blank=True, default="")
+    approval_request = models.ForeignKey(
+        "ai_governance.ApprovalRequest",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="discount_offers",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("order", "-created_at")),
+            models.Index(fields=("status", "-created_at")),
+            models.Index(fields=("stage", "-created_at")),
+            models.Index(fields=("source_channel", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return (
+            f"discount_offer · {self.order_id} · {self.stage} · "
+            f"+{self.offered_additional_pct}% → {self.resulting_total_discount_pct}% · "
+            f"{self.status}"
+        )

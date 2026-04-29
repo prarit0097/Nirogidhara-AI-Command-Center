@@ -8,13 +8,17 @@ from rest_framework.response import Response
 from apps.accounts.permissions import OPERATIONS_AND_UP, RoleBasedPermission
 
 from . import services
-from .models import Order
+from . import rescue_discount as rescue_module
+from .models import DiscountOfferLog, Order
 from .serializers import (
     ConfirmationQueueSerializer,
+    CreateRescueOfferPayloadSerializer,
+    DiscountOfferSerializer,
     OrderConfirmSerializer,
     OrderCreateSerializer,
     OrderSerializer,
     OrderTransitionSerializer,
+    RescueOfferDecisionPayloadSerializer,
     RtoRiskSerializer,
 )
 from .services import OrderTransitionError
@@ -94,6 +98,106 @@ class OrderViewSet(
             return Order.objects.get(pk=pk)
         except Order.DoesNotExist as exc:
             raise NotFound(f"Order {pk} not found") from exc
+
+    # ----- Phase 5E — Rescue discount endpoints -----
+
+    @action(detail=True, methods=["get"], url_path="discount-offers")
+    def list_discount_offers(self, request, pk=None):
+        order = self._get_order(pk)
+        offers = order.discount_offers.all().order_by("-created_at")[:200]
+        cap = rescue_module.cap_status(order)
+        return Response(
+            {
+                "orderId": order.id,
+                "currentDiscountPct": int(order.discount_pct or 0),
+                "cap": cap.to_dict(),
+                "offers": DiscountOfferSerializer(offers, many=True).data,
+            }
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="discount-offers/rescue",
+    )
+    def create_rescue_offer(self, request, pk=None):
+        order = self._get_order(pk)
+        payload = CreateRescueOfferPayloadSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+
+        conversation = None
+        conv_id = (data.get("conversationId") or "").strip()
+        if conv_id:
+            try:
+                from apps.whatsapp.models import WhatsAppConversation
+
+                conversation = WhatsAppConversation.objects.filter(pk=conv_id).first()
+            except Exception:  # noqa: BLE001 - whatsapp app optional in audit
+                conversation = None
+
+        actor_role = (getattr(request.user, "role", "") or "").lower() or "operations"
+
+        log = rescue_module.create_rescue_discount_offer(
+            order=order,
+            stage=data["stage"],
+            source_channel=data["sourceChannel"],
+            trigger_reason=data["triggerReason"],
+            refusal_count=int(data.get("refusalCount") or 1),
+            risk_level=str(data.get("riskLevel") or ""),
+            requested_pct=data.get("requestedPct"),
+            actor_role=actor_role,
+            actor_agent="operator",
+            conversation=conversation,
+            metadata=dict(data.get("metadata") or {}),
+        )
+        return Response(
+            DiscountOfferSerializer(log).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"discount-offers/(?P<offer_id>\d+)/accept",
+    )
+    def accept_discount_offer(self, request, pk=None, offer_id=None):
+        order = self._get_order(pk)
+        offer = self._get_offer(order, offer_id)
+        try:
+            log = rescue_module.accept_rescue_discount_offer(
+                offer=offer,
+                actor_role=(getattr(request.user, "role", "") or "operations"),
+                actor=request.user,
+            )
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        return Response(DiscountOfferSerializer(log).data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"discount-offers/(?P<offer_id>\d+)/reject",
+    )
+    def reject_discount_offer(self, request, pk=None, offer_id=None):
+        order = self._get_order(pk)
+        offer = self._get_offer(order, offer_id)
+        payload = RescueOfferDecisionPayloadSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        try:
+            log = rescue_module.reject_rescue_discount_offer(
+                offer=offer,
+                note=payload.validated_data.get("note") or "",
+            )
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        return Response(DiscountOfferSerializer(log).data)
+
+    def _get_offer(self, order: Order, offer_id) -> DiscountOfferLog:
+        try:
+            return order.discount_offers.get(pk=offer_id)
+        except DiscountOfferLog.DoesNotExist as exc:
+            raise NotFound(f"DiscountOfferLog {offer_id} not found") from exc
 
 
 class ConfirmationQueueView(viewsets.GenericViewSet, mixins.ListModelMixin):

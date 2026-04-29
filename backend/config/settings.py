@@ -406,6 +406,36 @@ WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS = _csv(
 )
 
 
+# ----- Phase 5E — Rescue Discount Flow + Day-20 Reorder + Default Claims -----
+# All defaults stay OFF / SAFE so a fresh deploy never automatically
+# offers a customer a discount. Production rollout sequence:
+#   1) Mock + OpenAI verification on test customers.
+#   2) Limited-live Meta with one test number.
+#   3) Flip WHATSAPP_RESCUE_DISCOUNT_ENABLED=true (confirmation +
+#      delivery refusals; uses the WhatsApp AI agent).
+#   4) Flip WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=true once RTO rescue
+#      flow has soaked for 3+ days.
+#   5) Flip WHATSAPP_REORDER_DAY20_ENABLED=true and start the daily
+#      Celery beat for run_reorder_day20_sweep.
+#
+# DEFAULT_CLAIMS_SEED_DEMO_ONLY=true keeps the demo Claim Vault visible
+# in coverage reports as ``risk=demo_ok`` and forces production ops to
+# replace each row with a doctor-approved claim before promoting the
+# Claim out of demo mode.
+WHATSAPP_RESCUE_DISCOUNT_ENABLED = _bool(
+    os.environ.get("WHATSAPP_RESCUE_DISCOUNT_ENABLED"), default=False
+)
+WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED = _bool(
+    os.environ.get("WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED"), default=False
+)
+WHATSAPP_REORDER_DAY20_ENABLED = _bool(
+    os.environ.get("WHATSAPP_REORDER_DAY20_ENABLED"), default=False
+)
+DEFAULT_CLAIMS_SEED_DEMO_ONLY = _bool(
+    os.environ.get("DEFAULT_CLAIMS_SEED_DEMO_ONLY"), default=True
+)
+
+
 # ----- Phase 4A — Real-time WebSockets via Django Channels -----
 # Local dev / pytest default to the in-memory channel layer so neither
 # Redis nor the daphne ASGI runner is required for the test suite. To

@@ -366,6 +366,14 @@ def run_whatsapp_ai_agent(
             refusal_trigger=rescue_trigger,
             actor_role="operations",
         )
+        # Phase 5E — also persist a DiscountOfferLog row so the order
+        # surface and analytics see the offer regardless of channel.
+        _record_phase5e_offer_log(
+            convo,
+            ai_state,
+            decision,
+            eval_result=eval_result,
+        )
         if not eval_result.allowed:
             kind = (
                 "whatsapp.ai.discount_blocked"
@@ -977,6 +985,90 @@ def _maybe_trigger_vapi_call(
 # Local alias so we don't have to import the full enum at module scope —
 # the call_handoff module owns the value and accepts the literal string.
 WhatsAppHandoffToCall_TRIGGER_AI = "ai"
+
+
+_AI_STAGE_TO_OFFER_STAGE: dict[str, str] = {
+    "greeting": "order_booking",
+    "discovery": "order_booking",
+    "category_detection": "order_booking",
+    "product_explanation": "order_booking",
+    "objection_handling": "order_booking",
+    "price_presented": "order_booking",
+    "discount_negotiation": "order_booking",
+    "address_collection": "order_booking",
+    "order_confirmation": "confirmation",
+    "order_booked": "confirmation",
+    "handoff_required": "customer_success",
+}
+
+
+def _record_phase5e_offer_log(
+    convo: WhatsAppConversation,
+    ai_state: Mapping[str, Any],
+    decision: ChatAgentDecision,
+    *,
+    eval_result: Any,
+) -> None:
+    """Persist a Phase 5E :class:`DiscountOfferLog` row from a chat decision.
+
+    Best-effort — never raises. The orchestrator's existing audit
+    writes still fire; this row is a richer cross-channel record so the
+    orders / analytics surfaces don't have to parse the audit ledger.
+    """
+    try:
+        from apps.orders.models import DiscountOfferLog, Order
+        from apps.orders.rescue_discount import (
+            create_rescue_discount_offer,
+        )
+
+        proposed = int(decision.order_draft.get("discountPct") or 0)
+        if proposed <= 0:
+            return
+
+        # Find the order, if any. The AI may propose discount before
+        # the order is booked — that's fine; the log row records
+        # ``order=None`` and surfaces in analytics by customer.
+        order_id = (ai_state.get("orderId") or "").strip()
+        order: Order | None = None
+        if order_id:
+            order = Order.objects.filter(pk=order_id).first()
+        if order is None and convo.customer:
+            order = (
+                Order.objects.filter(phone=convo.customer.phone)
+                .order_by("-created_at")
+                .first()
+            )
+        if order is None:
+            return
+
+        stage_key = (ai_state.get("stage") or "").lower()
+        offer_stage = _AI_STAGE_TO_OFFER_STAGE.get(stage_key, "order_booking")
+
+        create_rescue_discount_offer(
+            order=order,
+            stage=offer_stage,
+            source_channel=DiscountOfferLog.SourceChannel.WHATSAPP_AI,
+            trigger_reason=str(ai_state.get("refusalTrigger") or "ai_discount_offer"),
+            refusal_count=int(ai_state.get("discountAskCount") or 1),
+            risk_level=str(ai_state.get("riskLevel") or ""),
+            requested_pct=proposed,
+            actor_role="operations",
+            actor_agent="ai_chat",
+            conversation=convo,
+            metadata={
+                "decision_band": getattr(eval_result, "band", ""),
+                "decision_allowed": getattr(eval_result, "allowed", False),
+                "decision_reason": getattr(eval_result, "reason", "")[:240],
+                "current_total_pct": getattr(eval_result, "current_total_pct", 0),
+                "final_total_pct": getattr(eval_result, "final_total_pct", 0),
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - never break the orchestrator
+        logger.warning(
+            "Phase 5E DiscountOfferLog record failed for %s: %s",
+            convo.id,
+            exc,
+        )
 
 
 def _finalize_run(

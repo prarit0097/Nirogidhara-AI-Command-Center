@@ -43,6 +43,11 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     # Phase 5A-1 anticipated greeting template — registered now so Phase
     # 5C wiring doesn't have to invent a name.
     "whatsapp.greeting": "nrg_greeting_intro",
+    # Phase 5E — rescue discount + Day 20 reorder templates.
+    "whatsapp.confirmation_rescue_discount": "nrg_confirmation_rescue_discount",
+    "whatsapp.delivery_rescue_discount": "nrg_delivery_rescue_discount",
+    "whatsapp.rto_rescue_discount": "nrg_rto_rescue_discount",
+    "whatsapp.reorder_day20_reminder": "nrg_reorder_day20_reminder",
 }
 
 # Templates whose body falls under the Approved Claim Vault gate.

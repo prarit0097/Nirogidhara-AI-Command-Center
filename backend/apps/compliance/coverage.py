@@ -66,8 +66,9 @@ class ClaimVaultCoverageItem:
     has_approved_claims: bool
     missing_required_usage_claims: bool
     last_approved_at: str  # ISO string; empty when no Claim row exists
-    risk: str  # "ok" | "weak" | "missing"
+    risk: str  # "ok" | "weak" | "missing" | "demo_ok"
     notes: tuple[str, ...] = field(default_factory=tuple)
+    is_demo_default: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -79,6 +80,7 @@ class ClaimVaultCoverageItem:
             "lastApprovedAt": self.last_approved_at,
             "risk": self.risk,
             "notes": list(self.notes),
+            "isDemoDefault": self.is_demo_default,
         }
 
 
@@ -92,12 +94,17 @@ class ClaimVaultCoverageReport:
     weak_count: int
     missing_count: int
 
+    @property
+    def demo_count(self) -> int:
+        return sum(1 for item in self.items if item.is_demo_default)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "totalProducts": self.total_products,
             "okCount": self.ok_count,
             "weakCount": self.weak_count,
             "missingCount": self.missing_count,
+            "demoCount": self.demo_count,
             "items": [item.to_dict() for item in self.items],
         }
 
@@ -109,16 +116,42 @@ def _looks_like_usage(phrases: Iterable[str]) -> bool:
     return any(keyword in haystack for keyword in USAGE_HINT_KEYWORDS)
 
 
+DEMO_CLAIM_MARKERS: tuple[str, ...] = (
+    "demo-v",  # version field marker — e.g. "demo-v1"
+    "Demo Default",  # doctor / compliance fields marker
+)
+
+
+def _is_demo_claim(claim: Claim) -> bool:
+    """Detect whether a Claim row was sown by the Phase 5E default seed."""
+    fields = (
+        (claim.version or ""),
+        (claim.doctor or ""),
+        (claim.compliance or ""),
+    )
+    return any(
+        marker.lower() in (value or "").lower()
+        for marker in DEMO_CLAIM_MARKERS
+        for value in fields
+    )
+
+
 def _coverage_for_claim(claim: Claim, *, category: str = "") -> ClaimVaultCoverageItem:
     approved = list(claim.approved or [])
     approved_count = len(approved)
     has_approved = approved_count > 0
     has_usage = _looks_like_usage(approved)
+    is_demo = _is_demo_claim(claim)
     notes: list[str] = []
     if not has_approved:
         notes.append("approved_list_empty")
     if has_approved and not has_usage:
         notes.append("missing_usage_hint")
+    if is_demo:
+        notes.append(
+            "demo default claim; replace with doctor-approved final claim "
+            "before full live rollout"
+        )
     last_approved_at = (
         claim.updated_at.isoformat() if claim.updated_at and has_approved else ""
     )
@@ -126,6 +159,8 @@ def _coverage_for_claim(claim: Claim, *, category: str = "") -> ClaimVaultCovera
         risk = "missing"
     elif not has_usage:
         risk = "weak"
+    elif is_demo:
+        risk = "demo_ok"
     else:
         risk = "ok"
     return ClaimVaultCoverageItem(
@@ -137,6 +172,7 @@ def _coverage_for_claim(claim: Claim, *, category: str = "") -> ClaimVaultCovera
         last_approved_at=last_approved_at,
         risk=risk,
         notes=tuple(notes),
+        is_demo_default=is_demo,
     )
 
 
@@ -177,7 +213,7 @@ def build_coverage_report() -> ClaimVaultCoverageReport:
     except Exception:  # noqa: BLE001 - catalog optional at audit time
         pass
 
-    ok = sum(1 for item in items if item.risk == "ok")
+    ok = sum(1 for item in items if item.risk in {"ok", "demo_ok"})
     weak = sum(1 for item in items if item.risk == "weak")
     missing = sum(1 for item in items if item.risk == "missing")
 

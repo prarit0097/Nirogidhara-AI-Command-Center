@@ -139,7 +139,26 @@ def send_whatsapp_lifecycle_message_task(
     }
 
 
+@shared_task(
+    name="apps.whatsapp.tasks.run_reorder_day20_sweep",
+    bind=True,
+)
+def run_reorder_day20_sweep_task(self, *, dry_run: bool = False) -> dict[str, Any]:
+    """Phase 5E — Day-20 reorder reminder sweep.
+
+    Cron-friendly. The actual eligibility math + lifecycle dispatch
+    lives in :func:`apps.whatsapp.reorder.run_day20_reorder_sweep`. This
+    task is intentionally a thin wrapper so the management command and
+    Celery beat schedule call the same code path.
+    """
+    from .reorder import run_day20_reorder_sweep
+
+    result = run_day20_reorder_sweep(dry_run=bool(dry_run))
+    return result.to_dict()
+
+
 __all__ = (
+    "run_reorder_day20_sweep_task",
     "run_whatsapp_ai_agent_for_conversation",
     "send_whatsapp_lifecycle_message_task",
     "send_whatsapp_message",

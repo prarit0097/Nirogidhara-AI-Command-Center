@@ -107,6 +107,27 @@ APPROVAL_MATRIX: tuple[Mapping[str, Any], ...] = (
             "automated path."
         ),
     },
+    # Phase 5E — rescue discount escalation. Used when an AI rescue
+    # offer is over the auto band, hits the cumulative 50% cap, or the
+    # AI is otherwise stuck. Caller is the orders rescue_discount module.
+    {
+        "action": "discount.rescue.ceo_review",
+        "approver": "ceo_ai",
+        "mode": "approval_required",
+        "description": (
+            "AI rescue discount offer needs CEO AI / admin review (over "
+            "auto band, cumulative cap exhausted, or unclear context)."
+        ),
+    },
+    {
+        "action": "discount.above_safe_auto_band",
+        "approver": "director",
+        "mode": "director_override",
+        "description": (
+            "Discount offer above the safe auto band (>20%). Director "
+            "override required."
+        ),
+    },
     # Shipments / RTO
     {
         "action": "shipment.dispatch_after_confirmed",
@@ -175,6 +196,48 @@ APPROVAL_MATRIX: tuple[Mapping[str, Any], ...] = (
         "description": (
             "Send a WhatsApp reorder reminder (MARKETING template tier). "
             "Requires explicit marketing opt-in."
+        ),
+    },
+    # Phase 5E — rescue discount + Day-20 reorder lifecycle templates.
+    # All run on the auto-with-consent rail; the rescue calculator
+    # already enforces the 50% cumulative cap and CEO escalation before
+    # the lifecycle send fires.
+    {
+        "action": "whatsapp.confirmation_rescue_discount",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Send a WhatsApp rescue-discount offer when the customer "
+            "refuses confirmation. Cap-checked + CEO escalation enforced "
+            "by apps.orders.rescue_discount."
+        ),
+    },
+    {
+        "action": "whatsapp.delivery_rescue_discount",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Send a WhatsApp rescue-discount offer when the customer "
+            "refuses delivery. Cap-checked + CEO escalation enforced."
+        ),
+    },
+    {
+        "action": "whatsapp.rto_rescue_discount",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Send a WhatsApp / AI-call rescue discount on RTO risk / "
+            "refusal. 50% cap enforced; high-risk over-cap goes to CEO."
+        ),
+    },
+    {
+        "action": "whatsapp.reorder_day20_reminder",
+        "approver": "auto",
+        "mode": "auto_with_consent",
+        "description": (
+            "Day-20 reorder reminder (MARKETING tier). No upfront "
+            "discount — rescue discount opens only on customer "
+            "objection."
         ),
     },
     {

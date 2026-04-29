@@ -1287,6 +1287,56 @@ class WhatsAppLifecycleEventsListView(APIView):
         return Response([_serialize_lifecycle_event(row) for row in rows])
 
 
+# ----- Phase 5E — Day-20 reorder admin endpoints -----
+
+
+class WhatsAppReorderDay20StatusView(APIView):
+    """``GET /api/whatsapp/reorder/day20/status/`` — admin/director view."""
+
+    permission_classes = [_AdminAlways]
+
+    def get(self, _request):
+        from django.conf import settings
+
+        from .reorder import (
+            DAY20_LOWER_BOUND_DAYS,
+            DAY20_UPPER_BOUND_DAYS,
+        )
+
+        rows = (
+            WhatsAppLifecycleEvent.objects.filter(
+                action_key="whatsapp.reorder_day20_reminder"
+            )
+            .order_by("-created_at")[:50]
+        )
+        return Response(
+            {
+                "enabled": bool(
+                    getattr(settings, "WHATSAPP_REORDER_DAY20_ENABLED", False)
+                ),
+                "lowerBoundDays": DAY20_LOWER_BOUND_DAYS,
+                "upperBoundDays": DAY20_UPPER_BOUND_DAYS,
+                "lifecycleEnabled": bool(
+                    getattr(settings, "WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED", False)
+                ),
+                "events": [_serialize_lifecycle_event(row) for row in rows],
+            }
+        )
+
+
+class WhatsAppReorderDay20RunView(APIView):
+    """``POST /api/whatsapp/reorder/day20/run/`` — admin/director sweep trigger."""
+
+    permission_classes = [_AdminAlways]
+
+    def post(self, request):
+        from .reorder import run_day20_reorder_sweep
+
+        dry_run = bool((request.data or {}).get("dryRun"))
+        result = run_day20_reorder_sweep(dry_run=dry_run)
+        return Response(result.to_dict())
+
+
 def _serialize_handoff(row: WhatsAppHandoffToCall) -> dict[str, Any]:
     return {
         "id": row.pk,
@@ -1345,6 +1395,8 @@ __all__ = (
     "WhatsAppCustomerTimelineView",
     "WhatsAppInboxView",
     "WhatsAppLifecycleEventsListView",
+    "WhatsAppReorderDay20RunView",
+    "WhatsAppReorderDay20StatusView",
     "WhatsAppMessageRetryView",
     "WhatsAppMessageViewSet",
     "WhatsAppProviderStatusView",

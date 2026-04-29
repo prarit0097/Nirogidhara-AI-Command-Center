@@ -1246,5 +1246,98 @@ export interface ClaimVaultCoverageReport {
   okCount: number;
   weakCount: number;
   missingCount: number;
+  /** Phase 5E — count of demo / default seed rows. */
+  demoCount?: number;
   items: ClaimVaultCoverageItem[];
+}
+
+// ---------- Phase 5E — Rescue Discount Flow + Day-20 Reorder ----------
+
+export type DiscountOfferSourceChannel =
+  | "whatsapp_ai"
+  | "ai_call"
+  | "confirmation"
+  | "delivery"
+  | "rto"
+  | "operator"
+  | "system";
+
+export type DiscountOfferStage =
+  | "order_booking"
+  | "confirmation"
+  | "delivery"
+  | "rto"
+  | "reorder"
+  | "customer_success";
+
+export type DiscountOfferStatus =
+  | "offered"
+  | "accepted"
+  | "rejected"
+  | "blocked"
+  | "skipped"
+  | "needs_ceo_review";
+
+export interface DiscountOffer {
+  id: number;
+  orderId: string;
+  customerId: string;
+  conversationId: string;
+  sourceChannel: DiscountOfferSourceChannel;
+  stage: DiscountOfferStage;
+  triggerReason: string;
+  previousDiscountPct: number;
+  offeredAdditionalPct: number;
+  resultingTotalDiscountPct: number;
+  capRemainingPct: number;
+  status: DiscountOfferStatus;
+  blockedReason: string;
+  offeredByAgent: string;
+  approvalRequestId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiscountOfferCap {
+  currentTotalPct: number;
+  capRemainingPct: number;
+  finalTotalIfAppliedPct: number;
+  capPassed: boolean;
+  totalCapPct: number;
+}
+
+export interface DiscountOfferListResponse {
+  orderId: string;
+  currentDiscountPct: number;
+  cap: DiscountOfferCap;
+  offers: DiscountOffer[];
+}
+
+export interface CreateRescueOfferPayload {
+  sourceChannel?: DiscountOfferSourceChannel;
+  stage: DiscountOfferStage;
+  triggerReason: string;
+  refusalCount?: number;
+  riskLevel?: string;
+  requestedPct?: number | null;
+  conversationId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReorderDay20StatusResponse {
+  enabled: boolean;
+  lifecycleEnabled: boolean;
+  lowerBoundDays: number;
+  upperBoundDays: number;
+  events: WhatsAppLifecycleEvent[];
+}
+
+export interface ReorderDay20RunResponse {
+  eligible: number;
+  queued: number;
+  skipped: number;
+  blocked: number;
+  failed: number;
+  dryRun: boolean;
 }

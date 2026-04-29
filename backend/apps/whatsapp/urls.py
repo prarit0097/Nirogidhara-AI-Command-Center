@@ -22,6 +22,8 @@ from .views import (
     WhatsAppCustomerTimelineView,
     WhatsAppInboxView,
     WhatsAppLifecycleEventsListView,
+    WhatsAppReorderDay20RunView,
+    WhatsAppReorderDay20StatusView,
     WhatsAppMessageRetryView,
     WhatsAppMessageViewSet,
     WhatsAppProviderStatusView,
@@ -119,5 +121,16 @@ urlpatterns = [
         "lifecycle-events/",
         WhatsAppLifecycleEventsListView.as_view(),
         name="whatsapp-lifecycle-events",
+    ),
+    # Phase 5E — Day-20 reorder admin endpoints.
+    path(
+        "reorder/day20/status/",
+        WhatsAppReorderDay20StatusView.as_view(),
+        name="whatsapp-reorder-day20-status",
+    ),
+    path(
+        "reorder/day20/run/",
+        WhatsAppReorderDay20RunView.as_view(),
+        name="whatsapp-reorder-day20-run",
     ),
 ] + router.urls
