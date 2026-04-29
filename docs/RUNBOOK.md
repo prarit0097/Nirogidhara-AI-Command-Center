@@ -117,6 +117,45 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5E-Smoke-Fix — OpenAI provider semantics
+
+The Phase 5E-Smoke harness adds four new detail fields to the
+`ai-reply` scenario when `--use-openai` is passed:
+
+| Field | Meaning |
+| --- | --- |
+| `openaiAttempted` | True when `--use-openai` is on. |
+| `openaiSucceeded` | True only when the OpenAI adapter actually returned `SUCCESS`. False if the SDK is missing, the API key is wrong, or the adapter raised. |
+| `providerPassed` | True when no provider was attempted OR when the attempted provider succeeded. |
+| `safeFailure` | True when `--use-openai` was on AND the adapter did NOT succeed but the customer send stayed blocked (i.e. safety held but the provider integration is broken). |
+
+A safe-failure is **safety-correct** (no real customer was messaged)
+but **does NOT count as a pass**. `scenario.passed=false` and
+`overallPassed=false` so operators see the failure clearly.
+
+Required gate before flipping any automation flag with real OpenAI:
+
+```bash
+python manage.py run_controlled_ai_smoke_test --scenario ai-reply --language hinglish --use-openai --json
+```
+
+Expected JSON keys (must all be true):
+
+```
+detail.openaiAttempted = true
+detail.openaiSucceeded = true
+detail.providerPassed = true
+detail.safeFailure   = false
+overallPassed        = true
+```
+
+If `safeFailure=true`, fix the OpenAI integration first. Common causes:
+
+1. `openai` Python SDK not installed in the backend container — rebuild after a `pip install`.
+2. `OPENAI_API_KEY` missing or wrong in `.env` / `.env.production`.
+3. `AI_PROVIDER` not set to `openai` (default is `disabled`).
+4. Network egress blocked from the VPS (rare on Hostinger but possible behind a strict firewall).
+
 ### Phase 5E-Smoke — Controlled Mock + OpenAI Smoke Testing Harness
 
 Run before flipping any automation flag in production. Defaults are

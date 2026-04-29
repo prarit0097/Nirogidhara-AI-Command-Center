@@ -18,6 +18,13 @@ razorpay>=1.4,<2.0
 # Imported lazily by each adapter, so dev/CI in mock mode runs without it.
 requests>=2.32,<3.0
 
+# Phase 5E-Smoke — OpenAI Python SDK for the AI provider chain.
+# Imported lazily by apps.integrations.ai.openai_client.dispatch so the
+# disabled / no-key / mocked-dispatch test paths still work without the
+# package installed. Pinned to the v1 SDK family (chat.completions.create).
+# No API key in this file — set OPENAI_API_KEY in .env / .env.production.
+openai>=1.0,<2.0
+
 # Phase 3C — Celery scheduler + Redis broker. Tests run in eager mode
 # (CELERY_TASK_ALWAYS_EAGER=true) so neither Redis nor a worker has to be
 # running for `pytest -q` / `manage.py check` / development.

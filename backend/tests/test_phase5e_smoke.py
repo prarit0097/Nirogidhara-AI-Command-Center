@@ -344,3 +344,168 @@ def test_smoke_failure_emits_failed_audit(db) -> None:
     path instead."""
     with pytest.raises(ValueError):
         run_smoke_harness(scenario="nope")
+
+
+# ---------------------------------------------------------------------------
+# 11. OpenAI provider smoke semantics (Phase 5E-Smoke fix)
+# ---------------------------------------------------------------------------
+
+
+def test_openai_sdk_is_importable() -> None:
+    """The openai SDK must be installed via requirements.txt so the
+    real provider path is exercisable on every deploy."""
+    from openai import OpenAI  # noqa: F401 — import-only check.
+
+    assert OpenAI is not None
+
+
+def test_default_run_keeps_provider_passed_true_without_openai(db) -> None:
+    """When --use-openai is NOT passed, providerPassed stays True
+    because the harness uses the deterministic mocked dispatcher."""
+    result = run_smoke_harness(scenario="ai-reply", language="hinglish")
+    detail = result.scenarios[0].detail
+    assert detail["openaiAttempted"] is False
+    assert detail["providerPassed"] is True
+    assert detail["safeFailure"] is False
+    assert result.scenarios[0].passed is True
+
+
+@override_settings(OPENAI_API_KEY="test-smoke-key", AI_PROVIDER="openai")
+def test_use_openai_passes_when_adapter_returns_success(db, monkeypatch) -> None:
+    """Mock the OpenAI adapter to SUCCESS — providerPassed=True and
+    the scenario passes."""
+    from apps.integrations.ai.base import AdapterResult, AdapterStatus
+    from apps.whatsapp.smoke_harness import _scripted_ai_decision_payload
+
+    def _fake_dispatch(_messages):
+        import json as _json
+
+        return AdapterResult(
+            status=AdapterStatus.SUCCESS,
+            provider="openai",
+            model="gpt-test",
+            output={
+                "text": _json.dumps(_scripted_ai_decision_payload()),
+                "finish_reason": "stop",
+            },
+            raw={"id": "real-openai"},
+            latency_ms=12,
+            cost_usd=0.0,
+            prompt_tokens=10,
+            completion_tokens=20,
+            total_tokens=30,
+        )
+
+    monkeypatch.setattr(
+        "apps.whatsapp.ai_orchestration.dispatch_messages", _fake_dispatch
+    )
+    result = run_smoke_harness(
+        scenario="ai-reply", language="hinglish", use_openai=True
+    )
+    scenario = result.scenarios[0]
+    detail = scenario.detail
+    assert detail["openaiAttempted"] is True
+    assert detail["openaiSucceeded"] is True
+    assert detail["providerPassed"] is True
+    assert detail["safeFailure"] is False
+    assert scenario.passed is True
+    assert result.overall_passed is True
+
+
+@override_settings(OPENAI_API_KEY="test-smoke-key", AI_PROVIDER="openai")
+def test_use_openai_safe_failure_when_adapter_fails(db, monkeypatch) -> None:
+    """Mock the OpenAI adapter to FAILED — providerPassed=False,
+    safeFailure=True, scenario passed=False, and the warning text
+    explicitly tells the operator the customer send stayed blocked."""
+    from apps.integrations.ai.base import AdapterResult, AdapterStatus
+
+    def _fake_dispatch(_messages):
+        return AdapterResult(
+            status=AdapterStatus.FAILED,
+            provider="openai",
+            model="gpt-test",
+            error_message="openai SDK not installed: No module named 'openai'",
+        )
+
+    monkeypatch.setattr(
+        "apps.whatsapp.ai_orchestration.dispatch_messages", _fake_dispatch
+    )
+    result = run_smoke_harness(
+        scenario="ai-reply", language="hinglish", use_openai=True
+    )
+    scenario = result.scenarios[0]
+    detail = scenario.detail
+    assert detail["openaiAttempted"] is True
+    assert detail["openaiSucceeded"] is False
+    assert detail["providerPassed"] is False
+    assert detail["safeFailure"] is True
+    assert detail["outcome"]["blockedReason"] in {
+        "adapter_failed",
+        "adapter_skipped",
+        "dispatch_error",
+    }
+    assert detail["outcome"]["sent"] is False
+    assert scenario.passed is False
+    assert any(
+        "OpenAI provider did not execute successfully" in w
+        for w in scenario.warnings
+    )
+    # Overall result must NOT report success when --use-openai failed.
+    assert result.overall_passed is False
+
+
+@override_settings(OPENAI_API_KEY="test-smoke-key", AI_PROVIDER="openai")
+def test_use_openai_safe_failure_audit_failed_kind_emitted(
+    db, monkeypatch
+) -> None:
+    """A safe-failure run must emit a system.smoke_test.failed audit so
+    operators see the failure on the live activity stream."""
+    from apps.integrations.ai.base import AdapterResult, AdapterStatus
+
+    def _fake_dispatch(_messages):
+        return AdapterResult(
+            status=AdapterStatus.FAILED,
+            provider="openai",
+            model="gpt-test",
+            error_message="boom",
+        )
+
+    monkeypatch.setattr(
+        "apps.whatsapp.ai_orchestration.dispatch_messages", _fake_dispatch
+    )
+    run_smoke_harness(
+        scenario="ai-reply", language="hinglish", use_openai=True
+    )
+    assert AuditEvent.objects.filter(kind="system.smoke_test.failed").exists()
+
+
+def test_no_real_whatsapp_send_during_use_openai_safe_failure(
+    db, monkeypatch
+) -> None:
+    """Even on safe-failure with --use-openai, no real WhatsApp send
+    happens. The harness's safe_mode locks WHATSAPP_PROVIDER=mock and
+    auto-reply OFF."""
+    from django.conf import settings
+    from apps.integrations.ai.base import AdapterResult, AdapterStatus
+
+    def _fake_dispatch(_messages):
+        return AdapterResult(
+            status=AdapterStatus.FAILED,
+            provider="openai",
+            model="gpt-test",
+            error_message="boom",
+        )
+
+    monkeypatch.setattr(
+        "apps.whatsapp.ai_orchestration.dispatch_messages", _fake_dispatch
+    )
+    with override_settings(
+        OPENAI_API_KEY="test-smoke-key",
+        AI_PROVIDER="openai",
+        WHATSAPP_PROVIDER="mock",
+    ):
+        run_smoke_harness(
+            scenario="ai-reply", language="hinglish", use_openai=True
+        )
+    # WhatsApp provider stays mock; no real outbound call ever fires.
+    assert (settings.WHATSAPP_PROVIDER or "mock").lower() == "mock"

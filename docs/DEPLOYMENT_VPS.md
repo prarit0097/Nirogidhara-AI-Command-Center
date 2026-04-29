@@ -140,6 +140,20 @@ sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
 sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py run_controlled_ai_smoke_test --scenario all --json
 
+# Phase 5E-Smoke-Fix — when the requirements.txt changes (e.g. the
+# openai SDK was added), rebuild the backend image so pip install
+# picks up the new dep, then re-run the OpenAI provider smoke. The
+# expected outcome is openaiSucceeded=true + providerPassed=true.
+# A safeFailure=true result means the SDK / API key / AI_PROVIDER
+# is wrong — fix it before flipping any automation flag.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production build backend
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production up -d backend worker beat
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python -c "from openai import OpenAI; print('openai SDK OK')"
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_smoke_test \
+        --scenario ai-reply --language hinglish --use-openai --mock-whatsapp --dry-run --json
+
 # Single-scenario examples (use these to debug a specific surface).
 sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py run_controlled_ai_smoke_test --scenario claim-vault --json

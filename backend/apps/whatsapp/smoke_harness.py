@@ -346,6 +346,31 @@ def _create_smoke_inbound(
     return msg
 
 
+_PROVIDER_FAILURE_BLOCKED_REASONS: frozenset[str] = frozenset(
+    {
+        "ai_provider_disabled",
+        "adapter_failed",
+        "adapter_skipped",
+        "dispatch_error",
+    }
+)
+
+
+def _provider_succeeded(blocked_reason: str) -> bool:
+    """Return True iff the LLM adapter actually returned SUCCESS.
+
+    Phase 5E-Smoke uses ``blocked_reason`` from
+    :class:`apps.whatsapp.ai_orchestration.OrchestrationOutcome` to
+    decide whether the AI provider executed cleanly. Anything in
+    :data:`_PROVIDER_FAILURE_BLOCKED_REASONS` means the adapter never
+    returned SUCCESS — the orchestrator's downstream gates (claim
+    vault, safety, blocked phrase, low confidence) DO count as
+    provider success because the LLM did respond and the filtering
+    happened on top of its output.
+    """
+    return blocked_reason not in _PROVIDER_FAILURE_BLOCKED_REASONS
+
+
 def run_ai_reply_scenario(
     *,
     language: str,
@@ -374,6 +399,27 @@ def run_ai_reply_scenario(
     sync_templates_from_provider(connection=connection, actor="smoke")
     customer = _ensure_smoke_customer(language=language)
     convo = _ensure_smoke_conversation(customer, connection)
+
+    # Pre-seed an outbound on this conversation so the greeting
+    # fast-path inside the orchestrator never short-circuits dispatch.
+    # The scripted smoke inbounds all start with "hi" / "hello" /
+    # "namaste" — without this seed, a fresh conversation would route
+    # through the locked Hindi greeting template and the LLM adapter
+    # would never be exercised. Idempotent via get_or_create.
+    WhatsAppMessage.objects.get_or_create(
+        id="WAM-SMOKE-AI-PRESEED",
+        defaults={
+            "conversation": convo,
+            "customer": customer,
+            "direction": WhatsAppMessage.Direction.OUTBOUND,
+            "status": WhatsAppMessage.Status.SENT,
+            "type": WhatsAppMessage.Type.TEMPLATE,
+            "body": "smoke-preseed",
+            "queued_at": timezone.now(),
+            "sent_at": timezone.now(),
+        },
+    )
+
     inbound = _create_smoke_inbound(
         convo, body=body, suffix=f"AI-{language.upper()}"
     )
@@ -410,6 +456,18 @@ def run_ai_reply_scenario(
     post_kinds = set(AuditEvent.objects.values_list("kind", flat=True).distinct())
     new_kinds = sorted(post_kinds - pre_kinds)
 
+    # Phase 5E-Smoke fix — when --use-openai is passed, the harness
+    # must distinguish a real provider success from a "safe failure"
+    # where the adapter raised but the orchestrator correctly kept
+    # any customer message blocked. Both are safety-correct, but only
+    # the former proves the provider integration actually works.
+    openai_attempted = bool(use_openai)
+    openai_succeeded = (
+        openai_attempted and _provider_succeeded(outcome.blocked_reason)
+    )
+    provider_passed = (not openai_attempted) or openai_succeeded
+    safe_failure = openai_attempted and not openai_succeeded
+
     result.audit_events_emitted = new_audit
     result.new_audit_kinds = new_kinds
     result.objects_created = {
@@ -438,6 +496,10 @@ def run_ai_reply_scenario(
         },
         "useOpenai": use_openai,
         "dryRun": dry_run,
+        "openaiAttempted": openai_attempted,
+        "openaiSucceeded": openai_succeeded,
+        "providerPassed": provider_passed,
+        "safeFailure": safe_failure,
     }
 
     if outcome.handoff_required and outcome.blocked_reason in {
@@ -480,6 +542,27 @@ def run_ai_reply_scenario(
         return result
     if new_audit == 0:
         result.errors.append("no audit events emitted; orchestrator silent")
+        return result
+
+    # Phase 5E-Smoke fix — `--use-openai` requires the adapter to have
+    # actually returned SUCCESS. A safe-failure (adapter blew up but
+    # the orchestrator correctly kept the customer message blocked) is
+    # explicitly reported but does NOT count as a pass — operators
+    # would otherwise miss "the SDK isn't installed" or "the API key
+    # is wrong" while the safe-defaults made everything look fine.
+    if safe_failure:
+        result.warnings.append(
+            f"OpenAI provider did not execute successfully "
+            f"(blockedReason={outcome.blocked_reason!r}); customer send "
+            "remained safely blocked. Treat as PROVIDER FAILURE — fix "
+            "the OpenAI integration before flipping any automation flag."
+        )
+        result.next_action = (
+            "Install the OpenAI SDK (pip install 'openai>=1.0,<2.0'), "
+            "verify OPENAI_API_KEY + AI_PROVIDER=openai, then re-run "
+            "with --use-openai. The harness must report "
+            "openaiSucceeded=true before any flag flip."
+        )
         return result
 
     result.passed = True
