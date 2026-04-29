@@ -156,6 +156,19 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.ai.discount_objection_handled": "message-circle",
     "whatsapp.ai.discount_offered": "percent",
     "whatsapp.ai.discount_blocked": "ban",
+    # Phase 5D — Chat-to-call handoff + lifecycle automation.
+    "whatsapp.handoff.call_requested": "phone",
+    "whatsapp.handoff.call_triggered": "phone-outgoing",
+    "whatsapp.handoff.call_failed": "phone-missed",
+    "whatsapp.handoff.call_skipped": "phone-off",
+    "whatsapp.handoff.call_skipped_duplicate": "skip-forward",
+    "whatsapp.lifecycle.queued": "send",
+    "whatsapp.lifecycle.sent": "send",
+    "whatsapp.lifecycle.blocked": "ban",
+    "whatsapp.lifecycle.skipped_duplicate": "skip-forward",
+    "whatsapp.lifecycle.failed": "alert-octagon",
+    "whatsapp.ai.order_moved_to_confirmation": "check-circle-2",
+    "compliance.claim_coverage.checked": "shield-check",
 }
 
 

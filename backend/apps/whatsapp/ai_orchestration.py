@@ -924,6 +924,61 @@ def _attempt_book_order(
     return outcome
 
 
+_BLOCKED_REASON_TO_CALL_REASON: dict[str, str] = {
+    "ai_handoff_requested": "ai_handoff_requested",
+    "low_confidence": "low_confidence_repeated",
+    "medical_emergency": "medical_emergency",
+    "side_effect_complaint": "side_effect_complaint",
+    "legal_threat": "legal_threat",
+}
+
+
+def _maybe_trigger_vapi_call(
+    convo: WhatsAppConversation,
+    inbound: WhatsAppMessage | None,
+    *,
+    blocked_reason: str,
+    decision: ChatAgentDecision | None,
+) -> None:
+    """Phase 5D — route safe handoff reasons through the Vapi call service.
+
+    Wrapped in a defensive try/except: a Vapi failure never breaks the
+    orchestrator's audit + state-finalisation path. The handoff service
+    itself records a handoff row in every outcome (failed / skipped /
+    triggered) so operations always have a paper trail.
+    """
+    if not getattr(settings, "WHATSAPP_CALL_HANDOFF_ENABLED", False):
+        return
+    call_reason = _BLOCKED_REASON_TO_CALL_REASON.get(blocked_reason)
+    if not call_reason and decision is not None:
+        # Look at the LLM's handoff_reason text for the "customer asked
+        # for a call" intent. The schema validator does not enumerate
+        # this — the LLM emits a free-text reason and we pattern-match.
+        text = (decision.handoff_reason or "").lower()
+        if any(kw in text for kw in ("call me", "phone call", "call please", "talk on call")):
+            call_reason = "customer_requested_call"
+    if not call_reason:
+        return
+    try:
+        from .call_handoff import trigger_vapi_call_from_whatsapp
+
+        trigger_vapi_call_from_whatsapp(
+            conversation=convo,
+            reason=call_reason,
+            inbound_message=inbound,
+            trigger_source=WhatsAppHandoffToCall_TRIGGER_AI,
+        )
+    except Exception as exc:  # noqa: BLE001 - never fail the AI run
+        logger.warning(
+            "WhatsApp Vapi handoff trigger failed for %s: %s", convo.id, exc
+        )
+
+
+# Local alias so we don't have to import the full enum at module scope —
+# the call_handoff module owns the value and accepts the literal string.
+WhatsAppHandoffToCall_TRIGGER_AI = "ai"
+
+
 def _finalize_run(
     convo: WhatsAppConversation,
     outcome: OrchestrationOutcome,
@@ -1003,6 +1058,16 @@ def _finalize_run(
         }:
             convo.status = WhatsAppConversation.Status.ESCALATED
             convo.save(update_fields=["status", "updated_at"])
+        # Phase 5D — opportunistic Vapi handoff for safe call reasons
+        # (customer asked for a call, low confidence, AI requested
+        # handoff). Safety reasons (medical / side-effect / legal)
+        # write a skipped handoff row so a human picks it up.
+        _maybe_trigger_vapi_call(
+            convo,
+            inbound,
+            blocked_reason=blocked_reason,
+            decision=decision,
+        )
     elif blocked_reason:
         # auto_reply_disabled / low_confidence / no_action → record but
         # don't escalate.

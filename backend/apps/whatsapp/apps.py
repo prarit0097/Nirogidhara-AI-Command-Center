@@ -6,3 +6,7 @@ class WhatsAppConfig(AppConfig):
     name = "apps.whatsapp"
     label = "whatsapp"
     verbose_name = "WhatsApp (Phase 5A)"
+
+    def ready(self) -> None:  # pragma: no cover - import side effect
+        # Phase 5D — register lifecycle signal receivers.
+        from . import signals  # noqa: F401

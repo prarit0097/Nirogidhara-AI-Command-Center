@@ -538,3 +538,160 @@ class WhatsAppInternalNote(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"note · {self.conversation_id} · {self.created_at:%Y-%m-%d}"
+
+
+class WhatsAppHandoffToCall(models.Model):
+    """Phase 5D — a WhatsApp conversation is being handed off to a Vapi call.
+
+    One row per (conversation, inboundMessage, reason) tuple — the
+    service layer enforces idempotency on that triple before triggering
+    a Vapi call so the same inbound never produces two calls.
+
+    The row is the audit-friendly link between the WhatsApp inbox and
+    the existing :class:`apps.calls.Call` table. ``call`` is the FK to
+    that Call row when the trigger succeeded; ``provider_call_id`` mirrors
+    what Vapi returned. Failures keep ``call=None`` and store the error
+    in ``error_message`` for forensics.
+    """
+
+    class TriggerSource(models.TextChoices):
+        AI = "ai", "ai"
+        OPERATOR = "operator", "operator"
+        LIFECYCLE = "lifecycle", "lifecycle"
+        SYSTEM = "system", "system"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "pending"
+        TRIGGERED = "triggered", "triggered"
+        FAILED = "failed", "failed"
+        SKIPPED = "skipped", "skipped"
+
+    conversation = models.ForeignKey(
+        WhatsAppConversation,
+        on_delete=models.CASCADE,
+        related_name="call_handoffs",
+    )
+    customer = models.ForeignKey(
+        "crm.Customer",
+        on_delete=models.PROTECT,
+        related_name="whatsapp_call_handoffs",
+    )
+    inbound_message = models.ForeignKey(
+        WhatsAppMessage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="call_handoffs",
+    )
+    reason = models.CharField(max_length=80)
+    trigger_source = models.CharField(
+        max_length=16,
+        choices=TriggerSource.choices,
+        default=TriggerSource.AI,
+    )
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    call = models.ForeignKey(
+        "calls.Call",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="whatsapp_handoffs",
+    )
+    provider_call_id = models.CharField(max_length=64, blank=True, default="")
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="whatsapp_handoffs",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    triggered_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("conversation", "-created_at")),
+            models.Index(fields=("status", "-created_at")),
+        )
+        constraints = (
+            # Idempotency: the same (conversation, inbound_message, reason)
+            # triple cannot create two handoffs. ``inbound_message`` is
+            # nullable; the partial constraint applies only when it's set.
+            models.UniqueConstraint(
+                fields=("conversation", "inbound_message", "reason"),
+                condition=~models.Q(inbound_message=None),
+                name="uniq_whatsapp_handoff_per_inbound",
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"handoff · {self.conversation_id} · {self.reason} · {self.status}"
+
+
+class WhatsAppLifecycleEvent(models.Model):
+    """Phase 5D — append-only log of WhatsApp lifecycle automation triggers.
+
+    Tracks every queued / sent / blocked / skipped lifecycle send so the
+    service layer can stay idempotent (``idempotency_key`` is unique)
+    and the inbox / Customer 360 can render a "lifecycle activity"
+    column without re-querying the audit ledger.
+    """
+
+    class ObjectType(models.TextChoices):
+        ORDER = "order", "order"
+        PAYMENT = "payment", "payment"
+        SHIPMENT = "shipment", "shipment"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "queued"
+        SENT = "sent", "sent"
+        BLOCKED = "blocked", "blocked"
+        SKIPPED = "skipped", "skipped"
+        FAILED = "failed", "failed"
+
+    action_key = models.CharField(max_length=120, db_index=True)
+    object_type = models.CharField(
+        max_length=16, choices=ObjectType.choices
+    )
+    object_id = models.CharField(max_length=64, db_index=True)
+    event_kind = models.CharField(max_length=64)
+    customer = models.ForeignKey(
+        "crm.Customer",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="whatsapp_lifecycle_events",
+    )
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.QUEUED
+    )
+    message = models.ForeignKey(
+        WhatsAppMessage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lifecycle_events",
+    )
+    block_reason = models.CharField(max_length=80, blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    idempotency_key = models.CharField(max_length=200, unique=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("object_type", "object_id", "-created_at")),
+            models.Index(fields=("status", "-created_at")),
+            models.Index(fields=("action_key", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"lifecycle · {self.action_key} · {self.object_type}:{self.object_id} · {self.status}"

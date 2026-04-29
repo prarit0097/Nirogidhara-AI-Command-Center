@@ -453,6 +453,21 @@ Inbound webhook flow: `services.handle_inbound_message_event` now enqueues `task
 
 New audit kinds (18): `whatsapp.ai.run_started`, `whatsapp.ai.run_completed`, `whatsapp.ai.run_failed`, `whatsapp.ai.reply_auto_sent`, `whatsapp.ai.reply_blocked`, `whatsapp.ai.suggestion_stored`, `whatsapp.ai.greeting_sent`, `whatsapp.ai.greeting_blocked`, `whatsapp.ai.language_detected`, `whatsapp.ai.category_detected`, `whatsapp.ai.address_updated`, `whatsapp.ai.order_draft_created`, `whatsapp.ai.order_booked`, `whatsapp.ai.payment_link_created`, `whatsapp.ai.handoff_required`, `whatsapp.ai.discount_objection_handled`, `whatsapp.ai.discount_offered`, `whatsapp.ai.discount_blocked`.
 
+#### Phase 5D — Chat-to-Call Handoff + Lifecycle Automation
+
+Phase 5D ships the direct WhatsApp → Vapi handoff bridge, the lifecycle automation service that fires approved-template sends on Order/Payment/Shipment events, and the Claim Vault coverage audit. Handoff and lifecycle automation both default OFF (`WHATSAPP_CALL_HANDOFF_ENABLED=false`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false`); the limited live-Meta test gate (`WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`) is the bridge between mock+OpenAI verification and a full production rollout. AI-booked orders move directly into the confirmation queue from the chat (Phase 5C `book_order_from_decision` calls `apps.orders.services.move_to_confirmation`).
+
+| Method | Path | Auth / role | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/compliance/claim-coverage/` | admin / director | Returns the Claim Vault coverage report. `{ totalProducts, okCount, weakCount, missingCount, items[] }` where each item carries `product, category, approvedClaimCount, hasApprovedClaims, missingRequiredUsageClaims, lastApprovedAt, risk: "ok"|"weak"|"missing", notes[]`. Writes a single `compliance.claim_coverage.checked` audit. |
+| POST | `/api/whatsapp/conversations/{id}/handoff-to-call/` | operations+ | Operator manual trigger. Body `{ reason?, note? }` (default reason `customer_requested_call`). Routes through `apps.whatsapp.call_handoff.trigger_vapi_call_from_whatsapp` → existing `apps.calls.services.trigger_call_for_lead`. Idempotent on `(conversation, inbound_message, reason)`. Returns `{ handoffId, status, callId, providerCallId, reason, skipped, errorMessage, message }`. Safety reasons (`medical_emergency`, `side_effect_complaint`, `legal_threat`) are recorded as `skipped` for human/doctor pickup — never auto-dialed. |
+| GET | `/api/whatsapp/conversations/{id}/handoffs/` | authenticated | Lists the most recent 50 `WhatsAppHandoffToCall` rows for the conversation. |
+| GET | `/api/whatsapp/lifecycle-events/` | authenticated | Lists the most recent 100 `WhatsAppLifecycleEvent` rows. Optional filters `?objectType=order|payment|shipment`, `?objectId=...`, `?status=queued|sent|blocked|skipped|failed`, `?limit=N` (max 500). |
+
+Lifecycle service (`apps.whatsapp.lifecycle.queue_lifecycle_message`) is the single dispatch path; signals in `apps.whatsapp.signals` listen on `orders.Order` / `payments.Payment` / `shipments.Shipment` `post_save` and queue the matching template via Celery (`send_whatsapp_lifecycle_message_task`) on commit. The send pipeline still flows through Phase 5A's `queue_template_message`, so consent + approved-template + Claim Vault + matrix + CAIO + idempotency gates are all in force on every lifecycle send. Idempotency key shape: `lifecycle:{action_key}:{object_type}:{object_id}:{event_kind}`. Template `whatsapp.usage_explanation` fails closed when `apps.compliance.coverage.coverage_for_product` reports `missing` / `weak` for the customer's product interest.
+
+New audit kinds (11): `whatsapp.handoff.call_requested`, `whatsapp.handoff.call_triggered`, `whatsapp.handoff.call_failed`, `whatsapp.handoff.call_skipped`, `whatsapp.handoff.call_skipped_duplicate`, `whatsapp.lifecycle.queued`, `whatsapp.lifecycle.sent`, `whatsapp.lifecycle.blocked`, `whatsapp.lifecycle.skipped_duplicate`, `whatsapp.lifecycle.failed`, `whatsapp.ai.order_moved_to_confirmation`, plus `compliance.claim_coverage.checked` for the coverage endpoint.
+
 ### Permissions
 
 `apps/accounts/permissions.py` exposes:

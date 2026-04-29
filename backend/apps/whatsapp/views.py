@@ -46,7 +46,9 @@ from .models import (
     WhatsAppConnection,
     WhatsAppConsent,
     WhatsAppConversation,
+    WhatsAppHandoffToCall,
     WhatsAppInternalNote,
+    WhatsAppLifecycleEvent,
     WhatsAppMessage,
     WhatsAppMessageStatusEvent,
     WhatsAppTemplate,
@@ -1183,13 +1185,156 @@ def _ai_state_payload(
     }
 
 
+# ============================================================================
+# Phase 5D — Chat-to-call handoff endpoints + lifecycle endpoints.
+# ============================================================================
+
+
+class WhatsAppConversationHandoffToCallView(APIView):
+    """``POST /api/whatsapp/conversations/{id}/handoff-to-call/`` — operator manual call trigger.
+
+    Operations / admin / director allowed. Viewer + anonymous blocked.
+    CAIO actor agent token never reaches this view (it has no auth path).
+    """
+
+    permission_classes = [_OperationsWritePermission]
+
+    def post(self, request, pk: str):
+        from .call_handoff import trigger_vapi_call_from_whatsapp
+
+        convo = _get_conversation_or_404(pk)
+        body = request.data or {}
+        reason = str(body.get("reason") or "customer_requested_call").strip()
+        note = str(body.get("note") or "")[:500]
+
+        try:
+            result = trigger_vapi_call_from_whatsapp(
+                conversation=convo,
+                reason=reason,
+                triggered_by=request.user,
+                inbound_message=None,
+                trigger_source=WhatsAppHandoffToCall.TriggerSource.OPERATOR,
+                metadata={"note": note} if note else None,
+            )
+        except Exception as exc:  # noqa: BLE001 - never 5xx the API
+            return Response(
+                {"detail": f"Handoff failed: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(
+            {
+                "handoffId": result.handoff_id,
+                "status": result.status,
+                "callId": result.call_id,
+                "providerCallId": result.provider_call_id,
+                "reason": result.reason,
+                "skipped": result.skipped,
+                "errorMessage": result.error_message,
+                "message": (
+                    "Call triggered" if not result.skipped else f"Skipped: {result.error_message}"
+                ),
+            },
+            status=status.HTTP_201_CREATED if not result.skipped else status.HTTP_200_OK,
+        )
+
+
+class WhatsAppConversationHandoffsListView(APIView):
+    """``GET /api/whatsapp/conversations/{id}/handoffs/`` — list call handoffs."""
+
+    permission_classes = [_ReadAuthRequired]
+
+    def get(self, _request, pk: str):
+        convo = _get_conversation_or_404(pk)
+        rows = (
+            WhatsAppHandoffToCall.objects.filter(conversation=convo)
+            .select_related("call", "requested_by", "inbound_message")
+            .order_by("-created_at")[:50]
+        )
+        return Response(
+            [
+                _serialize_handoff(row)
+                for row in rows
+            ]
+        )
+
+
+class WhatsAppLifecycleEventsListView(APIView):
+    """``GET /api/whatsapp/lifecycle-events/`` — read recent lifecycle events.
+
+    Optional filters: ``objectType``, ``objectId``, ``status``, ``limit``.
+    """
+
+    permission_classes = [_ReadAuthRequired]
+
+    def get(self, request):
+        qs = WhatsAppLifecycleEvent.objects.all().select_related(
+            "customer", "message"
+        )
+        object_type = request.query_params.get("objectType")
+        if object_type:
+            qs = qs.filter(object_type=object_type)
+        object_id = request.query_params.get("objectId")
+        if object_id:
+            qs = qs.filter(object_id=object_id)
+        status_param = request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+        try:
+            limit = max(1, min(int(request.query_params.get("limit") or 100), 500))
+        except (TypeError, ValueError):
+            limit = 100
+        rows = qs.order_by("-created_at")[:limit]
+        return Response([_serialize_lifecycle_event(row) for row in rows])
+
+
+def _serialize_handoff(row: WhatsAppHandoffToCall) -> dict[str, Any]:
+    return {
+        "id": row.pk,
+        "conversationId": row.conversation_id,
+        "customerId": row.customer_id,
+        "inboundMessageId": row.inbound_message_id or "",
+        "reason": row.reason,
+        "triggerSource": row.trigger_source,
+        "status": row.status,
+        "callId": row.call_id or "",
+        "providerCallId": row.provider_call_id or "",
+        "requestedBy": getattr(row.requested_by, "username", "") or "",
+        "metadata": dict(row.metadata or {}),
+        "createdAt": row.created_at.isoformat(),
+        "updatedAt": row.updated_at.isoformat(),
+        "triggeredAt": row.triggered_at.isoformat() if row.triggered_at else None,
+        "errorMessage": row.error_message or "",
+    }
+
+
+def _serialize_lifecycle_event(row: WhatsAppLifecycleEvent) -> dict[str, Any]:
+    return {
+        "id": row.pk,
+        "actionKey": row.action_key,
+        "objectType": row.object_type,
+        "objectId": row.object_id,
+        "eventKind": row.event_kind,
+        "customerId": row.customer_id or "",
+        "messageId": row.message_id or "",
+        "status": row.status,
+        "blockReason": row.block_reason or "",
+        "errorMessage": row.error_message or "",
+        "idempotencyKey": row.idempotency_key,
+        "metadata": dict(row.metadata or {}),
+        "createdAt": row.created_at.isoformat(),
+        "updatedAt": row.updated_at.isoformat(),
+    }
+
+
 __all__ = (
     "WhatsAppAiStatusView",
     "WhatsAppConnectionViewSet",
     "WhatsAppConsentView",
     "WhatsAppConversationAiModeView",
     "WhatsAppConversationAiRunsView",
+    "WhatsAppConversationHandoffToCallView",
     "WhatsAppConversationHandoffView",
+    "WhatsAppConversationHandoffsListView",
     "WhatsAppConversationMarkReadView",
     "WhatsAppConversationMessagesView",
     "WhatsAppConversationNotesView",
@@ -1199,6 +1344,7 @@ __all__ = (
     "WhatsAppConversationViewSet",
     "WhatsAppCustomerTimelineView",
     "WhatsAppInboxView",
+    "WhatsAppLifecycleEventsListView",
     "WhatsAppMessageRetryView",
     "WhatsAppMessageViewSet",
     "WhatsAppProviderStatusView",

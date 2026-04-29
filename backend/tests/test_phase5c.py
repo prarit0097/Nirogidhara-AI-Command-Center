@@ -769,7 +769,8 @@ def test_order_booking_happy_path(
     assert outcome.order_id
     assert outcome.payment_id
     order = Order.objects.get(pk=outcome.order_id)
-    assert order.stage == Order.Stage.ORDER_PUNCHED
+    # Phase 5D — AI-booked orders move directly to the confirmation queue.
+    assert order.stage == Order.Stage.CONFIRMATION_PENDING
     assert order.amount == 3000
     payment = Payment.objects.get(pk=outcome.payment_id)
     assert payment.amount == 499

@@ -1150,3 +1150,101 @@ export interface WhatsAppTemplateSyncResult {
   totalProcessed: number;
   actor: string;
 }
+
+// ---------- Phase 5D — Chat-to-Call handoff + Lifecycle automation ----------
+
+export type WhatsAppHandoffTriggerSource =
+  | "ai"
+  | "operator"
+  | "lifecycle"
+  | "system";
+
+export type WhatsAppHandoffStatus =
+  | "pending"
+  | "triggered"
+  | "failed"
+  | "skipped";
+
+export interface WhatsAppHandoffToCall {
+  id: number;
+  conversationId: string;
+  customerId: string;
+  inboundMessageId: string;
+  reason: string;
+  triggerSource: WhatsAppHandoffTriggerSource;
+  status: WhatsAppHandoffStatus;
+  callId: string;
+  providerCallId: string;
+  requestedBy: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  triggeredAt: string | null;
+  errorMessage: string;
+}
+
+export interface TriggerWhatsAppCallPayload {
+  reason?: string;
+  note?: string;
+}
+
+export interface TriggerWhatsAppCallResponse {
+  handoffId: number;
+  status: WhatsAppHandoffStatus;
+  callId: string;
+  providerCallId: string;
+  reason: string;
+  skipped: boolean;
+  errorMessage: string;
+  message: string;
+}
+
+export type WhatsAppLifecycleObjectType =
+  | "order"
+  | "payment"
+  | "shipment";
+
+export type WhatsAppLifecycleStatus =
+  | "queued"
+  | "sent"
+  | "blocked"
+  | "skipped"
+  | "failed";
+
+export interface WhatsAppLifecycleEvent {
+  id: number;
+  actionKey: string;
+  objectType: WhatsAppLifecycleObjectType;
+  objectId: string;
+  eventKind: string;
+  customerId: string;
+  messageId: string;
+  status: WhatsAppLifecycleStatus;
+  blockReason: string;
+  errorMessage: string;
+  idempotencyKey: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClaimCoverageRisk = "ok" | "weak" | "missing";
+
+export interface ClaimVaultCoverageItem {
+  product: string;
+  category: string;
+  approvedClaimCount: number;
+  hasApprovedClaims: boolean;
+  missingRequiredUsageClaims: boolean;
+  lastApprovedAt: string;
+  risk: ClaimCoverageRisk;
+  notes: string[];
+}
+
+export interface ClaimVaultCoverageReport {
+  totalProducts: number;
+  okCount: number;
+  weakCount: number;
+  missingCount: number;
+  items: ClaimVaultCoverageItem[];
+}

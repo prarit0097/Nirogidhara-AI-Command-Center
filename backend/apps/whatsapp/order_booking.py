@@ -181,8 +181,60 @@ def book_order_from_decision(
             "amount": amount,
             "discount_pct": proposed_pct,
             "actor_role": actor_role,
+            "source": "whatsapp_ai",
+            "bookedBy": "whatsapp_ai_chat_agent",
         },
     )
+
+    # Phase 5D — push the AI-booked order straight into the confirmation
+    # queue so confirmation-pending visibility kicks in immediately. We
+    # don't bypass the state machine — we go through the existing
+    # ``move_to_confirmation`` service. Failure is non-fatal: the order
+    # stays at Order Punched and metadata records the failure so ops
+    # can fix it from the orders board.
+    confirmation_move_failed = False
+    confirmation_error = ""
+    try:
+        from apps.orders.services import move_to_confirmation
+
+        with transaction.atomic():
+            move_to_confirmation(order, by_user=None)
+        write_event(
+            kind="whatsapp.ai.order_moved_to_confirmation",
+            text=(
+                f"AI-booked order {order.id} moved to confirmation queue "
+                f"· conversation={conversation.id}"
+            ),
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "conversation_id": conversation.id,
+                "order_id": order.id,
+                "customer_id": conversation.customer_id,
+                "source": "whatsapp_ai",
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - never lose the booked order
+        logger.warning(
+            "WhatsApp AI: confirmation move failed for order %s: %s",
+            order.id,
+            exc,
+        )
+        confirmation_move_failed = True
+        confirmation_error = str(exc)[:500]
+        write_event(
+            kind="whatsapp.ai.order_moved_to_confirmation",
+            text=(
+                f"AI-booked order {order.id} confirmation move FAILED · "
+                f"manual operator review needed"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": conversation.id,
+                "order_id": order.id,
+                "error": confirmation_error,
+                "confirmationMoveFailed": True,
+            },
+        )
 
     payment_id = ""
     payment_url = ""

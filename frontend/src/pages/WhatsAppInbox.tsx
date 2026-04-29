@@ -26,6 +26,7 @@ import {
   Languages,
   MessageCircle,
   PauseCircle,
+  Phone,
   PlayCircle,
   RefreshCw,
   Search,
@@ -343,6 +344,31 @@ export default function WhatsAppInboxPage() {
                   setAiBusy(false);
                 }
               }}
+              onTriggerCall={async () => {
+                if (!activeConversation) return;
+                setAiBusy(true);
+                try {
+                  const res = await api.triggerWhatsAppConversationCall(
+                    activeConversation.id,
+                    { reason: "customer_requested_call" },
+                  );
+                  if (res.skipped) {
+                    toast.warning(
+                      `Call handoff skipped · ${res.errorMessage || res.reason}`,
+                    );
+                  } else {
+                    toast.success(
+                      `Vapi call triggered · ${res.callId || res.providerCallId}`,
+                    );
+                  }
+                  await refreshInbox();
+                  await refreshAiRuns(activeConversation.id);
+                } catch (error) {
+                  toast.error(`Call handoff failed: ${(error as Error).message}`);
+                } finally {
+                  setAiBusy(false);
+                }
+              }}
             />
           )}
         </div>
@@ -462,6 +488,7 @@ interface ThreadPaneProps {
   onAiRunNow: () => void | Promise<void>;
   onAiHandoff: () => void | Promise<void>;
   onAiResume: () => void | Promise<void>;
+  onTriggerCall: () => void | Promise<void>;
 }
 
 function ThreadPane({
@@ -481,6 +508,7 @@ function ThreadPane({
   onAiRunNow,
   onAiHandoff,
   onAiResume,
+  onTriggerCall,
 }: ThreadPaneProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -538,6 +566,7 @@ function ThreadPane({
             onAiRunNow={onAiRunNow}
             onAiHandoff={onAiHandoff}
             onAiResume={onAiResume}
+            onTriggerCall={onTriggerCall}
           />
           <div className="rounded-lg border border-border p-2.5">
             <div className="flex items-center gap-1.5 mb-1.5 text-xs font-medium text-muted-foreground">
@@ -596,6 +625,7 @@ interface AiAgentPanelProps {
   onAiRunNow: () => void | Promise<void>;
   onAiHandoff: () => void | Promise<void>;
   onAiResume: () => void | Promise<void>;
+  onTriggerCall: () => void | Promise<void>;
 }
 
 function AiAgentPanel({
@@ -606,6 +636,7 @@ function AiAgentPanel({
   onAiRunNow,
   onAiHandoff,
   onAiResume,
+  onTriggerCall,
 }: AiAgentPanelProps) {
   const aiEnabled = aiState?.aiEnabled ?? true;
   const handoffRequired = aiState?.handoffRequired ?? false;
@@ -685,6 +716,15 @@ function AiAgentPanel({
           >
             <RefreshCw className={`h-3 w-3 ${aiBusy ? "animate-spin" : ""}`} />
             Run AI now
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1"
+            disabled={aiBusy}
+            onClick={() => void onTriggerCall()}
+          >
+            <Phone className="h-3 w-3" /> Call customer
           </Button>
         </div>
       </div>

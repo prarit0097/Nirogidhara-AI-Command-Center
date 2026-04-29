@@ -9,7 +9,9 @@ from .views import (
     WhatsAppConsentView,
     WhatsAppConversationAiModeView,
     WhatsAppConversationAiRunsView,
+    WhatsAppConversationHandoffToCallView,
     WhatsAppConversationHandoffView,
+    WhatsAppConversationHandoffsListView,
     WhatsAppConversationMarkReadView,
     WhatsAppConversationMessagesView,
     WhatsAppConversationNotesView,
@@ -19,6 +21,7 @@ from .views import (
     WhatsAppConversationViewSet,
     WhatsAppCustomerTimelineView,
     WhatsAppInboxView,
+    WhatsAppLifecycleEventsListView,
     WhatsAppMessageRetryView,
     WhatsAppMessageViewSet,
     WhatsAppProviderStatusView,
@@ -100,5 +103,21 @@ urlpatterns = [
         "conversations/<str:pk>/resume-ai/",
         WhatsAppConversationResumeAiView.as_view(),
         name="whatsapp-conversation-resume-ai",
+    ),
+    # Phase 5D — Chat-to-call handoff + lifecycle visibility.
+    path(
+        "conversations/<str:pk>/handoff-to-call/",
+        WhatsAppConversationHandoffToCallView.as_view(),
+        name="whatsapp-conversation-handoff-to-call",
+    ),
+    path(
+        "conversations/<str:pk>/handoffs/",
+        WhatsAppConversationHandoffsListView.as_view(),
+        name="whatsapp-conversation-handoffs",
+    ),
+    path(
+        "lifecycle-events/",
+        WhatsAppLifecycleEventsListView.as_view(),
+        name="whatsapp-lifecycle-events",
     ),
 ] + router.urls

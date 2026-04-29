@@ -114,6 +114,11 @@ import type {
   WhatsAppConversationAiPayload,
   WhatsAppConversationAiState,
   UpdateWhatsAppAiModePayload,
+  WhatsAppHandoffToCall,
+  TriggerWhatsAppCallPayload,
+  TriggerWhatsAppCallResponse,
+  WhatsAppLifecycleEvent,
+  ClaimVaultCoverageReport,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -863,6 +868,48 @@ export const api = {
           aiMode: "auto",
         }),
     ),
+
+  // ---------- Phase 5D — Chat-to-call handoff + lifecycle automation ----------
+  triggerWhatsAppConversationCall: (
+    id: string,
+    payload: TriggerWhatsAppCallPayload = {},
+  ) =>
+    safeMutate<TriggerWhatsAppCallResponse>(
+      `/whatsapp/conversations/${id}/handoff-to-call/`,
+      "POST",
+      payload,
+      () => optimisticTriggerCallResponse(payload),
+    ),
+  getWhatsAppConversationHandoffs: (id: string) =>
+    safeFetch<WhatsAppHandoffToCall[]>(
+      `/whatsapp/conversations/${id}/handoffs/`,
+      () => [],
+    ),
+  getWhatsAppLifecycleEvents: (params?: {
+    objectType?: string;
+    objectId?: string;
+    status?: string;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.objectType) qs.set("objectType", params.objectType);
+    if (params?.objectId) qs.set("objectId", params.objectId);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return safeFetch<WhatsAppLifecycleEvent[]>(
+      `/whatsapp/lifecycle-events/${suffix}`,
+      () => [],
+    );
+  },
+  getClaimVaultCoverage: () =>
+    safeFetch<ClaimVaultCoverageReport>("/compliance/claim-coverage/", () => ({
+      totalProducts: 0,
+      okCount: 0,
+      weakCount: 0,
+      missingCount: 0,
+      items: [],
+    })),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
@@ -1410,6 +1457,23 @@ function emptyAiGlobalStatus(): WhatsAppAiGlobalStatus {
       maxTurnsPerConversationPerHour: 10,
       maxMessagesPerCustomerPerDay: 30,
     },
+  };
+}
+
+// ---------- Phase 5D — handoff optimistic helper ----------
+
+function optimisticTriggerCallResponse(
+  payload: TriggerWhatsAppCallPayload,
+): TriggerWhatsAppCallResponse {
+  return {
+    handoffId: Date.now(),
+    status: "skipped",
+    callId: "",
+    providerCallId: "",
+    reason: payload.reason ?? "customer_requested_call",
+    skipped: true,
+    errorMessage: "Backend offline — optimistic stub.",
+    message: "Backend offline — optimistic stub.",
   };
 }
 

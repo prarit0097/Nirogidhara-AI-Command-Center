@@ -377,6 +377,35 @@ WHATSAPP_AI_MAX_MESSAGES_PER_CUSTOMER_PER_DAY = _safe_int(
 )
 
 
+# ----- Phase 5D — Chat-to-Call Handoff + Lifecycle Automation -----
+# Direct WhatsApp → Vapi handoff. Defaults OFF so a fresh deploy does
+# not auto-dial customers until ops verify the Vapi assistant config
+# end-to-end (mock first, OpenAI test second, then limited live Meta).
+WHATSAPP_CALL_HANDOFF_ENABLED = _bool(
+    os.environ.get("WHATSAPP_CALL_HANDOFF_ENABLED"), default=False
+)
+
+# Lifecycle template automation. Defaults OFF — when enabled, business
+# events (order moved to confirmation, payment link created, shipment
+# out for delivery / NDR / RTO) trigger approved-template sends through
+# the existing Phase 5A pipeline. All consent / Claim Vault / approval
+# matrix / CAIO gates remain in force.
+WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED = _bool(
+    os.environ.get("WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED"), default=False
+)
+
+# Limited live Meta test mode — when WHATSAPP_PROVIDER=meta_cloud and
+# this flag is true, the service layer refuses to send to any number
+# not in WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS. This is the bridge
+# between mock+OpenAI verification and a full production rollout.
+WHATSAPP_LIVE_META_LIMITED_TEST_MODE = _bool(
+    os.environ.get("WHATSAPP_LIVE_META_LIMITED_TEST_MODE"), default=True
+)
+WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS = _csv(
+    os.environ.get("WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS")
+)
+
+
 # ----- Phase 4A — Real-time WebSockets via Django Channels -----
 # Local dev / pytest default to the in-memory channel layer so neither
 # Redis nor the daphne ASGI runner is required for the test suite. To

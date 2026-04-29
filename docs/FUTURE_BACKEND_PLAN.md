@@ -693,13 +693,21 @@ Shipped per Phase 5A-1 addendum + Prarit's locked Phase 5C decisions (auto mode,
 
 **Out of scope (still deferred):** `learned_memory.py` port, `WhatsAppAIReplySuggestion` / `WhatsAppChatAgentRun` separate tables, chat-to-call handoff (Phase 5D), lifecycle automation (Phase 5D), confirmation / delivery / RTO / reorder rescue automation (Phase 5E), campaigns (Phase 5F).
 
-### Phase 5D — Chat-to-Call Handoff + Lifecycle Automation
+### ✅ Phase 5D — Chat-to-Call Handoff + Lifecycle Automation (DONE)
 
-- Chat-to-call handoff (per addendum §Y) wired to `apps.calls.services.trigger_call_for_lead`. New `WhatsAppHandoffToCall` model captures the handoff record; `whatsapp.handoff.call_triggered` audit fires.
-- Reverse handoff: AI Calling Agent can fire one approved template back into chat.
-- Order / Payment / Shipment state-change signals fire `enforce_or_queue` for the matching template.
-- Auto-approved (consent-gated) lifecycle messages flow without operator action.
-- Operations / admin can still manually pre-empt or send.
+Shipped per Prarit's locked Phase 5D decisions (direct Vapi handoff, AI-booked → confirmation queue, mock + OpenAI test then limited live Meta rollout, Claim Vault coverage check). Tests: 29 new pytest cases; **498 backend + 13 frontend, all green.**
+
+- ✅ `apps.whatsapp.call_handoff.trigger_vapi_call_from_whatsapp` is the SINGLE entry that may dial Vapi from WhatsApp; routes through existing `apps.calls.services.trigger_call_for_lead`. New `WhatsAppHandoffToCall` model is idempotent on `(conversation, inbound_message, reason)`. `whatsapp.handoff.call_requested / call_triggered / call_failed / call_skipped / call_skipped_duplicate` audits.
+- ✅ Phase 5C orchestrator opportunistically routes safe handoff reasons to Vapi when `WHATSAPP_CALL_HANDOFF_ENABLED=true`. Safety reasons (medical_emergency / side_effect_complaint / legal_threat / refund_threat) record a `skipped` row for human/doctor pickup.
+- ✅ Operator manual trigger at `POST /api/whatsapp/conversations/{id}/handoff-to-call/` (operations+); CAIO never reaches the view (no auth path).
+- ✅ AI-booked orders move directly into the confirmation queue: `book_order_from_decision` calls `apps.orders.services.move_to_confirmation` post-create, audits `whatsapp.ai.order_moved_to_confirmation`. Failure flips `confirmationMoveFailed=true` metadata flag — order is never lost.
+- ✅ Lifecycle service `apps.whatsapp.lifecycle.queue_lifecycle_message` + `apps.whatsapp.signals` listen on Order/Payment/Shipment `post_save` and route to approved templates (`whatsapp.confirmation_reminder`, `whatsapp.payment_reminder`, `whatsapp.delivery_reminder`, `whatsapp.usage_explanation`, `whatsapp.rto_rescue`). Idempotent on `lifecycle:{action}:{type}:{id}:{event}`. `whatsapp.lifecycle.queued / sent / blocked / skipped_duplicate / failed` audits. `usage_explanation` template fails closed when Phase 5D Claim Vault coverage shows `missing` / `weak`.
+- ✅ Claim Vault coverage audit: `apps.compliance.coverage` + `python manage.py check_claim_vault_coverage` (exits 1 on missing) + admin-only `GET /api/compliance/claim-coverage/`.
+- ✅ Three new endpoints (`POST /api/whatsapp/conversations/{id}/handoff-to-call/`, `GET /api/whatsapp/conversations/{id}/handoffs/`, `GET /api/whatsapp/lifecycle-events/`).
+- ✅ Four new env vars (all default safe): `WHATSAPP_CALL_HANDOFF_ENABLED=false`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false`, `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS=`.
+- ✅ Frontend: "Call customer" button on AI Chat panel; new `WhatsAppHandoffToCall` / `WhatsAppLifecycleEvent` / `ClaimVaultCoverageReport` types; new `triggerWhatsAppConversationCall / getWhatsAppConversationHandoffs / getWhatsAppLifecycleEvents / getClaimVaultCoverage` api methods.
+
+**Out of scope (deferred to 5E):** confirmation / delivery / RTO refusal-based rescue discount flow, `DiscountOfferLog` table, `validate_total_discount_cap` enforcement before `apply_order_discount`, `discount.above_50_director_override` matrix row, `WhatsAppConversationOutcome` / `WhatsAppEscalation` finalisation tables, reverse handoff (AI Calling Agent → WhatsApp template), `learned_memory.py` port. Campaigns remain Phase 5F.
 
 ### Phase 5E — Confirmation / Delivery / RTO / Reorder automation + Discount Rescue
 

@@ -90,7 +90,57 @@ def run_whatsapp_ai_agent_for_conversation(
     }
 
 
+@shared_task(
+    name="apps.whatsapp.tasks.send_whatsapp_lifecycle_message",
+    bind=True,
+)
+def send_whatsapp_lifecycle_message_task(
+    self,
+    object_type: str,
+    object_id: str,
+    event_kind: str,
+    *,
+    customer_id: str = "",
+    variables: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Phase 5D — drive a lifecycle template send for one business event.
+
+    The task is intentionally NOT wrapped in ``autoretry_for``: the
+    lifecycle service writes a :class:`WhatsAppLifecycleEvent` row in
+    every outcome (queued/sent/blocked/skipped). Provider-side retries
+    happen on the Phase 5A ``send_whatsapp_message`` task once the
+    message is queued; retrying the lifecycle layer would re-evaluate
+    consent / Claim Vault gates against the exact same event, which is
+    pointless.
+    """
+    from apps.crm.models import Customer
+
+    from .lifecycle import queue_lifecycle_message
+
+    customer = None
+    if customer_id:
+        customer = Customer.objects.filter(pk=customer_id).first()
+
+    result = queue_lifecycle_message(
+        object_type=object_type,
+        object_id=object_id,
+        event_kind=event_kind,
+        customer=customer,
+        variables=variables or {},
+        metadata=metadata or {},
+    )
+    return {
+        "lifecycleEventId": result.event_id,
+        "status": result.status,
+        "messageId": result.message_id,
+        "blockReason": result.block_reason,
+        "errorMessage": result.error_message,
+    }
+
+
 __all__ = (
     "run_whatsapp_ai_agent_for_conversation",
+    "send_whatsapp_lifecycle_message_task",
     "send_whatsapp_message",
 )
