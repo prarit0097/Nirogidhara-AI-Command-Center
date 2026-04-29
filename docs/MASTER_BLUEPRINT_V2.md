@@ -14,9 +14,9 @@
 | Author of record | Prarit Sidana (Director, Nirogidhara Private Limited) |
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
-| Completed phase range | Phase 1 → Phase 5E-Smoke-Fix-3 |
-| Last verified test baseline | 619 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
-| Smoke + provider state | Phase 5E-Smoke + Smoke-Fix-1 / Smoke-Fix-2 / Smoke-Fix-3 completed · OpenAI provider smoke test passed on VPS · OpenAI SDK installed (`openai>=1.0,<2.0`) · OpenAI adapter uses `max_completion_tokens` · false `side_effect_complaint` classification fixed |
+| Completed phase range | Phase 1 → Phase 5F-Gate |
+| Last verified test baseline | 643 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
+| Smoke + provider state | Phase 5E-Smoke + Smoke-Fix-1 / Smoke-Fix-2 / Smoke-Fix-3 completed · OpenAI provider smoke test passed on VPS · OpenAI SDK installed (`openai>=1.0,<2.0`) · OpenAI adapter uses `max_completion_tokens` · false `side_effect_complaint` classification fixed · Phase 5F-Gate one-number test harness shipped |
 | Live deployment stack | Docker Compose (six containers) on Hostinger VPS, host port 18020 → host Nginx + Certbot SSL |
 | GitHub repo | https://github.com/prarit0097/Nirogidhara-AI-Command-Center |
 | VPS path | `/opt/nirogidhara-command` |
@@ -94,7 +94,7 @@ curl -fsS https://ai.nirogidhara.com/api/healthz/
 
 ---
 
-## 3. Completed Build Timeline — Phase 1 → Phase 5E-Smoke-Fix-3
+## 3. Completed Build Timeline — Phase 1 → Phase 5F-Gate
 
 | Phase | Status | What shipped | Risk / Safety note |
 | --- | --- | --- | --- |
@@ -125,6 +125,7 @@ curl -fsS https://ai.nirogidhara.com/api/healthz/
 | 5D | ✅ Live | Chat-to-Call Handoff + Lifecycle Automation. `apps.whatsapp.call_handoff` is the single Vapi entry from WhatsApp; idempotent on `(conversation, inbound, reason)`. Safety reasons skip auto-dial. AI-booked orders move directly to confirmation queue. `apps.whatsapp.lifecycle` + `apps.whatsapp.signals` route Order/Payment/Shipment events to approved templates. Claim Vault coverage audit (`check_claim_vault_coverage`, `/api/compliance/claim-coverage/`). Three new endpoints. 11 new audit kinds. | `WHATSAPP_CALL_HANDOFF_ENABLED=false`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false`, `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` defaults. |
 | 5E | ✅ Live | Rescue Discount Flow + Day-20 Reorder + Default Claim Vault Seeds. `apps.orders.rescue_discount` enforces the **50% absolute cumulative cap** with per-stage ladders. `DiscountOfferLog` records every attempt. CEO AI / admin escalation via `discount.rescue.ceo_review` + `discount.above_safe_auto_band` matrix rows. Five new endpoints. 12 new audit kinds. `seed_default_claims` covers the eight categories. | `WHATSAPP_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_REORDER_DAY20_ENABLED=false`, `DEFAULT_CLAIMS_SEED_DEMO_ONLY=true` defaults. CAIO refused at offer entry. |
 | 5E-Hotfix | ✅ Live | Two `RenameIndex` migrations to bring Phase 5D / 5E hand-rolled index names in line with Django's auto-suffix form. Working agreement now requires `python manage.py makemigrations --check --dry-run` to be clean before every commit. | Pure metadata; no schema rewrite. |
+| 5F-Gate | ✅ Live | Limited Live Meta WhatsApp One-Number Test harness. New `apps.whatsapp.meta_one_number_test` module + `python manage.py run_meta_one_number_test --to +91… --template nrg_greeting_intro --verify-only|--send|--check-webhook-config --json` exercises the real Meta Cloud send path against exactly one approved test number. Hard stops stacked: provider must be `meta_cloud`, `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, destination must be in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`, template must be APPROVED + active + UTILITY/AUTHENTICATION (MARKETING tier refused), every automation flag must remain off. Defaults to `--dry-run`; `--send` is required for a real dispatch and refuses on any amber gate. Eight new audit kinds (`whatsapp.meta_test.{started,config_ok,config_failed,blocked_number,template_missing,sent,failed,completed}`); audit payloads NEVER carry tokens. 24 new pytest cases pin the safety stack. | Phase 5F (broadcast campaigns / growth automation) remains LOCKED until this gate passes on a live test number. Re-run after every deploy. |
 | 5E-Smoke-Fix-3 | ✅ Live | False-positive safety classification fix. New `apps.whatsapp.safety_validation.validate_safety_flags(inbound_text, safety_flags)` runs server-side just before `_safety_block` and downgrades any `sideEffectComplaint` / `medicalEmergency` / `legalThreat` flag whose vocabulary is absent from the inbound text (English + Hindi + Hinglish keyword sets). Real safety phrases stay flagged; the corrector never promotes false → true and never touches `angryCustomer` / `claimVaultUsed`. New audit kind `whatsapp.ai.safety_downgraded` makes every correction observable. The LLM prompt now carries an explicit `SAFETY FLAG DISCIPLINE` block listing required vocabulary per flag. 28 new pytest cases cover false-positive scrubbing, real signals (English / Hindi / Hinglish) staying flagged, and the validator never promoting false → true. | VPS rebuild required so the new orchestrator + prompt land in the container. After rebuild, `ai-reply --use-openai` smoke run is expected to report `overallPassed=true`. |
 | 5E-Smoke-Fix-2 | ✅ Live | OpenAI Chat Completions token-parameter hotfix. Modern Chat models (gpt-4o, gpt-5, o1, o3, …) reject the legacy `max_tokens` and require `max_completion_tokens`. Adapter now builds its request kwargs through a unit-testable `build_request_kwargs(messages, model, config)` helper that always sends `max_completion_tokens` and never `max_tokens`. Zero / unset drops the key entirely. 10 new pytest cases pin the kwargs-shape contract. | VPS rebuild required so the new adapter code lands in the backend image. Re-run smoke; require `openaiSucceeded=true`. |
 | 5E-Smoke-Fix | ✅ Live | OpenAI SDK (`openai>=1.0,<2.0`) added to `backend/requirements.txt` so the AI provider chain has a real SDK to import on every deploy. Smoke harness `ai-reply` scenario reports `openaiAttempted` / `openaiSucceeded` / `providerPassed` / `safeFailure` — a safe-failure no longer reports `overallPassed=true`. Pre-seeds an outbound on the smoke conversation so the greeting fast-path no longer bypasses LLM dispatch. | VPS rebuild required (`docker compose build backend`) after the requirements.txt change so the openai package lands inside the backend image. |
@@ -242,7 +243,7 @@ nirogidhara-command/
 │   ├── Dockerfile                    # python:3.11-slim + tini + non-root
 │   ├── apps/                         # 16 apps (see §8 module catalogue)
 │   ├── config/                       # settings.py / urls.py / asgi.py / routing.py / celery.py
-│   └── tests/                        # 619 pytest cases
+│   └── tests/                        # 643 pytest cases
 └── docs/
     ├── MASTER_BLUEPRINT_V2.md        # ← this file (current strategic blueprint)
     ├── RUNBOOK.md
@@ -607,7 +608,7 @@ Two new matrix rows for AI rescue discount escalation:
 
 ## 17. Automation Feature Flags & Safe Rollout
 
-> **Current state (post Phase 5E-Smoke-Fix-3):** Controlled OpenAI + mock WhatsApp smoke has passed on the VPS (`run_controlled_ai_smoke_test --scenario all` and `--scenario ai-reply --use-openai` both green). All automation flags below remain **default OFF** until the limited live Meta one-number test passes. Flag flips are gated, sequential, and reversible.
+> **Current state (post Phase 5F-Gate):** Controlled OpenAI + mock WhatsApp smoke has passed on the VPS (`run_controlled_ai_smoke_test --scenario all` and `--scenario ai-reply --use-openai` both green). All automation flags below remain **default OFF** until the limited live Meta one-number test passes. Flag flips are gated, sequential, and reversible.
 
 ### 17.1 The flags
 
@@ -629,7 +630,15 @@ Two new matrix rows for AI rescue discount escalation:
 3. **OpenAI mock test.** Configure `AI_PROVIDER=openai` (or `anthropic`) on a staging copy. Re-run the smoke harness with `--scenario ai-reply --use-openai` to validate the OpenAI path produces JSON-schema-valid decisions; review every stored suggestion before flipping any flag.
 4. **WhatsApp mock test.** Keep `WHATSAPP_PROVIDER=mock`. The smoke harness's `claim-vault` + `ai-reply` scenarios cover the gate stack. Ensure no template / consent / Claim Vault / matrix gates fail on the test conversations.
 5. **Vapi mock test.** The smoke harness's `vapi-handoff` scenario does this — verifies `WhatsAppHandoffToCall` row creation, idempotency, and safety-reason skip in mock mode.
-6. **One-number live Meta test.** Flip `WHATSAPP_PROVIDER=meta_cloud`, keep `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, add exactly one approved test number to `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting, payment reminder, and confirmation reminder templates manually and verify delivery.
+6. **One-number live Meta test (Phase 5F-Gate harness).** Flip `WHATSAPP_PROVIDER=meta_cloud`, keep `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, add exactly one approved test number to `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`, then run:
+
+   ```bash
+   python manage.py run_meta_one_number_test --check-webhook-config --json
+   python manage.py run_meta_one_number_test --to +91XXXXXXXXXX --template nrg_greeting_intro --verify-only --json
+   python manage.py run_meta_one_number_test --to +91XXXXXXXXXX --template nrg_greeting_intro --send --json
+   ```
+
+   Require `passed=true` and `auditEvents` containing `whatsapp.meta_test.sent` for the `--send` run. The harness refuses outright if the destination is not on the allow-list, the template is not approved/active, the provider is not `meta_cloud`, or any automation flag is on.
 7. **Limited production rollout.** Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED=true` for a small approved customer cohort. Watch the `whatsapp.ai.*` audit stream for at least 48 hours. Resolve every blocked / handoff / suggestion-stored case manually before scaling.
 8. **Gradual scale.** Flip `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=true`, then `WHATSAPP_CALL_HANDOFF_ENABLED=true`, then `WHATSAPP_RESCUE_DISCOUNT_ENABLED=true` and `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=true`, then `WHATSAPP_REORDER_DAY20_ENABLED=true`. One flag at a time, with at least 24 hours of soak between flips.
 
@@ -646,7 +655,7 @@ A flag flip is reversible — if anything looks wrong on the audit stream, set t
 cd backend
 python manage.py makemigrations --check --dry-run    # MUST report "No changes detected"
 python manage.py check                                # 0 issues
-python -m pytest -q                                   # 619 tests today
+python -m pytest -q                                   # 643 tests today
 
 # Frontend
 cd ../frontend
@@ -720,7 +729,7 @@ If either run fails, **do not** flip flags or proceed to live Meta testing.
 
 ## 19. Updated Roadmap
 
-**Next immediate work: Limited Live Meta WhatsApp One-Number Test.**
+**Next immediate work: Run the Phase 5F-Gate one-number test on a real Meta test number.**
 
 | Stage | Status |
 | --- | --- |
@@ -729,8 +738,9 @@ If either run fails, **do not** flip flags or proceed to live Meta testing.
 | Phase 5E-Smoke-Fix | ✅ Completed — OpenAI SDK installed, provider-success semantics fixed. |
 | Phase 5E-Smoke-Fix-2 | ✅ Completed — Adapter switched to `max_completion_tokens`. |
 | Phase 5E-Smoke-Fix-3 | ✅ Completed — False `side_effect_complaint` classification fixed; safety corrector + audit. |
-| Limited Live Meta WhatsApp One-Number Test | 🔜 **Next.** Flip `WHATSAPP_PROVIDER=meta_cloud` with `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` + exactly one approved number in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Send the locked greeting + payment reminder + confirmation reminder templates manually and verify delivery + audit ledger. |
-| Enable automation flags one-by-one | 🔜 After the live one-number test passes. Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED` first, soak 48+ hours; then `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED`, `WHATSAPP_CALL_HANDOFF_ENABLED`, rescue + reorder flags — one at a time, 24+ hours soak between flips. Reverse on any anomaly in `/ws/audit/events/`. |
+| Phase 5F-Gate harness | ✅ Completed — `python manage.py run_meta_one_number_test` ships with `--verify-only`, `--send`, `--check-webhook-config`, `--json`. Hard stops stacked. 24 new pytest cases. |
+| Limited Live Meta WhatsApp One-Number Test (live run) | 🔜 **Next.** On the VPS: flip `WHATSAPP_PROVIDER=meta_cloud`, keep `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, add exactly one approved number to `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`, run the harness `--verify-only` then `--send` and require `auditEvents` includes `whatsapp.meta_test.sent`. |
+| Enable automation flags one-by-one | 🔜 After the live one-number test passes end-to-end (delivery receipt + inbound webhook). Flip `WHATSAPP_AI_AUTO_REPLY_ENABLED` first, soak 48+ hours; then `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED`, `WHATSAPP_CALL_HANDOFF_ENABLED`, rescue + reorder flags — one at a time, 24+ hours soak between flips. Reverse on any anomaly in `/ws/audit/events/`. |
 | Phase 5F — Approval-gated Campaigns / Growth Automation | 🔜 After the limited rollout soaks cleanly. Director-approved broadcast campaigns. Meta MARKETING template tier. Per-campaign rate limit + dry-run + audit. Frontend Campaigns page (Director + Admin only). |
 | Phase 6 — Recording / QA / Learning Loop pipeline | 🔜 Speech-to-text → speaker separation → QA scoring → Compliance review → CAIO audit → sandbox test → live `PromptVersion` promotion. No automatic promotion. |
 | Phase 7 — Multi-tenant SaaS readiness | 🔜 Tenant model + middleware that scopes every queryset; same backend serves Android / iOS apps. |
@@ -758,7 +768,7 @@ Controlled Mock + OpenAI smoke testing is **no longer an open gap** — Phase 5E
 
 ## 21. Updated Learning Loop
 
-The release / verification / deploy / observe / improve cycle is the only way changes land safely. The current state of the loop (post Phase 5E-Smoke-Fix-3) is:
+The release / verification / deploy / observe / improve cycle is the only way changes land safely. The current state of the loop (post Phase 5F-Gate) is:
 
 ```
 Mock smoke passed
@@ -958,7 +968,7 @@ flowchart LR
 
 ## 26. Final Note
 
-Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 5E-Smoke-Fix-3. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
+Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 5F-Gate. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
 
 Whenever the system grows, this blueprint must grow with it: new phases, new flags, new audit kinds, new gaps. The contract is — **`nd.md` is the live source of truth; this blueprint is the Director-facing strategic mirror of it.**
 

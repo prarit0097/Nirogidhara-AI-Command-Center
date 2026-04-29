@@ -227,6 +227,53 @@ Browser tour (after the host Nginx / Traefik step in §6):
 - `https://ai.nirogidhara.com/whatsapp-inbox` — Phase 5B inbox (manual-only)
 - `https://ai.nirogidhara.com/admin/` — Django admin (login with the superuser above)
 
+### 5.1 Phase 5F-Gate — Limited Live Meta WhatsApp One-Number Test
+
+Required gate before flipping any of the six automation flags. Run on
+the VPS, against the production-target backend container:
+
+```bash
+# 1. Print the expected Meta webhook callback URL + verify-token presence.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_meta_one_number_test \
+    --check-webhook-config --json
+
+# 2. Add ONE approved test MSISDN to .env.production:
+#    WHATSAPP_PROVIDER=meta_cloud
+#    WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true
+#    WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS=+91XXXXXXXXXX
+#    META_WA_ACCESS_TOKEN=<approved Meta WA Cloud token>
+#    META_WA_PHONE_NUMBER_ID=<from WABA>
+#    META_WA_BUSINESS_ACCOUNT_ID=<from WABA>
+#    META_WA_VERIFY_TOKEN=<random secret you choose, paste same in Meta console>
+#    META_WA_APP_SECRET=<from Meta App settings>
+#    Restart the backend + worker containers after editing.
+
+# 3. Verify-only — runs the precondition stack and exits without sending.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_meta_one_number_test \
+    --to +91XXXXXXXXXX --template nrg_greeting_intro --verify-only --json
+
+# 4. Real send (only after verify-only reports passed=true).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_meta_one_number_test \
+    --to +91XXXXXXXXXX --template nrg_greeting_intro --send --json
+```
+
+Required outputs:
+
+- `passed=true` for both `--verify-only` and `--send` runs.
+- `auditEvents` for the `--send` run includes
+  `whatsapp.meta_test.sent` and `nextAction=verify_inbound_webhook_callback`.
+- The destination phone receives the locked greeting on WhatsApp.
+- The Meta webhook posts a status (`sent`/`delivered`) back to
+  `https://ai.nirogidhara.com/api/webhooks/whatsapp/meta/`; check the
+  audit ledger for `whatsapp.message.delivered`.
+
+If anything is amber, the JSON output's `nextAction` field tells you
+exactly what to fix (see RUNBOOK §"Phase 5F-Gate"). The harness refuses
+outright if any of the six automation flags is on.
+
 ---
 
 ## 6. DNS + TLS for `ai.nirogidhara.com`

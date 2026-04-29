@@ -117,6 +117,53 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5F-Gate — Limited Live Meta WhatsApp One-Number Test
+
+The single safe surface for verifying real Meta Cloud sends without
+flipping any automation flag. Defaults to `--dry-run`; `--send` is
+required for a real dispatch and refuses if any safety gate is amber.
+
+```bash
+# Print the expected webhook callback URL + verify-token / app-secret
+# presence summary so the operator can wire the Meta Developer Console.
+python manage.py run_meta_one_number_test --check-webhook-config --json
+
+# Verify-only — runs the precondition stack and exits without sending.
+python manage.py run_meta_one_number_test \
+    --to +91XXXXXXXXXX \
+    --template nrg_greeting_intro \
+    --verify-only --json
+
+# Real send — refused unless every gate is green.
+python manage.py run_meta_one_number_test \
+    --to +91XXXXXXXXXX \
+    --template nrg_greeting_intro \
+    --send --json
+```
+
+The command refuses with a typed `nextAction` field on every amber gate:
+
+| `nextAction` | Meaning |
+| --- | --- |
+| `fix_provider_credentials` | Provider is not `meta_cloud` or required Meta env keys are missing. |
+| `enable_limited_test_mode` | `WHATSAPP_LIVE_META_LIMITED_TEST_MODE` is not `true`. |
+| `add_number_to_allowed_list` | Destination is not in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. |
+| `sync_or_approve_template` | Template missing / not approved / inactive / MARKETING tier. |
+| `disable_automation_flags` | One of the six automation flags is on; the gate refuses live sends until they're all off. |
+| `grant_consent_on_test_number` | Test customer has no WhatsApp consent. |
+| `verify_only_passed` | `--verify-only` succeeded; safe to flip to `--send`. |
+| `ready_to_send` | All gates green and the user did not pass `--send`. |
+| `verify_inbound_webhook_callback` | Real send dispatched — now confirm the inbound webhook arrives at `/api/webhooks/whatsapp/meta/`. |
+
+Audit ledger emits eight `whatsapp.meta_test.*` rows per run
+(`started`, `config_ok` or `config_failed`, optionally
+`blocked_number` / `template_missing`, `sent` or `failed`,
+`completed`). Audit payloads NEVER carry tokens; the destination
+number is masked to its last 4 digits.
+
+**Phase 5F (broadcast campaigns / growth automation) remains LOCKED
+until this gate passes on a live test number.**
+
 ### Phase 5E-Smoke-Fix-3 — false-positive safety classification fix
 
 The VPS OpenAI smoke run reported `overallPassed=false` because the

@@ -1259,3 +1259,45 @@ Auto-reply is gated by `WHATSAPP_AI_AUTO_REPLY_ENABLED` (default off). The locke
 
 Phase 5D — chat-to-call handoff + lifecycle automation — shipped (see CLAUDE.md / FUTURE_BACKEND_PLAN.md for the full audit). **Phase 5E** also shipped: rescue discount engine in `apps.orders.rescue_discount` with the locked 50% cumulative cap, per-stage ladder, automatic CEO AI / admin escalation via two new matrix rows (`discount.rescue.ceo_review`, `discount.above_safe_auto_band`), append-only `DiscountOfferLog`, plus four new WhatsApp lifecycle actions (`whatsapp.confirmation_rescue_discount`, `whatsapp.delivery_rescue_discount`, `whatsapp.rto_rescue_discount`, `whatsapp.reorder_day20_reminder`), Day-20 reorder cadence, and a default Claim Vault seed (`python manage.py seed_default_claims`). Defaults stay safe (`WHATSAPP_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_REORDER_DAY20_ENABLED=false`); production opts in only after the AI Calling Agent + WhatsApp AI flow has soaked on test numbers. Phase 5F adds approval-gated broadcast campaigns.
 
+---
+
+## II. Phase 5F-Gate — Limited Live Meta One-Number Test (post-ship)
+
+The single safe surface for verifying real Meta Cloud sends. Lives in
+`apps.whatsapp.meta_one_number_test` + management command
+`python manage.py run_meta_one_number_test`. Required gate before
+flipping any of the six automation flags
+(`WHATSAPP_AI_AUTO_REPLY_ENABLED`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED`,
+`WHATSAPP_CALL_HANDOFF_ENABLED`, `WHATSAPP_RESCUE_DISCOUNT_ENABLED`,
+`WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED`, `WHATSAPP_REORDER_DAY20_ENABLED`).
+
+**Hard stops stacked at the function level AND command level (defence
+in depth):**
+
+1. Provider must be `meta_cloud`.
+2. `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`.
+3. `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` non-empty AND destination
+   in the list (digits-only normalised — `+91 90000 99001`,
+   `91-9000099001`, `9000099001` all collapse to the same number).
+4. Template must be `APPROVED + active + UTILITY/AUTHENTICATION`.
+   MARKETING-tier templates are refused outright (Phase 5F territory).
+5. Freeform / AI-generated text refused outright — template-only.
+6. AI auto-reply + lifecycle + handoff + rescue + reorder flags must
+   be off. Even one ON refuses the run.
+7. CAIO actor token is refused inside `queue_template_message`.
+8. Default `--dry-run`; `--send` required for real dispatch.
+9. Audit payloads NEVER carry tokens (`token`-keyed entries are
+   stripped before `write_event`).
+
+**Eight new audit kinds:** `whatsapp.meta_test.{started,config_ok,
+config_failed,blocked_number,template_missing,sent,failed,completed}`.
+
+**Webhook setup printer:** `--check-webhook-config` prints the
+expected callback URL (`https://ai.nirogidhara.com/api/webhooks/whatsapp/meta/`),
+verify-token / app-secret presence, the subscribed-fields list, and
+operator notes for the Meta Developer Console.
+
+**Roadmap unchanged:** mock smoke → OpenAI smoke → Phase 5F-Gate
+one-number live test → enable automation flags one-by-one → Phase 5F
+(approval-gated broadcast campaigns).
+

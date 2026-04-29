@@ -188,6 +188,15 @@ ICON_BY_KIND: dict[str, str] = {
     "system.smoke_test.completed": "check-circle",
     "system.smoke_test.failed": "x-circle",
     "system.smoke_test.warning": "alert-triangle",
+    # Phase 5F-Gate — Limited Live Meta WhatsApp One-Number Test.
+    "whatsapp.meta_test.started": "play",
+    "whatsapp.meta_test.config_ok": "shield-check",
+    "whatsapp.meta_test.config_failed": "shield-off",
+    "whatsapp.meta_test.blocked_number": "ban",
+    "whatsapp.meta_test.template_missing": "alert-triangle",
+    "whatsapp.meta_test.sent": "send",
+    "whatsapp.meta_test.failed": "x-circle",
+    "whatsapp.meta_test.completed": "check-circle",
 }
 
 
