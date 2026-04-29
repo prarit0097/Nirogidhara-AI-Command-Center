@@ -257,12 +257,18 @@ sudo docker compose -f docker-compose.prod.yml --env-file .env.production down -
 ```bash
 cd /opt/nirogidhara-command
 sudo git pull origin main
-sudo docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-sudo docker compose -f docker-compose.prod.yml --env-file .env.production exec backend python manage.py migrate
-```
 
-The entrypoint also runs `migrate` automatically, but invoking it
-explicitly makes the deploy log easier to scan for migration warnings.
+# Rebuild + restart. `--pull never` keeps the local image cache in
+# place; without it Compose tries to pull `nirogidhara/backend:latest`
+# from a registry that does not exist and the deploy stalls.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    up -d --build --pull never
+
+# Run migrations explicitly (the entrypoint also does this, but an
+# explicit run is easier to scan for warnings).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    run --rm --entrypoint sh backend -lc "python manage.py migrate --no-input"
+```
 
 ### 7.4 Backups (recommended before going live)
 
@@ -310,6 +316,72 @@ a day:
   `max_connections` if observed contention happens.
 
 ---
+
+## 8.5 Troubleshooting — duplicate Postgres index on first migrate
+
+If the **first** `migrate` against a fresh Postgres errors out with one
+or more of:
+
+```
+django.db.utils.ProgrammingError: relation "calls_calltranscriptline_call_id_5bc33dc3" already exists
+django.db.utils.ProgrammingError: relation "calls_calltranscriptline_call_id_5bc33dc3_like" already exists
+```
+
+…you have hit a known production-only data race in
+`apps/calls/migrations/0002_phase2d_vapi_fields.py`. Django creates the
+support indexes for the FK in two passes; under Postgres 16 + Daphne
++ Celery worker / beat all booting at once, a stale index from a prior
+half-applied migration can survive into the next attempt.
+
+**Fix without dropping the database:**
+
+```bash
+cd /opt/nirogidhara-command
+
+# 1) Stop everything that talks to the schema. Keep only Postgres + Redis up.
+docker compose -f docker-compose.prod.yml --env-file .env.production stop \
+    backend worker beat nginx
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d \
+    postgres redis
+
+# 2) Drop the two clashing indexes (idempotent — safe to re-run).
+docker compose -f docker-compose.prod.yml --env-file .env.production exec postgres \
+    psql -U nirogidhara -d nirogidhara -c \
+    'DROP INDEX IF EXISTS calls_calltranscriptline_call_id_5bc33dc3; DROP INDEX IF EXISTS calls_calltranscriptline_call_id_5bc33dc3_like;'
+
+# 3) Re-run migrate via a one-shot backend container (entrypoint runs
+#    migrate automatically, so we override it to a plain shell here to
+#    avoid double-collectstatic in the recovery path).
+docker compose -f docker-compose.prod.yml --env-file .env.production run --rm \
+    --entrypoint sh backend -lc "python manage.py migrate --no-input"
+
+# 4) Bring the rest of the stack back up. `--pull never` keeps the local
+#    image in place (the recovery already proved it works).
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    up -d --build --pull never
+```
+
+If multiple FK index variants exist (e.g. after several failed retries),
+sweep all of them in one shot:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production exec postgres \
+    psql -U nirogidhara -d nirogidhara -c "DO \$\$ DECLARE r RECORD; BEGIN FOR r IN SELECT indexname FROM pg_indexes WHERE schemaname='public' AND indexname LIKE 'calls_calltranscriptline_call_id_%' LOOP EXECUTE format('DROP INDEX IF EXISTS %I', r.indexname); END LOOP; END \$\$;"
+```
+
+> **Do not** edit `apps/calls/migrations/0002_phase2d_vapi_fields.py` to
+> "fix" this in the repo. Migration files are append-only history; a
+> patch that works for one customer's DB will silently desync from
+> another. Keep the workaround in this runbook.
+
+After the sweep:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f backend
+curl -fsS http://127.0.0.1:18020/api/healthz/
+```
+
+The backend should boot cleanly and `migrate` should be a no-op.
 
 ## 9. Security checklist before customers go live
 

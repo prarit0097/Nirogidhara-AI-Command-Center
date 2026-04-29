@@ -42,25 +42,28 @@ back to the deterministic mock fixtures in
 
 Full setup detail in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
-## Production deploy (Hostinger VPS — `ai.nirogidhara.com`)
+## Production deploy — live at [`ai.nirogidhara.com`](https://ai.nirogidhara.com)
 
-Production runs as an isolated Docker Compose stack that does NOT
-collide with Postzyo / OpenClaw on the same VPS. One host port (`18020`),
-six containers (`nirogidhara-db`, `nirogidhara-redis`, `nirogidhara-backend`,
-`nirogidhara-worker`, `nirogidhara-beat`, `nirogidhara-nginx`), domain
-TLS terminated by host Nginx + Certbot or Hostinger Traefik.
+- **Live URL:** <https://ai.nirogidhara.com> · **Health:** <https://ai.nirogidhara.com/api/healthz/>
+- **VPS folder:** `/opt/nirogidhara-command` on a Hostinger VPS (host port `18020 → 80`).
+- **Stack:** isolated Docker Compose with 6 containers (`nirogidhara-db / -redis / -backend / -worker / -beat / -nginx`) — namespaced so it does not collide with Postzyo / OpenClaw on the same VPS.
+- **TLS:** Let's Encrypt via Certbot, fronted by host Ubuntu Nginx.
+
+Update an existing deploy:
 
 ```bash
-cd /opt
-git clone https://github.com/prarit0097/Nirogidhara-AI-Command-Center.git nirogidhara-command
+ssh root@<vps>
 cd /opt/nirogidhara-command
-cp .env.production.example .env.production
-nano .env.production                               # fill secrets, ALLOWED_HOSTS
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+git pull origin main
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build --pull never
 ```
 
-Step-by-step runbook (DNS, TLS, smoke tests, backups, security
-checklist): [`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md).
+Greenfield deploy + every operational command (DNS, TLS, smoke tests,
+backups, troubleshooting — including the duplicate-index recovery for
+the `calls.0002_phase2d_vapi_fields` migration): see
+[`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md). The locked
+production reference (URL / paths / commands / what stays mock-mode)
+is also in [`nd.md`](nd.md) §17.
 
 ## Architecture rule
 

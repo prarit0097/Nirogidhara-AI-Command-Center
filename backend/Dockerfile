@@ -5,6 +5,12 @@
 #   - nirogidhara-worker   (Celery worker)
 #   - nirogidhara-beat     (Celery beat)
 #
+# Build context: REPO ROOT (compose passes `context: .` + `dockerfile:
+# backend/Dockerfile`). This is mandatory — it lets the image pull both
+# the Django source (`backend/`) AND the entrypoint script
+# (`deploy/backend/entrypoint.sh`) into one layout, avoiding the prod
+# crash where tini cannot find the entrypoint at /app/deploy/...
+#
 # The container command is supplied by compose, NOT baked here.
 #
 # Hard rules (Master Blueprint §26):
@@ -20,23 +26,37 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_SETTINGS_MODULE=config.settings
 
 # System deps:
-#  - libpq5 + build-essential are needed for psycopg[binary] wheels on slim.
+#  - libpq-dev + build-essential for psycopg[binary] wheels on slim.
 #  - tini gives Daphne / Celery clean signal handling under PID 1.
+#  - netcat-openbsd lets the entrypoint poll Postgres / Redis if shell
+#    fallback is ever wanted (the Python wait helpers stay primary).
+#  - curl for the backend healthcheck inside compose.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
         tini \
         curl \
+        netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+# 1) Install Python deps first so the layer caches across source edits.
+COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip \
     && pip install -r /app/requirements.txt
 
-COPY . /app/
+# 2) Copy the Django source.
+COPY backend/ /app/
+
+# 3) Copy the entrypoint script from the repo-root deploy/ folder. CRLF
+#    line endings (introduced when the repo is checked out on Windows)
+#    break tini, so we normalise to LF and ensure the +x bit even on
+#    hosts where the git checkout dropped it.
+COPY deploy/backend/entrypoint.sh /app/deploy/backend/entrypoint.sh
+RUN sed -i 's/\r$//' /app/deploy/backend/entrypoint.sh \
+    && chmod +x /app/deploy/backend/entrypoint.sh
 
 # Non-root runtime user (the postgres / redis volumes mount as their own
 # uids; only /app + STATIC_ROOT need to be writable here).

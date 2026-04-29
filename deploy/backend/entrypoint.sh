@@ -1,20 +1,42 @@
-#!/usr/bin/env sh
+#!/bin/sh
 # Nirogidhara backend container entrypoint.
 #
 # Behaviour by role (selected via the compose service `command`):
-#   - `daphne ...` (default)   → wait for DB, run migrate + collectstatic,
-#                                 then exec Daphne.
-#   - `celery -A config worker` → wait for DB + Redis, then exec Celery.
-#   - `celery -A config beat`   → wait for DB + Redis, then exec Celery beat.
+#   - daphne ...                 → wait for DB, run migrate + collectstatic,
+#                                  then exec Daphne. (Default if no command
+#                                  is supplied — fixes the historical
+#                                  "parameter not set" crash on backend.)
+#   - python ...                 → same as daphne (one-off `manage.py` runs
+#                                  benefit from migrate having happened).
+#   - celery -A config worker    → wait for DB + Redis, then exec Celery.
+#   - celery -A config beat      → wait for DB + Redis, then exec Celery beat.
 #
-# The script never bakes secrets; everything comes from env supplied by
-# docker-compose.prod.yml + .env.production.
-set -eu
+# Hard rules:
+#   - never bake secrets; everything comes from env supplied by
+#     docker-compose.prod.yml + .env.production.
+#   - Worker / beat must skip migrate (the backend container owns schema).
+#   - `set -e` only — `set -u` was historically unsafe here because some
+#     compose service commands omitted positional args entirely.
+set -e
 
-ROLE="backend"
+echo "[entrypoint] Starting Nirogidhara backend..."
+
+# --- Default command ------------------------------------------------------
+# Compose's backend service intentionally relies on the Dockerfile CMD,
+# which means tini may invoke the entrypoint with zero positional args
+# in some Docker runtimes. Default to Daphne so a no-args invocation
+# still serves traffic instead of crashing.
+if [ "$#" -eq 0 ]; then
+    set -- daphne -b 0.0.0.0 -p 8000 config.asgi:application
+fi
+
+ROLE="other"
 case "$1" in
+    daphne|python)
+        ROLE="backend"
+        ;;
     celery)
-        # Detect worker vs. beat from $2.
+        # Detect worker vs. beat from the next arg.
         if [ "${2:-}" = "beat" ]; then
             ROLE="beat"
         else
@@ -25,9 +47,9 @@ esac
 
 echo "[entrypoint] role=$ROLE pid=$$"
 
-# ---- Wait for Postgres -------------------------------------------------
-# We never block forever — 30 attempts × 2s = 1 minute. If Postgres still
-# isn't reachable, fail closed so the orchestrator restarts us.
+# --- Wait for Postgres ----------------------------------------------------
+# Bounded retries: 30 attempts × 2s ≈ 1 minute. If Postgres still isn't
+# reachable the entrypoint exits non-zero so the orchestrator restarts us.
 wait_for_db() {
     if [ -z "${DATABASE_URL:-}" ]; then
         echo "[entrypoint] DATABASE_URL not set; skipping DB wait."
@@ -39,16 +61,15 @@ wait_for_db() {
             return 0
             ;;
     esac
-    echo "[entrypoint] waiting for database…"
+    echo "[entrypoint] waiting for database..."
     python - <<'PY' || exit 1
-import os, sys, time
+import os, sys, time, socket
 import dj_database_url
 
 cfg = dj_database_url.parse(os.environ["DATABASE_URL"])
 host = cfg.get("HOST") or "localhost"
 port = int(cfg.get("PORT") or 5432)
 
-import socket
 for attempt in range(30):
     try:
         with socket.create_connection((host, port), timeout=2):
@@ -69,7 +90,7 @@ wait_for_redis() {
         redis://*) ;;
         *) return 0 ;;
     esac
-    echo "[entrypoint] waiting for redis…"
+    echo "[entrypoint] waiting for redis..."
     python - <<'PY' || exit 1
 import os, sys, socket, time
 from urllib.parse import urlparse
@@ -93,16 +114,17 @@ PY
 wait_for_db
 wait_for_redis
 
-# ---- Backend-only bootstrap ---------------------------------------------
-# Worker + beat do not run migrate; the backend container owns schema.
+# --- Backend / management bootstrap --------------------------------------
+# Worker + beat skip migrate / collectstatic — the backend container owns
+# schema and static collection.
 if [ "$ROLE" = "backend" ]; then
-    echo "[entrypoint] running migrations…"
-    python manage.py migrate --noinput
+    echo "[entrypoint] Running database migrations..."
+    python manage.py migrate --no-input
 
-    echo "[entrypoint] collectstatic…"
-    python manage.py collectstatic --noinput || \
+    echo "[entrypoint] Collecting static files..."
+    python manage.py collectstatic --no-input || \
         echo "[entrypoint] collectstatic failed (non-fatal)."
 fi
 
-echo "[entrypoint] exec: $*"
+echo "[entrypoint] Executing: $*"
 exec "$@"

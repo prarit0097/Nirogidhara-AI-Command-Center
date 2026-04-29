@@ -1,5 +1,12 @@
 # Runbook — Nirogidhara AI Command Center
 
+> **This file is the LOCAL DEVELOPMENT runbook.** Production is live at
+> <https://ai.nirogidhara.com> from `/opt/nirogidhara-command` on a
+> Hostinger VPS — see [`docs/DEPLOYMENT_VPS.md`](DEPLOYMENT_VPS.md) and
+> [`nd.md`](../nd.md) §17 for the production runbook (URL, containers,
+> SSL, commands, troubleshooting). Do not run the local-dev steps below
+> on the VPS.
+
 How to bring the full stack up locally on Windows / macOS / Linux.
 
 ## Prerequisites

@@ -59,9 +59,14 @@ services:
     # No host port — only sibling containers reach Redis.
 
   backend:
+    # Build context is the REPO ROOT (not ./backend) so the Dockerfile can
+    # COPY both the Django source AND deploy/backend/entrypoint.sh into the
+    # image. Building from ./backend leaves the entrypoint missing and the
+    # container exits with:
+    #   [FATAL tini] exec /app/deploy/backend/entrypoint.sh failed
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     image: nirogidhara/backend:latest
     container_name: nirogidhara-backend
     restart: unless-stopped

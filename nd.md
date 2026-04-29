@@ -1122,6 +1122,201 @@ If all of the above pass: you have a green baseline to build on. Now go ship the
 
 ---
 
+## 17. Production Deployment — Hostinger VPS
+
+> **Operational truth.** Anything below this line describes the live
+> production stack at `https://ai.nirogidhara.com`. If you change the
+> deployment shape, also update this section, `docs/DEPLOYMENT_VPS.md`,
+> `AGENTS.md`, and `CLAUDE.md`. The repo on GitHub is the source of
+> truth — never hand-edit files on the VPS without committing the same
+> change here.
+
+### Production URL
+
+- **App:** `https://ai.nirogidhara.com`
+- **Health:** `https://ai.nirogidhara.com/api/healthz/`
+
+### VPS
+
+- **Host:** Hostinger VPS
+- **SSH:** `ssh root@187.127.132.106`
+- **Project folder:** `/opt/nirogidhara-command`
+- **GitHub repo:** `https://github.com/prarit0097/Nirogidhara-AI-Command-Center`
+- **Other Docker projects on the same VPS:** `postzyo`, `openclaw`. **Never touch their containers, networks, or volumes.** Never run `docker system prune -a`.
+
+### Deployment method
+
+- Docker Compose production deployment.
+- Compose file: `docker-compose.prod.yml`.
+- Env file (live, gitignored): `.env.production`.
+- Env example (committed): `.env.production.example`.
+- **Compose project name:** `nirogidhara-command` (namespaced; will not collide with `postzyo` / `openclaw`).
+
+### Containers
+
+| Container | Image | Role |
+| --- | --- | --- |
+| `nirogidhara-db` | `postgres:16-alpine` | Database — only siblings reach it |
+| `nirogidhara-redis` | `redis:7-alpine` (AOF on) | Celery broker + Channels group layer |
+| `nirogidhara-backend` | `nirogidhara/backend:latest` (built from `backend/Dockerfile` with **repo-root context**) | Daphne ASGI on internal `:8000`, runs migrate + collectstatic on boot |
+| `nirogidhara-worker` | same image | `celery -A config worker --concurrency=1` |
+| `nirogidhara-beat` | same image | `celery -A config beat` |
+| `nirogidhara-nginx` | `nirogidhara/nginx:latest` (built from `frontend/Dockerfile` with **repo-root context**) | Serves the Vite SPA, proxies `/api/`, `/admin/`, `/ws/` to `backend:8000` |
+
+### Network + volumes
+
+- Network: `nirogidhara_network` (isolated bridge).
+- Volumes: `nirogidhara_postgres_data`, `nirogidhara_redis_data`, `nirogidhara_static_volume`, `nirogidhara_media_volume`.
+
+### Host port + reverse proxy
+
+- Container Nginx publishes **`18020:80`**. Avoids conflict with Postzyo / OpenClaw.
+- Host-level Ubuntu Nginx (or Hostinger Traefik) terminates TLS and proxies `ai.nirogidhara.com → 127.0.0.1:18020`.
+- Host Nginx config (recommended path): `/etc/nginx/sites-available/ai.nirogidhara.com` symlinked into `/etc/nginx/sites-enabled/ai.nirogidhara.com`.
+
+### SSL
+
+- Issued by **Certbot / Let's Encrypt** (`sudo certbot --nginx -d ai.nirogidhara.com`).
+- Certificate paths:
+  - `/etc/letsencrypt/live/ai.nirogidhara.com/fullchain.pem`
+  - `/etc/letsencrypt/live/ai.nirogidhara.com/privkey.pem`
+- Auto-renewal handled by Certbot's default systemd timer.
+
+### Health checks
+
+```bash
+curl http://127.0.0.1:18020/api/healthz/
+curl http://ai.nirogidhara.com/api/healthz/
+curl https://ai.nirogidhara.com/api/healthz/
+```
+
+All three must return `{"status":"ok","service":"nirogidhara-backend"}`.
+
+### Common VPS commands
+
+```bash
+# SSH
+ssh root@187.127.132.106
+
+# Switch to project
+cd /opt/nirogidhara-command
+
+# Status
+docker compose -f docker-compose.prod.yml --env-file .env.production ps
+
+# Logs
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f backend
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f worker
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f beat
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f nginx
+
+# Pull latest code
+cd /opt/nirogidhara-command
+git pull origin main
+
+# Rebuild + restart (--pull never keeps the local image cache; the
+# images are not published to a registry).
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build --pull never
+
+# Run migrations explicitly (entrypoint also does this, but explicit is
+# easier to scan for warnings).
+docker compose -f docker-compose.prod.yml --env-file .env.production run --rm --entrypoint sh backend -lc "python manage.py migrate --no-input"
+
+# Create superuser
+docker compose -f docker-compose.prod.yml --env-file .env.production exec backend python manage.py createsuperuser
+
+# Seed demo data (NOT on a live customer DB)
+docker compose -f docker-compose.prod.yml --env-file .env.production exec backend python manage.py seed_demo_data --reset
+
+# Django check
+docker compose -f docker-compose.prod.yml --env-file .env.production run --rm --entrypoint sh backend -lc "python manage.py check"
+
+# Restart
+docker compose -f docker-compose.prod.yml --env-file .env.production restart
+
+# Stop (keeps volumes + data)
+docker compose -f docker-compose.prod.yml --env-file .env.production down
+
+# Resource monitoring
+docker stats
+docker system df
+
+# Host Nginx checks
+nginx -t
+systemctl reload nginx
+
+# Certbot renewal check
+certbot certificates
+certbot renew --dry-run
+```
+
+### Troubleshooting — duplicate Postgres index on first migrate
+
+If the **first** `migrate` against a fresh Postgres errors out with
+`relation "calls_calltranscriptline_call_id_5bc33dc3" already exists`
+(or the `_like` variant), drop the stale indexes and re-run migrate.
+
+```bash
+cd /opt/nirogidhara-command
+
+docker compose -f docker-compose.prod.yml --env-file .env.production stop backend worker beat nginx
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d postgres redis
+
+docker compose -f docker-compose.prod.yml --env-file .env.production exec postgres \
+    psql -U nirogidhara -d nirogidhara -c \
+    'DROP INDEX IF EXISTS calls_calltranscriptline_call_id_5bc33dc3; DROP INDEX IF EXISTS calls_calltranscriptline_call_id_5bc33dc3_like;'
+
+docker compose -f docker-compose.prod.yml --env-file .env.production run --rm \
+    --entrypoint sh backend -lc "python manage.py migrate --no-input"
+
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build --pull never
+```
+
+If multiple variants accumulated across retries, sweep them all in one
+shot:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production exec postgres \
+    psql -U nirogidhara -d nirogidhara -c "DO \$\$ DECLARE r RECORD; BEGIN FOR r IN SELECT indexname FROM pg_indexes WHERE schemaname='public' AND indexname LIKE 'calls_calltranscriptline_call_id_%' LOOP EXECUTE format('DROP INDEX IF EXISTS %I', r.indexname); END LOOP; END \$\$;"
+```
+
+> **Do not** edit `apps/calls/migrations/0002_phase2d_vapi_fields.py`
+> in the repo. Migration files are append-only history; a patch that
+> works for one customer's DB will silently desync from another. The
+> recovery is documented here and in `docs/DEPLOYMENT_VPS.md` §8.5.
+
+### Manual VPS fixes that are now in the repo (Phase 5B-Deploy hotfix)
+
+These were applied directly on the VPS during the first deploy and are
+now committed to `main` so the next `git pull && docker compose up -d
+--build` reproduces them automatically:
+
+1. `docker-compose.prod.yml` — backend service uses **repo-root build context** (`context: .` + `dockerfile: backend/Dockerfile`). Without this the image cannot copy `deploy/backend/entrypoint.sh` and tini exits with `exec ... entrypoint.sh failed: No such file or directory`.
+2. `backend/Dockerfile` — copies `backend/requirements.txt` and `backend/` separately, then explicitly copies `deploy/backend/entrypoint.sh`, runs `sed -i 's/\r$//'` (drops Windows CRLF that breaks tini) and `chmod +x`.
+3. `deploy/backend/entrypoint.sh` — runs under `set -e` only (no `set -u`), defaults `daphne -b 0.0.0.0 -p 8000 config.asgi:application` when invoked with zero positional args, and runs `migrate` + `collectstatic` only for the backend / python role (worker + beat skip both).
+4. `docs/DEPLOYMENT_VPS.md` §8.5 + this section — the duplicate Postgres index workaround for `calls.0002_phase2d_vapi_fields`.
+
+### Security — what stays mock-mode in production
+
+These integrations stay in `mock` until Prarit confirms each integration's live credentials. **Never change them without authorisation:**
+
+- `WHATSAPP_PROVIDER=mock`
+- `RAZORPAY_MODE=mock`
+- `DELHIVERY_MODE=mock`
+- `VAPI_MODE=mock`
+- `META_MODE=mock`
+- `AI_PROVIDER=disabled` (or live OpenAI when key is set)
+- `WHATSAPP_DEV_PROVIDER_ENABLED=false` (Baileys must never load in production)
+
+Other warnings:
+
+- **Never commit `.env.production`** — it is gitignored at the repo root.
+- **Never paste `docker compose config` output publicly** — the rendered config interpolates the env file and prints secrets.
+- Existing VPS apps `postzyo` / `openclaw` must not be touched.
+- Do not run `docker system prune -a` on a shared VPS without explicit user approval.
+
+---
+
 ### ✅ Phase 5A — WhatsApp Live Sender Foundation (DONE, this session)
 
 The first runtime WhatsApp phase. New `apps.whatsapp` Django app added to `INSTALLED_APPS`. **No AI Chat Agent in this phase** — that's 5C. **No lifecycle automation** — that's 5D. **No campaigns** — that's 5F. Phase 5A is the safe foundation: manual operator-triggered sends through a fully-gated pipeline.
@@ -1214,6 +1409,22 @@ containers `nirogidhara-*`, network `nirogidhara_network`, host port
 - Worker concurrency = 1 initially. Bump only after `docker stats` confirms memory headroom on the shared VPS.
 - No application-level changes. Phase 5C is still locked out at the matrix + service-entry level (CAIO refusal, AI auto-reply not wired, etc.).
 
+### ✅ Phase 5B-Deploy hotfix sync (DONE, after first VPS deploy)
+
+The first VPS deploy surfaced four issues that were patched directly on
+the server. They are now committed back to `main` so future
+`git pull && docker compose up -d --build` runs reproduce them:
+
+1. **Compose backend build context.** `docker-compose.prod.yml` now uses `context: .` + `dockerfile: backend/Dockerfile` (was `context: ./backend`). The repo-root context is required so the image can copy `deploy/backend/entrypoint.sh`. Without it tini exits with `exec /app/deploy/backend/entrypoint.sh failed: No such file or directory`.
+2. **Backend Dockerfile path layout.** `backend/Dockerfile` now does `COPY backend/requirements.txt /app/requirements.txt`, `COPY backend/ /app/`, then explicitly `COPY deploy/backend/entrypoint.sh /app/deploy/backend/entrypoint.sh` followed by `sed -i 's/\r$//' ... && chmod +x ...` to normalise CRLF + ensure the executable bit even when the repo was checked out on Windows. Adds `netcat-openbsd` for shell-based DB / Redis polling fallbacks.
+3. **Entrypoint default command.** `deploy/backend/entrypoint.sh` runs under `set -e` only (not `set -eu`) and defaults to `daphne -b 0.0.0.0 -p 8000 config.asgi:application` when invoked with zero positional args. The previous `set -u` + `case "$1"` shape crashed the backend container with `parameter not set`.
+4. **Migration duplicate-index workaround.** Documented in §17 of this file and `docs/DEPLOYMENT_VPS.md` §8.5 — drop the stale `calls_calltranscriptline_call_id_*` indexes via `psql`, then re-run `migrate`. Migration files stay append-only in the repo.
+
+These four fixes are required for any greenfield deploy to succeed
+without manual intervention. Anyone running `docker compose -f
+docker-compose.prod.yml --env-file .env.production up -d --build` from
+a fresh clone of `main` will get a clean stack.
+
 Tests stay at 434 backend / 13 frontend. The deploy scaffold doesn't add code paths — every change is config / Docker / docs.
 
 ### ✅ Phase 5B — Inbound WhatsApp Inbox + Customer 360 Timeline (DONE, this session)
@@ -1272,10 +1483,11 @@ The audit found no runtime bugs — the missing env vars all had safe
 in-code defaults, so the gap was purely documentation drift. Phase 5B
 implementation can start from a clean baseline.
 
-_End of `nd.md`. Last updated after **Phase 5B-Deploy** — production
-Docker scaffold for ai.nirogidhara.com (six isolated containers,
-host port 18020, Postgres + Redis + Daphne ASGI + Celery worker +
-beat + Nginx serving the Vite SPA, deploy runbook at
-`docs/DEPLOYMENT_VPS.md`). Phase 5B (Inbound WhatsApp Inbox + Customer
-360 Timeline) shipped earlier this session. **No business logic
-changed in 5B-Deploy** — 434 backend + 13 frontend tests still green._
+_End of `nd.md`. Last updated after **Phase 5B-Deploy hotfix sync** —
+the four manual VPS fixes (compose build context, Dockerfile path
+layout, entrypoint default command, migration duplicate-index
+workaround) are now committed to `main` so a fresh clone +
+`docker compose up -d --build` reproduces a clean stack. Live at
+**`https://ai.nirogidhara.com`**. Operational runbook lives in `nd.md`
+§17 + `docs/DEPLOYMENT_VPS.md`. **No business logic changed** — 434
+backend + 13 frontend tests still green._
