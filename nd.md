@@ -857,10 +857,10 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 351 tests (26 reads + 18 writes + 13 razorpay + 7 ai config + 13 delhivery + 16 vapi + 14 meta + 25 phase3a + 26 phase3b + 17 phase3c + 14 phase3d + 29 phase3e + 25 phase4b + 31 phase4c + 37 phase4d + 8 phase4a + 31 phase4e)
+cd backend && python -m pytest -q   # 434 tests (Phase 1 → 5B inclusive — see test_phaseNN.py files)
 
 # Frontend
-cd frontend && npm test             # 8 tests
+cd frontend && npm test             # 13 tests
 cd frontend && npm run lint         # 0 errors
 cd frontend && npm run build        # production build
 ```
