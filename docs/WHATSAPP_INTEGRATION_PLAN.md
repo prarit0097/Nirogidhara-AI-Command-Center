@@ -1394,3 +1394,83 @@ run.** Next safe step is then a tightly-scoped controlled AI
 auto-reply test on the allowed test number only — every other safety
 check (Claim Vault, matrix, CAIO, idempotency) stays in force.
 
+---
+
+## KK. Phase 5F-Gate Controlled AI Auto-Reply Test Harness (post-ship)
+
+The single safe surface for verifying a real live AI reply against
+the allowed test number only. Lives in
+`apps.whatsapp.management.commands.run_controlled_ai_auto_reply_test`
+plus the shared service-layer guard at
+`apps.whatsapp.services._limited_test_mode_blocks_send` and the new
+`force_auto_reply` kwarg on `apps.whatsapp.ai_orchestration.
+run_whatsapp_ai_agent`.
+
+### Two pieces of the gate
+
+**1. Final-send limited-mode guard.** Runs inside both
+`services.send_freeform_text_message` (AI auto-reply path) and
+`services.queue_template_message` (template path). When
+`WHATSAPP_PROVIDER=meta_cloud` AND
+`WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, every customer-facing
+send must target a phone on `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`
+or it raises `WhatsAppServiceError(block_reason="limited_test_number_not_allowed")`
++ writes a `whatsapp.send.blocked` audit row. **Do not bypass this
+guard from the orchestrator, lifecycle service, or any future caller**
+— it is the last-line defence under limited mode.
+
+**2. `force_auto_reply` orchestrator kwarg.** Default `False`. When
+`True`, the orchestrator's auto-reply gate accepts the call even when
+`WHATSAPP_AI_AUTO_REPLY_ENABLED=false` in env. **Only the new CLI may
+pass `True`**; webhook-driven runs never set it. Every other safety
+check (Claim Vault, blocked phrase, safety flags, CAIO, matrix,
+idempotency, the limited-mode final-send guard above) still runs.
+
+### CLI
+
+```
+python manage.py run_controlled_ai_auto_reply_test \
+    --phone +91XXXXXXXXXX \
+    --message "<inbound text>" \
+    [--dry-run | --send] [--json]
+```
+
+Defaults to `--dry-run`. Refuses on every amber gate:
+
+- `WHATSAPP_PROVIDER` ≠ `meta_cloud` → `enable_meta_cloud_provider`
+- `WHATSAPP_LIVE_META_LIMITED_TEST_MODE` ≠ `true` →
+  `enable_limited_test_mode`
+- Any of `WHATSAPP_AI_AUTO_REPLY_ENABLED` /
+  `WHATSAPP_CALL_HANDOFF_ENABLED` /
+  `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED` /
+  `WHATSAPP_RESCUE_DISCOUNT_ENABLED` /
+  `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED` /
+  `WHATSAPP_REORDER_DAY20_ENABLED` is on → `disable_automation_flags`
+- Destination not in `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` →
+  `add_number_to_allowed_list`
+- Customer missing or no granted `WhatsAppConsent` →
+  `grant_consent_on_test_number`
+- WABA `subscribed_apps` is empty (best-effort) →
+  `fix_waba_subscription`
+
+On `--send` success: `nextAction=live_ai_reply_sent_verify_phone`,
+`auditEvents` includes `whatsapp.ai.controlled_test.sent`. On
+safety-flag block: `nextAction=blocked_for_medical_safety`. On
+Claim-Vault miss: `nextAction=blocked_for_unapproved_claim`.
+
+### Audit kinds
+
+`whatsapp.ai.controlled_test.{started,dry_run_passed,sent,blocked,completed}`.
+Audit payloads carry phone last-4 only, body 120-char preview, no
+tokens / verify token / app secret.
+
+### Boundaries
+
+- The CLI is the only sanctioned path that may produce a real AI
+  auto-reply during the gate phase.
+- It does not enable broadcasts, campaigns, MARKETING-tier templates,
+  lifecycle automation, rescue / RTO / reorder automation, or
+  chat-to-call handoff.
+- Phase 5F (broadcast campaigns / growth automation) stays LOCKED
+  until a clean 24-hour soak under this harness has been observed.
+

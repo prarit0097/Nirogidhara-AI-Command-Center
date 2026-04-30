@@ -139,12 +139,24 @@ def run_whatsapp_ai_agent(
     triggered_by: str = "auto",
     actor_role: str = "ai_chat",
     force: bool = False,
+    force_auto_reply: bool = False,
 ) -> OrchestrationOutcome:
     """Drive the AI Chat Agent for one conversation turn.
 
     The function is idempotent on ``inbound_message_id`` — the same
     inbound message will not produce two AI runs unless ``force=True``
     (used by the operator-triggered ``run-ai`` endpoint).
+
+    Phase 5F-Gate Controlled AI Auto-Reply Test Harness:
+    ``force_auto_reply=True`` lets a trusted CLI caller (the
+    ``run_controlled_ai_auto_reply_test`` management command) bypass
+    the ``WHATSAPP_AI_AUTO_REPLY_ENABLED`` env gate for one orchestrator
+    call without flipping the env globally. Every other safety check
+    (allow-list, Claim Vault, blocked phrase, safety flags, CAIO,
+    matrix, idempotency) still runs. The CLI is responsible for
+    confirming the destination is on the allow-list BEFORE forcing
+    auto-reply; the limited-test-mode guard inside
+    ``send_freeform_text_message`` is the last-line defence.
     """
     convo = (
         WhatsAppConversation.objects.select_related("customer", "connection")
@@ -476,7 +488,7 @@ def run_whatsapp_ai_agent(
     )
     auto_enabled = bool(
         getattr(settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False)
-    )
+    ) or bool(force_auto_reply)
     confidence_ok = decision.confidence >= threshold
 
     if not auto_enabled:

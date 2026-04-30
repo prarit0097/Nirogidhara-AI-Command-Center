@@ -117,6 +117,93 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5F-Gate Controlled AI Auto-Reply Test Harness
+
+The single safe surface for verifying a real live AI reply against
+exactly one allowed test number, **without** flipping the global
+`WHATSAPP_AI_AUTO_REPLY_ENABLED` env. The flag stays `false`
+everywhere else; only this CLI may produce a real AI reply during the
+gate phase.
+
+**How it works:**
+
+- A new final-send guard inside `apps.whatsapp.services.
+  _limited_test_mode_blocks_send` runs both inside
+  `services.send_freeform_text_message` (AI auto-reply path) and
+  `services.queue_template_message` (template path). When
+  `WHATSAPP_PROVIDER=meta_cloud` AND `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`,
+  every customer-facing send must target a phone on
+  `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` or it raises
+  `WhatsAppServiceError(block_reason="limited_test_number_not_allowed")`
+  and writes a `whatsapp.send.blocked` audit row.
+- `apps.whatsapp.ai_orchestration.run_whatsapp_ai_agent` gains a new
+  `force_auto_reply: bool = False` kwarg. The new CLI sets it to
+  `True` for one orchestrator call; webhook-driven runs never set it.
+- The CLI persists ONE synthetic inbound `WhatsAppMessage` per real
+  `--send` run and feeds it to the orchestrator. Failures during AI
+  dispatch never mutate `Order` / `Payment` / `Shipment`.
+
+```bash
+# Dry-run — runs every precondition (provider, limited mode,
+# automation flags off, allow-list, customer + consent, WABA active)
+# and exits without persisting an inbound or hitting the LLM.
+python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste mujhe weight loss product ke baare me bataye" \
+    --dry-run --json
+
+# Live `--send` — drives the orchestrator with auto-reply forced ON
+# for one call only. Refused if any safety gate is amber.
+python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste mujhe weight loss product ke baare me bataye" \
+    --send --json
+```
+
+**Required outputs:**
+
+- Dry-run: `passed=true`, `nextAction=dry_run_passed_ready_for_send`,
+  no synthetic inbound persisted.
+- `--send`: `passed=true`, `replySent=true`, `outboundMessageId` set,
+  `providerMessageId` set, `auditEvents` includes
+  `whatsapp.ai.controlled_test.sent`,
+  `nextAction=live_ai_reply_sent_verify_phone`.
+
+**Typed `nextAction` table:**
+
+| `nextAction` | Meaning |
+| --- | --- |
+| `dry_run_passed_ready_for_send` | Every gate passed; safe to flip to `--send`. |
+| `live_ai_reply_sent_verify_phone` | Real AI reply dispatched; verify the test phone received it. |
+| `add_number_to_allowed_list` | Destination not on `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. |
+| `grant_consent_on_test_number` | No Customer or no granted `WhatsAppConsent`. |
+| `enable_meta_cloud_provider` | `WHATSAPP_PROVIDER` is not `meta_cloud`. |
+| `enable_limited_test_mode` | `WHATSAPP_LIVE_META_LIMITED_TEST_MODE` is not `true`. |
+| `disable_automation_flags` | One of the six automation flags is on. |
+| `fix_waba_subscription` | WABA `subscribed_apps` is empty. |
+| `fix_claim_vault_coverage` | LLM marked `claimVaultUsed=false` or product coverage is missing. |
+| `blocked_for_medical_safety` | Safety flag (`medicalEmergency` / `sideEffectComplaint` / `legalThreat`) tripped. |
+| `blocked_for_unapproved_claim` | LLM omitted Claim Vault grounding. |
+| `blocked_by_limited_mode_guard` | Final-send guard refused the destination. |
+| `inspect_live_test` | Other amber state — re-run the inspector for full diagnostics. |
+
+**Five new audit kinds**:
+`whatsapp.ai.controlled_test.{started,dry_run_passed,sent,blocked,completed}`.
+Audit payloads carry phone last-4 only, body 120-char preview, no
+tokens / verify token / app secret.
+
+**Hard constraints (do not relax):**
+
+- The CLI refuses to run if `WHATSAPP_AI_AUTO_REPLY_ENABLED=true`
+  globally — it's the only sanctioned path during the gate phase.
+- It refuses to run if any of `WHATSAPP_CALL_HANDOFF_ENABLED`,
+  `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED`,
+  `WHATSAPP_RESCUE_DISCOUNT_ENABLED`,
+  `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED`, or
+  `WHATSAPP_REORDER_DAY20_ENABLED` is on.
+- It does NOT introduce broadcast / campaign / MARKETING-tier
+  behaviour. Phase 5F (broadcast campaigns) remains LOCKED.
+
 ### Phase 5F-Gate Hardening Hotfix — diagnostics layer
 
 The live one-number gate passed on the VPS (`WAM-100003` outbound +

@@ -200,6 +200,12 @@ ICON_BY_KIND: dict[str, str] = {
     # Phase 5F-Gate Hardening Hotfix.
     "whatsapp.meta_test.duplicate_idempotency": "copy",
     "whatsapp.meta_test.webhook_subscription_checked": "shield-question",
+    # Phase 5F-Gate Controlled AI Auto-Reply Test Harness.
+    "whatsapp.ai.controlled_test.started": "play",
+    "whatsapp.ai.controlled_test.dry_run_passed": "check-circle",
+    "whatsapp.ai.controlled_test.sent": "send",
+    "whatsapp.ai.controlled_test.blocked": "ban",
+    "whatsapp.ai.controlled_test.completed": "check-circle",
 }
 
 

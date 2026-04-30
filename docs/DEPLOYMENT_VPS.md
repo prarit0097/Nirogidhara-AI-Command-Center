@@ -309,6 +309,71 @@ inspector flags `subscribe_waba_to_app_webhooks` — the new diagnostics
 block surfaces `wabaSubscriptionActive` + `wabaSubscribedAppCount`
 without printing tokens.
 
+### 5.3 Phase 5F-Gate Controlled AI Auto-Reply Test
+
+After the inspector reports a clean state, run the controlled AI
+auto-reply test against the **single allowed test number** without
+flipping the global `WHATSAPP_AI_AUTO_REPLY_ENABLED` env. The flag
+must stay `false` for this test to run — the harness is the only
+sanctioned path that may produce a real AI reply during the gate
+phase.
+
+```bash
+# 1. Dry-run — every precondition, no LLM call, no DB inbound row.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste mujhe weight loss product ke baare me bataye" \
+    --dry-run --json
+
+# 2. Live `--send` — drives the orchestrator with force_auto_reply=True
+# for ONE call only. Refused on any amber gate.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste mujhe weight loss product ke baare me bataye" \
+    --send --json
+```
+
+Required outputs for a clean live `--send` run:
+
+- `passed == true`
+- `replySent == true`
+- `outboundMessageId` and `providerMessageId` populated
+- `auditEvents` includes `whatsapp.ai.controlled_test.sent` and
+  `whatsapp.ai.controlled_test.completed`
+- `nextAction == "live_ai_reply_sent_verify_phone"`
+- The test phone receives the AI reply on WhatsApp
+
+**Rollback / safety check.** If anything looks wrong, immediately
+verify automation flags stay off:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend printenv | grep -E \
+    "WHATSAPP_AI_AUTO_REPLY_ENABLED|WHATSAPP_CALL_HANDOFF_ENABLED|\
+WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED|WHATSAPP_RESCUE_DISCOUNT_ENABLED|\
+WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED|WHATSAPP_REORDER_DAY20_ENABLED|\
+WHATSAPP_LIVE_META_LIMITED_TEST_MODE|WHATSAPP_PROVIDER"
+```
+
+Expected safe state:
+
+```
+WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true
+WHATSAPP_PROVIDER=meta_cloud
+WHATSAPP_AI_AUTO_REPLY_ENABLED=false
+WHATSAPP_CALL_HANDOFF_ENABLED=false
+WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false
+WHATSAPP_RESCUE_DISCOUNT_ENABLED=false
+WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false
+WHATSAPP_REORDER_DAY20_ENABLED=false
+```
+
+If `WHATSAPP_AI_AUTO_REPLY_ENABLED` is `true`, **stop and revert it**.
+Phase 5F (broadcast campaigns) remains LOCKED until a 24-hour soak
+under the controlled harness has been observed cleanly.
+
 ---
 
 ## 6. DNS + TLS for `ai.nirogidhara.com`

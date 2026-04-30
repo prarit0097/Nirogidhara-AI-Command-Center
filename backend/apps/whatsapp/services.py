@@ -72,6 +72,41 @@ from .template_registry import (
 CAIO_AGENT_TOKEN = "caio"
 
 
+# ---------------------------------------------------------------------------
+# Phase 5F-Gate Controlled AI Auto-Reply — final-send limited-mode guard
+# ---------------------------------------------------------------------------
+
+
+def _limited_test_mode_blocks_send(customer: Customer) -> str:
+    """Return a non-empty block-reason iff the send must be refused.
+
+    LOCKED rule (Phase 5F-Gate):
+    - When ``WHATSAPP_PROVIDER == 'meta_cloud'`` AND
+      ``WHATSAPP_LIVE_META_LIMITED_TEST_MODE == True``, every
+      customer-facing send (template OR freeform) must be aimed at a
+      number on ``WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS``. Anything
+      else is refused — even an approved template, even an AI reply
+      that has passed every other gate.
+
+    Returns ``""`` when the send may proceed, or the typed block reason
+    ``limited_test_number_not_allowed`` otherwise.
+    """
+    provider = (
+        getattr(settings, "WHATSAPP_PROVIDER", "mock") or "mock"
+    ).lower()
+    if provider != "meta_cloud":
+        return ""
+    if not bool(getattr(settings, "WHATSAPP_LIVE_META_LIMITED_TEST_MODE", False)):
+        return ""
+
+    # Lazy import keeps the helper module free of circular references.
+    from .meta_one_number_test import is_number_allowed_for_live_meta_test
+
+    if is_number_allowed_for_live_meta_test(customer.phone or ""):
+        return ""
+    return "limited_test_number_not_allowed"
+
+
 class WhatsAppServiceError(Exception):
     """Raised when the service refuses to queue / send a message."""
 
@@ -347,6 +382,24 @@ def queue_template_message(
             "Customer has not opted in to WhatsApp.",
             http_status=403,
             block_reason="consent_missing",
+        )
+
+    # Phase 5F-Gate — limited-test-mode final-send guard.
+    limited_block = _limited_test_mode_blocks_send(customer)
+    if limited_block:
+        _block(
+            customer,
+            action_key=action_key,
+            reason=(
+                "WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true and customer phone "
+                "is not on WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS."
+            ),
+            block_reason=limited_block,
+        )
+        raise WhatsAppServiceError(
+            "Limited test mode: destination not on allow-list.",
+            http_status=403,
+            block_reason=limited_block,
         )
 
     # Template gate.
@@ -1240,6 +1293,24 @@ def send_freeform_text_message(
             "Customer has not opted in to WhatsApp.",
             http_status=403,
             block_reason="consent_missing",
+        )
+
+    # Phase 5F-Gate — limited-test-mode final-send guard.
+    limited_block = _limited_test_mode_blocks_send(customer)
+    if limited_block:
+        _block(
+            customer,
+            action_key="whatsapp.freeform_reply",
+            reason=(
+                "WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true and customer phone "
+                "is not on WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS."
+            ),
+            block_reason=limited_block,
+        )
+        raise WhatsAppServiceError(
+            "Limited test mode: destination not on allow-list.",
+            http_status=403,
+            block_reason=limited_block,
         )
 
     body_clean = (body or "").strip()
