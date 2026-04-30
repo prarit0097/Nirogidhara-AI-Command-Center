@@ -348,11 +348,7 @@ def run_whatsapp_ai_agent(
     outcome.detected_category = decision.category
     if decision.category and decision.category != "unknown":
         normalized_product = category_to_claim_product(decision.category)
-        claim_count = (
-            Claim.objects.filter(product__iexact=normalized_product).count()
-            if normalized_product
-            else 0
-        )
+        counts = _claim_grounding_counts(decision.category)
         write_event(
             kind="whatsapp.ai.category_detected",
             text=f"Category detected · {decision.category}",
@@ -361,7 +357,14 @@ def run_whatsapp_ai_agent(
                 "conversation_id": convo.id,
                 "category": decision.category,
                 "normalized_claim_product": normalized_product,
-                "claim_count": claim_count,
+                "claim_row_count": counts["claim_row_count"],
+                "approved_claim_count": counts["approved_claim_count"],
+                "disallowed_phrase_count": counts["disallowed_phrase_count"],
+                # Backward-compat: old logs / queries that read
+                # ``claim_count`` continue to work and now reflect the
+                # **approved-phrase** count (the count operators care
+                # about for grounding).
+                "claim_count": counts["approved_claim_count"],
                 "confidence": decision.confidence,
             },
         )
@@ -1196,13 +1199,7 @@ def _finalize_run(
         normalized_product_for_audit = category_to_claim_product(
             category_for_audit
         )
-        claim_count_for_audit = (
-            Claim.objects.filter(
-                product__iexact=normalized_product_for_audit
-            ).count()
-            if normalized_product_for_audit
-            else 0
-        )
+        counts_for_audit = _claim_grounding_counts(category_for_audit)
         write_event(
             kind="whatsapp.ai.handoff_required",
             text=f"AI handoff · conversation={convo.id} · {blocked_reason}",
@@ -1213,7 +1210,13 @@ def _finalize_run(
                 "handoff_reason": handoff_reason,
                 "category": category_for_audit,
                 "normalized_claim_product": normalized_product_for_audit,
-                "claim_count": claim_count_for_audit,
+                "claim_row_count": counts_for_audit["claim_row_count"],
+                "approved_claim_count": counts_for_audit["approved_claim_count"],
+                "disallowed_phrase_count": counts_for_audit[
+                    "disallowed_phrase_count"
+                ],
+                # Backward-compat alias.
+                "claim_count": counts_for_audit["approved_claim_count"],
                 "confidence": (
                     decision.confidence if decision is not None else 0.0
                 ),
@@ -1247,11 +1250,7 @@ def _finalize_run(
             decision.category if decision is not None else ""
         )
         normalized_product = category_to_claim_product(category_for_audit)
-        claim_count = (
-            Claim.objects.filter(product__iexact=normalized_product).count()
-            if normalized_product
-            else 0
-        )
+        counts = _claim_grounding_counts(category_for_audit)
         write_event(
             kind="whatsapp.ai.reply_blocked",
             text=f"AI reply blocked · conversation={convo.id} · {blocked_reason}",
@@ -1261,7 +1260,11 @@ def _finalize_run(
                 "reason": blocked_reason,
                 "category": category_for_audit,
                 "normalized_claim_product": normalized_product,
-                "claim_count": claim_count,
+                "claim_row_count": counts["claim_row_count"],
+                "approved_claim_count": counts["approved_claim_count"],
+                "disallowed_phrase_count": counts["disallowed_phrase_count"],
+                # Backward-compat alias.
+                "claim_count": counts["approved_claim_count"],
                 "confidence": (
                     decision.confidence if decision is not None else 0.0
                 ),
@@ -1388,9 +1391,59 @@ def _build_context(
         ],
         "settings": {
             "standardPriceInr": 3000,
+            "standardCapsuleCount": 30,
             "advanceAmountInr": 499,
             "totalDiscountCapPct": TOTAL_DISCOUNT_HARD_CAP_PCT,
+            "currency": "INR",
+            "discountDiscipline": (
+                "no upfront discount; only after 2+ asks AND objection "
+                "handling; per-stage band 0–20% (auto up to 10%); "
+                "cumulative across all stages must never exceed 50%"
+            ),
+            "businessFactsAllowed": [
+                "Standard price ₹3000 / 30 capsules",
+                "Fixed advance ₹499",
+                "Conservative usage guidance: use as directed on label / qualified practitioner",
+                "Consult doctor for pregnancy / serious illness / allergies / existing medication",
+            ],
         },
+    }
+
+
+def _claim_grounding_counts(category: str) -> dict[str, int]:
+    """Phase 5F-Gate Controlled Reply Confidence Fix.
+
+    Returns a structured count of Claim Vault grounding for the given
+    AI category slug. Distinguishes:
+
+    - ``claim_row_count`` — number of ``Claim`` rows whose
+      ``product`` matches the normalized label (usually 0 or 1).
+    - ``approved_claim_count`` — total entries across all
+      ``Claim.approved`` lists for those rows.
+    - ``disallowed_phrase_count`` — total entries across all
+      ``Claim.disallowed`` lists for those rows.
+
+    Defaults to all zeros when the category does not normalize. The
+    helper is intentionally cheap so it can run on every audit emit.
+    """
+    normalized = category_to_claim_product(category) if category else ""
+    if not normalized:
+        return {
+            "claim_row_count": 0,
+            "approved_claim_count": 0,
+            "disallowed_phrase_count": 0,
+        }
+    rows = list(
+        Claim.objects.filter(product__iexact=normalized).only(
+            "approved", "disallowed"
+        )
+    )
+    approved_total = sum(len(r.approved or []) for r in rows)
+    disallowed_total = sum(len(r.disallowed or []) for r in rows)
+    return {
+        "claim_row_count": len(rows),
+        "approved_claim_count": approved_total,
+        "disallowed_phrase_count": disallowed_total,
     }
 
 
@@ -1489,6 +1542,71 @@ def _build_prompt(
         " - When in doubt and the inbound is a normal product / "
         "price / availability question, ALL safety flags are FALSE "
         "and you continue the sales conversation.\n"
+        "\n"
+        "BUSINESS FACTS YOU MAY STATE FREELY (these are business "
+        "facts, NOT medical claims, so they do NOT need a Claim "
+        "Vault entry):\n"
+        " - Standard price: ₹3000 for one bottle of 30 capsules.\n"
+        " - Fixed advance amount on order booking: ₹499.\n"
+        " - Free / standard delivery and the order workflow can be "
+        "described in plain operational language (e.g. 'aapko home "
+        "delivery hogi', 'order confirm hone ke baad shipment 24-48 "
+        "hours me chalu hota hai').\n"
+        " - Conservative usage guidance: 'use as directed on the "
+        "label or as advised by a qualified Ayurvedic practitioner'. "
+        "Do not invent a dosage. If the customer asks for a specific "
+        "dosage or treatment plan, say it must come from a doctor / "
+        "qualified practitioner.\n"
+        " - Lifestyle support (diet + activity) can be mentioned in "
+        "GENERAL terms only when the Claim Vault for the product "
+        "actually carries a lifestyle phrase. Do not invent any.\n"
+        " - For pregnancy, serious illness, allergies, existing "
+        "medication, or adverse reaction → ALWAYS suggest "
+        "consulting their doctor and use action='handoff' with "
+        "safety.medicalEmergency=false unless a medical emergency "
+        "vocabulary trip fires.\n"
+        "\n"
+        "ACTION SELECTION DECISION TREE — read carefully. The "
+        "controlled gate test BLOCKS replies with low confidence or "
+        "action=handoff on grounded inquiries, so this discipline "
+        "matters.\n"
+        " A. Normal product / price / capsule-quantity / general "
+        "safe-use inquiry, AND the 'claims' block below has at "
+        "least one APPROVED phrase for the detected category, AND "
+        "every safety flag is FALSE, AND the inbound contains no "
+        "blocked-phrase trigger (cure, guarantee, 100%, side-effect, "
+        "etc.):\n"
+        "    → action='send_reply'\n"
+        "    → confidence ≥ 0.85\n"
+        "    → safety.claimVaultUsed=true\n"
+        "    → replyText must literally include at least one phrase "
+        "from the matching APPROVED Claim Vault entry, plus the "
+        "₹3000 / 30 capsule price when the customer asked about "
+        "price/quantity, plus the ₹499 advance when booking is "
+        "discussed.\n"
+        " B. Customer asks an open question for which there is NO "
+        "approved Claim Vault entry yet (e.g. specific cure, "
+        "diabetes guarantee, dosage exact mg):\n"
+        "    → action='handoff'\n"
+        "    → confidence may be low\n"
+        "    → safety.claimVaultUsed=false\n"
+        " C. Category is 'unknown' AND the customer has not named "
+        "the product yet:\n"
+        "    → action='ask_question'\n"
+        "    → confidence reflects how well the next question helps\n"
+        " D. Customer has explicitly confirmed booking (haan / yes / "
+        "confirm / book) AND complete address + pincode + phone are "
+        "present in the conversation context:\n"
+        "    → action='book_order'\n"
+        " E. Any of the safety vocabulary (medical emergency, side "
+        "effect, legal threat) is in the inbound text:\n"
+        "    → action='handoff'\n"
+        "    → set the matching safety flag to true\n"
+        "Use action='handoff' ONLY for cases B, E (and overflow "
+        "cases like repeated address/payment confusion). Do NOT use "
+        "handoff just because you feel cautious; the operator "
+        "stands in for handoff and the customer experience suffers "
+        "if every grounded inquiry ends in handoff.\n"
     )
 
     schema_instructions = (
@@ -1523,7 +1641,17 @@ def _build_prompt(
         "safety flag to true when the inbound text contains the "
         "vocabulary listed in 'SAFETY FLAG DISCIPLINE' above. A "
         "normal product / price / availability inquiry leaves all "
-        "safety flags false."
+        "safety flags false.\n"
+        "\n"
+        "FINAL CHECK before you emit the JSON: if the 'claims' block "
+        "above has at least one APPROVED phrase for the detected "
+        "category AND every safety flag is false AND the inbound is "
+        "a normal product/price/quantity/use-guidance question, then "
+        "you MUST use action='send_reply', confidence ≥ 0.85, and "
+        "safety.claimVaultUsed=true. You MUST also literally include "
+        "one of the APPROVED phrases from the 'claims' block in "
+        "replyText (verbatim or with minor punctuation). Defaulting "
+        "to action='handoff' on a grounded inquiry is a defect."
     )
 
     claims_block = "\n".join(

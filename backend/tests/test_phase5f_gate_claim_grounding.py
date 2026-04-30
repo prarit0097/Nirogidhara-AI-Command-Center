@@ -590,7 +590,14 @@ def test_reply_blocked_audit_payload_now_carries_grounding_context(
     assert payload.get("reason") == "claim_vault_not_used"
     assert payload.get("category") == "weight-management"
     assert payload.get("normalized_claim_product") == "Weight Management"
-    assert payload.get("claim_count") == 1
+    # Phase 5F-Gate Controlled Reply Confidence Fix splits the
+    # ambiguous claim_count into row vs approved-phrase counts. The
+    # legacy claim_count alias now reflects the approved-phrase count
+    # (3 phrases for Weight Management); claim_row_count is 1.
+    assert payload.get("claim_row_count") == 1
+    assert payload.get("approved_claim_count") == 3
+    assert payload.get("disallowed_phrase_count") == 2
+    assert payload.get("claim_count") == 3
     assert payload.get("confidence") == pytest.approx(0.9)
     # Audit payload must never carry secrets.
     for key in payload.keys():

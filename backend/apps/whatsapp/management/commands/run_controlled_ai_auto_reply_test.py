@@ -138,20 +138,32 @@ class Command(BaseCommand):
             "claimVaultUsed": None,
             "safetyBlocked": False,
             "blockedReason": "",
-            # Phase 5F-Gate Claim Vault Grounding Fix — diagnostics.
+            # Phase 5F-Gate Claim Vault Grounding Fix + Confidence Fix —
+            # diagnostics. claimCount is preserved as a backward-compat
+            # alias for approvedClaimCount (the count operators care
+            # about for grounding); claimRowCount + approvedClaimCount
+            # + disallowedPhraseCount are the unambiguous fields.
             "detectedCategory": "",
             "normalizedClaimProduct": "",
+            "claimRowCount": 0,
+            "approvedClaimCount": 0,
+            "disallowedPhraseCount": 0,
             "claimCount": 0,
             "confidence": 0.0,
+            "confidenceThreshold": 0.0,
+            "actionReason": "",
             "action": "",
             "replyPreview": "",
             "safetyFlags": {},
             "groundingStatus": {
                 "claimProductFound": False,
+                "claimRowCount": 0,
                 "approvedClaimCount": 0,
                 "disallowedPhraseCount": 0,
                 "promptGroundingInjected": False,
+                "businessFactsInjected": False,
             },
+            "sendEligibilitySummary": "",
             "auditEvents": [],
             "warnings": [],
             "errors": [],
@@ -324,27 +336,50 @@ class Command(BaseCommand):
             }
             normalized_product = category_to_claim_product(decision.category)
             report["normalizedClaimProduct"] = normalized_product
+            from django.conf import settings as _settings
+
+            report["confidenceThreshold"] = float(
+                getattr(
+                    _settings, "WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD", 0.75
+                )
+            )
+            row_count = 0
+            approved_count = 0
+            disallowed_count = 0
             if normalized_product:
-                claim_row = (
+                rows = list(
                     Claim.objects.filter(product__iexact=normalized_product)
                     .only("approved", "disallowed")
-                    .first()
                 )
-                approved_count = (
-                    len(claim_row.approved) if claim_row and claim_row.approved else 0
+                row_count = len(rows)
+                approved_count = sum(
+                    len(r.approved or []) for r in rows
                 )
-                disallowed_count = (
-                    len(claim_row.disallowed) if claim_row and claim_row.disallowed else 0
+                disallowed_count = sum(
+                    len(r.disallowed or []) for r in rows
                 )
-                report["claimCount"] = approved_count
-                report["groundingStatus"] = {
-                    "claimProductFound": claim_row is not None,
-                    "approvedClaimCount": approved_count,
-                    "disallowedPhraseCount": disallowed_count,
-                    # Grounding is "injected" iff the prompt builder
-                    # had at least one approved row to surface.
-                    "promptGroundingInjected": approved_count > 0,
-                }
+            report["claimRowCount"] = row_count
+            report["approvedClaimCount"] = approved_count
+            report["disallowedPhraseCount"] = disallowed_count
+            # Backward-compat alias for older log scrapers.
+            report["claimCount"] = approved_count
+            report["groundingStatus"] = {
+                "claimProductFound": row_count > 0,
+                "claimRowCount": row_count,
+                "approvedClaimCount": approved_count,
+                "disallowedPhraseCount": disallowed_count,
+                # Grounding is "injected" iff the prompt builder had
+                # at least one approved phrase to surface in the
+                # claims block of the user message.
+                "promptGroundingInjected": approved_count > 0,
+                # Business facts (₹3000 / 30 capsules / ₹499 advance)
+                # are injected unconditionally by _build_context now,
+                # so this flag tracks the contract — not an env flag.
+                "businessFactsInjected": True,
+            }
+            # actionReason / sendEligibilitySummary derive from the
+            # current outcome; populated below depending on path.
+            report["actionReason"] = decision.handoff_reason or ""
 
         if outcome.sent:
             report["replySent"] = True
@@ -546,18 +581,69 @@ class Command(BaseCommand):
                 "dry_run": report["dryRun"],
                 # Phase 5F-Gate Claim Vault Grounding Fix — surface
                 # the grounding context so the audit ledger explains
-                # exactly why the block fired.
+                # exactly why the block fired. Phase 5F-Gate Controlled
+                # Reply Confidence Fix splits claim_count into
+                # row/approved/disallowed so operators can distinguish
+                # "no Claim row" from "Claim row exists but few
+                # approved phrases". The legacy ``claim_count`` field
+                # is preserved as a backward-compat alias for the
+                # approved-phrase count.
                 "category": report.get("detectedCategory", ""),
                 "normalized_claim_product": report.get("normalizedClaimProduct", ""),
+                "claim_row_count": report.get("claimRowCount", 0),
+                "approved_claim_count": report.get("approvedClaimCount", 0),
+                "disallowed_phrase_count": report.get("disallowedPhraseCount", 0),
                 "claim_count": report.get("claimCount", 0),
                 "confidence": report.get("confidence", 0.0),
+                "confidence_threshold": report.get("confidenceThreshold", 0.0),
+                "action": report.get("action", ""),
             },
         )
         report["auditEvents"].append("whatsapp.ai.controlled_test.blocked")
 
+    def _populate_send_eligibility_summary(self, report: dict[str, Any]) -> None:
+        """Build the ``sendEligibilitySummary`` operator field.
+
+        One short sentence describing why the run is in its current
+        state — never carries secrets, derived purely from already-
+        populated diagnostic fields.
+        """
+        if report["replySent"]:
+            report["sendEligibilitySummary"] = (
+                f"Live AI reply sent · category={report['detectedCategory']} "
+                f"· approvedClaims={report['approvedClaimCount']} "
+                f"· confidence={report['confidence']:.2f}"
+            )
+            return
+        if report["dryRun"] and report["passed"]:
+            report["sendEligibilitySummary"] = (
+                "Dry-run gates passed; ready to flip to --send."
+            )
+            return
+        if report["replyBlocked"]:
+            reason = report.get("blockedReason") or "unknown"
+            cat = report.get("detectedCategory") or "(none)"
+            approved = report.get("approvedClaimCount", 0)
+            confidence = report.get("confidence", 0.0)
+            threshold = report.get("confidenceThreshold", 0.0)
+            report["sendEligibilitySummary"] = (
+                f"Send blocked · reason={reason} · category={cat} "
+                f"· approvedClaims={approved} · confidence={confidence:.2f} "
+                f"· threshold={threshold:.2f}"
+            )
+            return
+        report["sendEligibilitySummary"] = (
+            f"No send · provider={report['provider']} · "
+            f"limitedTestMode={report['limitedTestMode']} · "
+            f"toAllowed={report['toAllowed']}"
+        )
+
     def _emit_completed(
         self, report: dict[str, Any], options: dict[str, Any]
     ) -> None:
+        # Populate the operator-facing summary string before emitting
+        # the completed audit row + writing the JSON document.
+        self._populate_send_eligibility_summary(report)
         write_event(
             kind="whatsapp.ai.controlled_test.completed",
             text=(

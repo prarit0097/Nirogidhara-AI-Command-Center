@@ -1573,3 +1573,90 @@ Audit ledger:
   `apps.whatsapp.ai_schema.SUPPORTED_CATEGORIES`.
 - Phase 5F (broadcast campaigns / growth automation) stays LOCKED.
 
+---
+
+## MM. Phase 5F-Gate Controlled Reply Confidence Fix (post-ship)
+
+After the Claim Vault Grounding Fix landed, the live `--send`
+against the allowed test number still failed: `WAM-100007` came
+back with `action=handoff`, `confidence=0.7`,
+`blockedReason=low_confidence` even though the Weight Management
+Claim row was correctly mapped and surfaced in the prompt.
+
+### Root cause
+
+The prompt did not tell the LLM that a normal grounded inquiry must
+use `action=send_reply` with `confidence ≥ 0.85`. The LLM defaulted
+to handoff out of caution.
+
+### Fix (three pieces)
+
+**1. Business facts injected.** New `BUSINESS FACTS YOU MAY STATE
+FREELY` section in the system prompt:
+
+```
+- Standard price: ₹3000 for one bottle of 30 capsules.
+- Fixed advance amount on order booking: ₹499.
+- Conservative usage guidance: "use as directed on the label or as
+  advised by a qualified Ayurvedic practitioner". No invented dosage.
+- Lifestyle support (diet + activity) only when the Claim Vault for
+  the product carries a lifestyle phrase. Do not invent any.
+- Doctor escalation for pregnancy / serious illness / allergies /
+  existing medication / adverse reaction.
+```
+
+The `settings` block in the user JSON gains
+`standardCapsuleCount=30`, `currency="INR"`, a
+`discountDiscipline` description, and a `businessFactsAllowed`
+whitelist.
+
+**Business facts are routing labels and price/quantity facts** —
+they are NOT medical claims. Medical / product-benefit content
+still comes only from `Claim.approved`.
+
+**2. Action discipline.** New `ACTION SELECTION DECISION TREE`
+section in the system prompt with cases A–E:
+
+- A: grounded inquiry → `action='send_reply'`, `confidence ≥ 0.85`,
+  `safety.claimVaultUsed=true`, replyText literally includes one
+  APPROVED phrase.
+- B: open question with no approved Claim Vault entry → handoff.
+- C: unknown category → ask_question.
+- D: confirmed booking with complete address → book_order.
+- E: safety vocabulary in inbound → handoff with safety flag set.
+
+A new `FINAL CHECK` paragraph at the end of the schema instructions
+makes "Defaulting to action='handoff' on a grounded inquiry is a
+defect" a literal instruction.
+
+**Confidence threshold env unchanged.** The fix is in the prompt —
+never lower `WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD` globally.
+
+**3. Diagnostics cleanup.** The ambiguous `claim_count` (which
+sometimes meant rows and sometimes phrases) is split into three
+explicit fields across all four orchestrator audit kinds AND the
+controlled-test JSON:
+
+- `claim_row_count` — number of `Claim` rows for the category.
+- `approved_claim_count` — sum of `Claim.approved` phrase counts.
+- `disallowed_phrase_count` — sum of `Claim.disallowed` phrase
+  counts.
+
+`claim_count` is preserved as a backward-compat alias for
+`approved_claim_count`. Affected audit kinds:
+`whatsapp.ai.{category_detected, reply_blocked, handoff_required,
+controlled_test.blocked}`. Controlled-test JSON also gains
+`confidenceThreshold`, `actionReason`, `sendEligibilitySummary`,
+and `groundingStatus.{claimRowCount, businessFactsInjected}`.
+
+### Hard rules preserved
+
+- `claimVaultUsed=false` still blocks the send.
+- "Guaranteed cure" / "100% cure" replies still blocked by the
+  blocked-phrase filter.
+- Side-effect / medical-emergency / legal-threat inbounds still
+  route to handoff via `_safety_block`.
+- The final-send limited-mode guard still refuses non-allowed
+  numbers under limited mode.
+- CAIO never executes; no campaigns / broadcasts. Phase 5F LOCKED.
+

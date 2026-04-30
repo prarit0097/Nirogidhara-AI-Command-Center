@@ -433,6 +433,59 @@ again with `groundingStatus.approvedClaimCount=0`, the Claim Vault
 seed has not been re-applied — re-run `seed_default_claims --reset-demo`
 or restore the doctor-approved row before retrying.
 
+### 5.5 Phase 5F-Gate Controlled Reply Confidence Fix — re-run
+
+After the Confidence Fix lands on the VPS, re-run the live `--send`
+and verify the LLM now chooses `action=send_reply` with
+`confidence ≥ confidenceThreshold` and the reply literally carries
+both an approved Claim Vault phrase AND the ₹3000/30-capsules/₹499
+business facts.
+
+```bash
+# Same dry-run from §5.4 — must still pass.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste. Mujhe Nirogidhara ke weight management product ke baare me approved safe jaankari chahiye. Price, capsule quantity aur use guidance bata dijiye." \
+    --dry-run --json
+
+# Live --send. Required JSON:
+#   passed=true
+#   replySent=true
+#   action="send_reply"
+#   claimVaultUsed=true
+#   confidence>=confidenceThreshold (0.75 default)
+#   replyPreview literally contains at least one approved phrase
+#     (e.g. "Supports healthy metabolism") AND ₹3000 / 30 capsules
+#     when the customer asked about price/quantity
+#   nextAction="live_ai_reply_sent_verify_phone"
+#   sendEligibilitySummary="Live AI reply sent ..."
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste. Mujhe Nirogidhara ke weight management product ke baare me approved safe jaankari chahiye. Price, capsule quantity aur use guidance bata dijiye." \
+    --send --json
+
+# Audit tail — verify the new split counts (claim_row_count vs
+# approved_claim_count vs disallowed_phrase_count) appear cleanly.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py shell -c "
+from apps.audit.models import AuditEvent
+for e in AuditEvent.objects.filter(kind__startswith='whatsapp.ai').order_by('-occurred_at')[:30]:
+    print(e.occurred_at, '|', e.kind, '|', e.tone)
+    print(e.text)
+    print(e.payload)
+    print('-' * 100)
+"
+```
+
+If the LLM still returns `action=handoff` on a grounded inquiry,
+inspect the audit row's `confidence`, `approved_claim_count`, and
+`category` fields and confirm the prompt rebuild reached the
+backend container (`docker compose ... build --no-cache backend`).
+The fix is in the prompt — not in lowering the threshold. Do **not**
+edit `WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD` to compensate.
+
 ---
 
 ## 6. DNS + TLS for `ai.nirogidhara.com`
