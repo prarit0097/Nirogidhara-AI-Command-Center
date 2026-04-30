@@ -197,6 +197,9 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.meta_test.sent": "send",
     "whatsapp.meta_test.failed": "x-circle",
     "whatsapp.meta_test.completed": "check-circle",
+    # Phase 5F-Gate Hardening Hotfix.
+    "whatsapp.meta_test.duplicate_idempotency": "copy",
+    "whatsapp.meta_test.webhook_subscription_checked": "shield-question",
 }
 
 

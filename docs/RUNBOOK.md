@@ -117,6 +117,89 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5F-Gate Hardening Hotfix — diagnostics layer
+
+The live one-number gate passed on the VPS (`WAM-100003` outbound +
+`WAM-100004` inbound after fixing empty WABA `subscribed_apps`). Three
+gaps surfaced and are now closed:
+
+**1. Duplicate idempotency crash → clean JSON.** A second run of
+`run_meta_one_number_test --send` on the same number / template / day
+used to crash with a unique-constraint traceback
+(`uniq_whatsapp_message_idempotency_key`). The CLI now returns:
+
+```json
+{
+  "passed": false,
+  "duplicateIdempotencyKey": true,
+  "alreadyQueued": false,
+  "alreadySent": true,
+  "existingMessageId": "WAM-100003",
+  "auditEvents": ["...", "whatsapp.meta_test.duplicate_idempotency", "..."],
+  "nextAction": "inspect_existing_message"
+}
+```
+
+The audit row carries only the **last 12 chars** of the idempotency
+key — never the raw key, never any token.
+
+**2. WABA subscription diagnostics.** `--check-webhook-config` now
+runs `GET https://graph.facebook.com/{api}/{WABA_ID}/subscribed_apps`
+with the configured `META_WA_ACCESS_TOKEN` (read-only) and reports:
+
+```json
+"webhook": {
+  "callbackUrl": "https://ai.nirogidhara.com/api/webhooks/whatsapp/meta/",
+  "wabaSubscriptionChecked": true,
+  "wabaSubscriptionActive": false,
+  "wabaSubscribedAppCount": 0,
+  "wabaSubscriptionWarning": "subscribed_apps is empty — Meta will NOT deliver inbound webhooks. ...",
+  "overrideCallbackExpected": "https://ai.nirogidhara.com/api/webhooks/whatsapp/meta/",
+  "recommendedSubscribeCommandHint": "POST /{api}/{WABA_ID}/subscribed_apps with Authorization: Bearer <META_WA_ACCESS_TOKEN> (token, app secret, and verify token NEVER printed here).",
+  ...
+}
+```
+
+If `data=[]` the command flips `nextAction` to
+`subscribe_waba_to_app_webhooks` and emits a
+`whatsapp.meta_test.webhook_subscription_checked` audit row. Token /
+verify token / app secret are NEVER printed.
+
+**3. Read-only inspector.** New command:
+
+```bash
+python manage.py inspect_whatsapp_live_test --phone +91XXXXXXXXXX --json
+```
+
+Surfaces in a single JSON document:
+
+- `customer` (found / id / phone / consent_whatsapp)
+- `whatsappConsent` (state / granted_at / revoked_at / last_inbound_at)
+- `conversation` (id / status / unread_count / updated_at)
+- `messages.latestOutbound` + `messages.latestInbound`
+  (id / direction / type / status / bodyPreview / provider_message_id / created_at)
+- `webhookEvents` (count + latest 5 with signature_verified, processing_status)
+- `statusEvents` (count + latest 5)
+- `auditEvents` (latest 25 `whatsapp.*` rows)
+- `wabaSubscription` (live `subscribed_apps` check)
+- `latestProviderMessageId`
+- `nextAction`
+
+**Inspector contract:** never sends, never mutates the DB (no audit
+row, no message row, no status row, no webhook envelope written),
+never prints tokens / verify token / app secret. Gracefully handles
+missing Meta credentials (Graph check skipped with warning).
+
+`nextAction` priorities (most-blocking first):
+
+| Token | Meaning |
+| --- | --- |
+| `subscribe_waba_to_app_webhooks` | WABA `subscribed_apps` is empty — Meta won't deliver inbound webhooks. |
+| `run_one_number_send` | No outbound message on file for the number. |
+| `verify_inbound_webhook_callback` | Outbound exists but no inbound has arrived. |
+| `observe_status_events_optional` | Outbound + inbound both present, but no `WhatsAppMessageStatusEvent` rows yet. Soft signal — Meta may still send delivery webhooks. |
+| `gate_hardened_ready_for_limited_ai_auto_reply_plan` | Ready to plan a tightly-scoped controlled AI auto-reply test against the allowed test number. |
+
 ### Phase 5F-Gate — Limited Live Meta WhatsApp One-Number Test
 
 The single safe surface for verifying real Meta Cloud sends without

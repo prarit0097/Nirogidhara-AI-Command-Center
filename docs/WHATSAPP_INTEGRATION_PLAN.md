@@ -1301,3 +1301,96 @@ operator notes for the Meta Developer Console.
 one-number live test → enable automation flags one-by-one → Phase 5F
 (approval-gated broadcast campaigns).
 
+---
+
+## JJ. Phase 5F-Gate Hardening Hotfix (post-live-pass)
+
+The live one-number test passed end-to-end on the VPS:
+
+- Outbound `WAM-100003` (template `nrg_greeting_intro / hi /
+  UTILITY / APPROVED`) sent + delivered to phone.
+- Initial inbound webhook silence root-caused: `GET /{WABA_ID}/
+  subscribed_apps` returned `{"data": []}`.
+- Fixed manually on the VPS: `POST /{WABA_ID}/subscribed_apps` +
+  `POST` with `override_callback_uri=https://ai.nirogidhara.com/api/
+  webhooks/whatsapp/meta/&verify_token=…` returned `{"success": true}`.
+- After fix: one invalid-signature test event correctly rejected,
+  one real Meta `messages` event accepted with
+  `signature_verified=True`. Inbound `WAM-100004` "Namaste webhook
+  test" stored.
+- `WhatsAppMessageStatusEvent` count is still 0 — diagnostics added,
+  not blocking the gate yet.
+
+### Three gaps closed in this hotfix
+
+**1. Duplicate idempotency_key crash → clean JSON.** The second send
+to the allowed number on the same day collided on the unique
+constraint `uniq_whatsapp_message_idempotency_key`. The CLI now
+catches `IntegrityError` from `services.queue_template_message`,
+rebuilds the deterministic idempotency key, looks up the existing
+`WhatsAppMessage`, and returns:
+
+```
+passed=false
+duplicateIdempotencyKey=true
+alreadyQueued=… / alreadySent=…
+existingMessageId=WAM-…
+auditEvents=[..., "whatsapp.meta_test.duplicate_idempotency", ...]
+nextAction="inspect_existing_message"
+```
+
+The audit row only carries the **last 12 chars** of the key — never
+the raw key, never any token-shaped value.
+
+**2. WABA subscription diagnostics in `--check-webhook-config`.**
+The command now also runs `GET /{api}/{WABA_ID}/subscribed_apps` and
+adds the following to the `webhook` block:
+
+```
+wabaSubscriptionChecked      true|false
+wabaSubscriptionActive       true|false|null
+wabaSubscribedAppCount       int
+wabaSubscriptionWarning      string (set when active=false)
+wabaSubscriptionError        string (set when Graph call failed)
+overrideCallbackExpected     full URL (no secrets)
+recommendedSubscribeCommandHint     {api}/{WABA_ID}/... shape (no secrets)
+recommendedOverrideCallbackHint     {api}/{WABA_ID}/... shape (no secrets)
+```
+
+Emits a new `whatsapp.meta_test.webhook_subscription_checked` audit
+row. When `data=[]` the command flips `nextAction` to
+`subscribe_waba_to_app_webhooks`.
+
+**3. Read-only inspector.** New strictly-read-only command:
+
+```
+python manage.py inspect_whatsapp_live_test --phone +91XXXXXXXXXX --json
+```
+
+Surfaces customer / consent / conversation / latest 5 outbound + 5
+inbound messages / latest 5 webhook envelopes (with
+`signature_verified` + `processing_status`) / latest 5 status events
+/ latest 25 `whatsapp.*` audit rows / WABA subscription /
+`latestProviderMessageId` + a typed `nextAction`. Inspector NEVER
+writes audit rows, sends messages, or mutates the DB. Gracefully
+handles missing Meta credentials. Never prints tokens / verify token
+/ app secret.
+
+`nextAction` mapping (most-blocking first):
+
+- `subscribe_waba_to_app_webhooks` — WABA `subscribed_apps` is empty.
+- `run_one_number_send` — no outbound on file.
+- `verify_inbound_webhook_callback` — outbound exists, no inbound.
+- `observe_status_events_optional` — outbound + inbound both present
+  but `WhatsAppMessageStatusEvent.count == 0` (soft signal).
+- `gate_hardened_ready_for_limited_ai_auto_reply_plan` — ready to
+  plan a tightly-scoped controlled AI auto-reply test against the
+  allowed test number.
+
+**Phase 5F (broadcast campaigns / growth automation) remains LOCKED
+until the inspector reports
+`gate_hardened_ready_for_limited_ai_auto_reply_plan` on a real VPS
+run.** Next safe step is then a tightly-scoped controlled AI
+auto-reply test on the allowed test number only — every other safety
+check (Claim Vault, matrix, CAIO, idempotency) stays in force.
+

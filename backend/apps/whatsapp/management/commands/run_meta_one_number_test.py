@@ -27,6 +27,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db import IntegrityError
 
 from apps.audit.models import AuditEvent
 from apps.crm.models import Customer
@@ -37,14 +38,18 @@ from apps.whatsapp.meta_one_number_test import (
     MetaOneNumberTestResult,
     _digits_only,
     _normalize_phone,
+    check_waba_subscription,
     emit_blocked_number,
     emit_completed,
     emit_config_failed,
     emit_config_ok,
+    emit_duplicate_idempotency,
     emit_failed,
     emit_sent,
     emit_started,
     emit_template_missing,
+    emit_webhook_subscription_checked,
+    find_existing_message_by_idempotency_key,
     get_allowed_test_numbers,
     is_number_allowed_for_live_meta_test,
     resolve_test_template,
@@ -115,17 +120,58 @@ class Command(BaseCommand):
 
         if options.get("check_webhook_config"):
             result.next_action = "webhook_config_summary"
+            waba_status = check_waba_subscription()
+            emit_webhook_subscription_checked(status=waba_status)
+            result.audit_events.append(
+                "whatsapp.meta_test.webhook_subscription_checked"
+            )
+            if waba_status.active is False:
+                # Definitely empty — flip the recommendation.
+                result.warnings.append(
+                    waba_status.warning
+                    or "WABA subscribed_apps is empty — Meta will NOT deliver inbound webhooks."
+                )
+                result.next_action = "subscribe_waba_to_app_webhooks"
+            elif waba_status.warning:
+                # Skipped (missing creds) — surface as a warning but
+                # leave nextAction as the existing summary.
+                result.warnings.append(waba_status.warning)
+            if waba_status.error:
+                result.warnings.append(waba_status.error)
+
+            webhook = webhook_url_summary()
+            webhook.update(waba_status.to_dict())
+            webhook["overrideCallbackExpected"] = (
+                "https://ai.nirogidhara.com/api/webhooks/whatsapp/meta/"
+            )
+            webhook["recommendedSubscribeCommandHint"] = (
+                "POST https://graph.facebook.com/{api_version}/"
+                "{META_WA_BUSINESS_ACCOUNT_ID}/subscribed_apps "
+                "with Authorization: Bearer <META_WA_ACCESS_TOKEN> "
+                "(token, app secret, and verify token NEVER printed here)."
+            )
+            webhook["recommendedOverrideCallbackHint"] = (
+                "POST https://graph.facebook.com/{api_version}/"
+                "{META_WA_BUSINESS_ACCOUNT_ID}/subscribed_apps?"
+                "override_callback_uri=https://ai.nirogidhara.com/"
+                "api/webhooks/whatsapp/meta/&verify_token=<META_WA_VERIFY_TOKEN> "
+                "(value not printed)."
+            )
+
             self._emit_output(
                 options,
                 result,
-                extra={"webhook": webhook_url_summary()},
+                extra={"webhook": webhook},
                 preface_lines=[
                     "Meta webhook configuration summary",
                     "----------------------------------",
                     "Callback URL : https://ai.nirogidhara.com/api/webhooks/whatsapp/meta/",
-                    f"verifyTokenSet : {verification.verify_token_set}",
-                    f"appSecretSet   : {verification.app_secret_set}",
-                    f"apiVersion     : {verification.api_version}",
+                    f"verifyTokenSet     : {verification.verify_token_set}",
+                    f"appSecretSet       : {verification.app_secret_set}",
+                    f"apiVersion         : {verification.api_version}",
+                    f"wabaChecked        : {waba_status.checked}",
+                    f"wabaActive         : {waba_status.active}",
+                    f"wabaSubscribedApps : {waba_status.subscribed_app_count}",
                     "Subscribe to: messages (and message_template_status_update in prod).",
                 ],
             )
@@ -303,6 +349,17 @@ class Command(BaseCommand):
             result.next_action = "inspect_audit_blocked_send"
             self._finalize(options, result)
             return
+        except IntegrityError as exc:
+            # Phase 5F-Gate Hardening Hotfix — duplicate idempotency_key
+            # under the same-day fingerprint used to crash the CLI with a
+            # full traceback. Recover cleanly + point at the existing row.
+            return self._handle_duplicate_idempotency(
+                exc=exc,
+                customer=customer,
+                template=template,
+                options=options,
+                result=result,
+            )
 
         try:
             sent = services.send_queued_message(queued.message.id)
@@ -332,6 +389,78 @@ class Command(BaseCommand):
         self._finalize(options, result)
 
     # ---------- helpers ----------
+
+    def _handle_duplicate_idempotency(
+        self,
+        *,
+        exc: IntegrityError,
+        customer: Customer,
+        template,
+        options,
+        result: MetaOneNumberTestResult,
+    ) -> None:
+        """Translate the unique-constraint crash into clean JSON.
+
+        We rebuild the same idempotency key the service layer uses
+        (``apps.whatsapp.services._build_idempotency_key``) and look up
+        the row that already won the race. The CLI returns
+        ``passed=false`` + ``duplicateIdempotencyKey=true`` plus the
+        existing ``messageId`` / status so the operator knows whether
+        the prior attempt already queued or already sent.
+        """
+        from apps.whatsapp import services as whatsapp_services
+        from apps.whatsapp.models import WhatsAppMessage
+
+        idempotency_key = whatsapp_services._build_idempotency_key(  # noqa: SLF001
+            customer=customer,
+            template=template,
+            variables={},
+            action_key=template.action_key or "whatsapp.greeting",
+        )
+        existing = find_existing_message_by_idempotency_key(idempotency_key)
+        if existing is None:
+            # Could not locate the row that triggered the conflict — still
+            # report cleanly without a traceback.
+            result.duplicate_idempotency_key = True
+            result.errors.append(
+                "Duplicate idempotency_key detected, but the prior row "
+                "could not be located. Inspect WhatsAppMessage manually."
+            )
+            emit_duplicate_idempotency(
+                idempotency_key=idempotency_key,
+                existing_message_id="",
+                existing_status="unknown",
+                template_name=template.name,
+            )
+            result.audit_events.append("whatsapp.meta_test.duplicate_idempotency")
+            result.next_action = "inspect_existing_message"
+            self._finalize(options, result)
+            return
+
+        result.duplicate_idempotency_key = True
+        result.existing_message_id = existing.id
+        result.message_id = existing.id
+        result.provider_message_id = existing.provider_message_id or ""
+        result.already_queued = existing.status == WhatsAppMessage.Status.QUEUED
+        result.already_sent = existing.status in {
+            WhatsAppMessage.Status.SENT,
+            WhatsAppMessage.Status.DELIVERED,
+            WhatsAppMessage.Status.READ,
+        }
+        emit_duplicate_idempotency(
+            idempotency_key=idempotency_key,
+            existing_message_id=existing.id,
+            existing_status=existing.status,
+            template_name=template.name,
+        )
+        result.audit_events.append("whatsapp.meta_test.duplicate_idempotency")
+        result.warnings.append(
+            f"Duplicate idempotency_key — existing message {existing.id} "
+            f"is in status={existing.status}. Retry tomorrow or send via "
+            "a different template / customer."
+        )
+        result.next_action = "inspect_existing_message"
+        self._finalize(options, result)
 
     def _resolve_or_create_test_customer(self, target_phone: str) -> Customer:
         """Find a Customer by phone — never auto-grant consent.

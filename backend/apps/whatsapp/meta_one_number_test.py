@@ -113,6 +113,10 @@ class MetaOneNumberTestResult:
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     next_action: str = ""
+    duplicate_idempotency_key: bool = False
+    already_queued: bool = False
+    already_sent: bool = False
+    existing_message_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -128,6 +132,10 @@ class MetaOneNumberTestResult:
             "templateApproved": self.template_approved,
             "messageId": self.message_id,
             "providerMessageId": self.provider_message_id,
+            "duplicateIdempotencyKey": self.duplicate_idempotency_key,
+            "alreadyQueued": self.already_queued,
+            "alreadySent": self.already_sent,
+            "existingMessageId": self.existing_message_id,
             "auditEvents": list(self.audit_events),
             "warnings": list(self.warnings),
             "errors": list(self.errors),
@@ -242,6 +250,36 @@ def emit_sent(*, message_id: str, provider_message_id: str, template_name: str) 
     )
 
 
+def emit_duplicate_idempotency(
+    *,
+    idempotency_key: str,
+    existing_message_id: str,
+    existing_status: str,
+    template_name: str,
+) -> None:
+    """Phase 5F-Gate Hardening Hotfix — duplicate idempotency_key path.
+
+    The CLI used to crash with an IntegrityError traceback when the
+    same allowed number was sent the same template within the daily
+    idempotency window. We now report the duplicate cleanly and point
+    the operator at the existing row.
+    """
+    _emit(
+        kind="whatsapp.meta_test.duplicate_idempotency",
+        text=(
+            f"Meta one-number test refused · duplicate idempotency_key "
+            f"matches existing message {existing_message_id} ({existing_status})"
+        ),
+        tone=AuditEvent.Tone.WARNING,
+        payload={
+            "idempotency_key_suffix": (idempotency_key or "")[-12:],
+            "existing_message_id": existing_message_id,
+            "existing_status": existing_status,
+            "template": template_name,
+        },
+    )
+
+
 def emit_failed(*, error_code: str, error_message: str, template_name: str) -> None:
     _emit(
         kind="whatsapp.meta_test.failed",
@@ -251,6 +289,33 @@ def emit_failed(*, error_code: str, error_message: str, template_name: str) -> N
             "error_code": error_code,
             "error_message": (error_message or "")[:480],
             "template": template_name,
+        },
+    )
+
+
+def emit_webhook_subscription_checked(*, status) -> None:
+    """Phase 5F-Gate Hardening Hotfix — emit a single audit row per check.
+
+    The emitter never crashes if the GraphAPI lookup itself failed; it
+    just records what the diagnostics layer found.
+    """
+    _emit(
+        kind="whatsapp.meta_test.webhook_subscription_checked",
+        text=(
+            f"WABA subscription checked · checked={status.checked} "
+            f"· active={status.active} · count={status.subscribed_app_count}"
+        ),
+        tone=(
+            AuditEvent.Tone.SUCCESS
+            if status.active
+            else AuditEvent.Tone.WARNING
+        ),
+        payload={
+            "checked": status.checked,
+            "active": status.active,
+            "subscribed_app_count": status.subscribed_app_count,
+            "warning": status.warning,
+            "error": status.error,
         },
     )
 
@@ -415,6 +480,121 @@ def resolve_test_template(
     return template, ""
 
 
+def find_existing_message_by_idempotency_key(
+    idempotency_key: str,
+):
+    """Return the live ``WhatsAppMessage`` row for an idempotency key.
+
+    Imported lazily to keep this module import-safe at Django settings
+    load time (the management command imports the helper before
+    settings are fully built in some contexts).
+    """
+    if not idempotency_key:
+        return None
+    from .models import WhatsAppMessage
+
+    return (
+        WhatsAppMessage.objects.filter(idempotency_key=idempotency_key)
+        .order_by("-created_at")
+        .first()
+    )
+
+
+# ---------------------------------------------------------------------------
+# WABA subscribed_apps diagnostics
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class WabaSubscriptionStatus:
+    """Result of inspecting ``GET /{WABA_ID}/subscribed_apps``."""
+
+    checked: bool = False
+    active: bool | None = None
+    subscribed_app_count: int = 0
+    warning: str = ""
+    error: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "wabaSubscriptionChecked": self.checked,
+            "wabaSubscriptionActive": self.active,
+            "wabaSubscribedAppCount": self.subscribed_app_count,
+            "wabaSubscriptionWarning": self.warning,
+            "wabaSubscriptionError": self.error,
+        }
+
+
+def check_waba_subscription() -> WabaSubscriptionStatus:
+    """Best-effort check of the WhatsApp Business Account's webhook subscription.
+
+    Calls ``GET https://graph.facebook.com/{api}/{WABA_ID}/subscribed_apps``
+    with the configured ``META_WA_ACCESS_TOKEN``. The call is read-only
+    and never mutates anything. Returns a :class:`WabaSubscriptionStatus`
+    so callers can decide whether to surface the warning. Never raises.
+
+    Hard rules:
+    - Never log / return the access token.
+    - Never raise — return ``error`` instead so the CLI keeps producing
+      JSON.
+    - Skip outright when ``META_WA_BUSINESS_ACCOUNT_ID`` /
+      ``META_WA_ACCESS_TOKEN`` are missing.
+    """
+    waba_id = (getattr(settings, "META_WA_BUSINESS_ACCOUNT_ID", "") or "").strip()
+    token = (getattr(settings, "META_WA_ACCESS_TOKEN", "") or "").strip()
+    api_version = (getattr(settings, "META_WA_API_VERSION", "v20.0") or "v20.0").strip()
+
+    status = WabaSubscriptionStatus()
+    if not waba_id or not token:
+        status.warning = "META_WA_BUSINESS_ACCOUNT_ID or META_WA_ACCESS_TOKEN missing — skipping Graph check."
+        return status
+
+    try:
+        import requests  # type: ignore[import-untyped]
+    except ImportError:  # pragma: no cover - requests is in requirements
+        status.error = "requests package not available; cannot check WABA subscription."
+        return status
+
+    url = f"https://graph.facebook.com/{api_version}/{waba_id}/subscribed_apps"
+    try:
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+    except Exception as exc:  # noqa: BLE001 - any transport failure
+        status.error = f"Graph subscribed_apps GET failed: {type(exc).__name__}"
+        return status
+
+    status.checked = True
+    if not response.ok:
+        status.error = (
+            f"Graph subscribed_apps GET returned HTTP {response.status_code}"
+        )
+        return status
+
+    try:
+        body = response.json() or {}
+    except Exception:  # noqa: BLE001 - non-JSON path
+        status.error = "Graph subscribed_apps GET returned non-JSON body."
+        return status
+
+    data = body.get("data") if isinstance(body, dict) else None
+    if not isinstance(data, list):
+        status.error = "Graph subscribed_apps GET returned unexpected shape."
+        return status
+
+    status.subscribed_app_count = len(data)
+    status.active = len(data) > 0
+    if not status.active:
+        status.warning = (
+            "subscribed_apps is empty — Meta will NOT deliver inbound webhooks. "
+            "Run: POST /{WABA_ID}/subscribed_apps with override_callback_uri="
+            "https://ai.nirogidhara.com/api/webhooks/whatsapp/meta/ + verify_token."
+        )
+    return status
+
+
 def webhook_url_summary() -> dict[str, Any]:
     """Return a doc-friendly summary of webhook endpoints + verify-token presence."""
     return {
@@ -439,14 +619,19 @@ __all__ = (
     "MetaOneNumberTestResult",
     "REQUIRED_META_ENV_KEYS",
     "VerificationOutcome",
+    "WabaSubscriptionStatus",
+    "check_waba_subscription",
     "emit_blocked_number",
     "emit_completed",
     "emit_config_failed",
     "emit_config_ok",
+    "emit_duplicate_idempotency",
     "emit_failed",
     "emit_sent",
     "emit_started",
     "emit_template_missing",
+    "emit_webhook_subscription_checked",
+    "find_existing_message_by_idempotency_key",
     "get_allowed_test_numbers",
     "is_number_allowed_for_live_meta_test",
     "resolve_test_template",

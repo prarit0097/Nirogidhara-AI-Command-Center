@@ -274,6 +274,41 @@ If anything is amber, the JSON output's `nextAction` field tells you
 exactly what to fix (see RUNBOOK §"Phase 5F-Gate"). The harness refuses
 outright if any of the six automation flags is on.
 
+### 5.2 Phase 5F-Gate Hardening Hotfix — post-live-pass diagnostics
+
+Once the one-number test has passed at least once, run the
+**read-only inspector** after every deploy to confirm the limited
+live state stays healthy:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_whatsapp_live_test \
+    --phone +918949879990 --json
+```
+
+Required output for a clean state:
+
+- `nextAction == "gate_hardened_ready_for_limited_ai_auto_reply_plan"`
+  (or `observe_status_events_optional` if Meta has not yet posted any
+  status webhooks — soft signal only).
+- `customer.found == true` and `whatsappConsent.consent_state == "granted"`.
+- `messages.latestOutbound[0].status == "sent"` (or `delivered` / `read`).
+- `messages.latestInbound[0]` present.
+- `wabaSubscription.wabaSubscriptionActive == true`.
+- `errors == []`.
+
+Inspector is **strictly read-only** — never sends, never mutates the
+DB, never prints `META_WA_ACCESS_TOKEN` / `META_WA_VERIFY_TOKEN` /
+`META_WA_APP_SECRET`. Safe to re-run any time. If `nextAction ==
+"subscribe_waba_to_app_webhooks"`, the WABA's webhook subscription has
+fallen out — re-run the curl `POST /{WABA_ID}/subscribed_apps` +
+override-callback fix from §5.1.
+
+Re-run the harness's `--check-webhook-config --json` whenever the
+inspector flags `subscribe_waba_to_app_webhooks` — the new diagnostics
+block surfaces `wabaSubscriptionActive` + `wabaSubscribedAppCount`
+without printing tokens.
+
 ---
 
 ## 6. DNS + TLS for `ai.nirogidhara.com`
