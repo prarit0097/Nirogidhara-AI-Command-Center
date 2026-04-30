@@ -14,9 +14,9 @@
 | Author of record | Prarit Sidana (Director, Nirogidhara Private Limited) |
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
-| Completed phase range | Phase 1 → Phase 5F-Gate Controlled Reply Confidence Fix |
-| Last verified test baseline | 723 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
-| Smoke + provider state | Phase 5E-Smoke + Smoke-Fix-1 / Smoke-Fix-2 / Smoke-Fix-3 completed · OpenAI provider smoke test passed on VPS · OpenAI SDK installed · adapter uses `max_completion_tokens` · false `side_effect_complaint` classification fixed · Phase 5F-Gate one-number test harness shipped · **Phase 5F-Gate live one-number test passed on VPS** (`WAM-100003` outbound + `WAM-100004` inbound, WABA `subscribed_apps` empty issue resolved via `POST` + override callback) · Phase 5F-Gate Hardening Hotfix shipped (duplicate-idempotency clean JSON, WABA subscription diagnostics, read-only inspector) · Phase 5F-Gate Controlled AI Auto-Reply Test Harness shipped (final-send limited-mode guard + `force_auto_reply` kwarg + `run_controlled_ai_auto_reply_test` CLI) · Phase 5F-Gate Claim Vault Grounding Fix shipped (slug → `Claim.product` deterministic mapping; empty-string fallback removed; controlled-test JSON carries grounding diagnostics) · Phase 5F-Gate Controlled Reply Confidence Fix shipped (BUSINESS FACTS + ACTION SELECTION DECISION TREE in prompt + claim-count diagnostics split into row / approved / disallowed) |
+| Completed phase range | Phase 1 → Phase 5F-Gate Deterministic Grounded Reply Builder |
+| Last verified test baseline | 747 backend tests · 13 frontend tests · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
+| Smoke + provider state | Phase 5E-Smoke + Smoke-Fix-1 / Smoke-Fix-2 / Smoke-Fix-3 completed · OpenAI provider smoke test passed on VPS · OpenAI SDK installed · adapter uses `max_completion_tokens` · false `side_effect_complaint` classification fixed · Phase 5F-Gate one-number test harness shipped · **Phase 5F-Gate live one-number test passed on VPS** (`WAM-100003` outbound + `WAM-100004` inbound, WABA `subscribed_apps` empty issue resolved via `POST` + override callback) · Phase 5F-Gate Hardening Hotfix shipped (duplicate-idempotency clean JSON, WABA subscription diagnostics, read-only inspector) · Phase 5F-Gate Controlled AI Auto-Reply Test Harness shipped (final-send limited-mode guard + `force_auto_reply` kwarg + `run_controlled_ai_auto_reply_test` CLI) · Phase 5F-Gate Claim Vault Grounding Fix shipped (slug → `Claim.product` deterministic mapping; empty-string fallback removed; controlled-test JSON carries grounding diagnostics) · Phase 5F-Gate Controlled Reply Confidence Fix shipped (BUSINESS FACTS + ACTION SELECTION DECISION TREE in prompt + claim-count diagnostics split into row / approved / disallowed) · Phase 5F-Gate Deterministic Grounded Reply Builder shipped (backend Claim-Vault-grounded reply fallback for soft non-safety blockers; controlled-test command flips `claimVaultUsed=true` only after validator confirms reply embeds an approved phrase) |
 | Live deployment stack | Docker Compose (six containers) on Hostinger VPS, host port 18020 → host Nginx + Certbot SSL |
 | GitHub repo | https://github.com/prarit0097/Nirogidhara-AI-Command-Center |
 | VPS path | `/opt/nirogidhara-command` |
@@ -94,7 +94,7 @@ curl -fsS https://ai.nirogidhara.com/api/healthz/
 
 ---
 
-## 3. Completed Build Timeline — Phase 1 → Phase 5F-Gate Controlled Reply Confidence Fix
+## 3. Completed Build Timeline — Phase 1 → Phase 5F-Gate Deterministic Grounded Reply Builder
 
 | Phase | Status | What shipped | Risk / Safety note |
 | --- | --- | --- | --- |
@@ -125,6 +125,7 @@ curl -fsS https://ai.nirogidhara.com/api/healthz/
 | 5D | ✅ Live | Chat-to-Call Handoff + Lifecycle Automation. `apps.whatsapp.call_handoff` is the single Vapi entry from WhatsApp; idempotent on `(conversation, inbound, reason)`. Safety reasons skip auto-dial. AI-booked orders move directly to confirmation queue. `apps.whatsapp.lifecycle` + `apps.whatsapp.signals` route Order/Payment/Shipment events to approved templates. Claim Vault coverage audit (`check_claim_vault_coverage`, `/api/compliance/claim-coverage/`). Three new endpoints. 11 new audit kinds. | `WHATSAPP_CALL_HANDOFF_ENABLED=false`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false`, `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` defaults. |
 | 5E | ✅ Live | Rescue Discount Flow + Day-20 Reorder + Default Claim Vault Seeds. `apps.orders.rescue_discount` enforces the **50% absolute cumulative cap** with per-stage ladders. `DiscountOfferLog` records every attempt. CEO AI / admin escalation via `discount.rescue.ceo_review` + `discount.above_safe_auto_band` matrix rows. Five new endpoints. 12 new audit kinds. `seed_default_claims` covers the eight categories. | `WHATSAPP_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_REORDER_DAY20_ENABLED=false`, `DEFAULT_CLAIMS_SEED_DEMO_ONLY=true` defaults. CAIO refused at offer entry. |
 | 5E-Hotfix | ✅ Live | Two `RenameIndex` migrations to bring Phase 5D / 5E hand-rolled index names in line with Django's auto-suffix form. Working agreement now requires `python manage.py makemigrations --check --dry-run` to be clean before every commit. | Pure metadata; no schema rewrite. |
+| 5F-Gate Deterministic Grounded Reply Builder | ✅ Live | Backend Claim-Vault-grounded reply fallback for the controlled AI auto-reply test command. After the Confidence Fix landed, the live `--send` STILL failed (`WAM-100008`) because the LLM kept self-reporting `safety.claimVaultUsed=false` even though the backend had `claimRowCount=1 / approvedClaimCount=3 / promptGroundingInjected=true / businessFactsInjected=true`. New `apps.whatsapp.grounded_reply_builder` ships `is_normal_product_info_inquiry`, `can_build_grounded_product_reply`, `build_grounded_product_reply`, and `validate_reply_uses_claim_vault`. The controlled-test command runs the fallback ONLY when the LLM blocked on a soft non-safety reason AND backend grounding is valid AND inbound is product-info; safety blockers never trigger fallback. Send still flows through `services.send_freeform_text_message` so limited-mode allow-list + consent + CAIO + idempotency stay in force. `claimVaultUsed=true` flips only because the validator confirms the reply text literally embeds an approved phrase. Two new audit kinds (`whatsapp.ai.deterministic_grounded_reply_used` / `whatsapp.ai.deterministic_grounded_reply_blocked`); JSON adds `deterministicFallbackUsed` / `fallbackReason` / `deterministicReplyPreview` / `finalReplySource` / `finalReplyValidation`. 24 new pytest cases. | Phase 5F (broadcast campaigns / growth automation) remains LOCKED. |
 | 5F-Gate Controlled Reply Confidence Fix | ✅ Live | Prompt + action discipline + diagnostics cleanup. After the Claim Vault Grounding Fix the live `--send` still failed with `action=handoff` + `confidence=0.7` because the prompt did not tell the LLM that a normal grounded inquiry must use `action=send_reply` with `confidence ≥ 0.85`. Adds explicit `BUSINESS FACTS YOU MAY STATE FREELY` (₹3000 / 30 capsules / ₹499 advance / conservative usage / doctor-escalation) + `ACTION SELECTION DECISION TREE` (cases A–E) + `FINAL CHECK` paragraph. Extends `settings` block with `standardCapsuleCount`, `discountDiscipline`, `businessFactsAllowed`. Splits the ambiguous `claim_count` into `claim_row_count` / `approved_claim_count` / `disallowed_phrase_count` across the controlled-test JSON + four orchestrator audit kinds; `claim_count` preserved as backward-compat alias. Confidence threshold env unchanged. 12 new pytest cases. | Phase 5F (broadcast campaigns / growth automation) remains LOCKED. |
 | 5F-Gate Claim Vault Grounding Fix | ✅ Live | Category-slug → `Claim.product` mapping. The deployed Controlled AI Auto-Reply Test Harness produced two safety-correct blocks on the VPS (`low_confidence`, then `claim_vault_not_used`). Root cause: `_claims_for_category` filtered `Claim.product__icontains=<slug>` (`weight-management` vs `Weight Management`) and silently fell through to an empty-string match that returned every claim row. New `apps.whatsapp.claim_mapping.category_to_claim_product` deterministic table (eight canonical slugs + ~25 aliases) + `_claims_for_category` rewritten to use `__iexact` on the normalized product. Empty-string fallback removed; unknown / empty category fails closed. Disallowed phrases stay in the prompt avoid list. Controlled-test JSON adds `detectedCategory / normalizedClaimProduct / claimCount / confidence / action / replyPreview / safetyFlags / groundingStatus`. `whatsapp.ai.{category_detected,reply_blocked,handoff_required,controlled_test.blocked}` audits gain matching grounding fields. 40 new pytest cases. | Phase 5F (broadcast campaigns / growth automation) remains LOCKED. |
 | 5F-Gate Controlled AI Auto-Reply Test Harness | ✅ Live | Scoped one-shot live AI reply path for the allowed test number only — without flipping the global `WHATSAPP_AI_AUTO_REPLY_ENABLED` env. New final-send limited-mode guard in `apps.whatsapp.services._limited_test_mode_blocks_send` runs inside both `send_freeform_text_message` and `queue_template_message`; refuses any customer-facing send to a phone not on `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` whenever limited mode is on. Orchestrator gains a `force_auto_reply` kwarg. New `python manage.py run_controlled_ai_auto_reply_test --phone +91… --message "…" [--dry-run|--send] [--json]` command stacks every gate (provider, limited mode, automation flags off including `WHATSAPP_AI_AUTO_REPLY_ENABLED`, allow-list, customer + consent, WABA active) and drives the orchestrator with auto-reply forced ON for one call only. Default `--dry-run`. Five new audit kinds (`whatsapp.ai.controlled_test.{started,dry_run_passed,sent,blocked,completed}`); payloads carry phone last-4 only, body 120-char preview, no tokens. 15 new pytest cases. | Phase 5F (broadcast campaigns / growth automation) remains LOCKED until a clean 24-hour soak under this harness has been observed. |
@@ -247,7 +248,7 @@ nirogidhara-command/
 │   ├── Dockerfile                    # python:3.11-slim + tini + non-root
 │   ├── apps/                         # 16 apps (see §8 module catalogue)
 │   ├── config/                       # settings.py / urls.py / asgi.py / routing.py / celery.py
-│   └── tests/                        # 723 pytest cases
+│   └── tests/                        # 747 pytest cases
 └── docs/
     ├── MASTER_BLUEPRINT_V2.md        # ← this file (current strategic blueprint)
     ├── RUNBOOK.md
@@ -612,7 +613,7 @@ Two new matrix rows for AI rescue discount escalation:
 
 ## 17. Automation Feature Flags & Safe Rollout
 
-> **Current state (post Phase 5F-Gate Controlled Reply Confidence Fix):** Controlled OpenAI + mock WhatsApp smoke has passed on the VPS (`run_controlled_ai_smoke_test --scenario all` and `--scenario ai-reply --use-openai` both green). All automation flags below remain **default OFF** until the limited live Meta one-number test passes. Flag flips are gated, sequential, and reversible.
+> **Current state (post Phase 5F-Gate Deterministic Grounded Reply Builder):** Controlled OpenAI + mock WhatsApp smoke has passed on the VPS (`run_controlled_ai_smoke_test --scenario all` and `--scenario ai-reply --use-openai` both green). All automation flags below remain **default OFF** until the limited live Meta one-number test passes. Flag flips are gated, sequential, and reversible.
 
 ### 17.1 The flags
 
@@ -659,7 +660,7 @@ A flag flip is reversible — if anything looks wrong on the audit stream, set t
 cd backend
 python manage.py makemigrations --check --dry-run    # MUST report "No changes detected"
 python manage.py check                                # 0 issues
-python -m pytest -q                                   # 723 tests today
+python -m pytest -q                                   # 747 tests today
 
 # Frontend
 cd ../frontend
@@ -733,7 +734,7 @@ If either run fails, **do not** flip flags or proceed to live Meta testing.
 
 ## 19. Updated Roadmap
 
-**Next immediate work: VPS rebuild for the Confidence Fix → re-run dry-run on VPS with the explicit weight-management prompt → live `--send` against the existing allowed test number → verify the phone receives a Claim-Vault-grounded reply with `action=send_reply` and the ₹3000/30-capsules/₹499 business facts → 24-hour soak.**
+**Next immediate work: VPS rebuild for the Deterministic Grounded Reply Builder → re-run dry-run on VPS → live `--send` against the existing allowed test number → verify the phone receives the Claim-Vault-grounded reply (LLM or fallback) with `action=send_reply`, `claimVaultUsed=true`, and the ₹3000/30-capsules/₹499 business facts → 24-hour soak.**
 
 | Stage | Status |
 | --- | --- |
@@ -748,6 +749,7 @@ If either run fails, **do not** flip flags or proceed to live Meta testing.
 | Phase 5F-Gate Controlled AI Auto-Reply Test Harness | ✅ Completed — final-send limited-mode guard + orchestrator `force_auto_reply` kwarg + new `python manage.py run_controlled_ai_auto_reply_test --phone +91… --message "…" [--dry-run\|--send] [--json]` command. 15 new pytest cases. |
 | Phase 5F-Gate Claim Vault Grounding Fix | ✅ Completed — `apps.whatsapp.claim_mapping.category_to_claim_product` deterministic table + `_claims_for_category` rewritten to `__iexact` on the normalized product; empty-string fallback removed; unknown / empty category fails closed. Controlled-test JSON adds the grounding diagnostics block. 40 new pytest cases. |
 | Phase 5F-Gate Controlled Reply Confidence Fix | ✅ Completed — system prompt carries `BUSINESS FACTS YOU MAY STATE FREELY` + `ACTION SELECTION DECISION TREE` + `FINAL CHECK` paragraph. `settings` block extended with `standardCapsuleCount`, `discountDiscipline`, `businessFactsAllowed`. `claim_count` split into `claim_row_count` / `approved_claim_count` / `disallowed_phrase_count` across all four orchestrator audit kinds + the controlled-test JSON. Confidence threshold env unchanged. 12 new pytest cases. |
+| Phase 5F-Gate Deterministic Grounded Reply Builder | ✅ Completed — `apps.whatsapp.grounded_reply_builder` module (`is_normal_product_info_inquiry`, `can_build_grounded_product_reply`, `build_grounded_product_reply`, `validate_reply_uses_claim_vault`). Controlled-test command falls back to it ONLY when LLM blocked on soft non-safety reasons AND backend grounding is valid AND inbound is product-info. Send still flows through `services.send_freeform_text_message`. Two new audit kinds. JSON adds `deterministicFallbackUsed` / `fallbackReason` / `deterministicReplyPreview` / `finalReplySource` / `finalReplyValidation`. 24 new pytest cases. |
 | Run inspector on VPS | ✅ Completed — inspector reported provider `meta_cloud`, limited mode `true`, allow-list size `2`, customer `NRG-CUST-5025` granted, conversation `WCV-3`, outbound `WAM-100003`, inbound `WAM-100004`, WABA active, `errors=[]`, `nextAction=observe_status_events_optional`. |
 | Run controlled AI auto-reply dry-run on VPS | 🔜 **Next.** After the Controlled AI Auto-Reply Test Harness lands on the VPS, run `python manage.py run_controlled_ai_auto_reply_test --phone +918949879990 --message "Namaste mujhe weight loss product ke baare me bataye" --dry-run --json` and require `passed=true` + `nextAction=dry_run_passed_ready_for_send`. |
 | Run controlled AI auto-reply `--send` on VPS | 🔜 After the dry-run passes. Same command with `--send`. Require `passed=true` + `auditEvents` includes `whatsapp.ai.controlled_test.sent` + `nextAction=live_ai_reply_sent_verify_phone`. Verify the test phone receives the AI reply on WhatsApp. |
@@ -780,7 +782,7 @@ Controlled Mock + OpenAI smoke testing is **no longer an open gap** — Phase 5E
 
 ## 21. Updated Learning Loop
 
-The release / verification / deploy / observe / improve cycle is the only way changes land safely. The current state of the loop (post Phase 5F-Gate Controlled Reply Confidence Fix) is:
+The release / verification / deploy / observe / improve cycle is the only way changes land safely. The current state of the loop (post Phase 5F-Gate Deterministic Grounded Reply Builder) is:
 
 ```
 Mock smoke passed
@@ -980,7 +982,7 @@ flowchart LR
 
 ## 26. Final Note
 
-Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 5F-Gate Controlled Reply Confidence Fix. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
+Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 5F-Gate Deterministic Grounded Reply Builder. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
 
 Whenever the system grows, this blueprint must grow with it: new phases, new flags, new audit kinds, new gaps. The contract is — **`nd.md` is the live source of truth; this blueprint is the Director-facing strategic mirror of it.**
 

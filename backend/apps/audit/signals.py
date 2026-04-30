@@ -206,6 +206,9 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.ai.controlled_test.sent": "send",
     "whatsapp.ai.controlled_test.blocked": "ban",
     "whatsapp.ai.controlled_test.completed": "check-circle",
+    # Phase 5F-Gate Deterministic Grounded Reply Builder.
+    "whatsapp.ai.deterministic_grounded_reply_used": "shield-check",
+    "whatsapp.ai.deterministic_grounded_reply_blocked": "shield-off",
 }
 
 

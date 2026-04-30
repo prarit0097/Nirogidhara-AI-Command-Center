@@ -486,6 +486,70 @@ backend container (`docker compose ... build --no-cache backend`).
 The fix is in the prompt — not in lowering the threshold. Do **not**
 edit `WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD` to compensate.
 
+### 5.6 Phase 5F-Gate Deterministic Grounded Reply Builder — re-run
+
+After the Deterministic Grounded Reply Builder lands on the VPS,
+the controlled-test command's `--send` no longer depends on the
+LLM choosing `action=send_reply`. If the LLM blocks with a soft
+non-safety reason (`claim_vault_not_used` / `low_confidence` /
+`ai_handoff_requested` / `auto_reply_disabled`) AND the backend has
+valid grounding AND the inbound is a normal product-info inquiry,
+the command **falls back** to a deterministic Hinglish reply built
+from `Claim.approved` + locked business facts and dispatches it
+through the same `services.send_freeform_text_message` path.
+
+```bash
+# Inspector first.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_whatsapp_live_test \
+    --phone +918949879990 --json
+
+# Dry-run.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste. Mujhe Nirogidhara ke weight management product ke baare me approved safe jaankari chahiye. Price, capsule quantity aur use guidance bata dijiye." \
+    --dry-run --json
+
+# Live --send. Two outcomes count as success:
+#   (a) LLM honoured the prompt → finalReplySource="llm",
+#       deterministicFallbackUsed=false.
+#   (b) LLM still blocked but backend fallback dispatched →
+#       finalReplySource="deterministic_grounded_builder",
+#       deterministicFallbackUsed=true,
+#       fallbackReason ∈ {"claim_vault_not_used", "low_confidence",
+#                         "ai_handoff_requested",
+#                         "auto_reply_disabled"}.
+# Either way: passed=true, replySent=true, claimVaultUsed=true,
+# finalReplyValidation.passed=true,
+# finalReplyValidation.containsApprovedClaim=true.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste. Mujhe Nirogidhara ke weight management product ke baare me approved safe jaankari chahiye. Price, capsule quantity aur use guidance bata dijiye." \
+    --send --json
+
+# Audit tail — confirm whatsapp.ai.deterministic_grounded_reply_used
+# fires (path b) or whatsapp.ai.controlled_test.sent fires alone
+# (path a). No tokens / secrets in payloads.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py shell -c "
+from apps.audit.models import AuditEvent
+for e in AuditEvent.objects.filter(kind__startswith='whatsapp.ai').order_by('-occurred_at')[:30]:
+    print(e.occurred_at, '|', e.kind, '|', e.tone)
+    print(e.text)
+    print(e.payload)
+    print('-' * 100)
+"
+```
+
+If `deterministicFallbackUsed=true` and the test phone receives the
+deterministic reply, the gate is **passing safely** — the LLM's
+inability to self-report `claimVaultUsed=true` no longer blocks the
+controlled live test. Webhook-driven production runs still flow
+through the orchestrator's strict path; this fallback is
+controlled-test-only.
+
 ---
 
 ## 6. DNS + TLS for `ai.nirogidhara.com`

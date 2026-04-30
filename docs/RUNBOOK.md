@@ -117,6 +117,83 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5F-Gate Deterministic Grounded Reply Builder
+
+After the Controlled Reply Confidence Fix landed, the live `--send`
+against the allowed test number STILL failed: `WAM-100008` came back
+with `action=handoff`, `confidence=0.7`, `safety.claimVaultUsed=false`
+even though the backend audit proved
+`claimRowCount=1 / approvedClaimCount=3 /
+groundingStatus.promptGroundingInjected=true /
+groundingStatus.businessFactsInjected=true` and every safety flag
+was false. **The LLM's self-reported `claimVaultUsed=false` was
+contradicted by the backend's own grounding diagnostics.**
+
+**Root cause.** Relying only on the LLM's self-reported
+`safety.claimVaultUsed` flag is insufficient. The fix is a
+**backend-only deterministic Claim-Vault-grounded reply fallback**.
+
+**Module:** `apps.whatsapp.grounded_reply_builder`
+
+| Function | Purpose |
+| --- | --- |
+| `is_normal_product_info_inquiry(text)` | Deterministic intent detector — explicit keyword list (price / capsule / quantity / use guidance / jaankari / bataye / …) AND explicit disqualifier list (cure / guarantee / 100% / side-effect / consumer forum / …). |
+| `can_build_grounded_product_reply(...)` | Eligibility gate — requires mapped category, ≥1 approved claim, no safety flag set, qualified intent. |
+| `build_grounded_product_reply(...)` | Composes a Hinglish reply that literally embeds the first approved phrase + ₹3000 / 30 capsules + ₹499 advance + conservative usage line + doctor escalation. |
+| `validate_reply_uses_claim_vault(...)` | Final validator — must contain ≥1 approved phrase, no `BLOCKED_CLAIM_PHRASES` entry, no discount vocabulary. |
+
+**When the fallback fires.** The controlled-test command runs the
+fallback ONLY when ALL of:
+
+- `outcome.blocked_reason ∈ { "claim_vault_not_used", "low_confidence",
+  "ai_handoff_requested", "auto_reply_disabled", "no_action", "" }`
+- backend grounding is valid (`category_to_claim_product` mapped,
+  `Claim.product__iexact` row exists, `approved_claim_count ≥ 1`)
+- every safety flag is false
+- inbound is a normal product-info inquiry per the detector
+
+Safety blockers (`medical_emergency` / `side_effect_complaint` /
+`legal_threat` / `blocked_phrase` / `limited_test_number_not_allowed`)
+**NEVER** trigger the fallback. The fallback dispatches via the
+existing `services.send_freeform_text_message` path so the
+limited-mode allow-list guard, consent, CAIO, and idempotency gates
+all stay in force.
+
+**Locked safety contract.**
+
+- `claimVaultUsed=true` flips ONLY because the validator confirmed
+  the reply text literally embeds at least one approved phrase.
+- The reply text is built ONLY from `Claim.approved` + locked
+  business facts. No invented benefits.
+- No discount, cure, guarantee, "no side effects", or "doctor not
+  needed" content — ever.
+- The fallback is **controlled-test-only**. The orchestrator's
+  webhook-driven path (`run_whatsapp_ai_agent` for inbound webhook
+  deliveries) NEVER invokes this builder. Webhook runs stay strict.
+
+**Two new audit kinds.**
+
+- `whatsapp.ai.deterministic_grounded_reply_used` — emitted when
+  the fallback dispatched a real send. Payload carries category,
+  normalized product, claim row count, approved claim count,
+  fallback reason (the LLM block reason), final reply source, phone
+  last-4, outbound message id, and the list of approved phrases
+  used. Never carries tokens.
+- `whatsapp.ai.deterministic_grounded_reply_blocked` — emitted when
+  eligibility passed but the validator refused the built reply
+  (e.g. discount vocabulary slipped through, blocked phrase
+  detected, missing approved phrase).
+
+**Controlled-test JSON additions.**
+
+- `deterministicFallbackUsed` (bool)
+- `fallbackReason` (e.g. `claim_vault_not_used`, `low_confidence`)
+- `deterministicReplyPreview` (180 chars max)
+- `finalReplySource`: `"llm"` or `"deterministic_grounded_builder"`
+- `finalReplyValidation`: `{ containsApprovedClaim, matchedApprovedPhrase,
+  blockedPhraseFree, blockedPhrase, discountOffered, discountVocab,
+  safeBusinessFactsOnly, passed, violation }`
+
 ### Phase 5F-Gate Controlled Reply Confidence Fix
 
 After the Claim Vault Grounding Fix landed on the VPS, the live

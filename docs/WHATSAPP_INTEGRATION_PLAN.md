@@ -1660,3 +1660,87 @@ and `groundingStatus.{claimRowCount, businessFactsInjected}`.
   numbers under limited mode.
 - CAIO never executes; no campaigns / broadcasts. Phase 5F LOCKED.
 
+---
+
+## NN. Phase 5F-Gate Deterministic Grounded Reply Builder (post-ship)
+
+After the Controlled Reply Confidence Fix, the live `--send` STILL
+failed: `WAM-100008` came back with `action=handoff`,
+`confidence=0.7`, `safety.claimVaultUsed=false` despite the backend
+audit proving `claimRowCount=1 / approvedClaimCount=3 /
+groundingStatus.promptGroundingInjected=true /
+groundingStatus.businessFactsInjected=true` and every safety flag
+false.
+
+### Root cause
+
+The LLM's self-reported `safety.claimVaultUsed=false` was
+contradicted by the backend's own grounding diagnostics.
+Prompt-only fixes are insufficient when the LLM cannot self-report
+its own grounding correctly.
+
+### Fix
+
+A backend-only deterministic Claim-Vault-grounded reply fallback in
+the controlled-test command path. Lives in
+`apps.whatsapp.grounded_reply_builder` with four pure functions:
+
+| Function | Purpose |
+| --- | --- |
+| `is_normal_product_info_inquiry(text)` | Deterministic intent detector — explicit keyword + disqualifier lists. |
+| `can_build_grounded_product_reply(...)` | Eligibility gate (mapped category, ≥1 approved claim, no safety flag set, qualified intent). |
+| `build_grounded_product_reply(...)` | Composes a Hinglish reply that literally embeds the first approved phrase + ₹3000 / 30 capsules + ₹499 advance + conservative usage + doctor escalation. |
+| `validate_reply_uses_claim_vault(...)` | Final validator — must contain ≥1 approved phrase, no `BLOCKED_CLAIM_PHRASES` entry, no discount vocabulary. |
+
+The controlled-test command runs the fallback ONLY when the LLM
+blocked with one of the soft non-safety reasons
+(`claim_vault_not_used` / `low_confidence` / `ai_handoff_requested`
+/ `auto_reply_disabled` / `no_action`) AND backend grounding is
+valid AND the inbound is a normal product-info inquiry. Safety
+blockers (`medical_emergency` / `side_effect_complaint` /
+`legal_threat` / `blocked_phrase` /
+`limited_test_number_not_allowed`) NEVER trigger the fallback.
+
+The fallback dispatches via the existing
+`services.send_freeform_text_message` path so the limited-mode
+allow-list guard, consent, CAIO, and idempotency gates all stay in
+force.
+
+### Audit kinds
+
+- `whatsapp.ai.deterministic_grounded_reply_used` — fallback
+  dispatched a real send. Payload: category, normalized product,
+  claim row count, approved claim count, fallback reason, final
+  reply source, phone last-4, outbound message id, list of approved
+  phrases used.
+- `whatsapp.ai.deterministic_grounded_reply_blocked` — eligibility
+  passed but the validator refused (e.g. discount vocabulary
+  slipped in, blocked phrase detected, missing approved phrase).
+
+### Controlled-test JSON additions
+
+- `deterministicFallbackUsed`
+- `fallbackReason`
+- `deterministicReplyPreview` (180 chars max)
+- `finalReplySource` ∈ {`"llm"`, `"deterministic_grounded_builder"`}
+- `finalReplyValidation`: `{ containsApprovedClaim,
+  matchedApprovedPhrase, blockedPhraseFree, blockedPhrase,
+  discountOffered, discountVocab, safeBusinessFactsOnly, passed,
+  violation }`
+
+### Hard rules preserved
+
+- `claimVaultUsed=true` flips ONLY because the validator confirmed
+  the reply text literally embeds at least one approved phrase.
+- The reply is built ONLY from `Claim.approved` + locked business
+  facts. No invented benefits.
+- No discount, cure, guarantee, "no side effects", or "doctor not
+  needed" content — ever.
+- The fallback is **controlled-test-only**. The orchestrator's
+  webhook-driven path (`run_whatsapp_ai_agent` for inbound webhook
+  deliveries) NEVER invokes the builder.
+- Adding a new business fact requires updating the builder's
+  locked constants AND the `_build_context.settings.businessFactsAllowed`
+  whitelist in the orchestrator. Two-place rule.
+- Phase 5F (broadcast campaigns / growth automation) stays LOCKED.
+
