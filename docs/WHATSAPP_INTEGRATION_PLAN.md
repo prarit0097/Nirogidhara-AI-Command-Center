@@ -1474,3 +1474,102 @@ tokens / verify token / app secret.
 - Phase 5F (broadcast campaigns / growth automation) stays LOCKED
   until a clean 24-hour soak under this harness has been observed.
 
+---
+
+## LL. Phase 5F-Gate Claim Vault Grounding Fix (post-ship)
+
+### Context
+
+The deployed Controlled AI Auto-Reply Test Harness produced two
+safety-correct blocks on the VPS:
+
+1. `WAM-100005` — `low_confidence` (correct).
+2. `WAM-100006` — `claim_vault_not_used`,
+   `nextAction=blocked_for_unapproved_claim`. **The Weight Management
+   Claim Vault row existed** with three approved phrases and `doctor`
+   / `compliance` both `Approved`.
+
+### Root cause
+
+`apps.whatsapp.ai_orchestration._claims_for_category(category,
+customer)` ran:
+
+```python
+return list(qs.filter(product__icontains=category)) or list(
+    qs.filter(product__icontains=customer.product_interest or "")
+)
+```
+
+- `category="weight-management"` (slug) `__icontains` `Claim.product=
+  "Weight Management"` (label) → no match (hyphen vs space).
+- Falls back to `product__icontains=customer.product_interest or ""`.
+  When `product_interest` is blank that becomes `__icontains=""` —
+  Postgres / SQLite both interpret an empty substring as **matches
+  everything**, so the orchestrator received the entire Claim
+  Vault. The LLM's prompt was incoherent / not grounded → it
+  returned `safety.claimVaultUsed=false` → orchestrator blocked.
+
+### Fix
+
+New `apps.whatsapp.claim_mapping` module with a deterministic table:
+
+```python
+CATEGORY_SLUG_TO_PRODUCT = {
+    "weight-management":   "Weight Management",
+    "blood-purification":  "Blood Purification",
+    "men-wellness":        "Men Wellness",
+    "women-wellness":      "Women Wellness",
+    "immunity":            "Immunity",
+    "lungs-detox":         "Lungs Detox",
+    "body-detox":          "Body Detox",
+    "joint-care":          "Joint Care",
+}
+```
+
+Plus ~25 explicit aliases (`weight-loss`, `weight loss`, `blood
+purify`, `male wellness`, `female wellness`, `joint pain`, `detox`,
+…). No fuzzy substring matchers; every entry is an explicit key.
+
+`_claims_for_category` is rewritten:
+
+1. If `category` is known, normalize via `category_to_claim_product`.
+2. Run `Claim.objects.filter(product__iexact=normalized_product)`.
+3. Fall back to `customer.product_interest` only when **non-empty**
+   (exact-match, not `__icontains`).
+4. Unknown / empty category with no customer interest → `[]` (fail
+   closed).
+
+### Diagnostics
+
+Controlled-test JSON gains the grounding block:
+
+- `detectedCategory`
+- `normalizedClaimProduct`
+- `claimCount`
+- `confidence`
+- `action`
+- `replyPreview` (180 char max)
+- `safetyFlags` (boolean dict)
+- `groundingStatus.{claimProductFound, approvedClaimCount,
+  disallowedPhraseCount, promptGroundingInjected}`
+
+Audit ledger:
+
+- `whatsapp.ai.category_detected` payload now carries `category`,
+  `normalized_claim_product`, `claim_count`, `confidence`.
+- `whatsapp.ai.reply_blocked` payload + `whatsapp.ai.handoff_required`
+  payload carry the same fields plus `reason`.
+- `whatsapp.ai.controlled_test.blocked` payload carries the same.
+- Audit payloads NEVER carry tokens / verify token / app secret.
+
+### Hard rules preserved
+
+- `claimVaultUsed=false` still blocks the send. The fix grounds the
+  prompt; it does not weaken the safety contract.
+- No free-style medical claims. The `Claim.approved` list is still
+  the only product-text source.
+- Adding a new category requires updating
+  `CATEGORY_SLUG_TO_PRODUCT` AND
+  `apps.whatsapp.ai_schema.SUPPORTED_CATEGORIES`.
+- Phase 5F (broadcast campaigns / growth automation) stays LOCKED.
+

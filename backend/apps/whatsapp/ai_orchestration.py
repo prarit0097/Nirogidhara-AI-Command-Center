@@ -72,6 +72,7 @@ from .models import (
     WhatsAppMessage,
     WhatsAppTemplate,
 )
+from .claim_mapping import category_to_claim_product
 from .order_booking import OrderBookingError, book_order_from_decision
 from .safety_validation import validate_safety_flags
 from .template_registry import (
@@ -346,6 +347,12 @@ def run_whatsapp_ai_agent(
     outcome.confidence = decision.confidence
     outcome.detected_category = decision.category
     if decision.category and decision.category != "unknown":
+        normalized_product = category_to_claim_product(decision.category)
+        claim_count = (
+            Claim.objects.filter(product__iexact=normalized_product).count()
+            if normalized_product
+            else 0
+        )
         write_event(
             kind="whatsapp.ai.category_detected",
             text=f"Category detected · {decision.category}",
@@ -353,6 +360,9 @@ def run_whatsapp_ai_agent(
             payload={
                 "conversation_id": convo.id,
                 "category": decision.category,
+                "normalized_claim_product": normalized_product,
+                "claim_count": claim_count,
+                "confidence": decision.confidence,
             },
         )
 
@@ -1176,6 +1186,23 @@ def _finalize_run(
     if handoff:
         ai_state["handoffRequired"] = True
         ai_state["handoffReason"] = handoff_reason or blocked_reason
+        # Phase 5F-Gate Claim Vault Grounding Fix — surface grounding
+        # context on handoff audits too. claim_vault_not_used routes
+        # through this branch, not reply_blocked, so the operator
+        # needs the same diagnostics.
+        category_for_audit = (
+            decision.category if decision is not None else ""
+        )
+        normalized_product_for_audit = category_to_claim_product(
+            category_for_audit
+        )
+        claim_count_for_audit = (
+            Claim.objects.filter(
+                product__iexact=normalized_product_for_audit
+            ).count()
+            if normalized_product_for_audit
+            else 0
+        )
         write_event(
             kind="whatsapp.ai.handoff_required",
             text=f"AI handoff · conversation={convo.id} · {blocked_reason}",
@@ -1184,6 +1211,12 @@ def _finalize_run(
                 "conversation_id": convo.id,
                 "reason": blocked_reason,
                 "handoff_reason": handoff_reason,
+                "category": category_for_audit,
+                "normalized_claim_product": normalized_product_for_audit,
+                "claim_count": claim_count_for_audit,
+                "confidence": (
+                    decision.confidence if decision is not None else 0.0
+                ),
             },
         )
         # Bump conversation status to escalated_to_human only for the
@@ -1208,7 +1241,17 @@ def _finalize_run(
         )
     elif blocked_reason:
         # auto_reply_disabled / low_confidence / no_action → record but
-        # don't escalate.
+        # don't escalate. Phase 5F-Gate Claim Vault Grounding Fix —
+        # carry the grounding context so log readers can see why.
+        category_for_audit = (
+            decision.category if decision is not None else ""
+        )
+        normalized_product = category_to_claim_product(category_for_audit)
+        claim_count = (
+            Claim.objects.filter(product__iexact=normalized_product).count()
+            if normalized_product
+            else 0
+        )
         write_event(
             kind="whatsapp.ai.reply_blocked",
             text=f"AI reply blocked · conversation={convo.id} · {blocked_reason}",
@@ -1216,6 +1259,12 @@ def _finalize_run(
             payload={
                 "conversation_id": convo.id,
                 "reason": blocked_reason,
+                "category": category_for_audit,
+                "normalized_claim_product": normalized_product,
+                "claim_count": claim_count,
+                "confidence": (
+                    decision.confidence if decision is not None else 0.0
+                ),
             },
         )
 
@@ -1346,14 +1395,42 @@ def _build_context(
 
 
 def _claims_for_category(category: str, customer: Customer) -> list[Claim]:
+    """Resolve a category slug → live ``Claim`` rows.
+
+    Phase 5F-Gate Claim Vault Grounding Fix: the prior implementation
+    filtered ``Claim.product`` with the **slug** (``weight-management``)
+    via ``icontains`` — never matched ``Weight Management``, then fell
+    through to ``product__icontains=customer.product_interest or ""``
+    which silently returned **every** claim row when the customer's
+    ``product_interest`` was blank. The orchestrator then either had
+    zero relevant claims (LLM safely returned ``claimVaultUsed=false``)
+    or a kitchen-sink prompt (LLM still returned
+    ``claimVaultUsed=false`` because the grounding was incoherent).
+
+    Now: the slug runs through the deterministic
+    :func:`apps.whatsapp.claim_mapping.category_to_claim_product` table
+    and the lookup is on ``Claim.product__iexact``. Customer
+    ``product_interest`` is treated as an exact-match fallback only —
+    never an empty-string substring match.
+    """
     qs = Claim.objects.all()
     if category and category != "unknown":
-        # Match against Claim.product (case-insensitive contains).
-        return list(qs.filter(product__icontains=category)) or list(
-            qs.filter(product__icontains=customer.product_interest or "")
-        )
-    if customer.product_interest:
-        return list(qs.filter(product__icontains=customer.product_interest))
+        normalized = category_to_claim_product(category)
+        if normalized:
+            primary = list(qs.filter(product__iexact=normalized))
+            if primary:
+                return primary
+        # Fall back to the customer's stored product_interest, but ONLY
+        # when it is non-empty — never let "" become a substring match.
+        interest = (customer.product_interest or "").strip()
+        if interest:
+            return list(qs.filter(product__iexact=interest))
+        return []
+
+    # category is unknown / empty.
+    interest = (customer.product_interest or "").strip()
+    if interest:
+        return list(qs.filter(product__iexact=interest))
     return []
 
 

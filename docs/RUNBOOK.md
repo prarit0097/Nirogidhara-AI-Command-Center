@@ -117,6 +117,75 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5F-Gate Claim Vault Grounding Fix
+
+The deployed Controlled AI Auto-Reply Test Harness produced two
+safety-correct blocks against the allowed test number on the VPS:
+
+1. `WAM-100005` blocked by `low_confidence` (`confidence=0.7`) —
+   correct safety behaviour.
+2. `WAM-100006` blocked by `claim_vault_not_used`
+   (`nextAction=blocked_for_unapproved_claim`) — but the Weight
+   Management Claim Vault row **did exist** with three approved
+   phrases.
+
+**Root cause.** `_claims_for_category("weight-management", customer)`
+ran `Claim.objects.filter(product__icontains="weight-management")`
+against `Claim(product="Weight Management")` — hyphen vs space — and
+silently fell through to `product__icontains=customer.product_interest
+or ""` which returned **every claim row** when the customer's
+`product_interest` was blank.
+
+**Fix.** New deterministic helper
+`apps.whatsapp.claim_mapping.category_to_claim_product` (eight
+canonical slugs + ~25 aliases). `_claims_for_category` now runs
+`Claim.product__iexact=normalized_product`. The empty-string fallback
+is gone — unknown / empty category fails closed (returns `[]`). The
+disallowed-phrase list still flows into the prompt avoid list.
+
+**Diagnostics.** The controlled-test command's JSON output gains a
+full grounding block:
+
+```json
+"detectedCategory": "weight-management",
+"normalizedClaimProduct": "Weight Management",
+"claimCount": 3,
+"confidence": 0.9,
+"action": "send_reply",
+"replyPreview": "Namaskar! Weight management ke liye …",
+"safetyFlags": {
+  "claimVaultUsed": true,
+  "medicalEmergency": false,
+  "sideEffectComplaint": false,
+  "legalThreat": false,
+  "angryCustomer": false
+},
+"groundingStatus": {
+  "claimProductFound": true,
+  "approvedClaimCount": 3,
+  "disallowedPhraseCount": 2,
+  "promptGroundingInjected": true
+}
+```
+
+The orchestrator's `whatsapp.ai.{category_detected, reply_blocked,
+handoff_required}` audits gain matching grounding fields
+(`category` / `normalized_claim_product` / `claim_count` /
+`confidence`); the harness's `whatsapp.ai.controlled_test.blocked`
+audit carries the same. Tokens / verify token / app secret are NEVER
+in any payload.
+
+**Adding a new category.** Update
+`apps.whatsapp.claim_mapping.CATEGORY_SLUG_TO_PRODUCT` with the new
+slug → human label entry, and `apps.whatsapp.ai_schema.SUPPORTED_CATEGORIES`
+with the slug. Do NOT add fuzzy substring matchers — every alias is
+explicit.
+
+**Hard rules preserved.** `claimVaultUsed=false` still blocks the
+send. `claim_vault_not_used` still routes through the handoff path.
+No free-style medical claims. No campaigns / broadcasts. Phase 5F
+remains LOCKED.
+
 ### Phase 5F-Gate Controlled AI Auto-Reply Test Harness
 
 The single safe surface for verifying a real live AI reply against

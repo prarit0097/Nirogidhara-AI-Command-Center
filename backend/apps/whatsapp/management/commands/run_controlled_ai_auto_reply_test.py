@@ -56,11 +56,13 @@ from apps._id import next_id
 from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 from apps.crm.models import Customer
+from apps.compliance.models import Claim
 from apps.whatsapp import services as whatsapp_services
 from apps.whatsapp.ai_orchestration import (
     OrchestrationOutcome,
     run_whatsapp_ai_agent,
 )
+from apps.whatsapp.claim_mapping import category_to_claim_product
 from apps.whatsapp.consent import has_whatsapp_consent
 from apps.whatsapp.meta_one_number_test import (
     _digits_only,
@@ -136,6 +138,20 @@ class Command(BaseCommand):
             "claimVaultUsed": None,
             "safetyBlocked": False,
             "blockedReason": "",
+            # Phase 5F-Gate Claim Vault Grounding Fix — diagnostics.
+            "detectedCategory": "",
+            "normalizedClaimProduct": "",
+            "claimCount": 0,
+            "confidence": 0.0,
+            "action": "",
+            "replyPreview": "",
+            "safetyFlags": {},
+            "groundingStatus": {
+                "claimProductFound": False,
+                "approvedClaimCount": 0,
+                "disallowedPhraseCount": 0,
+                "promptGroundingInjected": False,
+            },
             "auditEvents": [],
             "warnings": [],
             "errors": [],
@@ -293,9 +309,42 @@ class Command(BaseCommand):
 
         report["aiRunId"] = inbound.id  # one-run-per-inbound by design
         if outcome.decision is not None:
+            decision = outcome.decision
             report["claimVaultUsed"] = bool(
-                outcome.decision.safety.get("claimVaultUsed", False)
+                decision.safety.get("claimVaultUsed", False)
             )
+            report["detectedCategory"] = decision.category or ""
+            report["confidence"] = float(decision.confidence or 0.0)
+            report["action"] = decision.action
+            report["replyPreview"] = (decision.reply_text or "")[:180]
+            # Surface the safety flags so the operator can read the
+            # decision at a glance — these are booleans, no PII.
+            report["safetyFlags"] = {
+                k: bool(v) for k, v in (decision.safety or {}).items()
+            }
+            normalized_product = category_to_claim_product(decision.category)
+            report["normalizedClaimProduct"] = normalized_product
+            if normalized_product:
+                claim_row = (
+                    Claim.objects.filter(product__iexact=normalized_product)
+                    .only("approved", "disallowed")
+                    .first()
+                )
+                approved_count = (
+                    len(claim_row.approved) if claim_row and claim_row.approved else 0
+                )
+                disallowed_count = (
+                    len(claim_row.disallowed) if claim_row and claim_row.disallowed else 0
+                )
+                report["claimCount"] = approved_count
+                report["groundingStatus"] = {
+                    "claimProductFound": claim_row is not None,
+                    "approvedClaimCount": approved_count,
+                    "disallowedPhraseCount": disallowed_count,
+                    # Grounding is "injected" iff the prompt builder
+                    # had at least one approved row to surface.
+                    "promptGroundingInjected": approved_count > 0,
+                }
 
         if outcome.sent:
             report["replySent"] = True
@@ -495,6 +544,13 @@ class Command(BaseCommand):
                 "phone_suffix": self._safe_phone(report["phone"]),
                 "to_allowed": report["toAllowed"],
                 "dry_run": report["dryRun"],
+                # Phase 5F-Gate Claim Vault Grounding Fix — surface
+                # the grounding context so the audit ledger explains
+                # exactly why the block fired.
+                "category": report.get("detectedCategory", ""),
+                "normalized_claim_product": report.get("normalizedClaimProduct", ""),
+                "claim_count": report.get("claimCount", 0),
+                "confidence": report.get("confidence", 0.0),
             },
         )
         report["auditEvents"].append("whatsapp.ai.controlled_test.blocked")

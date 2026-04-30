@@ -374,6 +374,65 @@ If `WHATSAPP_AI_AUTO_REPLY_ENABLED` is `true`, **stop and revert it**.
 Phase 5F (broadcast campaigns) remains LOCKED until a 24-hour soak
 under the controlled harness has been observed cleanly.
 
+### 5.4 Phase 5F-Gate Claim Vault Grounding Fix — re-run after deploy
+
+After the Claim Vault Grounding Fix lands on the VPS, re-run the
+dry-run + live-send with an explicit weight-management prompt and
+require the **new grounding diagnostics** to come back clean before
+proceeding:
+
+```bash
+# Confirm the Claim Vault still has the Weight Management row.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py check_claim_vault_coverage --json
+
+# Inspector check (read-only).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_whatsapp_live_test \
+    --phone +918949879990 --json
+
+# Dry-run with the explicit weight-management prompt.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste. Mujhe Nirogidhara ke weight management product ke baare me approved safe jaankari chahiye. Price, capsule quantity aur use guidance bata dijiye." \
+    --dry-run --json
+```
+
+Required JSON fields on the dry-run:
+
+- `passed == true`
+- `nextAction == "dry_run_passed_ready_for_send"`
+- `groundingStatus.claimProductFound == true`
+- `groundingStatus.approvedClaimCount >= 1`
+- `groundingStatus.promptGroundingInjected == true`
+
+```bash
+# Live --send (only after dry-run passes).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_controlled_ai_auto_reply_test \
+    --phone +918949879990 \
+    --message "Namaste. Mujhe Nirogidhara ke weight management product ke baare me approved safe jaankari chahiye. Price, capsule quantity aur use guidance bata dijiye." \
+    --send --json
+
+# Post-live audit tail to confirm the grounding context is in the
+# audit ledger (no tokens, last-4 phone only).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py shell -c "
+from apps.audit.models import AuditEvent
+for e in AuditEvent.objects.filter(kind__startswith='whatsapp.ai').order_by('-occurred_at')[:30]:
+    print(e.occurred_at, '|', e.kind, '|', e.tone)
+    print(e.text)
+    print(e.payload)
+    print('-' * 100)
+"
+```
+
+If the live `--send` returns `nextAction=blocked_for_unapproved_claim`
+again with `groundingStatus.approvedClaimCount=0`, the Claim Vault
+seed has not been re-applied — re-run `seed_default_claims --reset-demo`
+or restore the doctor-approved row before retrying.
+
 ---
 
 ## 6. DNS + TLS for `ai.nirogidhara.com`
