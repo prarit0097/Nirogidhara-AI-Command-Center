@@ -238,6 +238,111 @@ for e in AuditEvent.objects.filter(kind__startswith='whatsapp.internal_cohort.')
 Required: `DiscountOfferLog` / `Order` / `Payment` / `Shipment`
 counts unchanged from the pre-test snapshot.
 
+### Phase 5F-Gate — Real Inbound Deterministic Fallback Fix
+
+The first real-inbound auto-reply test on the VPS (allowed test
+number suffix `9990`) was blocked with `claim_vault_not_used` even
+though backend grounding was valid. Root cause: the deterministic
+Claim-Vault-grounded fallback ran only inside the controlled-CLI
+command — the real-inbound webhook path never benefited. The
+fallback is now inside `apps.whatsapp.ai_orchestration` at every
+soft non-safety blocker site (`claim_vault_not_used`,
+`low_confidence`, `ai_handoff_requested`, `no_action`).
+
+How it works for the real-inbound webhook path:
+
+1. The webhook persists the inbound `WhatsAppMessage` and enqueues
+   `run_whatsapp_ai_agent_for_conversation` (Celery).
+2. The orchestrator dispatches the LLM, applies safety validation
+   (downgrades flags whose vocabulary is absent from the LATEST
+   inbound), and runs the safety / confidence / action gates.
+3. If the LLM blocks with a soft non-safety reason BUT auto-reply is
+   enabled (`WHATSAPP_AI_AUTO_REPLY_ENABLED=true` OR `force_auto_reply`)
+   AND the inbound is a normal product-info inquiry AND the category
+   maps to a `Claim.product` AND at least one approved phrase exists
+   AND no live safety flag is set on the LATEST inbound, the
+   orchestrator builds the deterministic Hinglish reply and dispatches
+   it through `services.send_freeform_text_message` — every existing
+   gate (limited-mode allow-list, consent, CAIO, idempotency) stays
+   in force.
+4. Discount/price objections route through `build_objection_aware_reply`
+   ahead of the standard grounded reply (same priority order as the
+   CLI command).
+5. The orchestrator emits `whatsapp.ai.deterministic_grounded_reply_used`
+   (or `whatsapp.ai.objection_reply_used`), `whatsapp.ai.reply_auto_sent`,
+   `whatsapp.ai.auto_reply_flag_path_used` (only when the global flag
+   drove the run, not on `force_auto_reply=True`), and
+   `whatsapp.ai.run_completed`.
+
+**What still blocks even with auto-reply on:**
+
+- Latest inbound contains real side-effect / medical / legal /
+  refund / blocked-phrase vocabulary → safety stack handles the
+  block; fallback never sees it.
+- Customer phone not on `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`
+  → final-send guard refuses, `whatsapp.ai.auto_reply_guard_blocked`
+  fires, `outcome.sent` stays False.
+- Consent missing → orchestrator returns at the consent guard
+  before LLM dispatch.
+- Auto-reply flag off and `force_auto_reply=False` → suggestion is
+  stored, no auto-send. The fallback respects that.
+
+**Latest-inbound safety isolation.** The
+`whatsapp.ai.safety_downgraded` audit now carries:
+
+- `latest_inbound_message_id`
+- `latest_inbound_safety_flags`
+- `history_safety_flags`
+- `history_safety_ignored_for_current_safe_query` (true / false)
+
+If older synthetic scenario messages biased the LLM into flagging
+side-effect / legal / medical on a clean current query, the
+corrector flips those flags down based on the LATEST inbound text
+vocabulary and `history_safety_ignored_for_current_safe_query`
+flips to true. Real safety phrases in the LATEST inbound stay
+flagged and the fallback never fires.
+
+**Verifying the fix on the VPS.**
+
+```bash
+# 1. Rebuild backend so the orchestrator + tests land in the container.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    up -d --build --pull never backend worker beat nginx
+
+# 2. Pre-flip readiness gate.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_whatsapp_auto_reply_gate --json
+
+# 3. Set WHATSAPP_AI_AUTO_REPLY_ENABLED=true in .env.production and
+# recreate backend/worker/beat. Then send a real WhatsApp message
+# from the allowed test number:
+#   "Namaste. Mujhe weight management product ke price aur capsule
+#    quantity ke baare me bataye."
+
+# 4. After ~30 seconds, run the soak monitor:
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_recent_whatsapp_auto_reply_activity \
+    --hours 1 --json
+```
+
+Required outcomes after the test inbound:
+
+- `replyAutoSentCount >= 1`
+- `autoReplyFlagPathUsedCount >= 1`
+- `deterministicBuilderUsedCount >= 1`
+- `unexpectedNonAllowedSendsCount == 0`
+- `ordersCreatedInWindow == 0`
+- `paymentsCreatedInWindow == 0`
+- `shipmentsCreatedInWindow == 0`
+- `discountOfferLogsCreatedInWindow == 0`
+- `nextAction = limited_auto_reply_enabled_monitor_real_inbound`
+
+The phone receives the deterministic Claim-Vault-grounded reply on
+WhatsApp (literal approved phrase + ₹3000 / 30 capsules / ₹499
+advance + conservative usage + doctor escalation). If anything
+amber, roll back: `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` + recreate
+containers.
+
 ### Phase 5F-Gate — Limited Auto-Reply Flag Plan inspectors
 
 Two strictly read-only management commands prepare and observe the

@@ -73,6 +73,13 @@ from .models import (
     WhatsAppTemplate,
 )
 from .claim_mapping import category_to_claim_product
+from .grounded_reply_builder import (
+    build_grounded_product_reply,
+    build_objection_aware_reply,
+    can_build_grounded_product_reply,
+    can_build_objection_reply,
+    classify_inbound_intent,
+)
 from .order_booking import OrderBookingError, book_order_from_decision
 from .safety_validation import validate_safety_flags
 from .template_registry import (
@@ -374,12 +381,17 @@ def run_whatsapp_ai_agent(
             },
         )
 
-    # ---- Server-side safety flag validation (Phase 5E-Smoke-Fix-3) ----
+    # ---- Server-side safety flag validation (Phase 5E-Smoke-Fix-3 +
+    # Phase 5F-Gate Real Inbound Deterministic Fallback Fix latest-
+    # inbound safety isolation) ----
     # The LLM occasionally over-flags normal product inquiries as a
-    # safety event. Before evaluating the blockers, downgrade any
-    # flag whose signal vocabulary is absent from the inbound text.
-    # Real safety phrases are left intact.
+    # safety event — sometimes because older messages in the same
+    # conversation history (synthetic scenario tests, prior unsafe
+    # threads) bias its classification. Before evaluating the blockers,
+    # downgrade any flag whose signal vocabulary is absent from the
+    # LATEST inbound text. Real safety phrases stay intact.
     inbound_text_for_safety = (inbound.body if inbound is not None else "") or ""
+    history_safety_flags = dict(decision.safety or {})
     corrected_safety, downgraded_flags = validate_safety_flags(
         inbound_text_for_safety,
         decision.safety,
@@ -395,14 +407,21 @@ def run_whatsapp_ai_agent(
             kind="whatsapp.ai.safety_downgraded",
             text=(
                 f"Safety flags downgraded · {', '.join(downgraded_flags)} "
-                f"· no matching signal in inbound"
+                f"· no matching signal in latest inbound"
             ),
             tone=AuditEvent.Tone.WARNING,
             payload={
                 "conversation_id": convo.id,
                 "downgraded_flags": list(downgraded_flags),
+                # Latest-inbound safety isolation snapshot.
+                "latest_inbound_message_id": (
+                    inbound.id if inbound is not None else ""
+                ),
                 "inbound_message_id": inbound.id if inbound is not None else "",
                 "inbound_body_preview": inbound_text_for_safety[:160],
+                "history_safety_flags": history_safety_flags,
+                "latest_inbound_safety_flags": dict(corrected_safety),
+                "history_safety_ignored_for_current_safe_query": True,
                 "corrected_safety": dict(corrected_safety),
             },
         )
@@ -410,6 +429,24 @@ def run_whatsapp_ai_agent(
     # ---- Safety gates ----
     blocker = _safety_block(decision)
     if blocker:
+        # Phase 5F-Gate Real Inbound Deterministic Fallback Fix —
+        # claim_vault_not_used is a SOFT blocker (the LLM said it
+        # didn't ground its answer, despite the backend having full
+        # grounding). For real auto-reply runs we now attempt the same
+        # deterministic Claim-Vault-grounded fallback the controlled
+        # CLI uses, before finalizing as a block.
+        fallback_outcome = _attempt_deterministic_grounded_fallback(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason=blocker,
+            actor_role=actor_role,
+            force_auto_reply=force_auto_reply,
+        )
+        if fallback_outcome is not None:
+            return fallback_outcome
         return _finalize_run(
             convo,
             outcome,
@@ -523,6 +560,24 @@ def run_whatsapp_ai_agent(
             ),
         )
     if not confidence_ok:
+        # Phase 5F-Gate Real Inbound Deterministic Fallback Fix —
+        # attempt the deterministic grounded fallback before finalizing
+        # as low-confidence. The LLM may be returning a low confidence
+        # on a normal grounded inquiry simply because of conservative
+        # bias; the deterministic builder's reply has confidence 1.0
+        # by construction (it is a literal Claim Vault assembly).
+        fallback_outcome = _attempt_deterministic_grounded_fallback(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason="low_confidence",
+            actor_role=actor_role,
+            force_auto_reply=force_auto_reply,
+        )
+        if fallback_outcome is not None:
+            return fallback_outcome
         return _finalize_run(
             convo,
             outcome,
@@ -558,6 +613,26 @@ def run_whatsapp_ai_agent(
         )
 
     if decision.action == "handoff":
+        # Phase 5F-Gate Real Inbound Deterministic Fallback Fix —
+        # attempt the deterministic fallback first. The controlled
+        # CLI command short-circuits a true human-request handoff
+        # BEFORE invoking the orchestrator (so the orchestrator never
+        # sees one); on the real-inbound path the eligibility check
+        # inside the fallback (normal product-info inquiry, no live
+        # safety flag, mapped category) keeps human-call requests on
+        # the original handoff path.
+        fallback_outcome = _attempt_deterministic_grounded_fallback(
+            convo,
+            outcome,
+            ai_state,
+            inbound,
+            decision=decision,
+            blocked_reason="ai_handoff_requested",
+            actor_role=actor_role,
+            force_auto_reply=force_auto_reply,
+        )
+        if fallback_outcome is not None:
+            return fallback_outcome
         return _finalize_run(
             convo,
             outcome,
@@ -568,7 +643,20 @@ def run_whatsapp_ai_agent(
             handoff_reason=decision.handoff_reason or "AI requested handoff.",
         )
 
-    # action == 'no_action' or unknown — store + done.
+    # action == 'no_action' or unknown — attempt deterministic fallback
+    # first, then store + done.
+    fallback_outcome = _attempt_deterministic_grounded_fallback(
+        convo,
+        outcome,
+        ai_state,
+        inbound,
+        decision=decision,
+        blocked_reason="no_action",
+        actor_role=actor_role,
+        force_auto_reply=force_auto_reply,
+    )
+    if fallback_outcome is not None:
+        return fallback_outcome
     outcome.notes.append("no_action_from_ai")
     return _finalize_run(
         convo,
@@ -1204,6 +1292,497 @@ def _record_phase5e_offer_log(
             convo.id,
             exc,
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5F-Gate Real Inbound Deterministic Fallback Fix
+# ---------------------------------------------------------------------------
+
+
+# Soft, non-safety blockers where the deterministic grounded fallback may
+# produce a Claim-Vault-grounded reply for the real inbound webhook path.
+# Hard safety blockers (medical / side-effect / legal / blocked-phrase /
+# angry / discount / consent) never reach this branch.
+_FALLBACK_ELIGIBLE_BLOCK_REASONS: frozenset[str] = frozenset(
+    {
+        "claim_vault_not_used",
+        "low_confidence",
+        "ai_handoff_requested",
+        "no_action",
+    }
+)
+
+
+def _attempt_deterministic_grounded_fallback(
+    convo: WhatsAppConversation,
+    outcome: OrchestrationOutcome,
+    ai_state: dict[str, Any],
+    inbound: WhatsAppMessage | None,
+    *,
+    decision: ChatAgentDecision,
+    blocked_reason: str,
+    actor_role: str,
+    force_auto_reply: bool,
+) -> OrchestrationOutcome | None:
+    """Phase 5F-Gate Real Inbound Deterministic Fallback Fix.
+
+    When the LLM blocked the auto-reply with a soft non-safety reason
+    AND the backend has valid grounding (mapped category + approved
+    Claim Vault entries) AND the latest inbound is a normal product-
+    info inquiry with no live safety signal, build a deterministic
+    Claim-Vault-grounded reply and dispatch it through the same final-
+    send path the LLM would have used.
+
+    Returns the orchestration outcome on success, or ``None`` when the
+    fallback was skipped — the caller then emits the original block
+    path through ``_finalize_run`` exactly as before.
+
+    LOCKED rules:
+
+    - Eligibility set is the same as the controlled CLI command's
+      :data:`_FALLBACK_ELIGIBLE_BLOCK_REASONS`. Hard safety blockers
+      (medical / side-effect / legal / blocked-phrase / consent /
+      limited-mode-guard) never reach this helper.
+    - Auto-reply must be enabled (env flag OR ``force_auto_reply=True``);
+      otherwise the operator wanted a stored suggestion, not an
+      auto-send. The fallback respects that.
+    - The fallback NEVER bypasses consent, the limited-mode allow-list
+      guard, CAIO, or idempotency. Send goes through
+      :func:`apps.whatsapp.services.send_freeform_text_message` exactly
+      like the LLM path.
+    - The fallback NEVER mutates ``Order`` / ``Payment`` / ``Shipment``
+      / ``DiscountOfferLog``.
+    - ``claimVaultUsed=true`` is set ONLY because the validator inside
+      :func:`build_grounded_product_reply` confirmed the reply text
+      literally embeds an approved phrase.
+    """
+    if blocked_reason not in _FALLBACK_ELIGIBLE_BLOCK_REASONS:
+        return None
+
+    auto_reply_enabled = bool(
+        getattr(settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False)
+    ) or bool(force_auto_reply)
+    if not auto_reply_enabled:
+        # Auto-reply globally off and not forced → preserve existing
+        # suggestion-only behaviour. The operator wants a stored
+        # suggestion they can review, not a deterministic auto-send.
+        return None
+
+    if inbound is None:
+        return None
+    inbound_body = (inbound.body or "").strip()
+    if not inbound_body:
+        return None
+
+    category = decision.category or ""
+    if not category or category == "unknown":
+        return None
+
+    # Latest-inbound safety isolation: even though validate_safety_flags
+    # already corrected the LLM's flags against the latest inbound text
+    # earlier in the pipeline, defence-in-depth — refuse to fall back if
+    # any blocking safety flag is still set.
+    safety_flags = dict(decision.safety or {})
+    blocking_flags = ("medicalEmergency", "sideEffectComplaint", "legalThreat")
+    for flag in blocking_flags:
+        if bool(safety_flags.get(flag)):
+            return None
+
+    # Look up approved + disallowed phrases for the mapped product.
+    claims = _claims_for_category(category, convo.customer)
+    approved_phrases: list[str] = []
+    disallowed_phrases: list[str] = []
+    for claim in claims:
+        approved_phrases.extend(claim.approved or [])
+        disallowed_phrases.extend(claim.disallowed or [])
+
+    # Phase 5F-Gate Objection & Handoff Reason Refinement —
+    # discount/price-objection inbounds get the objection-aware reply
+    # ahead of the standard grounded reply. The objection builder
+    # opens with a price-concern acknowledgement, embeds the first
+    # approved phrase + ₹3000/30-capsules/₹499 advance, and explicitly
+    # states no upfront concession. Unsafe inbounds (cure / guarantee
+    # / side-effect inside an objection sentence) refuse outright —
+    # the safety stack handles them.
+    intent = classify_inbound_intent(inbound_body)
+    fallback_kind = "deterministic_grounded_builder"
+    fallback_note = "deterministic_grounded_fallback_used"
+
+    if intent.discount_objection and not intent.unsafe:
+        objection_eligibility = can_build_objection_reply(
+            category=category,
+            inbound_text=inbound_body,
+            safety_flags=safety_flags,
+            approved_claims=approved_phrases,
+        )
+        if objection_eligibility.eligible:
+            objection_result = build_objection_aware_reply(
+                normalized_product=objection_eligibility.normalized_product,
+                approved_claims=approved_phrases,
+                inbound_text=inbound_body,
+                purchase_intent=bool(intent.purchase_intent),
+            )
+            if objection_result.ok:
+                write_event(
+                    kind="whatsapp.ai.objection_detected",
+                    text=(
+                        f"Objection detected · category={category} "
+                        f"· type={intent.objection_type or 'discount'}"
+                    ),
+                    tone=AuditEvent.Tone.INFO,
+                    payload={
+                        "conversation_id": convo.id,
+                        "customer_id": convo.customer_id,
+                        "category": category,
+                        "objection_type": intent.objection_type or "discount",
+                        "purchase_intent": bool(intent.purchase_intent),
+                    },
+                )
+                return _dispatch_deterministic_fallback(
+                    convo,
+                    outcome,
+                    ai_state,
+                    inbound,
+                    decision=decision,
+                    blocked_reason=blocked_reason,
+                    actor_role=actor_role,
+                    eligibility=objection_eligibility,
+                    result=objection_result,
+                    claims=claims,
+                    fallback_kind="deterministic_objection_reply",
+                    fallback_note="deterministic_objection_fallback_used",
+                    success_audit_kind="whatsapp.ai.objection_reply_used",
+                    failure_audit_kind="whatsapp.ai.objection_reply_blocked",
+                )
+            # Objection result was not ok — emit the failure and fall
+            # through to the standard grounded path (defence-in-depth).
+            write_event(
+                kind="whatsapp.ai.objection_reply_blocked",
+                text=(
+                    f"Objection reply build failed · category={category} "
+                    f"· reason={objection_result.fallback_reason}"
+                ),
+                tone=AuditEvent.Tone.WARNING,
+                payload={
+                    "conversation_id": convo.id,
+                    "customer_id": convo.customer_id,
+                    "category": category,
+                    "normalized_claim_product": (
+                        objection_eligibility.normalized_product
+                    ),
+                    "fallback_reason": objection_result.fallback_reason,
+                    "validation": dict(objection_result.validation or {}),
+                    "llm_blocked_reason": blocked_reason,
+                },
+            )
+
+    eligibility = can_build_grounded_product_reply(
+        category=category,
+        inbound_text=inbound_body,
+        safety_flags=safety_flags,
+        approved_claims=approved_phrases,
+        disallowed_phrases=disallowed_phrases,
+    )
+    if not eligibility.eligible:
+        return None
+
+    # Build the deterministic reply.
+    result = build_grounded_product_reply(
+        normalized_product=eligibility.normalized_product,
+        approved_claims=approved_phrases,
+        inbound_text=inbound_body,
+        customer_name=convo.customer.name or "",
+    )
+    if not result.ok:
+        write_event(
+            kind="whatsapp.ai.deterministic_grounded_reply_blocked",
+            text=(
+                f"Deterministic grounded reply build failed · "
+                f"category={category} · reason={result.fallback_reason}"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": convo.id,
+                "customer_id": convo.customer_id,
+                "category": category,
+                "normalized_claim_product": eligibility.normalized_product,
+                "approved_claim_count": eligibility.approved_claim_count,
+                "fallback_reason": result.fallback_reason,
+                "validation": dict(result.validation or {}),
+                "llm_blocked_reason": blocked_reason,
+            },
+        )
+        return None
+
+    return _dispatch_deterministic_fallback(
+        convo,
+        outcome,
+        ai_state,
+        inbound,
+        decision=decision,
+        blocked_reason=blocked_reason,
+        actor_role=actor_role,
+        eligibility=eligibility,
+        result=result,
+        claims=claims,
+        fallback_kind=fallback_kind,
+        fallback_note=fallback_note,
+        success_audit_kind="whatsapp.ai.deterministic_grounded_reply_used",
+        failure_audit_kind="whatsapp.ai.deterministic_grounded_reply_blocked",
+    )
+
+def _dispatch_deterministic_fallback(
+    convo: WhatsAppConversation,
+    outcome: OrchestrationOutcome,
+    ai_state: dict[str, Any],
+    inbound: WhatsAppMessage | None,
+    *,
+    decision: ChatAgentDecision,
+    blocked_reason: str,
+    actor_role: str,
+    eligibility: Any,
+    result: Any,
+    claims: list,
+    fallback_kind: str,
+    fallback_note: str,
+    success_audit_kind: str,
+    failure_audit_kind: str,
+) -> OrchestrationOutcome | None:
+    """Internal dispatch for both grounded + objection deterministic
+    fallbacks. Owns the final-send call, audit emits, and outcome /
+    ai_state updates. Returns the orchestrator outcome on success or
+    ``None`` when the final-send guard refused.
+
+    ``fallback_kind`` is the value the CLI / monitor consumes for
+    ``finalReplySource`` (``deterministic_grounded_builder`` or
+    ``deterministic_objection_reply``). ``fallback_note`` is the entry
+    appended to ``outcome.notes`` so the CLI can detect which path
+    fired without re-deriving from audit rows.
+    """
+    category = decision.category or ""
+    try:
+        message = services.send_freeform_text_message(
+            customer=convo.customer,
+            conversation=convo,
+            body=result.reply_text,
+            actor_role=actor_role,
+            actor_agent="ai_chat",
+            ai_generated=True,
+            metadata={
+                "deterministic_grounded_fallback": True,
+                "fallback_kind": fallback_kind,
+                "category": category,
+                "normalized_product": eligibility.normalized_product,
+                "fallback_reason_for_llm_block": blocked_reason,
+                "ai_stage": ai_state.get("stage"),
+                "language": decision.language,
+                "confidence": decision.confidence,
+            },
+        )
+    except services.WhatsAppServiceError as exc:
+        # The final-send guard refused (limited-mode allow-list,
+        # consent, CAIO, idempotency). Emit the same guard-blocked
+        # audit the LLM path emits, plus the deterministic-blocked
+        # audit so the soak monitor can correlate the two failure
+        # modes.
+        write_event(
+            kind="whatsapp.ai.auto_reply_guard_blocked",
+            text=(
+                f"Auto-reply guard blocked deterministic fallback · "
+                f"conversation={convo.id} · reason={exc.block_reason}"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": convo.id,
+                "customer_id": convo.customer_id,
+                "block_reason": exc.block_reason,
+                "limited_test_mode": bool(
+                    getattr(
+                        settings,
+                        "WHATSAPP_LIVE_META_LIMITED_TEST_MODE",
+                        False,
+                    )
+                ),
+                "auto_reply_enabled": bool(
+                    getattr(settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False)
+                ),
+                "category": category,
+                "deterministic_fallback": True,
+                "fallback_kind": fallback_kind,
+            },
+        )
+        write_event(
+            kind=failure_audit_kind,
+            text=(
+                f"Deterministic fallback send refused · "
+                f"kind={fallback_kind} · category={category} · "
+                f"{exc.block_reason}"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": convo.id,
+                "customer_id": convo.customer_id,
+                "category": category,
+                "normalized_claim_product": eligibility.normalized_product,
+                "fallback_reason": f"send_refused:{exc.block_reason}",
+                "llm_blocked_reason": blocked_reason,
+                "fallback_kind": fallback_kind,
+            },
+        )
+        return None
+
+    # Success — flip claimVaultUsed=True on the decision so downstream
+    # consumers (CLI report, audit payload, OrchestrationOutcome
+    # readers) see the corrected flag. The validator inside the
+    # builder already confirmed the reply text literally embeds at
+    # least one approved phrase, so this flip is truthful.
+    if isinstance(decision.safety, dict):
+        decision.safety["claimVaultUsed"] = True
+
+    from .meta_one_number_test import _digits_only
+
+    digits = _digits_only(getattr(convo.customer, "phone", "") or "")
+    phone_suffix = digits[-4:] if digits else ""
+
+    write_event(
+        kind=success_audit_kind,
+        text=(
+            f"Deterministic fallback used · kind={fallback_kind} · "
+            f"category={category} · product={eligibility.normalized_product} "
+            f"· llm_block={blocked_reason}"
+        ),
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "conversation_id": convo.id,
+            "customer_id": convo.customer_id,
+            "category": category,
+            "normalized_claim_product": eligibility.normalized_product,
+            "claim_row_count": len(claims),
+            "approved_claim_count": eligibility.approved_claim_count,
+            "fallback_reason": blocked_reason,
+            "final_reply_source": fallback_kind,
+            "fallback_kind": fallback_kind,
+            "phone_suffix": phone_suffix,
+            "outbound_message_id": message.id,
+            "inbound_message_id": inbound.id if inbound else "",
+            "used_approved_phrases": list(
+                getattr(result, "used_approved_phrases", ()) or ()
+            ),
+            "triggered_by": ai_state.get("lastTriggeredBy") or "",
+            "force_auto_reply": bool(
+                (ai_state or {}).get("lastForceAutoReply")
+            ),
+            "trigger_path": "real_inbound_webhook",
+        },
+    )
+
+    write_event(
+        kind="whatsapp.ai.reply_auto_sent",
+        text=(
+            f"AI reply auto-sent ({fallback_kind}) · "
+            f"conversation={convo.id}"
+        ),
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "conversation_id": convo.id,
+            "customer_id": convo.customer_id,
+            "message_id": message.id,
+            "language": decision.language,
+            "category": decision.category,
+            "confidence": decision.confidence,
+            "preview": (result.reply_text or "")[:160],
+            "final_reply_source": fallback_kind,
+            "deterministic_fallback_used": True,
+            "fallback_for_llm_block": blocked_reason,
+        },
+    )
+
+    # Phase 5F-Gate Limited Auto-Reply Flag Plan emit — only when the
+    # real env flag (NOT force_auto_reply) drove the auto-send. The
+    # CLI controlled-test command sets force_auto_reply=True; that
+    # path must NEVER appear in the soak monitor's flag-path counter.
+    flag_enabled = bool(
+        getattr(settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False)
+    )
+    force_auto_reply_used = bool((ai_state or {}).get("lastForceAutoReply"))
+    if flag_enabled and not force_auto_reply_used:
+        write_event(
+            kind="whatsapp.ai.auto_reply_flag_path_used",
+            text=(
+                f"WHATSAPP_AI_AUTO_REPLY_ENABLED auto-reply sent "
+                f"({fallback_kind}) · conversation={convo.id} · "
+                f"message={message.id}"
+            ),
+            tone=AuditEvent.Tone.SUCCESS,
+            payload={
+                "conversation_id": convo.id,
+                "customer_id": convo.customer_id,
+                "message_id": message.id,
+                "outbound_message_id": message.id,
+                "inbound_message_id": inbound.id if inbound else "",
+                "phone_suffix": phone_suffix,
+                "category": decision.category,
+                "normalized_claim_product": eligibility.normalized_product,
+                "confidence": decision.confidence,
+                "claim_vault_used": True,
+                "deterministic_fallback_used": True,
+                "final_reply_source": fallback_kind,
+                "limited_test_mode": bool(
+                    getattr(
+                        settings,
+                        "WHATSAPP_LIVE_META_LIMITED_TEST_MODE",
+                        False,
+                    )
+                ),
+            },
+        )
+
+    # Stage update — same as LLM send_reply path.
+    next_stage = ai_state.get("stage") or "discovery"
+    if decision.category != "unknown" and ai_state.get("stage") in {
+        "greeting",
+        "discovery",
+    }:
+        next_stage = "category_detection"
+    ai_state["stage"] = next_stage
+    ai_state["lastAiAction"] = "send_reply"
+    threshold = float(
+        getattr(settings, "WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD", 0.75)
+    )
+    ai_state["lastAiConfidence"] = max(decision.confidence, threshold)
+    ai_state["lastReplyPreview"] = (result.reply_text or "")[:240]
+    ai_state["lastDeterministicFallbackUsed"] = True
+    ai_state["lastFallbackReason"] = blocked_reason
+    ai_state["lastFallbackKind"] = fallback_kind
+    ai_state.setdefault("processedMessageIds", [])
+    if inbound and inbound.id not in ai_state["processedMessageIds"]:
+        ai_state["processedMessageIds"].append(inbound.id)
+    _write_ai_state(convo, ai_state)
+
+    outcome.action = "send_reply"
+    outcome.sent = True
+    outcome.sent_message_id = message.id
+    outcome.stage = next_stage
+    outcome.notes.append(fallback_note)
+    outcome.notes.append(f"fallback_for:{blocked_reason}")
+
+    write_event(
+        kind="whatsapp.ai.run_completed",
+        text=(
+            f"AI run completed · conversation={convo.id} · "
+            f"{fallback_kind}"
+        ),
+        tone=AuditEvent.Tone.SUCCESS,
+        payload={
+            "conversation_id": convo.id,
+            "action": "send_reply",
+            "stage": next_stage,
+            "confidence": decision.confidence,
+            "final_reply_source": fallback_kind,
+            "deterministic_fallback_used": True,
+        },
+    )
+    return outcome
 
 
 def _finalize_run(

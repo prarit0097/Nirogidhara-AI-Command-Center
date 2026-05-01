@@ -446,22 +446,67 @@ class Command(BaseCommand):
             report["outboundMessageId"] = outcome.sent_message_id
             sent_msg = (
                 WhatsAppMessage.objects.filter(pk=outcome.sent_message_id)
-                .only("provider_message_id")
+                .only("provider_message_id", "body")
                 .first()
             )
             if sent_msg is not None:
                 report["providerMessageId"] = sent_msg.provider_message_id or ""
             report["passed"] = True
             report["nextAction"] = "live_ai_reply_sent_verify_phone"
-            report["finalReplySource"] = "llm"
-            # Validate the LLM's reply too — if it accidentally
+            # Phase 5F-Gate Real Inbound Deterministic Fallback Fix —
+            # the orchestrator now runs the deterministic grounded /
+            # objection fallback for soft non-safety blocks. Detect
+            # that path via the outcome notes so the CLI report stays
+            # accurate.
+            notes = list(outcome.notes or [])
+            orchestrator_used_grounded = (
+                "deterministic_grounded_fallback_used" in notes
+            )
+            orchestrator_used_objection = (
+                "deterministic_objection_fallback_used" in notes
+            )
+            if orchestrator_used_grounded or orchestrator_used_objection:
+                report["finalReplySource"] = (
+                    "deterministic_objection_reply"
+                    if orchestrator_used_objection
+                    else "deterministic_grounded_builder"
+                )
+                report["deterministicFallbackUsed"] = True
+                fallback_for = next(
+                    (
+                        n.split(":", 1)[1]
+                        for n in notes
+                        if n.startswith("fallback_for:")
+                    ),
+                    "",
+                )
+                if orchestrator_used_objection:
+                    report["fallbackReason"] = (
+                        "objection_aware_grounded_fallback"
+                    )
+                    report["objectionDetected"] = True
+                else:
+                    report["fallbackReason"] = fallback_for
+                report["claimVaultUsed"] = True
+                report["action"] = "send_reply"
+                if sent_msg is not None and sent_msg.body:
+                    report["replyPreview"] = sent_msg.body[:180]
+                    report["deterministicReplyPreview"] = sent_msg.body[:180]
+            else:
+                report["finalReplySource"] = "llm"
+            # Validate the actually-sent reply text — if it accidentally
             # contains a discount or blocked phrase, surface it.
-            if outcome.decision is not None:
+            reply_for_validation = ""
+            if sent_msg is not None and sent_msg.body:
+                reply_for_validation = sent_msg.body
+            elif outcome.decision is not None:
+                reply_for_validation = outcome.decision.reply_text or ""
+            if outcome.decision is not None and reply_for_validation:
                 approved_phrases = self._approved_phrases_for(
                     outcome.decision.category
                 )
                 report["finalReplyValidation"] = validate_reply_uses_claim_vault(
-                    reply_text=outcome.decision.reply_text,
+                    reply_text=reply_for_validation,
                     approved_claims=approved_phrases,
                 )
             self._emit_sent(report)

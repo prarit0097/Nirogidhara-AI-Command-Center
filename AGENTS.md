@@ -220,7 +220,7 @@ python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
 python manage.py makemigrations --check --dry-run  # MUST report "No changes detected"
-python -m pytest -q                 # 834 tests today
+python -m pytest -q                 # 847 tests today
 
 # Frontend
 cd frontend
