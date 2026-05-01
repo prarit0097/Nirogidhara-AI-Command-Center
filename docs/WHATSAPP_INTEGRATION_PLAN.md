@@ -1744,3 +1744,85 @@ force.
   whitelist in the orchestrator. Two-place rule.
 - Phase 5F (broadcast campaigns / growth automation) stays LOCKED.
 
+---
+
+## OO. Phase 5F-Gate Objection & Handoff Reason Refinement (post-ship)
+
+The Phase 5F-Gate Scenario Matrix Test passed safety-wise but
+flagged two refinements:
+
+| Scenario | Before | After |
+| --- | --- | --- |
+| Discount objection | Generic product-info reply | Objection-aware reply that opens with a price-concern acknowledgement, embeds approved Claim Vault phrase + `₹3000 / 30 capsules / ₹499 advance`, then explicitly states no upfront concession. |
+| Human call request | `blockedReason=claim_vault_not_used`, `nextAction=blocked_for_unapproved_claim` | `blockedReason=human_advisor_requested`, `nextAction=human_handoff_requested`, `finalReplySource=blocked_handoff`, `safetyBlocked=false`. |
+
+### Module exports (apps.whatsapp.grounded_reply_builder)
+
+| Export | Purpose |
+| --- | --- |
+| `classify_inbound_intent(text)` | Returns `IntentResult(primary ∈ {unsafe, human_request, discount_objection, product_info, unknown}, ...)`. Priority: unsafe → human_request → discount_objection → product_info → unknown. |
+| `detect_discount_objection(text)` | Returns `(detected, type ∈ {"discount", "price", ""})`. Price-complaint vocabulary (`budget`, `mehenga`, `costly`, …) wins over ambiguous shared tokens like `thoda kam`. |
+| `detect_human_request(text)` | Substring match on `HUMAN_REQUEST_KEYWORDS`. |
+| `detect_purchase_intent(text)` | Substring match on `PURCHASE_INTENT_KEYWORDS`. |
+| `detect_unsafe_signal(text)` | Substring match on `PRODUCT_INFO_DISQUALIFIERS` (cure / 100% / side-effect / consumer-forum / fraud / police vocab). |
+| `can_build_objection_reply(...)` | Eligibility gate. Refuses on unsafe signal, missing objection signal, unmapped category, missing approved claims, or any safety flag set. |
+| `build_objection_aware_reply(normalized_product, approved_claims, inbound_text, purchase_intent)` | Composes the deterministic reply. Reuses the grounded-reply preview ordering so the 180-char preview embeds the approved phrase + price. |
+| `validate_objection_reply(reply_text, approved_claims)` | Extends the grounded validator with `objectionPromisedDiscount` flag. Rejects `discount confirmed`, `guaranteed discount`, `50% discount`, `100% discount`, `50 percent discount`. |
+
+### Controlled-test command priority order
+
+1. Safety blockers (handled by orchestrator; safety wins everywhere).
+2. Human request — short-circuits before the orchestrator runs.
+   Emits typed `human_advisor_requested` audit reason. Vapi NEVER
+   fires (gated by `WHATSAPP_CALL_HANDOFF_ENABLED=false`).
+3. Unknown category / no Claim Vault → fail closed unchanged.
+4. Discount/price objection with grounding → objection-aware
+   fallback.
+5. Normal product-info → existing grounded fallback.
+6. Else → fail closed.
+
+### Audit kinds (4 new)
+
+- `whatsapp.ai.objection_detected`
+- `whatsapp.ai.objection_reply_used`
+- `whatsapp.ai.objection_reply_blocked`
+- `whatsapp.ai.human_request_detected`
+
+The existing `whatsapp.ai.handoff_required` audit row is
+**explicitly** used for human-request handoffs with
+`payload['reason'] = 'human_advisor_requested'`. Audit payloads
+NEVER carry tokens / verify token / app secret; phone is masked to
+last 4 digits.
+
+### Controlled-test JSON additions
+
+| Field | Meaning |
+| --- | --- |
+| `detectedIntent` | `unsafe / human_request / discount_objection / product_info / unknown` |
+| `objectionDetected` | bool — true when intent is `discount_objection` |
+| `objectionType` | `discount` / `price` / `""` |
+| `purchaseIntentDetected` | bool — `abhi order karna` / `ready to buy` etc. |
+| `humanRequestDetected` | bool — true when intent is `human_request` |
+| `handoffReason` | matches `blockedReason` for handoff paths (e.g. `human_advisor_requested`) |
+| `safetyReason` | populated when safety stack blocked |
+| `replyPolicy.upfrontDiscountOffered` | always `false` from controlled-test paths |
+| `replyPolicy.discountMutationCreated` | always `false` |
+| `replyPolicy.businessMutationCreated` | always `false` |
+| `finalReplySource` | extends to `"deterministic_objection_reply"` and `"blocked_handoff"` |
+
+### Hard rules preserved
+
+- Cure / guarantee / unsafe-claim demand inside an objection
+  sentence still routes to the safety stack — unsafe wins.
+- Side-effect / legal / refund / unknown-category still fail closed.
+- Final-send limited-mode guard still refuses non-allowed numbers.
+- Zero mutation of `Order` / `Payment` / `Shipment` /
+  `DiscountOfferLog` from any controlled-test path (asserted in
+  pytest with before/after counts).
+- The objection reply NEVER promises a discount (validator rejects
+  `discount confirmed` / `guaranteed discount` / `50% discount`).
+- Webhook-driven production runs stay strict — the orchestrator's
+  `run_whatsapp_ai_agent` does not consume the classifier or the
+  objection builder. They are controlled-test-only.
+- Phase 5F (broadcast campaigns / growth automation) stays LOCKED.
+

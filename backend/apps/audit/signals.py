@@ -209,6 +209,11 @@ ICON_BY_KIND: dict[str, str] = {
     # Phase 5F-Gate Deterministic Grounded Reply Builder.
     "whatsapp.ai.deterministic_grounded_reply_used": "shield-check",
     "whatsapp.ai.deterministic_grounded_reply_blocked": "shield-off",
+    # Phase 5F-Gate Objection & Handoff Reason Refinement.
+    "whatsapp.ai.objection_detected": "tag",
+    "whatsapp.ai.objection_reply_used": "shield-check",
+    "whatsapp.ai.objection_reply_blocked": "shield-off",
+    "whatsapp.ai.human_request_detected": "phone-call",
 }
 
 

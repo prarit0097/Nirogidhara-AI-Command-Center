@@ -197,6 +197,286 @@ def _normalize_text(text: str | None) -> str:
     return (text or "").strip().lower()
 
 
+# ---------------------------------------------------------------------------
+# Phase 5F-Gate Objection & Handoff Reason Refinement
+# ---------------------------------------------------------------------------
+
+
+# Discount / price objection vocabulary. Hinglish + Hindi + English.
+DISCOUNT_OBJECTION_KEYWORDS: tuple[str, ...] = (
+    # Direct discount
+    "discount",
+    "discount milega",
+    "discount do",
+    "kya discount",
+    "best price",
+    "final price",
+    "offer",
+    "best offer",
+    "kuch kam",
+    "thoda kam",
+    "kuch kam ho sakta",
+    "kya kam ho",
+    # Price expensiveness
+    "price zyada",
+    "rate zyada",
+    "rate kam",
+    "price kam",
+    "mehenga",
+    "mehnga",
+    "costly",
+    "expensive",
+    "budget",
+    "budget me",
+    "budget nahi",
+    "zyada lag raha",
+    "zyada lagta",
+    "zyada hai",
+    "sasta",
+    "sasti",
+    "affordable",
+    # Negotiation framing
+    "kuch kar do",
+    "deal kya",
+    "deal de do",
+    "best me",
+    "kuch concession",
+)
+
+
+PURCHASE_INTENT_KEYWORDS: tuple[str, ...] = (
+    "abhi order karna",
+    "abhi le lunga",
+    "abhi le rahi hu",
+    "abhi book",
+    "ready to buy",
+    "ready to order",
+    "let me order",
+    "place karna",
+    "place karunga",
+    "abhi lena",
+    "abhi le lena",
+    "confirm order",
+    "buy now",
+)
+
+
+# Human-advisor / call-request vocabulary. The customer wants to talk
+# to a real human. Distinct from the AI handoff reasons above.
+HUMAN_REQUEST_KEYWORDS: tuple[str, ...] = (
+    "human advisor",
+    "human se baat",
+    "advisor ka call",
+    "advisor se baat",
+    "call chahiye",
+    "call kar sakte",
+    "call karwa do",
+    "call do",
+    "call karo",
+    "callback",
+    "call back",
+    "phone par baat",
+    "phone karo",
+    "phone karna",
+    "phone milega",
+    "ai se baat nahi",
+    "ai se nahi",
+    "ai nahi chahiye",
+    "agent se baat",
+    "agent chahiye",
+    "senior se baat",
+    "senior chahiye",
+    "senior advisor",
+    "doctor se baat",
+    "doctor se baat karwa",
+    "mujhe koi call",
+    "mujhe call kare",
+    "ek call kare",
+    "talk to a human",
+    "talk to human",
+    "talk to advisor",
+    "speak to agent",
+    "real person",
+)
+
+
+@dataclass(frozen=True)
+class IntentResult:
+    """Output of :func:`classify_inbound_intent`.
+
+    ``primary`` is the most-blocking intent (matches Phase 5F-Gate
+    Objection & Handoff Reason Refinement priority order):
+
+    1. ``unsafe`` — cure / guarantee / 100% / permanent / safety
+       vocabulary in the inbound. The existing safety stack will
+       handle this; the controlled-test command should NOT route
+       through any deterministic builder.
+    2. ``human_request`` — customer asked for a human advisor or a
+       call. Handoff with a typed reason.
+    3. ``discount_objection`` — discount / price objection. Eligible
+       for the objection-aware reply builder.
+    4. ``product_info`` — normal product / price / quantity / safe-use
+       guidance question. Eligible for the existing grounded reply
+       builder.
+    5. ``unknown`` — none of the above. Fail closed.
+    """
+
+    primary: str
+    discount_objection: bool = False
+    objection_type: str = ""
+    purchase_intent: bool = False
+    human_request: bool = False
+    unsafe: bool = False
+    matched: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict:
+        return {
+            "primary": self.primary,
+            "discountObjection": self.discount_objection,
+            "objectionType": self.objection_type,
+            "purchaseIntent": self.purchase_intent,
+            "humanRequest": self.human_request,
+            "unsafe": self.unsafe,
+            "matched": list(self.matched),
+        }
+
+
+def detect_discount_objection(
+    inbound_text: str | None,
+) -> tuple[bool, str]:
+    """Return ``(detected, objection_type)``.
+
+    ``objection_type`` is ``"discount"`` if explicit discount /
+    offer / negotiation vocabulary fires, ``"price"`` if only
+    price-expensiveness vocabulary fires, ``""`` otherwise.
+    """
+    text = _normalize_text(inbound_text)
+    if not text:
+        return False, ""
+
+    explicit_discount = (
+        "discount",
+        "offer",
+        "kuch kam",
+        "kya kam ho",
+        "kuch kar do",
+        "deal de do",
+        "deal kya",
+        "best me",
+        "kuch concession",
+        "best price",
+        "final price",
+        "kya discount",
+    )
+    price_complaint = (
+        "price zyada",
+        "rate zyada",
+        "rate kam",
+        "price kam",
+        "mehenga",
+        "mehnga",
+        "costly",
+        "expensive",
+        "budget",
+        "zyada lag raha",
+        "zyada lagta",
+        "zyada hai",
+        "sasta",
+        "sasti",
+        "affordable",
+    )
+    # Price-complaint wins when "budget" or other complaint vocab is
+    # present even alongside ambiguous tokens like "thoda kam".
+    for needle in price_complaint:
+        if needle in text:
+            return True, "price"
+    for needle in explicit_discount:
+        if needle in text:
+            return True, "discount"
+    # Fall back: any discount-objection vocabulary at all → "discount".
+    for needle in DISCOUNT_OBJECTION_KEYWORDS:
+        if needle in text:
+            return True, "discount"
+    return False, ""
+
+
+def detect_purchase_intent(inbound_text: str | None) -> bool:
+    text = _normalize_text(inbound_text)
+    if not text:
+        return False
+    return any(needle in text for needle in PURCHASE_INTENT_KEYWORDS)
+
+
+def detect_human_request(inbound_text: str | None) -> bool:
+    """Return True iff the customer asked to talk to a real human /
+    advisor / call. Distinct from medical or legal handoff."""
+    text = _normalize_text(inbound_text)
+    if not text:
+        return False
+    return any(needle in text for needle in HUMAN_REQUEST_KEYWORDS)
+
+
+def detect_unsafe_signal(inbound_text: str | None) -> bool:
+    """Return True iff the inbound contains cure / guarantee /
+    100% / permanent / side-effect / consumer-forum / fraud / police
+    vocabulary. Safety stack still handles the actual block; this
+    detector exists so the classifier can deprioritise objection /
+    human-request paths when the inbound is unsafe."""
+    text = _normalize_text(inbound_text)
+    if not text:
+        return False
+    return any(needle in text for needle in PRODUCT_INFO_DISQUALIFIERS)
+
+
+def classify_inbound_intent(inbound_text: str | None) -> IntentResult:
+    """Deterministic classification used by the controlled-test
+    command to refine the orchestrator's coarse blocked-reason output.
+
+    Priority order (most blocking first):
+
+    1. unsafe
+    2. human_request
+    3. discount_objection
+    4. product_info
+    5. unknown
+    """
+    unsafe = detect_unsafe_signal(inbound_text)
+    human = detect_human_request(inbound_text)
+    objection, objection_type = detect_discount_objection(inbound_text)
+    intent = is_normal_product_info_inquiry(inbound_text)
+    purchase_intent = detect_purchase_intent(inbound_text)
+
+    matched: list[str] = []
+    if unsafe:
+        matched.append("unsafe")
+    if human:
+        matched.append("human_request")
+    if objection:
+        matched.append(f"discount_objection:{objection_type}")
+    if intent:
+        matched.append("product_info")
+
+    primary = "unknown"
+    if unsafe:
+        primary = "unsafe"
+    elif human:
+        primary = "human_request"
+    elif objection:
+        primary = "discount_objection"
+    elif intent:
+        primary = "product_info"
+
+    return IntentResult(
+        primary=primary,
+        discount_objection=objection,
+        objection_type=objection_type,
+        purchase_intent=purchase_intent,
+        human_request=human,
+        unsafe=unsafe,
+        matched=tuple(matched),
+    )
+
+
 def is_normal_product_info_inquiry(inbound_text: str | None) -> bool:
     """Deterministic detector for normal product-info / price / safe-use
     inquiries. Returns False on disqualifying vocabulary so the
@@ -542,18 +822,236 @@ def validate_reply_uses_claim_vault(
     }
 
 
+# ---------------------------------------------------------------------------
+# Objection-aware reply builder
+# ---------------------------------------------------------------------------
+
+
+_OBJECTION_PREAMBLE_SHORT = "Price concern samajh sakta/sakti hoon."
+_OBJECTION_FOLLOWUP = (
+    "Hum upfront pricing par koi guaranteed concession promise nahi "
+    "karte; product approved process ke according hi support karta hai."
+)
+
+
+def can_build_objection_reply(
+    *,
+    category: str | None,
+    inbound_text: str | None,
+    safety_flags: dict | None,
+    approved_claims: Iterable[str] | None,
+) -> GroundedReplyEligibility:
+    """Eligibility for the objection-aware reply.
+
+    Same gates as ``can_build_grounded_product_reply`` plus the
+    inbound MUST contain a discount-objection signal. If the inbound
+    is unsafe, the helper refuses outright (the safety stack will
+    handle the block separately).
+    """
+    if detect_unsafe_signal(inbound_text):
+        return GroundedReplyEligibility(
+            eligible=False,
+            reason="unsafe_signal_in_inbound",
+            normalized_product=category_to_claim_product(category) if category else "",
+            approved_claim_count=len(list(approved_claims or [])),
+        )
+
+    objection, _ = detect_discount_objection(inbound_text)
+    if not objection:
+        return GroundedReplyEligibility(
+            eligible=False,
+            reason="not_discount_objection",
+            normalized_product=category_to_claim_product(category) if category else "",
+            approved_claim_count=len(list(approved_claims or [])),
+        )
+
+    # Reuse the grounded-reply gate, but bypass its product-info
+    # detector (the inbound is an objection, not a normal info
+    # inquiry — the discount detector took its place).
+    safety_flags = dict(safety_flags or {})
+    approved_list = [
+        str(p).strip() for p in (approved_claims or []) if str(p).strip()
+    ]
+    normalized_product = (
+        category_to_claim_product(category) if category else ""
+    )
+    if not normalized_product:
+        return GroundedReplyEligibility(
+            eligible=False,
+            reason="category_not_mapped",
+            approved_claim_count=len(approved_list),
+        )
+    if not approved_list:
+        return GroundedReplyEligibility(
+            eligible=False,
+            reason="no_approved_claims",
+            normalized_product=normalized_product,
+        )
+    for flag, value in safety_flags.items():
+        if flag == "claimVaultUsed":
+            continue
+        if bool(value):
+            return GroundedReplyEligibility(
+                eligible=False,
+                reason=f"safety_flag_set:{flag}",
+                normalized_product=normalized_product,
+                approved_claim_count=len(approved_list),
+            )
+
+    return GroundedReplyEligibility(
+        eligible=True,
+        reason="",
+        normalized_product=normalized_product,
+        approved_claim_count=len(approved_list),
+    )
+
+
+def build_objection_aware_reply(
+    *,
+    normalized_product: str,
+    approved_claims: Iterable[str],
+    inbound_text: str | None = None,
+    purchase_intent: bool = False,
+) -> GroundedReplyResult:
+    """Compose a deterministic objection-aware Hinglish reply.
+
+    Locked structure:
+
+    1. Greeting + objection acknowledgement (no medical content).
+    2. Business facts (₹3000 / 30 capsules / ₹499 advance).
+    3. Approved Claim Vault phrases verbatim.
+    4. Soft next-step invitation (do NOT promise a discount).
+    5. Conservative usage + doctor-escalation lines.
+    """
+    approved = [
+        str(p).strip()
+        for p in (approved_claims or [])
+        if str(p).strip()
+    ]
+    if not approved:
+        return GroundedReplyResult(
+            ok=False, fallback_reason="no_approved_claims"
+        )
+    if not normalized_product:
+        return GroundedReplyResult(
+            ok=False, fallback_reason="no_normalized_product"
+        )
+
+    selected_approved = list(approved[:3])
+    primary_phrase = selected_approved[0]
+    additional_phrases = "; ".join(selected_approved[1:])
+
+    next_step = (
+        "Agar aap order ke liye ready hain to team aapko approved process "
+        "ke according best support guide kar sakti hai."
+    )
+    if purchase_intent:
+        next_step = (
+            "Aap order ready hain — team aapko approved process ke according "
+            "next step (booking + advance) confirm kar dega."
+        )
+
+    # Order: greeting + short objection ack → product + first approved
+    # phrase + price (so the 180-char preview proves grounding) →
+    # objection follow-up → remaining approved phrases → next step →
+    # usage + doctor escalation.
+    parts: list[str] = [
+        (
+            f"Namaste ji 🙏 {_OBJECTION_PREAMBLE_SHORT} "
+            f"{normalized_product}: {primary_phrase}. "
+            f"₹{STANDARD_PRICE_INR} / {STANDARD_CAPSULE_COUNT} capsules; "
+            f"order par fixed advance ₹{ADVANCE_AMOUNT_INR}."
+        ),
+        _OBJECTION_FOLLOWUP,
+    ]
+    if additional_phrases:
+        parts.append(f"Approved: {additional_phrases}.")
+    parts.append(next_step)
+    parts.append(USAGE_GUIDANCE_LINE)
+    parts.append(DOCTOR_ESCALATION_LINE)
+
+    reply_text = " ".join(parts).strip()
+    if len(reply_text) > _MAX_REPLY_LEN:
+        reply_text = reply_text[: _MAX_REPLY_LEN].rstrip()
+
+    validation = validate_objection_reply(
+        reply_text=reply_text,
+        approved_claims=approved,
+    )
+    if not validation["passed"]:
+        return GroundedReplyResult(
+            ok=False,
+            reply_text=reply_text,
+            used_approved_phrases=tuple(selected_approved),
+            fallback_reason="validation_failed",
+            validation=validation,
+        )
+    return GroundedReplyResult(
+        ok=True,
+        reply_text=reply_text,
+        used_approved_phrases=tuple(selected_approved),
+        fallback_reason="",
+        validation=validation,
+    )
+
+
+def validate_objection_reply(
+    *,
+    reply_text: str | None,
+    approved_claims: Iterable[str],
+) -> dict:
+    """Reuses the grounded-reply validator and adds objection-specific
+    rules: must NOT promise a confirmed discount and must NOT promise
+    a 50% discount."""
+    base = validate_reply_uses_claim_vault(
+        reply_text=reply_text, approved_claims=approved_claims
+    )
+    text_lower = (reply_text or "").lower()
+    confirmed_discount_terms = (
+        "discount confirmed",
+        "guaranteed discount",
+        "50% discount",
+        "50 percent discount",
+        "100% discount",
+    )
+    confirmed_hit = ""
+    for term in confirmed_discount_terms:
+        if term in text_lower:
+            confirmed_hit = term
+            break
+    promised = bool(confirmed_hit)
+    base["objectionPromisedDiscount"] = promised
+    base["objectionPromisedDiscountTerm"] = confirmed_hit
+    if promised:
+        base["passed"] = False
+        base["violation"] = f"promised_discount:{confirmed_hit}"
+    return base
+
+
 __all__ = (
     "ADVANCE_AMOUNT_INR",
+    "DISCOUNT_OBJECTION_KEYWORDS",
     "DOCTOR_ESCALATION_LINE",
     "GroundedReplyEligibility",
     "GroundedReplyResult",
+    "HUMAN_REQUEST_KEYWORDS",
+    "IntentResult",
     "PRODUCT_INFO_DISQUALIFIERS",
     "PRODUCT_INFO_KEYWORDS",
+    "PURCHASE_INTENT_KEYWORDS",
     "STANDARD_CAPSULE_COUNT",
     "STANDARD_PRICE_INR",
     "USAGE_GUIDANCE_LINE",
     "build_grounded_product_reply",
+    "build_objection_aware_reply",
     "can_build_grounded_product_reply",
+    "can_build_objection_reply",
+    "classify_inbound_intent",
+    "detect_discount_objection",
+    "detect_human_request",
+    "detect_purchase_intent",
+    "detect_unsafe_signal",
     "is_normal_product_info_inquiry",
+    "validate_objection_reply",
     "validate_reply_uses_claim_vault",
 )

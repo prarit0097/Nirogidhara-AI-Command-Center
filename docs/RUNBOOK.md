@@ -117,6 +117,114 @@ python manage.py run_daily_ai_briefing --skip-caio
 python manage.py run_daily_ai_briefing --skip-ceo
 ```
 
+### Phase 5F-Gate Objection & Handoff Reason Refinement
+
+The Phase 5F-Gate Scenario Matrix Test passed safety-wise but flagged
+two refinements:
+
+1. **Discount Objection** — safety-correct (no discount mutation,
+   no upfront discount, no >50% issue) but the reply was a generic
+   product-info reply instead of an objection-aware acknowledgement.
+2. **Human Call Request** — safety-correct (no automation
+   triggered) but `blockedReason` came back as `claim_vault_not_used`
+   instead of the desired `human_advisor_requested`.
+
+Both refinements ship in this phase.
+
+**Module:** `apps.whatsapp.grounded_reply_builder` (extended).
+
+**Intent classifier.** `classify_inbound_intent(text)` returns an
+`IntentResult` whose `primary` field follows this priority:
+
+```
+1. unsafe          — cure / guarantee / 100% / permanent / side-effect
+                     / consumer-forum / fraud / police vocabulary in
+                     the inbound. Safety stack handles the block.
+2. human_request   — explicit human-advisor / call / callback /
+                     "talk to a human" vocabulary.
+3. discount_objection — discount / price / negotiation vocabulary,
+                     classified into objection_type ∈ {discount, price}.
+4. product_info    — normal price / quantity / safe-use / approved-info
+                     question.
+5. unknown         — none of the above. Fail closed.
+```
+
+Detector helpers exposed: `detect_discount_objection`,
+`detect_human_request`, `detect_purchase_intent`,
+`detect_unsafe_signal`. Each is deterministic substring matching on
+explicit keyword lists.
+
+**Objection-aware reply builder.** `can_build_objection_reply(...)`
+gates the reply on (a) discount-objection signal present, (b) inbound
+NOT unsafe, (c) category mapped + ≥1 approved Claim row, (d) every
+safety flag false. `build_objection_aware_reply(normalized_product,
+approved_claims, inbound_text, purchase_intent)` composes:
+
+```
+Namaste ji 🙏 Price concern samajh sakta/sakti hoon. <Product>:
+<first approved phrase>. ₹3000 / 30 capsules; order par fixed
+advance ₹499.
+
+Hum upfront pricing par koi guaranteed concession promise nahi
+karte; product approved process ke according hi support karta hai.
+
+Approved: <remaining approved phrases>.
+
+<soft next-step invitation, purchase-intent-aware>
+
+<usage line> <doctor-escalation line>
+```
+
+`validate_objection_reply(...)` extends the grounded validator with
+`objectionPromisedDiscount` / `objectionPromisedDiscountTerm` flags
+that reject `discount confirmed`, `guaranteed discount`, `50%
+discount`, `100% discount`, `50 percent discount`.
+
+**Controlled-test command priority order.**
+
+1. Safety blockers (handled by orchestrator).
+2. Human request — short-circuits the orchestrator. Emits:
+   - `whatsapp.ai.human_request_detected`
+   - `whatsapp.ai.handoff_required` (`reason=human_advisor_requested`)
+   - `whatsapp.ai.controlled_test.blocked` + `whatsapp.ai.controlled_test.completed`
+   - JSON: `blockedReason=human_advisor_requested`,
+     `handoffReason=human_advisor_requested`,
+     `nextAction=human_handoff_requested`,
+     `finalReplySource=blocked_handoff`, `safetyBlocked=false`.
+   - Vapi NEVER fires (gated by `WHATSAPP_CALL_HANDOFF_ENABLED=false`).
+3. Unknown category / no Claim Vault → fail closed unchanged.
+4. Discount/price objection with grounding → objection-aware fallback.
+   - JSON: `finalReplySource=deterministic_objection_reply`,
+     `objectionDetected=true`, `objectionType ∈ {discount, price}`,
+     `replyPolicy.upfrontDiscountOffered=false`,
+     `replyPolicy.discountMutationCreated=false`,
+     `replyPolicy.businessMutationCreated=false`.
+5. Normal product-info → existing grounded fallback.
+6. Else → fail closed.
+
+**Four new audit kinds.**
+
+| Kind | Tone | Payload |
+| --- | --- | --- |
+| `whatsapp.ai.objection_detected` | INFO | `objection_type`, `purchase_intent`, `phone_suffix` |
+| `whatsapp.ai.objection_reply_used` | SUCCESS | `category`, `normalized_claim_product`, `approved_claim_count`, `objection_type`, `purchase_intent`, `outbound_message_id`, `phone_suffix`, `used_approved_phrases`, `discount_mutation_created=false`, `business_mutation_created=false` |
+| `whatsapp.ai.objection_reply_blocked` | WARNING | `category`, `normalized_claim_product`, `approved_claim_count`, `fallback_reason`, `phone_suffix` |
+| `whatsapp.ai.human_request_detected` | INFO | `phone_suffix`, `matched` |
+
+Audit payloads NEVER carry tokens / verify token / app secret.
+
+**Hard rules preserved.**
+
+- Cure / guarantee / unsafe-claim demand inside an objection
+  sentence still routes to safety (unsafe wins).
+- Side-effect / legal / refund / unknown-category still fail closed.
+- Final-send limited-mode guard still refuses non-allowed numbers.
+- Zero mutation of `Order` / `Payment` / `Shipment` /
+  `DiscountOfferLog` from any controlled-test path (asserted in tests).
+- The fallback is controlled-test-only — webhook-driven production
+  runs stay strict through the orchestrator.
+- Phase 5F (broadcast campaigns) remains LOCKED.
+
 ### Phase 5F-Gate Deterministic Grounded Reply Builder
 
 After the Controlled Reply Confidence Fix landed, the live `--send`

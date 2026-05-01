@@ -66,8 +66,12 @@ from apps.whatsapp.claim_mapping import category_to_claim_product
 from apps.whatsapp.consent import has_whatsapp_consent
 from apps.whatsapp.grounded_reply_builder import (
     build_grounded_product_reply,
+    build_objection_aware_reply,
     can_build_grounded_product_reply,
+    can_build_objection_reply,
+    classify_inbound_intent,
     is_normal_product_info_inquiry,
+    validate_objection_reply,
     validate_reply_uses_claim_vault,
 )
 from apps.whatsapp.meta_one_number_test import (
@@ -176,6 +180,19 @@ class Command(BaseCommand):
             "deterministicReplyPreview": "",
             "finalReplySource": "",
             "finalReplyValidation": {},
+            # Phase 5F-Gate Objection & Handoff Reason Refinement.
+            "detectedIntent": "",
+            "objectionDetected": False,
+            "objectionType": "",
+            "purchaseIntentDetected": False,
+            "humanRequestDetected": False,
+            "handoffReason": "",
+            "safetyReason": "",
+            "replyPolicy": {
+                "upfrontDiscountOffered": False,
+                "discountMutationCreated": False,
+                "businessMutationCreated": False,
+            },
             "auditEvents": [],
             "warnings": [],
             "errors": [],
@@ -298,6 +315,23 @@ class Command(BaseCommand):
         )
         report["conversationId"] = convo.id
 
+        # Phase 5F-Gate Objection & Handoff Reason Refinement —
+        # deterministic intent classification BEFORE the orchestrator
+        # runs. This gives the controlled-test JSON a typed primary
+        # intent on every path, and lets us short-circuit human-request
+        # inbounds without sending a generic claim_vault_not_used
+        # block.
+        intent = classify_inbound_intent(message_body)
+        report["detectedIntent"] = intent.primary
+        report["objectionDetected"] = intent.discount_objection
+        report["objectionType"] = intent.objection_type
+        report["purchaseIntentDetected"] = intent.purchase_intent
+        report["humanRequestDetected"] = intent.human_request
+        if intent.discount_objection:
+            self._emit_objection_detected(report, intent)
+        if intent.human_request:
+            self._emit_human_request_detected(report, intent)
+
         if not send_flag:
             # Dry-run path — every gate has passed; do not persist a
             # synthetic inbound, do not call the orchestrator.
@@ -310,6 +344,20 @@ class Command(BaseCommand):
         inbound = self._persist_synthetic_inbound(convo, customer, message_body)
         report["inboundMessageId"] = inbound.id
         report["sendAttempted"] = True
+
+        # Phase 5F-Gate Objection & Handoff Reason Refinement —
+        # short-circuit human-request inbounds before the orchestrator
+        # runs. The customer asked for a human; we do NOT need the LLM
+        # to decide. The Vapi handoff stays gated by
+        # WHATSAPP_CALL_HANDOFF_ENABLED (false during the gate phase),
+        # so the audit row is the only side effect.
+        if intent.primary == "human_request" and not intent.unsafe:
+            return self._handle_human_request_handoff(
+                report=report,
+                options=options,
+                inbound=inbound,
+                customer=customer,
+            )
 
         # 8. Drive the orchestrator with auto-reply forced ON for this
         # one call only. Every other gate (Claim Vault, blocked phrase,
@@ -547,11 +595,30 @@ class Command(BaseCommand):
         if outcome.decision is None:
             return False
 
-        # Eligibility check — the helper inspects category, safety
-        # flags, approved-claim list, and inbound vocabulary.
         category = outcome.decision.category or ""
         approved_phrases = self._approved_phrases_for(category)
         disallowed_phrases = self._disallowed_phrases_for(category)
+
+        # Phase 5F-Gate Objection & Handoff Reason Refinement —
+        # discount/price objections take an objection-aware reply
+        # ahead of the standard grounded reply. Run the objection
+        # path first; fall through to the grounded path if it refuses.
+        intent = classify_inbound_intent(inbound.body or "")
+        if intent.discount_objection and not intent.unsafe:
+            objection_dispatched = self._maybe_run_objection_fallback(
+                report=report,
+                outcome=outcome,
+                inbound=inbound,
+                customer=customer,
+                intent=intent,
+                approved_phrases=approved_phrases,
+            )
+            if objection_dispatched:
+                return True
+
+        # Eligibility check for the standard grounded reply — the
+        # helper inspects category, safety flags, approved-claim list,
+        # and inbound vocabulary.
         eligibility = can_build_grounded_product_reply(
             category=category,
             inbound_text=inbound.body or "",
@@ -655,6 +722,247 @@ class Command(BaseCommand):
         # Also write the existing controlled_test.sent audit so the
         # operator sees a single consistent shape across LLM and
         # fallback runs.
+        self._emit_sent(report)
+        return True
+
+    # ------------------------------------------------------------------
+    # Phase 5F-Gate Objection & Handoff Reason Refinement
+    # ------------------------------------------------------------------
+
+    def _handle_human_request_handoff(
+        self,
+        *,
+        report: dict[str, Any],
+        options,
+        inbound: WhatsAppMessage,
+        customer: Customer,
+    ) -> None:
+        """Customer asked for a human / call. Emit a clean handoff
+        audit row + JSON; do NOT send a generic claim_vault_not_used
+        block, do NOT trigger a Vapi call (gated by
+        WHATSAPP_CALL_HANDOFF_ENABLED), do NOT mutate Order/Payment/
+        Shipment/DiscountOfferLog.
+        """
+        report["aiRunId"] = inbound.id
+        report["replyBlocked"] = True
+        report["replySent"] = False
+        report["safetyBlocked"] = False
+        report["blockedReason"] = "human_advisor_requested"
+        report["handoffReason"] = "human_advisor_requested"
+        report["finalReplySource"] = "blocked_handoff"
+        report["nextAction"] = "human_handoff_requested"
+        # Reply policy — the controlled-test command never mutates
+        # business state on the human-request path.
+        report["replyPolicy"] = {
+            "upfrontDiscountOffered": False,
+            "discountMutationCreated": False,
+            "businessMutationCreated": False,
+        }
+
+        write_event(
+            kind="whatsapp.ai.handoff_required",
+            text=(
+                f"AI handoff · conversation={inbound.conversation_id} · "
+                f"reason=human_advisor_requested"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": inbound.conversation_id,
+                "reason": "human_advisor_requested",
+                "handoff_reason": "human_advisor_requested",
+                "category": "",
+                "normalized_claim_product": "",
+                "claim_row_count": 0,
+                "approved_claim_count": 0,
+                "disallowed_phrase_count": 0,
+                "claim_count": 0,
+                "confidence": 0.0,
+                "phone_suffix": self._safe_phone(report["phone"]),
+            },
+        )
+        report["auditEvents"].append("whatsapp.ai.handoff_required")
+        self._emit_blocked(report, "human_advisor_requested")
+        self._emit_completed(report, options)
+
+    def _emit_objection_detected(
+        self, report: dict[str, Any], intent
+    ) -> None:
+        write_event(
+            kind="whatsapp.ai.objection_detected",
+            text=(
+                f"Discount/price objection detected · "
+                f"type={intent.objection_type} · "
+                f"phone_suffix={self._safe_phone(report['phone'])}"
+            ),
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "objection_type": intent.objection_type,
+                "purchase_intent": intent.purchase_intent,
+                "phone_suffix": self._safe_phone(report["phone"]),
+            },
+        )
+        report["auditEvents"].append("whatsapp.ai.objection_detected")
+
+    def _emit_human_request_detected(
+        self, report: dict[str, Any], intent
+    ) -> None:
+        write_event(
+            kind="whatsapp.ai.human_request_detected",
+            text=(
+                f"Human-request detected · "
+                f"phone_suffix={self._safe_phone(report['phone'])}"
+            ),
+            tone=AuditEvent.Tone.INFO,
+            payload={
+                "phone_suffix": self._safe_phone(report["phone"]),
+                "matched": list(intent.matched),
+            },
+        )
+        report["auditEvents"].append("whatsapp.ai.human_request_detected")
+
+    def _maybe_run_objection_fallback(
+        self,
+        *,
+        report: dict[str, Any],
+        outcome: OrchestrationOutcome,
+        inbound: WhatsAppMessage,
+        customer: Customer,
+        intent,
+        approved_phrases: list,
+    ) -> bool:
+        """Attempt the objection-aware deterministic reply.
+
+        Same safety contract as ``_maybe_run_deterministic_fallback``:
+        runs only when the LLM blocked on a soft non-safety reason,
+        backend grounding is valid, and the inbound is a discount /
+        price objection. NEVER mutates business state.
+        """
+        category = outcome.decision.category or ""
+        eligibility = can_build_objection_reply(
+            category=category,
+            inbound_text=inbound.body or "",
+            safety_flags=dict(outcome.decision.safety or {}),
+            approved_claims=approved_phrases,
+        )
+        if not eligibility.eligible:
+            return False
+
+        result = build_objection_aware_reply(
+            normalized_product=eligibility.normalized_product,
+            approved_claims=approved_phrases,
+            inbound_text=inbound.body or "",
+            purchase_intent=intent.purchase_intent,
+        )
+        report["deterministicReplyPreview"] = (result.reply_text or "")[:180]
+        report["finalReplyValidation"] = result.validation or {}
+
+        if not result.ok:
+            write_event(
+                kind="whatsapp.ai.objection_reply_blocked",
+                text=(
+                    f"Objection-aware reply blocked · "
+                    f"reason={result.fallback_reason or 'build_failed'}"
+                ),
+                tone=AuditEvent.Tone.WARNING,
+                payload={
+                    "category": category,
+                    "normalized_claim_product": eligibility.normalized_product,
+                    "approved_claim_count": eligibility.approved_claim_count,
+                    "fallback_reason": result.fallback_reason or "build_failed",
+                    "phone_suffix": self._safe_phone(report["phone"]),
+                },
+            )
+            report["auditEvents"].append("whatsapp.ai.objection_reply_blocked")
+            return False
+
+        try:
+            sent = whatsapp_services.send_freeform_text_message(
+                customer=customer,
+                conversation=inbound.conversation,
+                body=result.reply_text,
+                actor_role="director",
+                actor_agent="cli",
+                ai_generated=True,
+                metadata={
+                    "deterministic_objection_reply": True,
+                    "category": category,
+                    "normalized_product": eligibility.normalized_product,
+                    "objection_type": intent.objection_type,
+                    "purchase_intent": intent.purchase_intent,
+                },
+            )
+        except whatsapp_services.WhatsAppServiceError as exc:
+            write_event(
+                kind="whatsapp.ai.objection_reply_blocked",
+                text=(
+                    f"Objection-aware reply blocked at send · "
+                    f"reason={exc.block_reason}"
+                ),
+                tone=AuditEvent.Tone.WARNING,
+                payload={
+                    "category": category,
+                    "normalized_claim_product": eligibility.normalized_product,
+                    "fallback_reason": f"send_refused:{exc.block_reason}",
+                    "phone_suffix": self._safe_phone(report["phone"]),
+                },
+            )
+            report["auditEvents"].append("whatsapp.ai.objection_reply_blocked")
+            return False
+
+        from django.conf import settings as _settings
+
+        threshold = float(
+            getattr(
+                _settings, "WHATSAPP_AI_AUTO_REPLY_CONFIDENCE_THRESHOLD", 0.75
+            )
+        )
+        report["replyBlocked"] = False
+        report["blockedReason"] = ""
+        report["safetyBlocked"] = False
+        report["replySent"] = True
+        report["passed"] = True
+        report["claimVaultUsed"] = True
+        report["action"] = "send_reply"
+        report["actionReason"] = "deterministic_objection_reply"
+        report["confidence"] = max(threshold, 0.9)
+        report["replyPreview"] = (sent.body or "")[:180]
+        report["outboundMessageId"] = sent.id
+        report["providerMessageId"] = sent.provider_message_id or ""
+        report["nextAction"] = "live_ai_reply_sent_verify_phone"
+        report["deterministicFallbackUsed"] = True
+        report["fallbackReason"] = (
+            f"objection:{intent.objection_type}"
+            if intent.objection_type
+            else "objection"
+        )
+        report["finalReplySource"] = "deterministic_objection_reply"
+        report["replyPolicy"] = {
+            "upfrontDiscountOffered": False,
+            "discountMutationCreated": False,
+            "businessMutationCreated": False,
+        }
+
+        write_event(
+            kind="whatsapp.ai.objection_reply_used",
+            text=(
+                f"Objection-aware reply used · type={intent.objection_type} "
+                f"· product={eligibility.normalized_product}"
+            ),
+            tone=AuditEvent.Tone.SUCCESS,
+            payload={
+                "category": category,
+                "normalized_claim_product": eligibility.normalized_product,
+                "approved_claim_count": eligibility.approved_claim_count,
+                "objection_type": intent.objection_type,
+                "purchase_intent": intent.purchase_intent,
+                "outbound_message_id": sent.id,
+                "phone_suffix": self._safe_phone(report["phone"]),
+                "used_approved_phrases": list(result.used_approved_phrases),
+                "discount_mutation_created": False,
+                "business_mutation_created": False,
+            },
+        )
+        report["auditEvents"].append("whatsapp.ai.objection_reply_used")
         self._emit_sent(report)
         return True
 
