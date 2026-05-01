@@ -238,6 +238,68 @@ for e in AuditEvent.objects.filter(kind__startswith='whatsapp.internal_cohort.')
 Required: `DiscountOfferLog` / `Order` / `Payment` / `Shipment`
 counts unchanged from the pre-test snapshot.
 
+### Phase 5F-Gate — Limited Auto-Reply Flag Plan inspectors
+
+Two strictly read-only management commands prepare and observe the
+flip of `WHATSAPP_AI_AUTO_REPLY_ENABLED=true` on real inbound
+webhooks. Run them on the VPS through the backend container.
+
+**Pre-flip readiness inspector.**
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_whatsapp_auto_reply_gate --json
+```
+
+Required JSON outcomes before flipping the flag:
+
+- `provider="meta_cloud"`, `limitedTestMode=true`,
+  `allowedListSize >= 1`, `wabaSubscription.active=true`.
+- Every broad-automation flag false: `callHandoffEnabled`,
+  `lifecycleEnabled`, `rescueDiscountEnabled`, `rtoRescueEnabled`,
+  `reorderEnabled` — all `false`. `campaignsLocked=true`.
+- `readyForLimitedAutoReply=true`, `blockers=[]`.
+- `nextAction="ready_to_enable_limited_auto_reply_flag"` (when the
+  flag is still off) or `"limited_auto_reply_enabled_monitor_real_inbound"`
+  (after the flip).
+
+The inspector NEVER mutates the DB, NEVER writes audit rows, NEVER
+prints tokens / verify token / app secret. Phones in `allowedNumbersMasked`
+are last-4 only (e.g. `+91*****99001`).
+
+**Post-flip soak monitor.**
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_recent_whatsapp_auto_reply_activity \
+    --hours 2 --json
+```
+
+Required JSON outcomes during a healthy soak:
+
+- `unexpectedNonAllowedSendsCount=0` (any non-zero value
+  → `nextAction="rollback_auto_reply_flag"` immediately).
+- `ordersCreatedInWindow / paymentsCreatedInWindow /
+  shipmentsCreatedInWindow / discountOfferLogsCreatedInWindow` all
+  zero unless an intentional manual booking happened.
+- `replyAutoSentCount` matches the Director's expected real-inbound
+  count for the window. `autoReplyFlagPathUsedCount` should equal
+  `replyAutoSentCount` for any AI auto-send that fired through the
+  real flag-driven path; CLI-forced runs (controlled-test command)
+  do not increment this counter.
+- `autoReplyGuardBlockedCount` is non-zero only if a final-send
+  limited-mode allow-list refusal fired — investigate every entry in
+  the latest-events block for the masked phone suffix.
+
+`nextAction` priorities:
+
+| Token | Meaning |
+| --- | --- |
+| `rollback_auto_reply_flag` | A non-allowed outbound landed. Roll back `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` immediately. |
+| `limited_auto_reply_enabled_monitor_real_inbound` | Healthy soak — keep monitoring. |
+| `no_recent_ai_activity_in_window` | No inbound traffic to assess. |
+| `review_blocked_or_suggestion_paths` | AI runs happened but no auto-send fired — inspect blocked / suggestion / handoff counts. |
+
 ### Phase 5F-Gate Objection & Handoff Reason Refinement
 
 The Phase 5F-Gate Scenario Matrix Test passed safety-wise but flagged

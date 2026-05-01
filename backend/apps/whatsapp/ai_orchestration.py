@@ -198,6 +198,11 @@ def run_whatsapp_ai_agent(
 
     ai_state = _read_ai_state(convo)
     outcome.stage = ai_state.get("stage") or "greeting"
+    # Phase 5F-Gate Limited Auto-Reply Flag Plan — record the trigger
+    # so downstream emits can distinguish a CLI-forced run from a
+    # real webhook-driven one even though both share this orchestrator.
+    ai_state["lastTriggeredBy"] = triggered_by
+    ai_state["lastForceAutoReply"] = bool(force_auto_reply)
 
     # Idempotency on inbound id (skip if already processed unless force).
     if inbound is not None and not force:
@@ -832,6 +837,37 @@ def _send_freeform_reply(
             },
         )
     except services.WhatsAppServiceError as exc:
+        # Phase 5F-Gate Limited Auto-Reply Flag Plan — emit a typed
+        # diagnostic when the auto-reply path was refused at the
+        # final-send guard (limited test mode, consent, allow-list,
+        # CAIO). Helps the operator distinguish "LLM proposed nothing"
+        # from "LLM proposed but service-layer guard refused".
+        from django.conf import settings as _settings
+
+        write_event(
+            kind="whatsapp.ai.auto_reply_guard_blocked",
+            text=(
+                f"Auto-reply guard blocked send · conversation={convo.id} "
+                f"· reason={exc.block_reason}"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={
+                "conversation_id": convo.id,
+                "customer_id": convo.customer_id,
+                "block_reason": exc.block_reason,
+                "limited_test_mode": bool(
+                    getattr(
+                        _settings, "WHATSAPP_LIVE_META_LIMITED_TEST_MODE", False
+                    )
+                ),
+                "auto_reply_enabled": bool(
+                    getattr(
+                        _settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False
+                    )
+                ),
+                "category": decision.category,
+            },
+        )
         return _finalize_run(
             convo,
             outcome,
@@ -856,6 +892,46 @@ def _send_freeform_reply(
             "preview": decision.reply_text[:160],
         },
     )
+
+    # Phase 5F-Gate Limited Auto-Reply Flag Plan — additional typed
+    # diagnostic when the global flag is what enabled this real
+    # webhook-driven send (i.e. NOT a CLI-forced run). Helps the
+    # operator audit the cohort soak ("is the flag actually firing
+    # real auto-replies, and to which allow-listed numbers?").
+    from django.conf import settings as _settings
+
+    flag_enabled = bool(
+        getattr(_settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False)
+    )
+    force_auto_reply_used = bool((ai_state or {}).get("lastForceAutoReply"))
+    if flag_enabled and not force_auto_reply_used:
+        from .meta_one_number_test import _digits_only
+
+        digits = _digits_only(getattr(convo.customer, "phone", "") or "")
+        write_event(
+            kind="whatsapp.ai.auto_reply_flag_path_used",
+            text=(
+                f"WHATSAPP_AI_AUTO_REPLY_ENABLED auto-reply sent · "
+                f"conversation={convo.id} · message={message.id}"
+            ),
+            tone=AuditEvent.Tone.SUCCESS,
+            payload={
+                "conversation_id": convo.id,
+                "customer_id": convo.customer_id,
+                "message_id": message.id,
+                "phone_suffix": digits[-4:] if digits else "",
+                "category": decision.category,
+                "confidence": decision.confidence,
+                "claim_vault_used": bool(
+                    decision.safety.get("claimVaultUsed", False)
+                ),
+                "limited_test_mode": bool(
+                    getattr(
+                        _settings, "WHATSAPP_LIVE_META_LIMITED_TEST_MODE", False
+                    )
+                ),
+            },
+        )
 
     # Update sales stage based on action.
     next_stage = ai_state.get("stage") or "discovery"
