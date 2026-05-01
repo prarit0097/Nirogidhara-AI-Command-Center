@@ -48,6 +48,26 @@ describe("WhatsApp Monitoring page", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows approved customer pilot readiness without send controls", async () => {
+    renderWithRouter(<WhatsAppMonitoringPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Approved Customer Pilot Readiness"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Pilot members")).toBeInTheDocument();
+    expect(screen.getByText("Consent missing")).toBeInTheDocument();
+    expect(
+      screen.getByText("verify_customer_consent_before_pilot"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("+91*****99011")).toBeInTheDocument();
+    expect(screen.queryByText("+919000099011")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Pilot|Approve|Pause|Send/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders the cohort table with masked numbers only", async () => {
     renderWithRouter(<WhatsAppMonitoringPage />);
 

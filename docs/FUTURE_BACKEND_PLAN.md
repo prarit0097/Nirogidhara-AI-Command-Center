@@ -728,6 +728,46 @@ Shipped per Prarit's locked Phase 5E decisions (cumulative 50% cap, RTO auto-res
 
 **Out of scope (still deferred):** `WhatsAppConversationOutcome` + `WhatsAppEscalation` finalisation tables, reverse handoff (AI Calling Agent → WhatsApp template), `learned_memory.py` port. Campaigns remain Phase 5F.
 
+### ✅ Phase 5F-Gate — Approved Customer Pilot Readiness + SaaS Guardrails (DONE)
+
+This gate prepares a tiny approved customer pilot without enabling broad
+rollout. It keeps `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`,
+`WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`, campaigns/broadcast locked,
+and call handoff / lifecycle / rescue / RTO / reorder OFF. The prior
+4-hour soak was accelerated, not full-duration, so this phase is
+read-only/prep plus monitoring only.
+
+- ✅ New `WhatsAppPilotCohortMember` model references `crm.Customer` and
+  stores masked phone/suffix, status, consent verification, source,
+  approver, daily cap, notes, and metadata.
+- ✅ New `apps.whatsapp.pilot.get_whatsapp_pilot_readiness_summary()`
+  validates safe live posture, consent, allow-list membership, daily
+  caps, recent non-allowed sends, mutation counts, and dashboard
+  availability.
+- ✅ Three commands: `inspect_whatsapp_customer_pilot --json`
+  (read-only), `prepare_whatsapp_customer_pilot_member --phone ...`
+  (creates/reuses Customer + pilot member only; pending if consent is
+  missing; audit `whatsapp.pilot.member_prepared`), and
+  `pause_whatsapp_customer_pilot_member --phone ...` (audit-only pause).
+- ✅ New admin-only read endpoints:
+  `/api/v1/whatsapp/monitoring/pilot/` and
+  `/api/v1/whatsapp/monitoring/overview/` with masked phones only.
+- ✅ `/whatsapp-monitoring` adds a read-only "Approved Customer Pilot
+  Readiness" section with counts, blockers, `nextAction`, daily caps,
+  and a masked member table. No send / enable / approve / pause buttons.
+- ✅ SaaS guardrail audit is documented without forcing a multi-tenant
+  migration into this single-tenant production release.
+
+SaaS gaps intentionally deferred to Phase 7:
+
+- No Organization / tenant model.
+- No Branch model.
+- No middleware-enforced tenant queryset scoping.
+- No per-tenant feature flags.
+- No per-tenant WhatsApp provider/settings record.
+- No `AuditEvent` org/branch context fields.
+- User roles exist today, but are global rather than tenant-scoped.
+
 ### Phase 5F — Campaign system (gated, later)
 
 - Director-approved broadcast campaigns.

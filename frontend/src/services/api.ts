@@ -130,6 +130,7 @@ import type {
   WhatsAppMonitoringGate,
   WhatsAppMonitoringMutationSafety,
   WhatsAppMonitoringOverview,
+  WhatsAppMonitoringPilot,
   WhatsAppMonitoringUnexpectedOutbound,
 } from "@/types/domain";
 
@@ -988,8 +989,14 @@ export const api = {
 
   getWhatsAppMonitoringOverview: (hours: number = 2) =>
     safeFetch<WhatsAppMonitoringOverview>(
-      `/whatsapp/monitoring/overview/?hours=${hours}`,
+      `/v1/whatsapp/monitoring/overview/?hours=${hours}`,
       () => M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview,
+    ),
+  getWhatsAppMonitoringPilot: (hours: number = 2) =>
+    safeFetch<WhatsAppMonitoringPilot>(
+      `/v1/whatsapp/monitoring/pilot/?hours=${hours}`,
+      () =>
+        (M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview).pilot,
     ),
   getWhatsAppMonitoringGate: () =>
     safeFetch<WhatsAppMonitoringGate>(

@@ -28,6 +28,7 @@ from apps.accounts.permissions import RoleBasedPermission
 from apps.accounts.permissions import ADMIN_AND_UP
 
 from . import dashboard
+from .pilot import get_whatsapp_pilot_readiness_summary
 
 
 class _AdminMonitoringPermission(RoleBasedPermission):
@@ -154,6 +155,20 @@ class WhatsAppMonitoringUnexpectedOutboundView(APIView):
         )
 
 
+class WhatsAppMonitoringPilotView(APIView):
+    """``GET /api/v1/whatsapp/monitoring/pilot/``.
+
+    Read-only approved customer pilot readiness. No send / enable / pause
+    action lives behind this endpoint.
+    """
+
+    permission_classes = [_AdminMonitoringPermission]
+
+    def get(self, request):
+        hours = _hours_param(request, default=2.0)
+        return Response(get_whatsapp_pilot_readiness_summary(hours=hours))
+
+
 __all__ = (
     "WhatsAppMonitoringOverviewView",
     "WhatsAppMonitoringGateView",
@@ -162,4 +177,5 @@ __all__ = (
     "WhatsAppMonitoringAuditView",
     "WhatsAppMonitoringMutationSafetyView",
     "WhatsAppMonitoringUnexpectedOutboundView",
+    "WhatsAppMonitoringPilotView",
 )

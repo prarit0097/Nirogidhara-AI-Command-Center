@@ -50,6 +50,7 @@ from .models import (
     WhatsAppConversation,
     WhatsAppMessage,
 )
+from .pilot import get_whatsapp_pilot_readiness_summary
 
 
 # ---------------------------------------------------------------------------
@@ -846,6 +847,7 @@ def get_whatsapp_monitoring_dashboard(
     cohort = get_internal_cohort_summary()
     mutation = get_whatsapp_mutation_safety_summary(hours=h)
     unexpected = get_unexpected_outbound_summary(hours=h)
+    pilot = get_whatsapp_pilot_readiness_summary(hours=h)
 
     # Derive a single top-level status. The frontend renders the
     # corresponding badge — it MUST NOT re-derive this.
@@ -885,6 +887,7 @@ def get_whatsapp_monitoring_dashboard(
         "gate": gate,
         "activity": activity,
         "cohort": cohort,
+        "pilot": pilot,
         "mutationSafety": mutation,
         "unexpectedOutbound": unexpected,
     }
@@ -897,5 +900,6 @@ __all__ = (
     "get_recent_whatsapp_audit_events",
     "get_whatsapp_mutation_safety_summary",
     "get_unexpected_outbound_summary",
+    "get_whatsapp_pilot_readiness_summary",
     "get_whatsapp_monitoring_dashboard",
 )

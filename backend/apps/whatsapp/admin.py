@@ -10,6 +10,7 @@ from .models import (
     WhatsAppMessage,
     WhatsAppMessageAttachment,
     WhatsAppMessageStatusEvent,
+    WhatsAppPilotCohortMember,
     WhatsAppSendLog,
     WhatsAppTemplate,
     WhatsAppWebhookEvent,
@@ -137,3 +138,24 @@ class WhatsAppSendLogAdmin(admin.ModelAdmin):
     )
     list_filter = ("provider",)
     search_fields = ("message__id",)
+
+
+@admin.register(WhatsAppPilotCohortMember)
+class WhatsAppPilotCohortMemberAdmin(admin.ModelAdmin):
+    list_display = (
+        "customer",
+        "phone_masked",
+        "status",
+        "consent_verified",
+        "max_auto_replies_per_day",
+        "source",
+        "approved_at",
+        "updated_at",
+    )
+    list_filter = ("status", "consent_verified", "source")
+    search_fields = (
+        "customer__id",
+        "customer__name",
+        "phone_suffix",
+        "phone_masked",
+    )

@@ -5,6 +5,14 @@ direction.
 
 ## Status (current)
 
+Phase 5F-Gate pilot readiness update: `/whatsapp-monitoring` now includes
+a read-only "Approved Customer Pilot Readiness" section backed by
+`/api/v1/whatsapp/monitoring/pilot/`. Phones are masked, blockers and
+daily caps render from the backend, and there are no send / enable /
+approve / pause buttons. Auto-reply remains OFF, campaigns/broadcast stay
+locked, and the customer pilot requires explicit consent + approval. The
+earlier 4-hour soak was accelerated, not full-duration.
+
 Item | Status
 --- | ---
 All 21 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page; Phase 4B enhanced the Rewards page; Phase 4C added an Approval queue table on Governance; Phase 4D added an Execute button on approved rows; Phase 4A added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed and the Governance "Approval queue"; Phase 4E is backend-only; Phase 5A added a read-only `/whatsapp-templates` page + Settings → WABA section + new "Messaging" sidebar group; Phase 5B added a three-pane `/whatsapp-inbox` page + Customer 360 WhatsApp tab; Phase 5C replaces the Phase 5B "AI suggestions disabled" placeholder with a live `AiAgentPanel`; Phase 5D adds a "Call customer" button on the `AiAgentPanel` + handoff and lifecycle event endpoints; **Phase 5E** adds a Rescue Discount cap card to the `AiAgentPanel` (current cumulative %, cap remaining out of 50%, customer ask count) plus six new TS types (`DiscountOffer`, `DiscountOfferListResponse`, `CreateRescueOfferPayload`, `DiscountOfferCap`, `ReorderDay20StatusResponse`, `ReorderDay20RunResponse`) and six new `api` methods (`getOrderDiscountOffers`, `createRescueDiscountOffer`, `acceptRescueDiscountOffer`, `rejectRescueDiscountOffer`, `getReorderDay20Status`, `runReorderDay20Sweep`). All cap math and CEO escalation logic lives in the backend (`apps.orders.rescue_discount`); the frontend renders cap state and dispatches API calls only.
@@ -14,7 +22,7 @@ Sidebar collapse layout | done — shared collapsed state
 Mobile responsiveness | baseline done — KPI stack, sidebar drawer, tables horizontal-scroll on small screens; per-page tuning continues
 Dashboard polish | baseline done — premium spacing, hierarchy, executive feel; iterate as needed
 Workflow visuals | UI-component diagrams in `WorkflowMap`
-Vitest tests | 13 tests passing (5 page/sidebar + 3 API fallback + 5 realtime)
+Vitest tests | 20 tests passing (5 page/sidebar + 3 API fallback + 5 realtime + 7 WhatsApp monitoring)
 ESLint warnings | 8 pre-existing shadcn warnings (`react-refresh/only-export-components`); 0 errors
 Mock fallback in `api.ts` | done — pages never break when backend is offline
 
@@ -65,6 +73,9 @@ cd ../frontend && npm run dev
 | `/analytics` | `Analytics.tsx` | 1 | Analytics |
 | `/whatsapp-inbox` | `WhatsAppInbox.tsx` | 5B | Three-pane manual-only WhatsApp inbox + internal notes + manual template send + AI-suggestions-disabled placeholder |
 | `/whatsapp-templates` | `WhatsAppTemplates.tsx` | 5A | Meta-mirrored WhatsApp templates (read-only) + Sync from Meta button |
+| `/whatsapp-monitoring` | `WhatsAppMonitoring.tsx` | 5F-Gate | Read-only auto-reply safety dashboard + Approved Customer Pilot Readiness; masked phones only; no send/enable controls |
 | `/settings` | `Settings.tsx` | 1 / 5A | Settings & Control + WABA section |
+
+Phase 5F-Gate note: the route inventory now includes `/whatsapp-monitoring`, so the current page count is 22.
 
 21 pages total. Sidebar groups: Overview · Sales · Operations · AI Layer (5 entries: Agents Center, CEO AI Briefing, CAIO Audit Center, AI Scheduler & Cost, AI Governance) · Governance · Insights · Messaging (Phase 5A + 5B) · System.

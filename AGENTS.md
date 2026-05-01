@@ -148,6 +148,12 @@ backend/apps/whatsapp/views.py      ← Phase 5B adds `WhatsAppInboxView` (inbox
 frontend/src/pages/WhatsAppInbox.tsx ← Phase 5B three-pane manual-only inbox (filters / list / thread + internal notes + AI-suggestions-disabled placeholder + manual template send modal); live refresh via Phase 4A connectAuditEvents filtered on whatsapp.*
 frontend/src/pages/Customers.tsx    ← Phase 5B extends Customer 360 with a WhatsApp tab (timeline, AI-suggestions disabled placeholder, link to inbox)
 backend/apps/whatsapp/ai_orchestration.py ← Phase 5C orchestrator (run_whatsapp_ai_agent: build context → LLM → validate JSON → safety + Claim Vault + discount + rate limits → freeform send / order booking / handoff)
+backend/apps/whatsapp/pilot.py            ← Phase 5F-Gate approved customer pilot readiness selectors/prep services (read-only/prep; no send; no Order/Payment/Shipment/Discount mutation)
+backend/apps/whatsapp/models.py           ← Phase 5F-Gate adds WhatsAppPilotCohortMember (Customer FK + masked/suffix phone only)
+backend/apps/whatsapp/management/commands/inspect_whatsapp_customer_pilot.py ← read-only pilot readiness CLI
+backend/apps/whatsapp/management/commands/prepare_whatsapp_customer_pilot_member.py ← creates/reuses Customer + pilot member only; no send
+backend/apps/whatsapp/management/commands/pause_whatsapp_customer_pilot_member.py ← pauses pilot member only; no send
+backend/apps/whatsapp/v1_urls.py          ← `/api/v1/whatsapp/monitoring/{overview,pilot}/` aliases for pilot readiness
 backend/apps/whatsapp/language.py        ← Phase 5C deterministic Hindi/Hinglish/English detection (devanagari ratio + Hinglish marker word list)
 backend/apps/whatsapp/ai_schema.py        ← Phase 5C strict JSON schema + ChatAgentDecision dataclass + BLOCKED_CLAIM_PHRASES list + reply_contains_blocked_phrase()
 backend/apps/whatsapp/discount_policy.py  ← Phase 5C wrapper around apps.orders.discounts: never offer upfront, MIN_OBJECTION_TURNS_BEFORE_OFFER, refusal-rescue trigger, validate_total_discount_cap (50% hard cap)

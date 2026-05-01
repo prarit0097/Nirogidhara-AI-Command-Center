@@ -238,6 +238,71 @@ for e in AuditEvent.objects.filter(kind__startswith='whatsapp.internal_cohort.')
 Required: `DiscountOfferLog` / `Order` / `Payment` / `Shipment`
 counts unchanged from the pre-test snapshot.
 
+### Phase 5F-Gate - Approved Customer Pilot Readiness
+
+This is the current safe next step after the accelerated WhatsApp
+auto-reply soak. It is **not** a broad rollout: auto-reply remains OFF,
+limited Meta test mode stays ON, campaigns/broadcast stay locked, and
+call handoff / lifecycle / rescue / RTO / reorder remain OFF.
+
+Read-only overview:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_whatsapp_customer_pilot --json
+```
+
+Prepare one approved customer for pilot review. This does **not** send a
+WhatsApp message and does **not** create or mutate Order / Payment /
+Shipment / Discount rows. If explicit WhatsApp consent is missing, the
+member stays `pending`.
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py prepare_whatsapp_customer_pilot_member \
+    --phone +91XXXXXXXXXX \
+    --name "Customer Name" \
+    --source approved_customer_pilot \
+    --json
+```
+
+Pause a pilot member without messaging the customer:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py pause_whatsapp_customer_pilot_member \
+    --phone +91XXXXXXXXXX \
+    --reason "pilot paused by Director" \
+    --json
+```
+
+Pilot readiness is also available through the admin-only read API:
+
+```bash
+curl -H "Authorization: Bearer <admin-jwt>" \
+    "https://ai.nirogidhara.com/api/v1/whatsapp/monitoring/pilot/?hours=2" | jq
+
+curl -H "Authorization: Bearer <admin-jwt>" \
+    "https://ai.nirogidhara.com/api/v1/whatsapp/monitoring/overview/?hours=2" | jq
+```
+
+Healthy pilot readiness requires:
+
+- `autoReplyEnabled=false`
+- `limitedTestMode=true`
+- campaign and broadcast locks active
+- call handoff / lifecycle / rescue / RTO / reorder all false
+- every approved pilot member has explicit WhatsApp consent
+- every ready pilot phone is still in the limited-mode allow-list
+- `unexpectedNonAllowedSendsCount=0`
+- Order / Payment / Shipment / Discount mutation counts remain zero
+
+The `/whatsapp-monitoring` dashboard includes the read-only "Approved
+Customer Pilot Readiness" section. It shows counts, blockers,
+`nextAction`, masked phones, consent state, readiness, and daily caps.
+It intentionally has no send, enable, approve, pause, or automation
+buttons.
+
 ### Phase 5F-Gate — Auto-Reply Monitoring Dashboard
 
 The dashboard surface is the read-only operator view of every inspector

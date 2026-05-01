@@ -10,6 +10,7 @@ from .monitoring_views import (
     WhatsAppMonitoringGateView,
     WhatsAppMonitoringMutationSafetyView,
     WhatsAppMonitoringOverviewView,
+    WhatsAppMonitoringPilotView,
     WhatsAppMonitoringUnexpectedOutboundView,
 )
 from .views import (
@@ -177,5 +178,10 @@ urlpatterns = [
         "monitoring/unexpected-outbound/",
         WhatsAppMonitoringUnexpectedOutboundView.as_view(),
         name="whatsapp-monitoring-unexpected-outbound",
+    ),
+    path(
+        "monitoring/pilot/",
+        WhatsAppMonitoringPilotView.as_view(),
+        name="whatsapp-monitoring-pilot",
     ),
 ] + router.urls

@@ -216,6 +216,10 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.ai.human_request_detected": "phone-call",
     # Phase 5F-Gate Internal Allowed-Number Cohort Tooling.
     "whatsapp.internal_cohort.number_prepared": "user-check",
+    # Phase 5F-Gate Approved Customer Pilot Readiness.
+    "whatsapp.pilot.member_saved": "user-check",
+    "whatsapp.pilot.member_prepared": "user-check",
+    "whatsapp.pilot.member_paused": "pause",
     # Phase 5F-Gate Limited Auto-Reply Flag Plan.
     "whatsapp.ai.auto_reply_flag_path_used": "send",
     "whatsapp.ai.auto_reply_guard_blocked": "shield-off",
@@ -243,6 +247,26 @@ def _on_audit_event_created(sender, instance: AuditEvent, created: bool, **_):
     if not created:
         return
     publish_audit_event(instance)
+
+
+@receiver(
+    post_save,
+    sender="whatsapp.WhatsAppPilotCohortMember",
+    dispatch_uid="audit.whatsapp_pilot_member_saved",
+)
+def _on_whatsapp_pilot_member_saved(sender, instance, created, **_):
+    write_event(
+        kind="whatsapp.pilot.member_saved",
+        text=f"WhatsApp pilot member {instance.customer_id} {'created' if created else 'updated'}",
+        tone=AuditEvent.Tone.INFO,
+        payload={
+            "customer_id": instance.customer_id,
+            "status": instance.status,
+            "phone_suffix": instance.phone_suffix,
+            "consent_verified": instance.consent_verified,
+            "created": created,
+        },
+    )
 
 
 @receiver(post_save, sender="crm.Lead", dispatch_uid="audit.lead_created")

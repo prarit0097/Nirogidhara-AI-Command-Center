@@ -694,4 +694,56 @@ class WhatsAppLifecycleEvent(models.Model):
         )
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"lifecycle · {self.action_key} · {self.object_type}:{self.object_id} · {self.status}"
+        return f"lifecycle - {self.action_key} - {self.object_type}:{self.object_id} - {self.status}"
+
+
+class WhatsAppPilotCohortMember(models.Model):
+    """Phase 5F-Gate customer pilot readiness row.
+
+    This is a preparation/readiness object only. It references the existing
+    Customer row and stores masked/suffix phone data for operator triage; it
+    never stores a second full phone number and never sends a message.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "pending"
+        APPROVED = "approved", "approved"
+        PAUSED = "paused", "paused"
+        REMOVED = "removed", "removed"
+
+    customer = models.OneToOneField(
+        "crm.Customer",
+        on_delete=models.PROTECT,
+        related_name="whatsapp_pilot_member",
+    )
+    phone_masked = models.CharField(max_length=32, blank=True, default="")
+    phone_suffix = models.CharField(max_length=8, blank=True, default="")
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    consent_required = models.BooleanField(default=True)
+    consent_verified = models.BooleanField(default=False)
+    source = models.CharField(max_length=80, blank=True, default="")
+    approved_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_whatsapp_pilot_members",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    max_auto_replies_per_day = models.PositiveSmallIntegerField(default=3)
+    notes = models.TextField(blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at",)
+        indexes = (
+            models.Index(fields=("status", "-updated_at")),
+            models.Index(fields=("phone_suffix",)),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"pilot - {self.customer_id} - {self.status}"

@@ -1482,6 +1482,78 @@ export interface WhatsAppMonitoringUnexpectedOutbound {
   rollbackRecommended: boolean;
 }
 
+export interface WhatsAppMonitoringPilotMember {
+  customerId: string;
+  customerName: string;
+  maskedPhone: string;
+  phoneSuffix: string;
+  status: "pending" | "approved" | "paused" | "removed" | string;
+  consentRequired: boolean;
+  consentVerified: boolean;
+  source: string;
+  approvedAt: string | null;
+  dailyCap: number;
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  latestStatus: string;
+  phoneAllowedInLimitedMode: boolean;
+  recentSafetyIssue: boolean;
+  ready: boolean;
+  blockers: string[];
+}
+
+export interface WhatsAppMonitoringPilotSafety {
+  autoReplyEnabled: boolean;
+  limitedTestMode: boolean;
+  campaignsLocked: boolean;
+  broadcastLocked: boolean;
+  callHandoffEnabled: boolean;
+  lifecycleEnabled: boolean;
+  rescueDiscountEnabled: boolean;
+  rtoRescueEnabled: boolean;
+  reorderEnabled: boolean;
+  allowedListSize: number;
+  unexpectedNonAllowedSendsCount: number;
+  mutationCounts: {
+    ordersCreatedInWindow: number;
+    paymentsCreatedInWindow: number;
+    shipmentsCreatedInWindow: number;
+    discountOfferLogsCreatedInWindow: number;
+  };
+  mutationTotal: number;
+  dashboardAvailable: boolean;
+}
+
+export interface WhatsAppMonitoringSaasGuardrails {
+  mode: string;
+  organizationModelExists: boolean;
+  tenantModelExists: boolean;
+  branchModelExists: boolean;
+  userRolesExist: boolean;
+  auditOrgBranchContextExists: boolean;
+  featureFlagsPerOrgExist: boolean;
+  whatsappSettingsPerOrgExist: boolean;
+  safeInterfacesAdded: string[];
+  deferred: string[];
+  nextAction: string;
+}
+
+export interface WhatsAppMonitoringPilot {
+  windowHours: number;
+  generatedAt: string;
+  totalPilotMembers: number;
+  approvedCount: number;
+  pendingCount: number;
+  pausedCount: number;
+  consentMissingCount: number;
+  readyForPilotCount: number;
+  members: WhatsAppMonitoringPilotMember[];
+  blockers: string[];
+  nextAction: string;
+  safety: WhatsAppMonitoringPilotSafety;
+  saasGuardrails: WhatsAppMonitoringSaasGuardrails;
+}
+
 export interface WhatsAppMonitoringAuditEvent {
   id: number;
   occurredAt: string;
@@ -1519,6 +1591,7 @@ export interface WhatsAppMonitoringOverview {
   gate: WhatsAppMonitoringGate;
   activity: WhatsAppMonitoringActivity;
   cohort: WhatsAppMonitoringCohort;
+  pilot: WhatsAppMonitoringPilot;
   mutationSafety: WhatsAppMonitoringMutationSafety;
   unexpectedOutbound: WhatsAppMonitoringUnexpectedOutbound;
 }

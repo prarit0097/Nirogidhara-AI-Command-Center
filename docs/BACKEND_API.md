@@ -492,6 +492,33 @@ The Phase 5C orchestrator now also writes a `DiscountOfferLog` row whenever the 
 
 New audit kinds (12): `discount.offer.created`, `discount.offer.sent`, `discount.offer.accepted`, `discount.offer.rejected`, `discount.offer.blocked`, `discount.offer.needs_ceo_review`, `whatsapp.lifecycle.rescue_discount_queued`, `whatsapp.lifecycle.rescue_discount_sent`, `whatsapp.lifecycle.reorder_day20_queued`, `whatsapp.lifecycle.reorder_day20_sent`, `compliance.default_claims.seeded`.
 
+#### Phase 5F-Gate - Approved Customer Pilot Readiness
+
+This gate prepares a tiny approved customer pilot only. Auto-reply
+remains OFF, limited Meta test mode remains ON, campaigns/broadcast stay
+locked, and call handoff / lifecycle / rescue / RTO / reorder stay OFF.
+The earlier 4-hour soak was accelerated, not full-duration. Pilot
+tooling is read-only/prep and never sends WhatsApp messages or mutates
+Order / Payment / Shipment / Discount data.
+
+| Method | Endpoint | Permission | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/whatsapp/monitoring/pilot/?hours=2` | admin / director / superuser monitoring permission | Read-only pilot readiness summary. Returns counts, blockers, `nextAction`, safety flags, SaaS guardrail gaps, and masked pilot members only. |
+| GET | `/api/v1/whatsapp/monitoring/overview/?hours=2` | admin / director / superuser monitoring permission | Existing WhatsApp monitoring overview plus `pilot` summary. |
+
+Pilot command surfaces:
+
+| Command | Purpose |
+| --- | --- |
+| `python manage.py inspect_whatsapp_customer_pilot --json` | Read-only summary; no DB writes, no audit writes, masked phones only. |
+| `python manage.py prepare_whatsapp_customer_pilot_member --phone +91XXXXXXXXXX --name "Customer Name" --source approved_customer_pilot --json` | Creates/reuses `crm.Customer` and `WhatsAppPilotCohortMember` only. Missing consent keeps the member `pending`; consented customers can become `approved`. Writes `whatsapp.pilot.member_prepared`. |
+| `python manage.py pause_whatsapp_customer_pilot_member --phone +91XXXXXXXXXX --reason "..." --json` | Pauses the member and writes `whatsapp.pilot.member_paused`. |
+
+`WhatsAppPilotCohortMember` stores masked phone/suffix only and
+references `Customer` for the existing full phone field. Readiness
+requires explicit WhatsApp consent, approved member status, limited-mode
+allow-list membership, a daily cap, and no recent safety issue.
+
 New management commands:
 
 ```

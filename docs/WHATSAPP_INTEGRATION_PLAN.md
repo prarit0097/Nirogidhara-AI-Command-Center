@@ -1903,3 +1903,64 @@ Phone last-4 only; full E.164 NEVER appears in the payload.
 - Phase 5F (broadcast campaigns / growth automation) stays LOCKED
   throughout the cohort expansion.
 
+---
+
+## QQ. Phase 5F-Gate Approved Customer Pilot Readiness (post-ship)
+
+This phase prepares a tiny approved customer pilot without enabling
+broad rollout. The live posture remains:
+
+- `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`
+- `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`
+- allowed-list guard active
+- campaigns and broadcast locked
+- call handoff / lifecycle / rescue / RTO / reorder OFF
+- no WhatsApp messages sent by the phase tooling
+- no Order / Payment / Shipment / Discount mutation
+
+The earlier 4-hour soak was accelerated, not full-duration. A customer
+pilot therefore remains read-only/prep plus monitoring until Director
+approval says otherwise.
+
+### Customer pilot cohort
+
+`WhatsAppPilotCohortMember` references `crm.Customer` rather than
+duplicating sensitive data. It stores masked phone/suffix, status
+(`pending`, `approved`, `paused`, `removed`), consent requirements,
+consent verification, source, approver metadata, daily cap, notes, and
+JSON metadata.
+
+Readiness requires:
+
+- customer exists
+- WhatsApp consent is granted and verified
+- member status is approved and not paused
+- phone is on `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` while limited
+  test mode remains active
+- daily cap is configured
+- no recent safety issue or non-allowed outbound
+
+### Commands and API
+
+| Surface | Contract |
+| --- | --- |
+| `inspect_whatsapp_customer_pilot --json` | Read-only readiness summary; masked phones only. |
+| `prepare_whatsapp_customer_pilot_member --phone +91... --name "..." --source approved_customer_pilot --json` | Creates/reuses `Customer` and pilot member only; missing consent keeps status `pending`; writes `whatsapp.pilot.member_prepared`; never sends. |
+| `pause_whatsapp_customer_pilot_member --phone +91... --reason "..." --json` | Pauses the pilot member; writes audit; never sends. |
+| `GET /api/v1/whatsapp/monitoring/pilot/` | Admin/director/superuser read-only pilot readiness; masked phones only. |
+| `GET /api/v1/whatsapp/monitoring/overview/` | Existing monitoring overview plus `pilot` summary. |
+
+### Dashboard contract
+
+`/whatsapp-monitoring` includes a read-only "Approved Customer Pilot
+Readiness" section with counts, blockers, nextAction, masked member
+table, consent state, readiness, and daily caps. It intentionally has no
+send, enable, approve, pause, campaign, or broadcast controls.
+
+### SaaS guardrail audit
+
+This phase does not add a large multi-tenant migration. The current app
+is still single-tenant. Missing Phase 7 guardrails are documented in
+`docs/FUTURE_BACKEND_PLAN.md`: tenant/organization model, branch model,
+queryset scoping middleware, per-org feature flags, per-org WhatsApp
+settings, and audit org/branch context.

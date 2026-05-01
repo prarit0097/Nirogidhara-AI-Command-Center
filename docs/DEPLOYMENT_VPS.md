@@ -950,6 +950,48 @@ curl -fsS http://127.0.0.1:18020/api/healthz/
 
 The backend should boot cleanly and `migrate` should be a no-op.
 
+## 8.1 Phase 5F-Gate customer pilot readiness post-deploy
+
+This phase prepares a tiny approved customer pilot only. It does not
+enable broad rollout, does not send WhatsApp messages, and does not
+mutate Order / Payment / Shipment / Discount rows. Keep:
+
+```bash
+WHATSAPP_AI_AUTO_REPLY_ENABLED=false
+WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true
+WHATSAPP_CALL_HANDOFF_ENABLED=false
+WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false
+WHATSAPP_RESCUE_DISCOUNT_ENABLED=false
+WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false
+WHATSAPP_REORDER_DAY20_ENABLED=false
+```
+
+After deploy:
+
+```bash
+cd /opt/nirogidhara-command
+
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py migrate --no-input
+
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py makemigrations --check --dry-run
+
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_whatsapp_customer_pilot --json
+
+curl -fsS -H "Authorization: Bearer <admin-jwt>" \
+    "https://ai.nirogidhara.com/api/v1/whatsapp/monitoring/pilot/?hours=2" | jq
+```
+
+Use `prepare_whatsapp_customer_pilot_member --phone +91XXXXXXXXXX
+--name "Customer Name" --source approved_customer_pilot --json` only
+after explicit customer consent is documented. Missing consent leaves the
+pilot member pending. The dashboard section at `/whatsapp-monitoring`
+must show masked phones only and no send/enable controls. The prior
+4-hour soak was accelerated, not full-duration, so this customer pilot
+still needs conservative monitoring before any flag flip.
+
 ## 9. Security checklist before customers go live
 
 - [ ] `DJANGO_SECRET_KEY` and `JWT_SIGNING_KEY` are unique, long, and never committed.
