@@ -214,6 +214,8 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.ai.objection_reply_used": "shield-check",
     "whatsapp.ai.objection_reply_blocked": "shield-off",
     "whatsapp.ai.human_request_detected": "phone-call",
+    # Phase 5F-Gate Internal Allowed-Number Cohort Tooling.
+    "whatsapp.internal_cohort.number_prepared": "user-check",
 }
 
 

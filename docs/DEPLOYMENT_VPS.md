@@ -648,6 +648,78 @@ carries `payload['reason'] == 'human_advisor_requested'`. **Do not
 proceed to flag flips if any row carries `reason=claim_vault_not_used`
 on a human-request inbound.**
 
+### 5.8 Phase 5F-Gate Internal Allowed-Number Cohort Tooling — expand to 2–3 staff numbers
+
+After the one-number scenario matrix passes cleanly, expand the
+controlled live test to a tiny internal cohort of 2–3 staff numbers
+without unlocking any broad automation.
+
+```bash
+# 1. Edit .env.production to ADD staff numbers (start with 2–3 only).
+#    KEEP every automation flag default OFF.
+#    DO NOT paste real phone numbers in public docs / Slack / GitHub.
+
+# 2. Recreate backend/worker/beat/nginx so the new env is read.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    up -d --build --pull never backend worker beat nginx
+
+# 3. Inspect cohort readiness (phones masked to last-4 by default).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_whatsapp_internal_cohort --json
+
+# 4. Prepare each new number (refuses non-allow-list phones).
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py prepare_whatsapp_internal_test_number \
+    --phone +91XXXXXXXXXX \
+    --name "Internal Staff Name" \
+    --source internal_cohort_test \
+    --json
+
+# 5. (Optional) Cohort dry-run readiness across all five scenarios.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py run_whatsapp_internal_cohort_dry_run --json
+
+# 6. Run the 7-scenario matrix per number (use the messages from
+#    §5.7 and §5.4–5.6). Do this one number at a time and confirm
+#    the WhatsApp phone receives the correct reply / no reply per
+#    scenario before moving to the next number.
+
+# 7. Audit + mutation safety check.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py shell -c "
+from apps.audit.models import AuditEvent
+from apps.orders.models import DiscountOfferLog, Order
+from apps.payments.models import Payment
+from apps.shipments.models import Shipment
+print('DiscountOfferLog:', DiscountOfferLog.objects.count())
+print('Order:', Order.objects.count())
+print('Payment:', Payment.objects.count())
+print('Shipment:', Shipment.objects.count())
+print('---')
+for e in AuditEvent.objects.filter(kind__in=[
+    'whatsapp.internal_cohort.number_prepared',
+    'whatsapp.ai.controlled_test.sent',
+    'whatsapp.ai.controlled_test.blocked',
+    'whatsapp.ai.handoff_required',
+]).order_by('-occurred_at')[:30]:
+    print(e.occurred_at, '|', e.kind, '|', e.payload)
+"
+```
+
+**Hard constraints during cohort expansion:**
+
+- `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` stays.
+- `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` stays.
+- `WHATSAPP_CALL_HANDOFF_ENABLED=false` stays.
+- `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false` stays.
+- `WHATSAPP_RESCUE_DISCOUNT_ENABLED=false` stays.
+- `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false` stays.
+- `WHATSAPP_REORDER_DAY20_ENABLED=false` stays.
+- Cohort starts with 2–3 numbers only. Do NOT add customer
+  numbers; this is for internal staff testing only.
+- Full phone numbers NEVER committed to docs / git / audit
+  payloads. The audit row carries `phone_suffix` only.
+
 ---
 
 ## 6. DNS + TLS for `ai.nirogidhara.com`

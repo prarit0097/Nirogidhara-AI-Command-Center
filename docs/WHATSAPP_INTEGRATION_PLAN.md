@@ -1826,3 +1826,80 @@ last 4 digits.
   objection builder. They are controlled-test-only.
 - Phase 5F (broadcast campaigns / growth automation) stays LOCKED.
 
+---
+
+## PP. Phase 5F-Gate Internal Allowed-Number Cohort Tooling (post-ship)
+
+After the Scenario Matrix Test = FULL PASS and the Objection &
+Handoff Reason Refinement = FULL PASS on the single allowed test
+number, the next step is a tiny internal cohort of 2–3 staff
+numbers. This phase ships the management-command tooling — no
+broad automation flags, no campaign code, no DB-driven allow-list.
+
+### Three new commands
+
+| Command | Purpose |
+| --- | --- |
+| `inspect_whatsapp_internal_cohort [--show-full-numbers] [--json]` | Read-only readiness report for the entire `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` allow-list. Phones masked to last-4 by default; `--show-full-numbers` operator-only. Reports per-number: `customerFound`, `consentState`, `conversationFound`, `latestInbound/Outbound`, `latestAuditAt`, `readyForControlledTest`, `missingSetup`. Includes a global flag snapshot + WABA subscription summary. Never sends, never mutates. |
+| `prepare_whatsapp_internal_test_number --phone +91… --name "…" [--source …] [--json]` | Refuses outright if the phone is not on `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Creates / reuses a `Customer` row, sets `consent_whatsapp=True`, grants `WhatsAppConsent.consent_state="granted"`. Writes one `whatsapp.internal_cohort.number_prepared` audit row carrying `phone_suffix` only (no full E.164). NEVER sends a WhatsApp message; NEVER creates / mutates `Order` / `Payment` / `Shipment` / `DiscountOfferLog`. |
+| `run_whatsapp_internal_cohort_dry_run [--json]` | Loops the allow-list and reports per-number scenario readiness (`normal_product_info_ready`, `discount_objection_ready`, `safety_block_ready`, `legal_block_ready`, `human_request_ready`) without sending or mutating. |
+
+### Workflow
+
+1. **Edit `.env.production`** — add staff phones to
+   `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`. Keep
+   `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` and every automation
+   flag default OFF.
+2. **Recreate** `backend worker beat nginx` containers so the new
+   env is read.
+3. **Inspect** — `inspect_whatsapp_internal_cohort --json`. Confirm
+   `allowedListSize` matches, automation flags all `false`, WABA
+   `active=true`. New numbers will show `customerFound=false` and
+   `nextAction=register_missing_customers_or_consent`.
+4. **Prepare** each new number with
+   `prepare_whatsapp_internal_test_number --phone +91… --name "…"
+   --json`. Refused if the phone is not on the allow-list.
+5. **Run scenarios** with the existing `run_controlled_ai_auto_reply_test`
+   per number. The seven-scenario matrix is documented in §LL–§OO
+   and the runbook.
+6. **Audit + mutation safety check** after each number to confirm
+   no `Order` / `Payment` / `Shipment` / `DiscountOfferLog` row was
+   created.
+
+### Audit kind
+
+`whatsapp.internal_cohort.number_prepared` — payload:
+
+```json
+{
+  "phone_suffix": "9002",
+  "customer_id": "NRG-CUST-...",
+  "consent_state": "granted",
+  "consent_source": "internal_cohort_test",
+  "created_customer": true,
+  "created_consent": true,
+  "approved_by": "Prarit",
+  "limited_test_mode": true
+}
+```
+
+Phone last-4 only; full E.164 NEVER appears in the payload.
+
+### Hard rules preserved
+
+- Allow-list lives in `.env.production` only — no DB-driven
+  allow-list expansion.
+- `prepare_whatsapp_internal_test_number` REFUSES non-allow-list
+  phones. The DB will not gain a `Customer` row for a non-allow-list
+  phone via this command.
+- Inspector is strictly read-only (asserted with before/after
+  counts on `Customer` / `WhatsAppConsent` / `WhatsAppMessage` /
+  `AuditEvent`).
+- Cohort starts with 2–3 numbers only; do NOT add customer
+  numbers — internal staff testing only.
+- Full phone numbers NEVER committed to docs / git / audit
+  payloads. `--show-full-numbers` is operator-only with a
+  "do not paste publicly" warning.
+- Phase 5F (broadcast campaigns / growth automation) stays LOCKED
+  throughout the cohort expansion.
+
