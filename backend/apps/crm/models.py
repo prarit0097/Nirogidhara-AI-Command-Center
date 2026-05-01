@@ -54,6 +54,27 @@ class Lead(models.Model):
     raw_source_payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Phase 6B — Default Org Data Backfill. Nullable; backfilled by
+    # ``backfill_default_organization_data`` to the seeded default org +
+    # branch. Phase 6C will add tenant-scoped queryset filtering once
+    # coverage hits 100% for every business-critical model.
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="leads",
+        db_index=True,
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="leads",
+        db_index=True,
+    )
+
     class Meta:
         ordering = ("-created_at",)
         indexes = (models.Index(fields=("status",)), models.Index(fields=("state",)))
@@ -83,6 +104,25 @@ class Customer(models.Model):
     consent_call = models.BooleanField(default=True)
     consent_whatsapp = models.BooleanField(default=True)
     consent_marketing = models.BooleanField(default=False)
+
+    # Phase 6B — Default Org Data Backfill. Nullable; backfilled by
+    # ``backfill_default_organization_data`` to the seeded default org.
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="customers",
+        db_index=True,
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="customers",
+        db_index=True,
+    )
 
     class Meta:
         ordering = ("id",)

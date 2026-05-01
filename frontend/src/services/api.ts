@@ -133,6 +133,7 @@ import type {
   WhatsAppMonitoringPilot,
   WhatsAppMonitoringUnexpectedOutbound,
   SaasCurrentOrganization,
+  SaasDataCoverage,
   SaasFeatureFlagsResponse,
   SaasMyOrganizations,
 } from "@/types/domain";
@@ -1056,6 +1057,11 @@ export const api = {
     safeFetch<SaasFeatureFlagsResponse>(
       "/v1/saas/feature-flags/",
       () => M.SAAS_FEATURE_FLAGS as SaasFeatureFlagsResponse,
+    ),
+  getSaasDataCoverage: () =>
+    safeFetch<SaasDataCoverage>(
+      "/v1/saas/data-coverage/",
+      () => M.SAAS_DATA_COVERAGE as SaasDataCoverage,
     ),
 };
 

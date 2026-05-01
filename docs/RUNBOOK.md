@@ -303,6 +303,85 @@ Customer Pilot Readiness" section. It shows counts, blockers,
 It intentionally has no send, enable, approve, pause, or automation
 buttons.
 
+### Phase 6B — Default Org Data Backfill
+
+After Phase 6A seeded the default org + branch, Phase 6B attaches
+every existing business row to that default. Defaults are safe — the
+backfill is dry-run unless `--apply` is passed.
+
+**Deploy steps**:
+
+```bash
+# 1. Pull + rebuild + apply the new nullable-FK migrations.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    up -d --build --pull never backend worker beat nginx
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py migrate
+
+# 2. Make sure the default org + branch exist.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py ensure_default_organization --json
+
+# 3. Dry-run first. Always.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py backfill_default_organization_data \
+    --dry-run --json | jq '{
+        passed,
+        dryRun,
+        totalRows,
+        totalWouldUpdateOrganization,
+        totalWouldUpdateBranch,
+        nextAction
+    }'
+# Expect: dryRun=true, passed=true, totalWouldUpdate* > 0 on first run.
+
+# 4. Apply. Idempotent — safe to run repeatedly.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py backfill_default_organization_data \
+    --apply --json | jq '{
+        passed,
+        totalUpdatedOrganization,
+        totalUpdatedBranch,
+        nextAction
+    }'
+
+# 5. Verify coverage.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_default_organization_coverage \
+    --json | jq '{
+        defaultOrganizationExists,
+        defaultBranchExists,
+        globalTenantFilteringEnabled,
+        safeToStartPhase6C,
+        totals,
+        nextAction
+    }'
+# Expect: safeToStartPhase6C=true once nothing else is being written
+# during the backfill window. globalTenantFilteringEnabled stays false
+# until Phase 6C lands.
+
+# 6. (Optional) verify the API endpoint.
+ADMIN_JWT=$(curl -s -X POST https://ai.nirogidhara.com/api/auth/login/ \
+    -H "Content-Type: application/json" \
+    -d '{"username":"director","password":"<admin-password>"}' | jq -r .access)
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/data-coverage/ | jq
+```
+
+**What this phase deliberately did NOT do**:
+
+- The new `organization` / `branch` FKs are still nullable — Phase 6C
+  is what makes them non-nullable.
+- No request middleware filters existing endpoints by organization.
+- No queryset is scoped per tenant yet.
+- WhatsApp env flags untouched.
+- No real provider credentials migrated into `OrganizationSetting`.
+
+**Rollback**: this phase only adds nullable columns + an idempotent
+backfill + a read-only API. Rolling back is a git revert + a Django
+migration rollback (`python manage.py migrate <app> <prev>`). The
+already-backfilled `organization_id` columns are harmless to keep.
+
 ### Phase 6A — SaaS Foundation Safe Migration
 
 The multi-tenant scaffold is in place; the existing single-tenant

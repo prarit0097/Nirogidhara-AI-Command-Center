@@ -76,6 +76,25 @@ class Order(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Phase 6B — Default Org Data Backfill (nullable; backfilled to
+    # the seeded default org by the management command).
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="orders",
+        db_index=True,
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="orders",
+        db_index=True,
+    )
+
     class Meta:
         ordering = ("-created_at",)
         indexes = (models.Index(fields=("stage",)), models.Index(fields=("rto_risk",)))
@@ -170,6 +189,17 @@ class DiscountOfferLog(models.Model):
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Phase 6B — Default Org Data Backfill (nullable). Branch is not
+    # tracked separately on this row — it flows from the parent order.
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="discount_offers",
+        db_index=True,
+    )
 
     class Meta:
         ordering = ("-created_at",)

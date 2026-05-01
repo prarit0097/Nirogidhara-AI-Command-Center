@@ -225,6 +225,10 @@ ICON_BY_KIND: dict[str, str] = {
     "whatsapp.ai.auto_reply_guard_blocked": "shield-off",
     # Phase 6A SaaS Foundation Safe Migration.
     "saas.default_organization.ensured": "building",
+    # Phase 6B SaaS Default Org Data Backfill.
+    "saas.default_org_backfill.started": "play",
+    "saas.default_org_backfill.completed": "check-circle",
+    "saas.default_org_backfill.failed": "shield-off",
 }
 
 

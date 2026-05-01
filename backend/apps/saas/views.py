@@ -20,6 +20,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .coverage import compute_default_organization_coverage
 from .models import Organization, OrganizationMembership
 from .selectors import (
     get_active_organization_for_user,
@@ -127,8 +128,23 @@ class FeatureFlagsView(APIView):
         )
 
 
+class DataCoverageView(APIView):
+    """``GET /api/v1/saas/data-coverage/`` — Phase 6B coverage report.
+
+    Read-only. Mirrors the ``inspect_default_organization_coverage``
+    management command's JSON output. Auth required; the response
+    carries no secrets and no full phone numbers (it's row counts only).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request):
+        return Response(compute_default_organization_coverage())
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
     "FeatureFlagsView",
+    "DataCoverageView",
 )

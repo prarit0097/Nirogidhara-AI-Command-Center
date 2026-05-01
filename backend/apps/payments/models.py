@@ -48,6 +48,24 @@ class Payment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Phase 6B — Default Org Data Backfill (nullable).
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="payments",
+        db_index=True,
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="payments",
+        db_index=True,
+    )
+
     class Meta:
         ordering = ("-created_at",)
 

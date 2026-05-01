@@ -4,6 +4,7 @@ from django.urls import path
 
 from .views import (
     CurrentOrganizationView,
+    DataCoverageView,
     FeatureFlagsView,
     MyOrganizationsView,
 )
@@ -24,5 +25,10 @@ urlpatterns = [
         "feature-flags/",
         FeatureFlagsView.as_view(),
         name="saas-feature-flags",
+    ),
+    path(
+        "data-coverage/",
+        DataCoverageView.as_view(),
+        name="saas-data-coverage",
     ),
 ]

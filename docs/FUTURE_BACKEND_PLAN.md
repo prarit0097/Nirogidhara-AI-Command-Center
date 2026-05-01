@@ -833,9 +833,38 @@ Hard rules preserved:
 | Tenant admin onboarding (organization create / branch create / member invite endpoints + UI) | **6E** | Phase 6A is read-only; Phase 6E ships the writes. |
 | SaaS admin panel UI (org switcher, plan upgrade flow, member admin) | **6E** | Frontend `/saas-admin` page. |
 
+## Phase 6B — Default Org Data Backfill ✅ shipped
+
+What landed:
+
+- Nullable `organization` (and `branch` where applicable) FKs added
+  to 14 business-state models: `crm.Lead`, `crm.Customer`,
+  `orders.Order`, `orders.DiscountOfferLog`, `payments.Payment`,
+  `shipments.Shipment`, `calls.Call`, `whatsapp.WhatsAppConsent`,
+  `whatsapp.WhatsAppConversation`, `whatsapp.WhatsAppMessage`,
+  `whatsapp.WhatsAppLifecycleEvent`, `whatsapp.WhatsAppHandoffToCall`,
+  `whatsapp.WhatsAppPilotCohortMember`, `audit.AuditEvent`.
+- Idempotent `backfill_default_organization_data` management command
+  (dry-run default; `--apply` writes; never overwrites existing
+  assignments). Emits
+  `saas.default_org_backfill.{started,completed,failed}` audits.
+- `inspect_default_organization_coverage` management command + the
+  `apps.saas.coverage.compute_default_organization_coverage`
+  selector are the single source of truth.
+- `GET /api/v1/saas/data-coverage/` endpoint mirrors the inspector.
+- Read-only `SaasCoverageCard` on the dashboard.
+
+Hard rules preserved:
+
+- `globalTenantFilteringEnabled` stays `False` for this whole phase.
+- FKs stay nullable.
+- No middleware scopes existing endpoints per tenant yet.
+- No queryset filtering on tenant.
+- WhatsApp env flags untouched.
+
 ## Recommended future phases
 
-- **Phase 6B — Default-org data backfill.** Add nullable `organization` FK to every business model, ship a `python manage.py backfill_default_org_data` command that scopes every existing row to the seeded `nirogidhara` org. NEVER drops or reassigns rows. End-state: every business row has an `organization_id` set; FK is still nullable until 6C confirms zero gaps.
+- **Phase 6B — Default-org data backfill.** ✅ shipped — see above.
 - **Phase 6C — Org-scoped API filtering.** Tenant middleware + queryset filtering across every existing endpoint. Cross-tenant integration tests assert isolation. Make `organization` FK non-nullable. Add `organization` + `branch` context to `AuditEvent`.
 - **Phase 6D — Per-org integration settings.** Move WhatsApp / Meta / Razorpay / PayU / Delhivery / Vapi credentials into encrypted `OrganizationSetting` rows. Per-org WhatsApp automation flags. Per-org Claim Vault.
 - **Phase 6E — SaaS admin panel.** Org create / member invite / plan upgrade endpoints + UI. Billing + subscription tables. Public Stripe / Razorpay subscription webhooks.

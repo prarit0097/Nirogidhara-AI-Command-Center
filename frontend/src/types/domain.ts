@@ -1655,3 +1655,41 @@ export interface SaasFeatureFlagsResponse {
   organization: SaasOrganization | null;
   featureFlags: Record<string, SaasFeatureFlagEntry>;
 }
+
+// ---------- Phase 6B — Default Org Data Coverage ----------
+
+export interface SaasDataCoverageModelRow {
+  model: string;
+  totalRows: number;
+  withOrganization: number;
+  withoutOrganization: number;
+  organizationCoveragePercent: number;
+  hasBranchField: boolean;
+  withBranch: number;
+  withoutBranch: number;
+  branchCoveragePercent: number;
+}
+
+export interface SaasDataCoverageTotals {
+  totalRows: number;
+  totalWithOrganization: number;
+  totalWithoutOrganization: number;
+  totalWithBranch: number;
+  totalWithoutBranch: number;
+  organizationCoveragePercent: number;
+  branchCoveragePercent: number;
+}
+
+export interface SaasDataCoverage {
+  defaultOrganizationExists: boolean;
+  defaultOrganizationCode: string;
+  defaultBranchExists: boolean;
+  defaultBranchCode: string;
+  globalTenantFilteringEnabled: boolean;
+  safeToStartPhase6C: boolean;
+  models: SaasDataCoverageModelRow[];
+  totals: SaasDataCoverageTotals;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}

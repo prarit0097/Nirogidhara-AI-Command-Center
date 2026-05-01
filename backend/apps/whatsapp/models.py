@@ -183,6 +183,16 @@ class WhatsAppConsent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Phase 6B — Default Org Data Backfill (nullable).
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="whatsapp_consents",
+        db_index=True,
+    )
+
     class Meta:
         ordering = ("-updated_at",)
         indexes = (
@@ -258,6 +268,24 @@ class WhatsAppConversation(models.Model):
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Phase 6B — Default Org Data Backfill (nullable).
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="whatsapp_conversations",
+        db_index=True,
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="whatsapp_conversations",
+        db_index=True,
+    )
 
     class Meta:
         ordering = ("-updated_at",)
@@ -363,6 +391,17 @@ class WhatsAppMessage(models.Model):
     read_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Phase 6B — Default Org Data Backfill (nullable). Branch flows
+    # from the parent conversation; not tracked separately here.
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="whatsapp_messages",
+        db_index=True,
+    )
 
     class Meta:
         ordering = ("-created_at",)
@@ -613,6 +652,16 @@ class WhatsAppHandoffToCall(models.Model):
     triggered_at = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
 
+    # Phase 6B — Default Org Data Backfill (nullable).
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="whatsapp_handoffs",
+        db_index=True,
+    )
+
     class Meta:
         ordering = ("-created_at",)
         indexes = (
@@ -685,6 +734,16 @@ class WhatsAppLifecycleEvent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Phase 6B — Default Org Data Backfill (nullable).
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="whatsapp_lifecycle_events",
+        db_index=True,
+    )
+
     class Meta:
         ordering = ("-created_at",)
         indexes = (
@@ -737,6 +796,16 @@ class WhatsAppPilotCohortMember(models.Model):
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Phase 6B — Default Org Data Backfill (nullable).
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="whatsapp_pilot_members",
+        db_index=True,
+    )
 
     class Meta:
         ordering = ("-updated_at",)

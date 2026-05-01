@@ -24,6 +24,16 @@ class AuditEvent(models.Model):
     kind = models.CharField(max_length=64, db_index=True, default="event")
     payload = models.JSONField(default=dict, blank=True)
 
+    # Phase 6B — Default Org Data Backfill (nullable).
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_events",
+        db_index=True,
+    )
+
     class Meta:
         ordering = ("-occurred_at",)
         indexes = (models.Index(fields=("-occurred_at", "kind")),)
