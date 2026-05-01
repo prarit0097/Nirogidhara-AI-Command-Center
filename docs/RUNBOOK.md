@@ -77,14 +77,40 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # 469 tests (Phase 1 → 5C inclusive)
+python -m pytest -q                     # Phase 1 -> 6E inclusive
 
 # Frontend
 cd ../frontend
-npm test                                # 13 vitest tests
+npm test                                # Phase 1 -> 6E vitest tests
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
+
+## Phase 6E SaaS admin diagnostics
+
+Phase 6D org-aware write assignment is **FULL PASS**. Phase 6E adds safe
+SaaS admin/readiness tooling and per-organization integration settings
+metadata only. Runtime providers still use env/config, not DB integration
+settings; raw secrets are rejected and API responses return masked secret
+references only. Per-org runtime provider routing is deferred to Phase 6F.
+Global tenant filtering is still not blanket-enabled, org/branch FKs remain
+nullable, and WhatsApp flags remain untouched/off.
+
+```bash
+cd backend
+python manage.py ensure_default_organization --json
+python manage.py inspect_default_organization_coverage --json
+python manage.py inspect_org_scoped_api_readiness --json
+python manage.py inspect_org_write_path_readiness --json
+python manage.py inspect_saas_admin_readiness --json
+python manage.py inspect_org_integration_settings --json
+```
+
+Expected SaaS posture for Phase 6E: `runtimeUsesPerOrgSettings=false`,
+`globalTenantFilteringEnabled=false`, `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`,
+campaigns/broadcast/lifecycle/call/rescue/RTO/reorder locked/off, and
+`nextAction=ready_for_phase_6f_per_org_runtime_integration_routing_plan`
+when coverage is clean.
 
 ## Phase 3C — Celery scheduler (optional in development)
 

@@ -229,6 +229,9 @@ ICON_BY_KIND: dict[str, str] = {
     "saas.default_org_backfill.started": "play",
     "saas.default_org_backfill.completed": "check-circle",
     "saas.default_org_backfill.failed": "shield-off",
+    # Phase 6E SaaS Admin + Integration Settings.
+    "saas.integration_setting.created": "plug",
+    "saas.integration_setting.updated": "settings",
 }
 
 
@@ -313,6 +316,35 @@ def _on_whatsapp_pilot_member_saved(sender, instance, created, **_):
             "phone_suffix": instance.phone_suffix,
             "consent_verified": instance.consent_verified,
             "created": created,
+        },
+    )
+
+
+@receiver(
+    post_save,
+    sender="saas.OrganizationIntegrationSetting",
+    dispatch_uid="audit.saas_integration_setting_saved",
+)
+def _on_saas_integration_setting_saved(sender, instance, created, **_):
+    action = "created" if created else "updated"
+    write_event(
+        kind=f"saas.integration_setting.{action}",
+        text=(
+            f"SaaS integration setting {instance.provider_type} {action} "
+            f"for {instance.organization.code}"
+        ),
+        tone=AuditEvent.Tone.INFO,
+        organization=instance.organization,
+        payload={
+            "integration_setting_id": instance.id,
+            "organization_id": instance.organization_id,
+            "organization_code": instance.organization.code,
+            "provider_type": instance.provider_type,
+            "display_name": instance.display_name,
+            "status": instance.status,
+            "is_active": instance.is_active,
+            "validation_status": instance.validation_status,
+            "runtime_enabled": False,
         },
     )
 

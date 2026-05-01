@@ -27,6 +27,7 @@ import SettingsPage from "./pages/Settings";
 import WhatsAppTemplatesPage from "./pages/WhatsAppTemplates";
 import WhatsAppInboxPage from "./pages/WhatsAppInbox";
 import WhatsAppMonitoringPage from "./pages/WhatsAppMonitoring";
+import SaasAdminPage from "./pages/SaasAdmin";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,7 @@ const App = () => (
             <Route path="/whatsapp-inbox" element={<WhatsAppInboxPage />} />
             <Route path="/whatsapp-templates" element={<WhatsAppTemplatesPage />} />
             <Route path="/whatsapp-monitoring" element={<WhatsAppMonitoringPage />} />
+            <Route path="/saas-admin" element={<SaasAdminPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />

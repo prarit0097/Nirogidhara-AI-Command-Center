@@ -478,14 +478,19 @@ def test_readiness_command_returns_expected_shape(db):
         "defaultOrganizationExists",
         "defaultBranchExists",
         "writeContextHelpersAvailable",
+        "enforcementMode",
         "auditAutoOrgContextEnabled",
+        "coveredSafeCreatePaths",
         "safeCreatePathsCovered",
         "deferredCreatePaths",
+        "systemGlobalExceptions",
         "modelsWithOrgBranch",
+        "recentUnscopedWritesLast24h",
         "recentRowsWithoutOrganizationLast24h",
         "recentRowsWithoutBranchLast24h",
         "globalTenantFilteringEnabled",
         "safeToStartPhase6E",
+        "safeToStartPhase6F",
         "blockers",
         "warnings",
         "nextAction",
@@ -537,7 +542,8 @@ def test_readiness_safe_to_start_phase6e_when_clean(db):
     report = _run_readiness()
     assert report["recentRowsWithoutOrganizationLast24h"] == 0
     assert report["safeToStartPhase6E"] is True
+    assert report["safeToStartPhase6F"] is True
     assert (
         report["nextAction"]
-        == "ready_for_phase_6e_org_scoped_write_enforcement_plan"
+        == "ready_for_phase_6f_per_org_runtime_integration_routing_plan"
     )

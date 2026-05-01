@@ -154,6 +154,10 @@ backend/apps/whatsapp/management/commands/inspect_whatsapp_customer_pilot.py ←
 backend/apps/whatsapp/management/commands/prepare_whatsapp_customer_pilot_member.py ← creates/reuses Customer + pilot member only; no send
 backend/apps/whatsapp/management/commands/pause_whatsapp_customer_pilot_member.py ← pauses pilot member only; no send
 backend/apps/whatsapp/v1_urls.py          ← `/api/v1/whatsapp/monitoring/{overview,pilot}/` aliases for pilot readiness
+backend/apps/saas/write_context.py        ← Phase 6D/6E org-aware write assignment + safe enforcement helpers
+backend/apps/saas/integration_settings.py ← Phase 6E per-org integration readiness selectors + secret-ref masking; runtime providers still use env/config
+backend/apps/saas/admin_readiness.py      ← Phase 6E SaaS admin overview selector for org/write/integration/safety locks
+frontend/src/pages/SaasAdmin.tsx          ← Phase 6E read-only `/saas-admin`; no provider activation/send controls
 backend/apps/whatsapp/language.py        ← Phase 5C deterministic Hindi/Hinglish/English detection (devanagari ratio + Hinglish marker word list)
 backend/apps/whatsapp/ai_schema.py        ← Phase 5C strict JSON schema + ChatAgentDecision dataclass + BLOCKED_CLAIM_PHRASES list + reply_contains_blocked_phrase()
 backend/apps/whatsapp/discount_policy.py  ← Phase 5C wrapper around apps.orders.discounts: never offer upfront, MIN_OBJECTION_TURNS_BEFORE_OFFER, refusal-rescue trigger, validate_total_discount_cap (50% hard cap)

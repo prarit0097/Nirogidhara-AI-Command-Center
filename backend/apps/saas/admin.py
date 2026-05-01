@@ -6,6 +6,7 @@ from .models import (
     Branch,
     Organization,
     OrganizationFeatureFlag,
+    OrganizationIntegrationSetting,
     OrganizationMembership,
     OrganizationSetting,
 )
@@ -49,3 +50,24 @@ class OrganizationSettingAdmin(admin.ModelAdmin):
     )
     search_fields = ("key",)
     list_filter = ("is_sensitive", "organization")
+
+
+@admin.register(OrganizationIntegrationSetting)
+class OrganizationIntegrationSettingAdmin(admin.ModelAdmin):
+    list_display = (
+        "organization",
+        "provider_type",
+        "display_name",
+        "status",
+        "is_active",
+        "validation_status",
+        "updated_at",
+    )
+    search_fields = ("display_name", "provider_type")
+    list_filter = (
+        "provider_type",
+        "status",
+        "is_active",
+        "validation_status",
+        "organization",
+    )

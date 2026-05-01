@@ -6,6 +6,18 @@
 
 ---
 
+## Phase 6E SaaS integration-settings note
+
+Phase 6D org-aware write assignment is **FULL PASS**. Phase 6E adds
+`OrganizationIntegrationSetting` as a readiness layer for per-org WhatsApp
+Meta and other providers, but WhatsApp runtime still reads the existing
+env/config values. No raw Meta tokens or app secrets are stored or exposed;
+only masked `ENV:` / `VAULT:` secret references appear in APIs and the
+`/saas-admin` panel. Per-org WhatsApp provider routing is deferred to **Phase
+6F Per-Org Runtime Integration Routing Plan**. WhatsApp env flags remain
+untouched: auto-reply stays OFF, limited Meta test mode stays ON, and
+campaigns/broadcast/lifecycle/call/rescue/RTO/reorder remain locked/off.
+
 ## A. Executive summary
 
 ### What WhatsApp-sales-dashboard accelerates for Nirogidhara

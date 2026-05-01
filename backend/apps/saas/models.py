@@ -33,7 +33,48 @@ Hard rules:
 from __future__ import annotations
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
+
+
+_SENSITIVE_CONFIG_KEY_PARTS = (
+    "secret",
+    "token",
+    "password",
+    "api_key",
+    "access_key",
+    "private_key",
+    "client_secret",
+    "webhook_secret",
+    "salt",
+)
+
+
+def _contains_sensitive_config_key(value) -> bool:
+    """Return True when a nested config payload tries to hold secrets."""
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_l = str(key).lower()
+            if any(part in key_l for part in _SENSITIVE_CONFIG_KEY_PARTS):
+                return True
+            if _contains_sensitive_config_key(nested):
+                return True
+    elif isinstance(value, list):
+        return any(_contains_sensitive_config_key(item) for item in value)
+    return False
+
+
+def _secret_refs_are_safe_refs(value) -> bool:
+    """Secret refs may point to ENV:/VAULT: only; raw values are refused."""
+    if value in (None, "", {}, []):
+        return True
+    if isinstance(value, str):
+        return value.startswith("ENV:") or value.startswith("VAULT:")
+    if isinstance(value, dict):
+        return all(_secret_refs_are_safe_refs(item) for item in value.values())
+    if isinstance(value, list):
+        return all(_secret_refs_are_safe_refs(item) for item in value)
+    return False
 
 
 class Organization(models.Model):
@@ -228,3 +269,105 @@ class OrganizationSetting(models.Model):
     def __str__(self) -> str:  # pragma: no cover
         suffix = " [sensitive]" if self.is_sensitive else ""
         return f"{self.organization.code}/{self.key}{suffix}"
+
+
+class OrganizationIntegrationSetting(models.Model):
+    """Per-org provider readiness settings.
+
+    Phase 6E intentionally does not route runtime providers through this
+    table. It stores non-sensitive config plus secret references only
+    (for example ``ENV:OPENAI_API_KEY`` or ``VAULT:tenant/openai``).
+    """
+
+    class ProviderType(models.TextChoices):
+        WHATSAPP_META = "whatsapp_meta", "WhatsApp Meta"
+        RAZORPAY = "razorpay", "Razorpay"
+        PAYU = "payu", "PayU"
+        DELHIVERY = "delhivery", "Delhivery"
+        VAPI = "vapi", "Vapi"
+        OPENAI = "openai", "OpenAI"
+        OTHER = "other", "Other"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        CONFIGURED = "configured", "Configured"
+        ACTIVE = "active", "Active"
+        PAUSED = "paused", "Paused"
+        INVALID = "invalid", "Invalid"
+
+    class ValidationStatus(models.TextChoices):
+        NOT_CHECKED = "not_checked", "Not checked"
+        VALID = "valid", "Valid"
+        INVALID = "invalid", "Invalid"
+        WARNING = "warning", "Warning"
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="integration_settings",
+    )
+    provider_type = models.CharField(
+        max_length=32,
+        choices=ProviderType.choices,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+    display_name = models.CharField(max_length=120, blank=True, default="")
+    config = models.JSONField(default=dict, blank=True)
+    secret_refs = models.JSONField(default=dict, blank=True)
+    is_active = models.BooleanField(default=False)
+    last_validated_at = models.DateTimeField(null=True, blank=True)
+    validation_status = models.CharField(
+        max_length=16,
+        choices=ValidationStatus.choices,
+        default=ValidationStatus.NOT_CHECKED,
+    )
+    validation_message = models.TextField(blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("organization", "provider_type", "display_name")
+        constraints = (
+            models.UniqueConstraint(
+                fields=("organization", "provider_type", "display_name"),
+                name="saas_integration_unique_org_provider_name",
+            ),
+        )
+        indexes = (
+            models.Index(fields=("organization", "provider_type")),
+            models.Index(fields=("status", "validation_status")),
+        )
+
+    def clean(self):
+        super().clean()
+        if _contains_sensitive_config_key(self.config or {}):
+            raise ValidationError(
+                {
+                    "config": (
+                        "Sensitive values are not allowed in config. "
+                        "Store only ENV:/VAULT: references in secret_refs."
+                    )
+                }
+            )
+        if not _secret_refs_are_safe_refs(self.secret_refs or {}):
+            raise ValidationError(
+                {
+                    "secret_refs": (
+                        "Secret references must start with ENV: or VAULT:."
+                    )
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:  # pragma: no cover
+        name = self.display_name or self.provider_type
+        return f"{self.organization.code}/{name} ({self.status})"

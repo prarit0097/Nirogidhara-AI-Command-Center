@@ -1106,7 +1106,24 @@ export const SAAS_WRITE_PATH_READINESS: Record<string, unknown> = {
   defaultOrganizationExists: true,
   defaultBranchExists: true,
   writeContextHelpersAvailable: true,
+  enforcementMode: "safe_enforced",
   auditAutoOrgContextEnabled: true,
+  coveredSafeCreatePaths: [
+    "crm.Lead.create",
+    "crm.Customer.create",
+    "orders.Order.create",
+    "orders.DiscountOfferLog.create",
+    "payments.Payment.create",
+    "shipments.Shipment.create",
+    "calls.Call.create",
+    "whatsapp.WhatsAppConsent.create",
+    "whatsapp.WhatsAppConversation.create",
+    "whatsapp.WhatsAppMessage.create",
+    "whatsapp.WhatsAppLifecycleEvent.create",
+    "whatsapp.WhatsAppHandoffToCall.create",
+    "whatsapp.WhatsAppPilotCohortMember.create",
+    "audit.AuditEvent.write_event (via Phase 6C auto-org)",
+  ],
   safeCreatePathsCovered: [
     "crm.Lead.create",
     "crm.Customer.create",
@@ -1139,6 +1156,14 @@ export const SAAS_WRITE_PATH_READINESS: Record<string, unknown> = {
     "shipments.WorkflowStep.create (child of shipment)",
     "shipments.RescueAttempt.create (child of shipment)",
   ],
+  systemGlobalExceptions: [
+    "whatsapp.WhatsAppConnection.create (system provider config)",
+    "whatsapp.WhatsAppTemplate.create (Meta registry)",
+    "crm.MetaLeadEvent.create (webhook ingest log)",
+    "whatsapp.WhatsAppWebhookEvent.create (webhook ingest log)",
+    "payments.WebhookEvent.create (webhook ingest log)",
+    "calls.WebhookEvent.create (webhook ingest log)",
+  ],
   modelsWithOrgBranch: [
     "crm.Lead",
     "crm.Customer",
@@ -1154,13 +1179,21 @@ export const SAAS_WRITE_PATH_READINESS: Record<string, unknown> = {
     "whatsapp.WhatsAppHandoffToCall",
     "whatsapp.WhatsAppPilotCohortMember",
   ],
+  recentUnscopedWritesLast24h: 0,
+  recentUnscopedWriteDetails: {
+    windowHours: 24,
+    totalWithoutOrganization: 0,
+    totalWithoutBranch: 0,
+    rows: [],
+  },
   recentRowsWithoutOrganizationLast24h: 0,
   recentRowsWithoutBranchLast24h: 0,
   globalTenantFilteringEnabled: false,
   safeToStartPhase6E: true,
+  safeToStartPhase6F: true,
   blockers: [],
   warnings: [],
-  nextAction: "ready_for_phase_6e_org_scoped_write_enforcement_plan",
+  nextAction: "ready_for_phase_6f_per_org_runtime_integration_routing_plan",
 };
 
 export const SAAS_ORG_SCOPE_READINESS: Record<string, unknown> = {
@@ -1195,4 +1228,108 @@ export const SAAS_ORG_SCOPE_READINESS: Record<string, unknown> = {
   blockers: [],
   warnings: [],
   nextAction: "ready_for_phase_6d_write_path_org_assignment",
+};
+
+const SAAS_INTEGRATION_PROVIDERS = [
+  "whatsapp_meta",
+  "razorpay",
+  "payu",
+  "delhivery",
+  "vapi",
+  "openai",
+] as const;
+
+export const SAAS_INTEGRATION_SETTINGS: Record<string, unknown> = {
+  organization: SAAS_DEFAULT_ORG,
+  settings: [],
+  runtimeUsesPerOrgSettings: false,
+};
+
+export const SAAS_INTEGRATION_READINESS: Record<string, unknown> = {
+  organization: {
+    id: 1,
+    code: "nirogidhara",
+    name: "Nirogidhara Private Limited",
+  },
+  providers: SAAS_INTEGRATION_PROVIDERS.map((providerType) => ({
+    providerType,
+    providerLabel:
+      providerType === "whatsapp_meta"
+        ? "WhatsApp Meta"
+        : providerType.charAt(0).toUpperCase() + providerType.slice(1),
+    status: "missing",
+    configured: false,
+    isActive: false,
+    secretRefsPresent: false,
+    missingSecretRefs: ["secret_ref"],
+    validationStatus: "not_checked",
+    validationMessage: "",
+    runtimeEnabled: false,
+    runtimeUsesPerOrgSettings: false,
+    setting: null,
+    warnings: ["No per-org integration setting configured."],
+    nextAction: "configure_secret_refs_before_phase_6f",
+  })),
+  providersConfigured: [],
+  providersMissing: SAAS_INTEGRATION_PROVIDERS,
+  secretRefsMissing: SAAS_INTEGRATION_PROVIDERS,
+  integrationSettingsCount: 0,
+  runtimeUsesPerOrgSettings: false,
+  safeToStartPhase6F: true,
+  warnings: [
+    "Per-org provider routing is deferred; runtime still uses env/config.",
+  ],
+  nextAction: "phase_6f_per_org_runtime_integration_routing_plan",
+};
+
+export const SAAS_ADMIN_OVERVIEW: Record<string, unknown> = {
+  defaultOrganizationExists: true,
+  defaultBranchExists: true,
+  organization: {
+    ...SAAS_DEFAULT_ORG,
+    membershipSummary: { total: 1, active: 1, byRole: { owner: 1 } },
+    featureFlags: {},
+    integrationSettingsCount: 0,
+  },
+  orgScopeReadiness: SAAS_ORG_SCOPE_READINESS,
+  writePathReadiness: SAAS_WRITE_PATH_READINESS,
+  integrationReadiness: SAAS_INTEGRATION_READINESS,
+  integrationSettings: [],
+  integrationSettingsCount: 0,
+  providersConfigured: [],
+  providersMissing: SAAS_INTEGRATION_PROVIDERS,
+  secretRefsMissing: SAAS_INTEGRATION_PROVIDERS,
+  safetyLocks: {
+    whatsappAutoReplyEnabled: false,
+    whatsappAutoReplyOff: true,
+    limitedTestMode: true,
+    campaignsLocked: true,
+    broadcastLocked: true,
+    callHandoffEnabled: false,
+    lifecycleAutomationEnabled: false,
+    rescueDiscountEnabled: false,
+    rtoRescueEnabled: false,
+    reorderDay20Enabled: false,
+    runtimeUsesPerOrgSettings: false,
+  },
+  runtimeUsesPerOrgSettings: false,
+  auditTimeline: [],
+  safeToStartPhase6F: true,
+  blockers: [],
+  warnings: [
+    "Per-org provider routing is deferred; runtime still uses env/config.",
+  ],
+  nextAction: "phase_6f_per_org_runtime_integration_routing_plan",
+};
+
+export const SAAS_ADMIN_ORGANIZATIONS: Record<string, unknown> = {
+  count: 1,
+  organizations: [
+    {
+      ...SAAS_DEFAULT_ORG,
+      membershipSummary: { total: 1, active: 1, byRole: { owner: 1 } },
+      featureFlags: {},
+      integrationSettingsCount: 0,
+    },
+  ],
 };

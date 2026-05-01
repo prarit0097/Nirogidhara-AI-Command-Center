@@ -133,8 +133,12 @@ import type {
   WhatsAppMonitoringPilot,
   WhatsAppMonitoringUnexpectedOutbound,
   SaasCurrentOrganization,
+  SaasAdminOrganizationsResponse,
+  SaasAdminOverview,
   SaasDataCoverage,
   SaasFeatureFlagsResponse,
+  SaasIntegrationReadiness,
+  SaasIntegrationSettingsResponse,
   SaasMyOrganizations,
   SaasOrgScopeReadiness,
   SaasWritePathReadiness,
@@ -1074,6 +1078,30 @@ export const api = {
     safeFetch<SaasWritePathReadiness>(
       "/v1/saas/write-path-readiness/",
       () => M.SAAS_WRITE_PATH_READINESS as SaasWritePathReadiness,
+    ),
+
+  // ---------- Phase 6E — SaaS Admin + Integration Settings ----------
+
+  getSaasAdminOverview: () =>
+    safeFetch<SaasAdminOverview>(
+      "/v1/saas/admin/overview/",
+      () => M.SAAS_ADMIN_OVERVIEW as SaasAdminOverview,
+    ),
+  getSaasAdminOrganizations: () =>
+    safeFetch<SaasAdminOrganizationsResponse>(
+      "/v1/saas/admin/organizations/",
+      () => M.SAAS_ADMIN_ORGANIZATIONS as SaasAdminOrganizationsResponse,
+    ),
+  getSaasIntegrationSettings: () =>
+    safeFetch<SaasIntegrationSettingsResponse>(
+      "/v1/saas/admin/integration-settings/",
+      () =>
+        M.SAAS_INTEGRATION_SETTINGS as SaasIntegrationSettingsResponse,
+    ),
+  getSaasIntegrationReadiness: () =>
+    safeFetch<SaasIntegrationReadiness>(
+      "/v1/saas/admin/integration-readiness/",
+      () => M.SAAS_INTEGRATION_READINESS as SaasIntegrationReadiness,
     ),
 };
 

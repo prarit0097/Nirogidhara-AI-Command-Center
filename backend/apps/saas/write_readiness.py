@@ -13,6 +13,7 @@ from django.utils import timezone
 from .context import get_default_branch, get_default_organization
 from .coverage import compute_default_organization_coverage
 from .signals import ORG_AUTO_ASSIGN_MODELS
+from .write_context import get_recent_unscoped_writes
 
 
 # Create paths covered by the Phase 6D pre_save signal. Every entry
@@ -54,6 +55,16 @@ _DEFERRED_CREATE_PATHS: tuple[str, ...] = (
     "payments.WebhookEvent.create (webhook ingest log)",
     "shipments.WorkflowStep.create (child of shipment)",
     "shipments.RescueAttempt.create (child of shipment)",
+)
+
+
+_SYSTEM_GLOBAL_EXCEPTIONS: tuple[str, ...] = (
+    "whatsapp.WhatsAppConnection.create (system provider config)",
+    "whatsapp.WhatsAppTemplate.create (Meta registry)",
+    "crm.MetaLeadEvent.create (webhook ingest log)",
+    "whatsapp.WhatsAppWebhookEvent.create (webhook ingest log)",
+    "payments.WebhookEvent.create (webhook ingest log)",
+    "calls.WebhookEvent.create (webhook ingest log)",
 )
 
 
@@ -103,9 +114,9 @@ def compute_org_write_path_readiness() -> dict[str, Any]:
     org = get_default_organization()
     branch = get_default_branch()
 
-    missing_org_24h, missing_branch_24h = _count_recent_missing(
-        window_hours=24
-    )
+    recent_unscoped = get_recent_unscoped_writes(hours=24)
+    missing_org_24h = recent_unscoped["totalWithoutOrganization"]
+    missing_branch_24h = recent_unscoped["totalWithoutBranch"]
 
     models_with_org_branch = [
         f"{app}.{name}" for app, name in ORG_AUTO_ASSIGN_MODELS
@@ -115,14 +126,20 @@ def compute_org_write_path_readiness() -> dict[str, Any]:
         "defaultOrganizationExists": coverage["defaultOrganizationExists"],
         "defaultBranchExists": coverage["defaultBranchExists"],
         "writeContextHelpersAvailable": True,
+        "enforcementMode": "safe_enforced",
         "auditAutoOrgContextEnabled": True,
+        "coveredSafeCreatePaths": list(_SAFE_CREATE_PATHS),
         "safeCreatePathsCovered": list(_SAFE_CREATE_PATHS),
         "deferredCreatePaths": list(_DEFERRED_CREATE_PATHS),
+        "systemGlobalExceptions": list(_SYSTEM_GLOBAL_EXCEPTIONS),
         "modelsWithOrgBranch": models_with_org_branch,
+        "recentUnscopedWritesLast24h": missing_org_24h,
+        "recentUnscopedWriteDetails": recent_unscoped,
         "recentRowsWithoutOrganizationLast24h": missing_org_24h,
         "recentRowsWithoutBranchLast24h": missing_branch_24h,
         "globalTenantFilteringEnabled": False,
         "safeToStartPhase6E": False,
+        "safeToStartPhase6F": False,
         "blockers": [],
         "warnings": [],
         "nextAction": "",
@@ -162,6 +179,7 @@ def compute_org_write_path_readiness() -> dict[str, Any]:
         report["safeToStartPhase6E"] = (
             org is not None and branch is not None
         )
+        report["safeToStartPhase6F"] = report["safeToStartPhase6E"]
 
     if report["blockers"]:
         report["nextAction"] = "fix_write_path_assignment_gaps"
@@ -169,9 +187,9 @@ def compute_org_write_path_readiness() -> dict[str, Any]:
         report["nextAction"] = "run_default_org_backfill_again"
     elif report["recentRowsWithoutOrganizationLast24h"] > 0:
         report["nextAction"] = "fix_write_path_assignment_gaps"
-    elif report["safeToStartPhase6E"]:
+    elif report["safeToStartPhase6F"]:
         report["nextAction"] = (
-            "ready_for_phase_6e_org_scoped_write_enforcement_plan"
+            "ready_for_phase_6f_per_org_runtime_integration_routing_plan"
         )
     else:
         report["nextAction"] = "run_default_org_backfill_again"

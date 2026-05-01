@@ -31,6 +31,16 @@ Earlier phases unchanged: Phase 5A shipped the WhatsApp Live Sender Foundation (
 
 GitHub: https://github.com/prarit0097/Nirogidhara-AI-Command-Center
 
+**Phase 6E note:** Phase 6D org-aware write assignment is **FULL PASS**.
+Phase 6E adds the safe SaaS admin/integration-settings foundation:
+`OrganizationIntegrationSetting`, masked secret-ref readiness selectors,
+admin SaaS overview/integration APIs, diagnostics commands, and read-only
+`/saas-admin`. Runtime providers still use env/config rather than DB settings;
+raw secrets are rejected and never exposed; per-org runtime provider routing is
+deferred to **Phase 6F Per-Org Runtime Integration Routing Plan**. Global
+tenant filtering is still not blanket-enabled and WhatsApp flags remain
+untouched/off.
+
 ---
 
 ## 1. Working agreement (binding rule)
@@ -284,9 +294,13 @@ git push origin main
 | Phase 6C frontend readiness card | `frontend/src/components/OrgScopeReadinessCard.tsx` rendered on `frontend/src/pages/Index.tsx` — read-only audit-auto-org / global-filter / scoped/unscoped counts / nextAction. No mutation controls. |
 | Phase 6D write context helpers | `backend/apps/saas/write_context.py` — `resolve_write_organization`, `resolve_write_branch`, `apply_org_branch`, `get_parent_org_branch`, `assign_org_branch_from_parent`, `assign_org_branch_from_first_parent`. Pure helpers; never persist. |
 | Phase 6D auto-assign signal | `backend/apps/saas/signals.py` — `auto_assign_org_branch` connected via `apps.SaasConfig.ready` to 13 business models. Fires only on create + when FK is NULL. Inherits from parent chain, falls back to default org / branch. Silent on errors. |
-| Phase 6D readiness command | `python manage.py inspect_org_write_path_readiness [--json]` + `backend/apps/saas/write_readiness.compute_org_write_path_readiness`. Returns covered/deferred create paths, recent missing-org row counts, `safeToStartPhase6E`. |
+| Phase 6D/6E readiness command | `python manage.py inspect_org_write_path_readiness [--json]` + `backend/apps/saas/write_readiness.compute_org_write_path_readiness`. Returns covered/deferred create paths, system/global exceptions, recent unscoped writes, `enforcementMode`, `safeToStartPhase6E`, and `safeToStartPhase6F`. |
 | Phase 6D readiness API | `GET /api/v1/saas/write-path-readiness/` (auth required, read-only). |
 | Phase 6D frontend readiness card | `frontend/src/components/WritePathReadinessCard.tsx` rendered on `frontend/src/pages/Index.tsx` — read-only auto-assign / covered-paths / missing-row counts / nextAction. No mutation controls. |
+| Phase 6E integration setting model | `backend/apps/saas/models.py` (`OrganizationIntegrationSetting`) — per-org provider readiness only; non-sensitive config plus `ENV:` / `VAULT:` secret refs. Runtime providers still use env/config. |
+| Phase 6E integration selectors | `backend/apps/saas/integration_settings.py` — provider readiness and secret-ref masking. APIs return masked refs/booleans only. |
+| Phase 6E SaaS admin selectors/API | `backend/apps/saas/admin_readiness.py`, `backend/apps/saas/views.py`, `backend/apps/saas/urls.py` — admin overview, organizations, integration settings, integration readiness. |
+| Phase 6E SaaS Admin Panel | `frontend/src/pages/SaasAdmin.tsx` at `/saas-admin` — read-only org scope, write readiness, integration readiness, safety locks, SaaS audit events; no send/enable/provider-activation controls. |
 | Reward/Penalty engine (Phase 4B) | `backend/apps/rewards/engine.py` |
 | RewardPenaltyEvent model | `backend/apps/rewards/models.py` |
 | Reward/Penalty Celery task | `backend/apps/rewards/tasks.py` |

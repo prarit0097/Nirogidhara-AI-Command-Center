@@ -18,9 +18,11 @@ LOCKED rules for this phase:
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Optional
 
 from django.db.models import Model
+from django.utils import timezone
 
 from .context import (
     get_default_branch,
@@ -32,6 +34,10 @@ from .context import (
     user_has_org_access,
 )
 from .models import Branch, Organization
+
+
+class OrgWriteAccessError(PermissionError):
+    """Raised when a user tries to write into an org they cannot access."""
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +171,91 @@ def apply_org_branch(
     return instance
 
 
+def validate_org_write_access(user, organization: Optional[Organization]) -> bool:
+    """Validate that ``user`` may write into ``organization``.
+
+    Internal/system creates continue to work: no user or no org means the
+    caller is not denied here. Authenticated users with no org access are
+    blocked so safe create paths can opt into stricter enforcement.
+    """
+    if organization is None:
+        return True
+    if user is None or not getattr(user, "is_authenticated", False):
+        return True
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        return True
+    if user_has_org_access(user, organization):
+        return True
+    raise OrgWriteAccessError(
+        f"User {getattr(user, 'id', None)} cannot write to "
+        f"organization {organization.id}."
+    )
+
+
+def _is_system_global_exception(instance: Model) -> bool:
+    return bool(getattr(instance, "_saas_system_global", False))
+
+
+def ensure_org_branch_before_save(
+    instance: Model,
+    request=None,
+    user=None,
+    parent=None,
+) -> Model:
+    """Fill org/branch before a safe create save without overwriting.
+
+    Parent context wins, then request/user/default fallback. The helper
+    never saves and never changes an already-set org/branch.
+    """
+    if not _has_field(instance, "organization"):
+        return instance
+    if _is_system_global_exception(instance):
+        return instance
+
+    if parent is not None:
+        assign_org_branch_from_parent(instance, parent)
+    else:
+        assign_org_branch_from_first_parent(instance)
+
+    apply_org_branch(instance, request=request, user=user)
+    validate_org_write_access(user, getattr(instance, "organization", None))
+    return instance
+
+
+def enforce_org_on_create(
+    instance: Model,
+    request=None,
+    user=None,
+    parent=None,
+) -> Model:
+    """Strict wrapper for Phase 6E safe create paths.
+
+    The nullable DB schema stays unchanged. This helper enforces org
+    presence only when explicitly invoked by a safe path, with default
+    org fallback preserving current single-tenant production behavior.
+    """
+    if not _has_field(instance, "organization"):
+        return instance
+    state = getattr(instance, "_state", None)
+    if state is not None and not getattr(state, "adding", True):
+        validate_org_write_access(user, getattr(instance, "organization", None))
+        return instance
+    if _is_system_global_exception(instance):
+        return instance
+
+    ensure_org_branch_before_save(
+        instance,
+        request=request,
+        user=user,
+        parent=parent,
+    )
+    if getattr(instance, "organization_id", None) is None:
+        raise OrgWriteAccessError(
+            f"{instance._meta.label} cannot be created without organization."
+        )
+    return instance
+
+
 # Common parent attribute names ordered by preference for inheritance.
 _PARENT_INHERITANCE_ATTRS: tuple[str, ...] = (
     "conversation",
@@ -284,11 +375,74 @@ def assign_org_branch_from_first_parent(
     return child_instance
 
 
+def _resolve_model(app_label: str, model_name: str):
+    from django.apps import apps as django_apps
+
+    try:
+        return django_apps.get_model(app_label, model_name)
+    except LookupError:
+        return None
+
+
+def get_recent_unscoped_writes(hours: int = 24) -> dict:
+    """Count recent safe-path rows that still lack org/branch context."""
+    from .signals import ORG_AUTO_ASSIGN_MODELS
+
+    since = timezone.now() - timedelta(hours=hours)
+    rows: list[dict] = []
+    total_without_org = 0
+    total_without_branch = 0
+
+    for app_label, model_name in ORG_AUTO_ASSIGN_MODELS:
+        model = _resolve_model(app_label, model_name)
+        if model is None:
+            continue
+        try:
+            qs = model.objects.filter(created_at__gte=since)
+        except Exception:  # noqa: BLE001
+            continue
+
+        without_org = 0
+        without_branch = 0
+        try:
+            without_org = qs.filter(organization__isnull=True).count()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            model._meta.get_field("branch")
+            without_branch = qs.filter(branch__isnull=True).count()
+        except Exception:  # noqa: BLE001
+            pass
+
+        total_without_org += without_org
+        total_without_branch += without_branch
+        if without_org or without_branch:
+            rows.append(
+                {
+                    "model": f"{app_label}.{model_name}",
+                    "withoutOrganization": without_org,
+                    "withoutBranch": without_branch,
+                }
+            )
+
+    return {
+        "windowHours": hours,
+        "totalWithoutOrganization": total_without_org,
+        "totalWithoutBranch": total_without_branch,
+        "rows": rows,
+    }
+
+
 __all__ = (
+    "OrgWriteAccessError",
     "resolve_write_organization",
     "resolve_write_branch",
     "apply_org_branch",
+    "validate_org_write_access",
+    "ensure_org_branch_before_save",
+    "enforce_org_on_create",
     "get_parent_org_branch",
     "assign_org_branch_from_parent",
     "assign_org_branch_from_first_parent",
+    "get_recent_unscoped_writes",
 )

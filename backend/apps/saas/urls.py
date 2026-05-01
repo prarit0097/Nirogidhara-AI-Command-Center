@@ -8,6 +8,12 @@ from .views import (
     FeatureFlagsView,
     MyOrganizationsView,
     OrgScopeReadinessView,
+    SaasAdminOrganizationDetailView,
+    SaasAdminOrganizationsView,
+    SaasAdminOverviewView,
+    SaasIntegrationReadinessView,
+    SaasIntegrationSettingDetailView,
+    SaasIntegrationSettingsView,
     WritePathReadinessView,
 )
 
@@ -42,5 +48,35 @@ urlpatterns = [
         "write-path-readiness/",
         WritePathReadinessView.as_view(),
         name="saas-write-path-readiness",
+    ),
+    path(
+        "admin/overview/",
+        SaasAdminOverviewView.as_view(),
+        name="saas-admin-overview",
+    ),
+    path(
+        "admin/organizations/",
+        SaasAdminOrganizationsView.as_view(),
+        name="saas-admin-organizations",
+    ),
+    path(
+        "admin/organizations/<int:organization_id>/",
+        SaasAdminOrganizationDetailView.as_view(),
+        name="saas-admin-organization-detail",
+    ),
+    path(
+        "admin/integration-settings/",
+        SaasIntegrationSettingsView.as_view(),
+        name="saas-admin-integration-settings",
+    ),
+    path(
+        "admin/integration-settings/<int:setting_id>/",
+        SaasIntegrationSettingDetailView.as_view(),
+        name="saas-admin-integration-setting-detail",
+    ),
+    path(
+        "admin/integration-readiness/",
+        SaasIntegrationReadinessView.as_view(),
+        name="saas-admin-integration-readiness",
     ),
 ]

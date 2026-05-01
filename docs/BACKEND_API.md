@@ -529,6 +529,38 @@ python manage.py run_reorder_day20_sweep          # Day-20 reorder sweep
 python manage.py run_reorder_day20_sweep --dry-run
 ```
 
+## SaaS Admin + Integration Settings (Phase 6E)
+
+Phase 6D org-aware write assignment is complete and remains nullable /
+single-tenant-safe. Phase 6E adds a future SaaS control surface without
+switching runtime provider routing away from env/config.
+
+| Method | Endpoint | Permission | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/admin/overview/` | staff / superuser / global admin / director | Read-only SaaS admin overview: active default org, org-scope readiness, write-path readiness, integration readiness, safety locks, and SaaS audit timeline. |
+| GET | `/api/v1/saas/admin/organizations/` | same | Organization list with membership summary, feature flags, and integration-setting counts. |
+| GET | `/api/v1/saas/admin/organizations/{id}/` | same | Single organization detail plus integration readiness. |
+| GET / POST | `/api/v1/saas/admin/integration-settings/` | same | List or create per-org integration setting rows. Create accepts non-sensitive `config` and `secretRefs` only. |
+| PATCH | `/api/v1/saas/admin/integration-settings/{id}/` | same | Update admin-safe integration setting metadata/config/secret refs; does not call or activate any provider. |
+| GET | `/api/v1/saas/admin/integration-readiness/` | same | Provider readiness for WhatsApp Meta, Razorpay, PayU, Delhivery, Vapi, and OpenAI. |
+| GET | `/api/v1/saas/write-path-readiness/` | authenticated | Phase 6E-hardened write-path report with `enforcementMode`, covered/deferred paths, recent unscoped writes, system/global exceptions, and `safeToStartPhase6F`. |
+| GET | `/api/v1/saas/org-scope-readiness/` | authenticated | Existing Phase 6C org-scope readiness. |
+
+`OrganizationIntegrationSetting` stores only non-sensitive config and secret
+references such as `ENV:META_WA_ACCESS_TOKEN` or `VAULT:path/to/secret`.
+APIs return masked references/booleans only, never raw values. Runtime
+providers still read the existing env/config settings in Phase 6E;
+per-org runtime routing is deferred to Phase 6F. WhatsApp flags remain
+untouched and global tenant filtering is still not blanket-enabled.
+
+Diagnostic commands:
+
+```bash
+python manage.py inspect_saas_admin_readiness --json
+python manage.py inspect_org_integration_settings --json
+python manage.py inspect_org_write_path_readiness --json
+```
+
 ### Permissions
 
 `apps/accounts/permissions.py` exposes:

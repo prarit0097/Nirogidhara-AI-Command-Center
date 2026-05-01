@@ -920,6 +920,36 @@ Hard rules preserved:
 - Business-state status logic untouched.
 - WhatsApp env flags untouched.
 
+## Phase 6E — SaaS Admin + Integration Settings Foundation ✅ shipped
+
+What landed:
+
+- `OrganizationIntegrationSetting` stores per-org provider readiness for
+  WhatsApp Meta, Razorpay, PayU, Delhivery, Vapi, OpenAI, and `other`.
+- Only non-sensitive `config` and `ENV:` / `VAULT:` `secret_refs` are allowed.
+  Raw secret values are rejected and never returned by APIs.
+- `apps.saas.integration_settings` masks secret refs and computes provider
+  readiness. Runtime providers still use env/config exactly as before.
+- Admin-protected APIs expose SaaS overview, organizations, integration
+  settings, integration readiness, org-scope readiness, and write-path
+  readiness. Safe integration-setting create/update is audit logged, but does
+  not activate any provider or call external APIs.
+- Frontend `/saas-admin` renders organization overview, org/write readiness,
+  integration readiness, safety locks, and SaaS audit events with no send,
+  enable, campaign, or provider-activation buttons.
+- `inspect_saas_admin_readiness --json` and
+  `inspect_org_integration_settings --json` provide deploy diagnostics.
+
+Hard rules preserved:
+
+- Phase 6D org-aware write assignment is **FULL PASS**.
+- Runtime providers still read env/config; per-org runtime provider routing is
+  deferred to **Phase 6F Per-Org Runtime Integration Routing Plan**.
+- `globalTenantFilteringEnabled` stays `False`; no blanket tenant middleware.
+- Organization/branch FKs stay nullable.
+- WhatsApp flags remain untouched/off; campaigns/broadcast/lifecycle/call/
+  rescue/RTO/reorder remain locked.
+
 ## Recommended future phases
 
 - **Phase 6B — Default-org data backfill.** ✅ shipped — see above.

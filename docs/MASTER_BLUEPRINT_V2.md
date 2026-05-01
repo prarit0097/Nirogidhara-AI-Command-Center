@@ -48,6 +48,14 @@ Reward and penalty are calculated against **delivered profitable orders**, not o
 
 ## 2. Current Production Reality
 
+Phase 6E SaaS note: Phase 6D org-aware write assignment is **FULL PASS**.
+Phase 6E adds safe SaaS admin/readiness APIs, per-organization integration
+settings metadata, and the read-only `/saas-admin` panel. Runtime providers
+still use env/config, not DB integration settings; raw secrets are neither
+stored nor exposed; per-org runtime provider routing is deferred to **Phase
+6F Per-Org Runtime Integration Routing Plan**. Global tenant filtering remains
+not blanket-enabled and WhatsApp flags remain untouched/off.
+
 | Item | Value |
 | --- | --- |
 | Live URL | https://ai.nirogidhara.com |

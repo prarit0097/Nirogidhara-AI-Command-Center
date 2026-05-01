@@ -1721,15 +1721,160 @@ export interface SaasWritePathReadiness {
   defaultOrganizationExists: boolean;
   defaultBranchExists: boolean;
   writeContextHelpersAvailable: boolean;
+  enforcementMode?: "advisory" | "safe_enforced";
   auditAutoOrgContextEnabled: boolean;
+  coveredSafeCreatePaths?: string[];
   safeCreatePathsCovered: string[];
   deferredCreatePaths: string[];
+  systemGlobalExceptions?: string[];
   modelsWithOrgBranch: string[];
+  recentUnscopedWritesLast24h?: number;
+  recentUnscopedWriteDetails?: {
+    windowHours: number;
+    totalWithoutOrganization: number;
+    totalWithoutBranch: number;
+    rows: Array<{
+      model: string;
+      withoutOrganization: number;
+      withoutBranch: number;
+    }>;
+  };
   recentRowsWithoutOrganizationLast24h: number;
   recentRowsWithoutBranchLast24h: number;
   globalTenantFilteringEnabled: boolean;
   safeToStartPhase6E: boolean;
+  safeToStartPhase6F?: boolean;
   blockers: string[];
   warnings: string[];
   nextAction: string;
+}
+
+// ---------- Phase 6E — SaaS Admin + Integration Settings ----------
+
+export type SaasIntegrationProviderType =
+  | "whatsapp_meta"
+  | "razorpay"
+  | "payu"
+  | "delhivery"
+  | "vapi"
+  | "openai"
+  | "other";
+
+export interface SaasIntegrationSetting {
+  id: number;
+  organizationId: number;
+  organizationCode: string;
+  providerType: SaasIntegrationProviderType;
+  providerLabel: string;
+  status: "draft" | "configured" | "active" | "paused" | "invalid";
+  displayName: string;
+  config: Record<string, unknown>;
+  secretRefs: Record<string, unknown>;
+  secretRefsPresent: boolean;
+  secretRefKeys: string[];
+  isActive: boolean;
+  lastValidatedAt: string | null;
+  validationStatus: "not_checked" | "valid" | "invalid" | "warning";
+  validationMessage: string;
+  metadata: Record<string, unknown>;
+  runtimeEnabled: false;
+  runtimeUsesPerOrgSettings: false;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasProviderReadiness {
+  providerType: SaasIntegrationProviderType;
+  providerLabel: string;
+  status: string;
+  configured: boolean;
+  isActive: boolean;
+  secretRefsPresent: boolean;
+  missingSecretRefs: string[];
+  validationStatus: string;
+  validationMessage: string;
+  runtimeEnabled: false;
+  runtimeUsesPerOrgSettings: false;
+  setting: SaasIntegrationSetting | null;
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasIntegrationReadiness {
+  organization: { id: number; code: string; name: string } | null;
+  providers: SaasProviderReadiness[];
+  providersConfigured: SaasIntegrationProviderType[];
+  providersMissing: SaasIntegrationProviderType[];
+  secretRefsMissing: SaasIntegrationProviderType[];
+  integrationSettingsCount: number;
+  runtimeUsesPerOrgSettings: false;
+  safeToStartPhase6F: boolean;
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasSafetyLocks {
+  whatsappAutoReplyEnabled: boolean;
+  whatsappAutoReplyOff: boolean;
+  limitedTestMode: boolean;
+  campaignsLocked: boolean;
+  broadcastLocked: boolean;
+  callHandoffEnabled: boolean;
+  lifecycleAutomationEnabled: boolean;
+  rescueDiscountEnabled: boolean;
+  rtoRescueEnabled: boolean;
+  reorderDay20Enabled: boolean;
+  runtimeUsesPerOrgSettings: false;
+}
+
+export interface SaasAuditTimelineEvent {
+  id: number;
+  kind: string;
+  text: string;
+  tone: string;
+  icon: string;
+  createdAt: string;
+  organizationId: number | null;
+}
+
+export interface SaasAdminOverview {
+  defaultOrganizationExists: boolean;
+  defaultBranchExists: boolean;
+  organization: (SaasOrganization & {
+    membershipSummary: SaasMembershipSummary;
+    featureFlags: Record<string, SaasFeatureFlagEntry>;
+    integrationSettingsCount: number;
+  }) | null;
+  orgScopeReadiness: SaasOrgScopeReadiness;
+  writePathReadiness: SaasWritePathReadiness;
+  integrationReadiness: SaasIntegrationReadiness;
+  integrationSettings: SaasIntegrationSetting[];
+  integrationSettingsCount: number;
+  providersConfigured: SaasIntegrationProviderType[];
+  providersMissing: SaasIntegrationProviderType[];
+  secretRefsMissing: SaasIntegrationProviderType[];
+  safetyLocks: SaasSafetyLocks;
+  runtimeUsesPerOrgSettings: false;
+  auditTimeline: SaasAuditTimelineEvent[];
+  safeToStartPhase6F: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasAdminOrganizationsResponse {
+  count: number;
+  organizations: Array<
+    (SaasOrganization & {
+      membershipSummary: SaasMembershipSummary;
+      featureFlags: Record<string, SaasFeatureFlagEntry>;
+      integrationSettingsCount: number;
+    }) | null
+  >;
+}
+
+export interface SaasIntegrationSettingsResponse {
+  organization: SaasOrganization | null;
+  settings: SaasIntegrationSetting[];
+  runtimeUsesPerOrgSettings: false;
 }

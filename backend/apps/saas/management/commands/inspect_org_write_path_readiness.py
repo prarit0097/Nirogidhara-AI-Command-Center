@@ -64,6 +64,14 @@ class Command(BaseCommand):
             f"{report['safeToStartPhase6E']}"
         )
         self.stdout.write(
+            f"  safeToStartPhase6F              : "
+            f"{report['safeToStartPhase6F']}"
+        )
+        self.stdout.write(
+            f"  enforcementMode                 : "
+            f"{report['enforcementMode']}"
+        )
+        self.stdout.write(
             f"  recentRowsWithoutOrganization   : "
             f"{report['recentRowsWithoutOrganizationLast24h']}"
         )

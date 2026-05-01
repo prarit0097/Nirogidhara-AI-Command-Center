@@ -72,6 +72,11 @@ to live before keys are valid will fail closed (the adapters refuse to
 load), but configuring them prematurely with the wrong values risks
 sending a customer message during a smoke test — keep them mocked.
 
+Phase 6E integration settings are readiness metadata only. Do not move live
+Meta/Razorpay/PayU/Delhivery/Vapi/OpenAI secrets from `.env.production` into
+the database in this phase. Only `ENV:` / `VAULT:` secret references are
+allowed, and runtime providers still read env/config until Phase 6F.
+
 > **Never commit `.env.production`.** It is gitignored at the repo root.
 
 ---
@@ -124,6 +129,23 @@ sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py migrate
 sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
     exec backend python manage.py makemigrations --check --dry-run
+
+# Phase 6E — SaaS admin + integration settings foundation.
+# Phase 6D org-aware write assignment is FULL PASS. These checks are
+# read-only except ensure_default_organization, which is idempotent and
+# keeps the single-tenant default org/branch present.
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py ensure_default_organization --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_default_organization_coverage --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_org_scoped_api_readiness --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_org_write_path_readiness --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_saas_admin_readiness --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_org_integration_settings --json
 
 # Phase 5E-Hotfix-2 — refresh demo Claim Vault rows to demo-v2 once.
 # Real admin / doctor-approved claims are NEVER overwritten.
