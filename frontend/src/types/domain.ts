@@ -1341,3 +1341,184 @@ export interface ReorderDay20RunResponse {
   failed: number;
   dryRun: boolean;
 }
+
+// ---------- Phase 5F-Gate Auto-Reply Monitoring Dashboard ----------
+
+export type WhatsAppMonitoringStatus =
+  | "safe_off"
+  | "limited_auto_reply_on"
+  | "needs_attention"
+  | "danger";
+
+export interface WhatsAppMonitoringWabaSubscription {
+  checked: boolean;
+  active: boolean | null;
+  subscribedAppCount: number;
+  warning: string;
+  error: string;
+}
+
+export interface WhatsAppMonitoringGate {
+  provider: string;
+  limitedTestMode: boolean;
+  autoReplyEnabled: boolean;
+  allowedListSize: number;
+  allowedNumbersMasked: string[];
+  wabaSubscription: WhatsAppMonitoringWabaSubscription;
+  finalSendGuardActive: boolean;
+  consentRequired: boolean;
+  claimVaultRequired: boolean;
+  blockedPhraseFilterActive: boolean;
+  medicalSafetyActive: boolean;
+  callHandoffEnabled: boolean;
+  lifecycleEnabled: boolean;
+  rescueDiscountEnabled: boolean;
+  rtoRescueEnabled: boolean;
+  reorderEnabled: boolean;
+  campaignsLocked: boolean;
+  readyForLimitedAutoReply: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface WhatsAppMonitoringActivity {
+  windowHours: number;
+  since: string;
+  now: string;
+  allowedListSize: number;
+  inboundMessageCount: number;
+  outboundMessageCount: number;
+  inboundAiRunStartedCount: number;
+  replyAutoSentCount: number;
+  replyBlockedCount: number;
+  suggestionStoredCount: number;
+  handoffRequiredCount: number;
+  deterministicBuilderUsedCount: number;
+  deterministicBuilderBlockedCount: number;
+  objectionReplyUsedCount: number;
+  objectionReplyBlockedCount: number;
+  autoReplyFlagPathUsedCount: number;
+  autoReplyGuardBlockedCount: number;
+  safetyDowngradedCount: number;
+  messageDeliveredCount: number;
+  messageReadCount: number;
+  sendBlockedCount: number;
+  unexpectedNonAllowedSendsCount: number;
+  unexpectedNonAllowedSendSuffixes: string[];
+  ordersCreatedInWindow: number;
+  paymentsCreatedInWindow: number;
+  shipmentsCreatedInWindow: number;
+  discountOfferLogsCreatedInWindow: number;
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface WhatsAppMonitoringCohortEntry {
+  maskedPhone: string;
+  suffix: string;
+  customerFound: boolean;
+  customerId: string;
+  customerPhoneMasked: string;
+  consentFound: boolean;
+  consentState: string;
+  consentSource: string;
+  conversationFound: boolean;
+  latestInboundId: string;
+  latestInboundAt: string | null;
+  latestOutboundId: string;
+  latestOutboundStatus: string;
+  latestOutboundAt: string | null;
+  latestAuditAt: string | null;
+  readyForControlledTest: boolean;
+  missingSetup: string[];
+}
+
+export interface WhatsAppMonitoringCohort {
+  provider: string;
+  limitedTestMode: boolean;
+  autoReplyEnabled: boolean;
+  callHandoffEnabled: boolean;
+  lifecycleEnabled: boolean;
+  rescueDiscountEnabled: boolean;
+  rtoRescueEnabled: boolean;
+  reorderEnabled: boolean;
+  allowedListSize: number;
+  cohort: WhatsAppMonitoringCohortEntry[];
+  wabaSubscription: WhatsAppMonitoringWabaSubscription;
+  warnings: string[];
+  errors: string[];
+  nextAction: string;
+}
+
+export interface WhatsAppMonitoringMutationSafety {
+  windowHours: number;
+  since: string;
+  now: string;
+  ordersCreatedInWindow: number;
+  paymentsCreatedInWindow: number;
+  shipmentsCreatedInWindow: number;
+  discountOfferLogsCreatedInWindow: number;
+  lifecycleEventsInWindow: number;
+  handoffEventsInWindow: number;
+  totalMutations: number;
+  allClean: boolean;
+}
+
+export interface WhatsAppMonitoringUnexpectedOutboundEntry {
+  messageId: string;
+  phoneSuffix: string;
+  status: string;
+  sentAt: string | null;
+  providerMessageId: string;
+}
+
+export interface WhatsAppMonitoringUnexpectedOutbound {
+  windowHours: number;
+  since: string;
+  now: string;
+  unexpectedSendsCount: number;
+  breakdown: WhatsAppMonitoringUnexpectedOutboundEntry[];
+  rollbackRecommended: boolean;
+}
+
+export interface WhatsAppMonitoringAuditEvent {
+  id: number;
+  occurredAt: string;
+  kind: string;
+  tone: "success" | "info" | "warning" | "danger";
+  text: string;
+  icon: string;
+  conversationId: string;
+  customerId: string;
+  messageId: string;
+  inboundMessageId: string;
+  phoneSuffix: string;
+  category: string;
+  blockReason: string;
+  finalReplySource: string;
+  deterministicFallbackUsed: boolean;
+  claimVaultUsed: boolean;
+}
+
+export interface WhatsAppMonitoringAuditResponse {
+  windowHours: number;
+  since: string;
+  now: string;
+  limit: number;
+  count: number;
+  events: WhatsAppMonitoringAuditEvent[];
+}
+
+export interface WhatsAppMonitoringOverview {
+  windowHours: number;
+  generatedAt: string;
+  status: WhatsAppMonitoringStatus;
+  nextAction: string;
+  rollbackReady: boolean;
+  gate: WhatsAppMonitoringGate;
+  activity: WhatsAppMonitoringActivity;
+  cohort: WhatsAppMonitoringCohort;
+  mutationSafety: WhatsAppMonitoringMutationSafety;
+  unexpectedOutbound: WhatsAppMonitoringUnexpectedOutbound;
+}

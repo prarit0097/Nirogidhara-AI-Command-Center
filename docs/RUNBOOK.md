@@ -238,6 +238,98 @@ for e in AuditEvent.objects.filter(kind__startswith='whatsapp.internal_cohort.')
 Required: `DiscountOfferLog` / `Order` / `Payment` / `Shipment`
 counts unchanged from the pre-test snapshot.
 
+### Phase 5F-Gate — Auto-Reply Monitoring Dashboard
+
+The dashboard surface is the read-only operator view of every inspector
+that already exists on the CLI. It lives at `/whatsapp-monitoring`
+(sidebar group "Messaging") and is fed by seven admin-only DRF
+endpoints under `/api/whatsapp/monitoring/`.
+
+What the dashboard surfaces:
+
+- **Status badge** — `Safe OFF`, `Limited Auto-Reply ON`,
+  `Needs attention`, or `Danger / Roll back`. The status is derived
+  by `get_whatsapp_monitoring_dashboard` on the backend; the frontend
+  renders it directly without re-deriving safety logic.
+- **Gate status cards** — provider, limited test mode, auto-reply
+  enabled, allowed list size, WABA active, campaigns locked, final-
+  send guard, consent + Claim Vault required.
+- **Broad-automation flag pills** — call handoff, lifecycle, rescue,
+  RTO, reorder, campaigns. All show `OFF / locked` when healthy.
+- **Activity metrics** (default 2-hour trailing window) — inbound,
+  outbound, auto replies sent, deterministic builder used,
+  objection replies, blocked, delivered, read, guard blocks, and
+  unexpected non-allowed sends.
+- **Mutation safety** — orders / payments / shipments / discount logs
+  / lifecycle events / handoff events created in the window. Green
+  confirmation ("All clean — auto-reply path mutated nothing") when
+  every count is zero.
+- **Internal cohort table** — masked phone, suffix, customer found,
+  consent state, latest inbound + outbound, status, ready flag.
+  Phones are last-4 only on the dashboard wire (the operator-only
+  `--show-full-numbers` CLI flag is intentionally NOT exposed).
+- **Recent audit timeline** — latest WhatsApp-prefixed audit rows
+  with `kind`, `tone`, `text`, `phoneSuffix`, `category`,
+  `blockReason`, `finalReplySource`, `deterministicFallbackUsed`.
+  Tokens / verify token / app secret are scrubbed defence-in-depth
+  even though the orchestrator already masks.
+- **Backend `nextAction` panel** — read-only string surfacing the
+  selector's recommendation (`ready_to_enable_limited_auto_reply_flag`
+  / `limited_auto_reply_enabled_monitor_real_inbound` /
+  `keep_auto_reply_disabled_fix_blockers` / `rollback_auto_reply_flag`).
+
+The dashboard auto-refreshes every 30 seconds and exposes an explicit
+Refresh button. **There are no send / enable / disable / flag-flip
+controls on the page.** Flag flips happen only on the VPS via
+`.env.production` and a container recreate.
+
+Smoke-testing the dashboard endpoints from the VPS:
+
+```bash
+# Combined overview (status + gate + activity + cohort + mutation +
+# unexpected outbound).
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py shell -c "
+from apps.whatsapp import dashboard
+import json
+print(json.dumps(dashboard.get_whatsapp_monitoring_dashboard(hours=2), default=str)[:1000])
+"
+
+# Same data via the API (admin JWT required).
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/whatsapp/monitoring/overview/?hours=2 | jq
+
+# Per-section endpoints.
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/whatsapp/monitoring/gate/ | jq
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    "https://ai.nirogidhara.com/api/whatsapp/monitoring/activity/?hours=2" | jq
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/whatsapp/monitoring/cohort/ | jq
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    "https://ai.nirogidhara.com/api/whatsapp/monitoring/audit/?hours=2&limit=25" | jq
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    "https://ai.nirogidhara.com/api/whatsapp/monitoring/mutation-safety/?hours=2" | jq
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    "https://ai.nirogidhara.com/api/whatsapp/monitoring/unexpected-outbound/?hours=2" | jq
+```
+
+A healthy "Limited Auto-Reply ON" soak shows:
+
+- `status = limited_auto_reply_on`
+- `gate.readyForLimitedAutoReply = true`
+- Every broad-automation flag false; `campaignsLocked = true`.
+- `activity.unexpectedNonAllowedSendsCount = 0`
+- `activity.replyAutoSentCount` matches the expected real inbounds.
+- `mutationSafety.allClean = true`
+- `unexpectedOutbound.unexpectedSendsCount = 0`
+- `nextAction = limited_auto_reply_enabled_monitor_real_inbound`
+
+If the dashboard ever shows `status = danger` or
+`unexpectedOutbound.rollbackRecommended = true`, follow the rollback
+runbook below — flip `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` in
+`.env.production` and recreate `backend worker beat nginx`.
+
 ### Phase 5F-Gate — Real Inbound Deterministic Fallback Fix
 
 The first real-inbound auto-reply test on the VPS (allowed test

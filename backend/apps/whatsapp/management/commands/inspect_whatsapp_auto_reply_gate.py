@@ -20,25 +20,9 @@ from __future__ import annotations
 import json as _json
 from typing import Any
 
-from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from apps.whatsapp.meta_one_number_test import (
-    check_waba_subscription,
-    get_allowed_test_numbers,
-    verify_provider_and_credentials,
-)
-
-
-def _mask_phone(digits: str) -> str:
-    if not digits:
-        return ""
-    if len(digits) <= 4:
-        return "*" * len(digits)
-    suffix = digits[-4:]
-    if len(digits) >= 12:
-        return f"+{digits[:2]}{'*' * 5}{suffix}"
-    return f"{'*' * (len(digits) - 4)}{suffix}"
+from apps.whatsapp.dashboard import get_auto_reply_gate_summary
 
 
 class Command(BaseCommand):
@@ -52,112 +36,10 @@ class Command(BaseCommand):
         parser.add_argument("--json", action="store_true", help="Emit JSON.")
 
     def handle(self, *args, **options) -> None:
-        verification = verify_provider_and_credentials()
-        allow_list = get_allowed_test_numbers()
-
-        report: dict[str, Any] = {
-            "provider": verification.provider,
-            "limitedTestMode": verification.limited_test_mode,
-            "autoReplyEnabled": bool(
-                getattr(settings, "WHATSAPP_AI_AUTO_REPLY_ENABLED", False)
-            ),
-            "allowedListSize": len(allow_list),
-            "allowedNumbersMasked": [_mask_phone(d) for d in allow_list],
-            "wabaSubscription": {},
-            # Backend gate availability — derived from code paths that
-            # always run when the env flag is on.
-            "finalSendGuardActive": True,
-            "consentRequired": True,
-            "claimVaultRequired": True,
-            "blockedPhraseFilterActive": True,
-            "medicalSafetyActive": True,
-            "callHandoffEnabled": bool(
-                getattr(settings, "WHATSAPP_CALL_HANDOFF_ENABLED", False)
-            ),
-            "lifecycleEnabled": bool(
-                getattr(settings, "WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED", False)
-            ),
-            "rescueDiscountEnabled": bool(
-                getattr(settings, "WHATSAPP_RESCUE_DISCOUNT_ENABLED", False)
-            ),
-            "rtoRescueEnabled": bool(
-                getattr(settings, "WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED", False)
-            ),
-            "reorderEnabled": bool(
-                getattr(settings, "WHATSAPP_REORDER_DAY20_ENABLED", False)
-            ),
-            "campaignsLocked": True,
-            "readyForLimitedAutoReply": False,
-            "blockers": [],
-            "warnings": [],
-            "nextAction": "",
-        }
-
-        # WABA subscription summary (best-effort).
-        waba = check_waba_subscription()
-        report["wabaSubscription"] = {
-            "checked": waba.checked,
-            "active": waba.active,
-            "subscribedAppCount": waba.subscribed_app_count,
-            "warning": waba.warning,
-            "error": waba.error,
-        }
-        if waba.warning:
-            report["warnings"].append(waba.warning)
-        if waba.error:
-            report["warnings"].append(waba.error)
-
-        # Blocker enumeration. Each entry must be cleared before the
-        # operator may flip WHATSAPP_AI_AUTO_REPLY_ENABLED=true.
-        if report["provider"] != "meta_cloud":
-            report["blockers"].append(
-                "WHATSAPP_PROVIDER must be 'meta_cloud' to enable real "
-                "inbound auto-reply."
-            )
-        if not report["limitedTestMode"]:
-            report["blockers"].append(
-                "WHATSAPP_LIVE_META_LIMITED_TEST_MODE must be true. "
-                "The final-send guard depends on it."
-            )
-        if report["allowedListSize"] == 0:
-            report["blockers"].append(
-                "WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS is empty. The "
-                "final-send guard would refuse every send."
-            )
-        for flag, label in (
-            ("callHandoffEnabled", "WHATSAPP_CALL_HANDOFF_ENABLED"),
-            ("lifecycleEnabled", "WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED"),
-            ("rescueDiscountEnabled", "WHATSAPP_RESCUE_DISCOUNT_ENABLED"),
-            ("rtoRescueEnabled", "WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED"),
-            ("reorderEnabled", "WHATSAPP_REORDER_DAY20_ENABLED"),
-        ):
-            if report[flag]:
-                report["blockers"].append(
-                    f"{label} must remain false during the limited "
-                    "auto-reply gate."
-                )
-        if waba.checked and waba.active is False:
-            report["blockers"].append(
-                "WABA subscribed_apps is empty — Meta will not deliver "
-                "inbound webhooks; flipping the flag will not produce "
-                "auto-replies."
-            )
-
-        # readyForLimitedAutoReply means: every blocker is clear AND
-        # the broad-automation flags stay off. The auto-reply env flag
-        # itself can be either true or false at this point — the
-        # inspector reports either pre-flip readiness (flag=false) or
-        # post-flip soak (flag=true).
-        report["readyForLimitedAutoReply"] = not report["blockers"]
-
-        if report["blockers"]:
-            report["nextAction"] = "keep_auto_reply_disabled_fix_blockers"
-        elif report["autoReplyEnabled"]:
-            report["nextAction"] = (
-                "limited_auto_reply_enabled_monitor_real_inbound"
-            )
-        else:
-            report["nextAction"] = "ready_to_enable_limited_auto_reply_flag"
+        # Phase 5F-Gate Auto-Reply Monitoring Dashboard — selector
+        # owns the read-only logic. The CLI delegates so the dashboard
+        # API and the management command share one source of truth.
+        report: dict[str, Any] = get_auto_reply_gate_summary()
 
         if options.get("json"):
             self.stdout.write(_json.dumps(report, default=str))

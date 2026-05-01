@@ -28,6 +28,7 @@ const NAV = [
   { to: "/analytics", label: "Analytics", icon: BarChart3, group: "Insights" },
   { to: "/whatsapp-inbox", label: "WhatsApp Inbox", icon: Inbox, group: "Messaging" },
   { to: "/whatsapp-templates", label: "WhatsApp Templates", icon: MessageSquare, group: "Messaging" },
+  { to: "/whatsapp-monitoring", label: "WhatsApp Monitoring", icon: ShieldCheck, group: "Messaging" },
   { to: "/settings", label: "Settings & Control", icon: Settings2, group: "System" },
 ];
 

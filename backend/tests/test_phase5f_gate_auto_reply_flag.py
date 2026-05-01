@@ -150,7 +150,7 @@ def test_gate_inspector_reports_ready_when_every_precondition_passes(
     connection,
 ) -> None:
     with mock.patch(
-        "apps.whatsapp.management.commands.inspect_whatsapp_auto_reply_gate.check_waba_subscription",
+        "apps.whatsapp.dashboard.check_waba_subscription",
         return_value=WabaSubscriptionStatus(
             checked=True, active=True, subscribed_app_count=1
         ),
@@ -170,7 +170,7 @@ def test_gate_inspector_reports_monitor_state_when_flag_already_on(
     connection,
 ) -> None:
     with mock.patch(
-        "apps.whatsapp.management.commands.inspect_whatsapp_auto_reply_gate.check_waba_subscription",
+        "apps.whatsapp.dashboard.check_waba_subscription",
         return_value=WabaSubscriptionStatus(
             checked=True, active=True, subscribed_app_count=1
         ),
@@ -188,7 +188,7 @@ def test_gate_inspector_reports_monitor_state_when_flag_already_on(
 )
 def test_gate_inspector_blocks_readiness_when_limited_mode_off(connection) -> None:
     with mock.patch(
-        "apps.whatsapp.management.commands.inspect_whatsapp_auto_reply_gate.check_waba_subscription",
+        "apps.whatsapp.dashboard.check_waba_subscription",
         return_value=WabaSubscriptionStatus(
             checked=True, active=True, subscribed_app_count=1
         ),
@@ -212,7 +212,7 @@ def test_gate_inspector_blocks_when_broad_automation_flags_on(
     connection,
 ) -> None:
     with mock.patch(
-        "apps.whatsapp.management.commands.inspect_whatsapp_auto_reply_gate.check_waba_subscription",
+        "apps.whatsapp.dashboard.check_waba_subscription",
         return_value=WabaSubscriptionStatus(
             checked=True, active=True, subscribed_app_count=1
         ),
@@ -232,7 +232,7 @@ def test_gate_inspector_blocks_when_provider_is_not_meta_cloud(
     connection,
 ) -> None:
     with mock.patch(
-        "apps.whatsapp.management.commands.inspect_whatsapp_auto_reply_gate.check_waba_subscription",
+        "apps.whatsapp.dashboard.check_waba_subscription",
         return_value=WabaSubscriptionStatus(
             checked=True, active=True, subscribed_app_count=1
         ),
@@ -245,7 +245,7 @@ def test_gate_inspector_blocks_when_provider_is_not_meta_cloud(
 @override_settings(**META_CREDS)
 def test_gate_inspector_masks_phones_and_omits_secrets(connection) -> None:
     with mock.patch(
-        "apps.whatsapp.management.commands.inspect_whatsapp_auto_reply_gate.check_waba_subscription",
+        "apps.whatsapp.dashboard.check_waba_subscription",
         return_value=WabaSubscriptionStatus(
             checked=True, active=True, subscribed_app_count=1
         ),

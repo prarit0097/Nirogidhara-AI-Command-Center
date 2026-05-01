@@ -3,6 +3,15 @@ from __future__ import annotations
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from .monitoring_views import (
+    WhatsAppMonitoringActivityView,
+    WhatsAppMonitoringAuditView,
+    WhatsAppMonitoringCohortView,
+    WhatsAppMonitoringGateView,
+    WhatsAppMonitoringMutationSafetyView,
+    WhatsAppMonitoringOverviewView,
+    WhatsAppMonitoringUnexpectedOutboundView,
+)
 from .views import (
     WhatsAppAiStatusView,
     WhatsAppConnectionViewSet,
@@ -132,5 +141,41 @@ urlpatterns = [
         "reorder/day20/run/",
         WhatsAppReorderDay20RunView.as_view(),
         name="whatsapp-reorder-day20-run",
+    ),
+    # Phase 5F-Gate Auto-Reply Monitoring Dashboard — read-only.
+    path(
+        "monitoring/overview/",
+        WhatsAppMonitoringOverviewView.as_view(),
+        name="whatsapp-monitoring-overview",
+    ),
+    path(
+        "monitoring/gate/",
+        WhatsAppMonitoringGateView.as_view(),
+        name="whatsapp-monitoring-gate",
+    ),
+    path(
+        "monitoring/activity/",
+        WhatsAppMonitoringActivityView.as_view(),
+        name="whatsapp-monitoring-activity",
+    ),
+    path(
+        "monitoring/cohort/",
+        WhatsAppMonitoringCohortView.as_view(),
+        name="whatsapp-monitoring-cohort",
+    ),
+    path(
+        "monitoring/audit/",
+        WhatsAppMonitoringAuditView.as_view(),
+        name="whatsapp-monitoring-audit",
+    ),
+    path(
+        "monitoring/mutation-safety/",
+        WhatsAppMonitoringMutationSafetyView.as_view(),
+        name="whatsapp-monitoring-mutation-safety",
+    ),
+    path(
+        "monitoring/unexpected-outbound/",
+        WhatsAppMonitoringUnexpectedOutboundView.as_view(),
+        name="whatsapp-monitoring-unexpected-outbound",
     ),
 ] + router.urls

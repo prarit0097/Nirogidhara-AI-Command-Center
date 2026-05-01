@@ -124,6 +124,13 @@ import type {
   CreateRescueOfferPayload,
   ReorderDay20RunResponse,
   ReorderDay20StatusResponse,
+  WhatsAppMonitoringActivity,
+  WhatsAppMonitoringAuditResponse,
+  WhatsAppMonitoringCohort,
+  WhatsAppMonitoringGate,
+  WhatsAppMonitoringMutationSafety,
+  WhatsAppMonitoringOverview,
+  WhatsAppMonitoringUnexpectedOutbound,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -975,6 +982,52 @@ export const api = {
         failed: 0,
         dryRun,
       }),
+    ),
+
+  // ---------- Phase 5F-Gate Auto-Reply Monitoring Dashboard ----------
+
+  getWhatsAppMonitoringOverview: (hours: number = 2) =>
+    safeFetch<WhatsAppMonitoringOverview>(
+      `/whatsapp/monitoring/overview/?hours=${hours}`,
+      () => M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview,
+    ),
+  getWhatsAppMonitoringGate: () =>
+    safeFetch<WhatsAppMonitoringGate>(
+      "/whatsapp/monitoring/gate/",
+      () =>
+        (M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview).gate,
+    ),
+  getWhatsAppMonitoringActivity: (hours: number = 2) =>
+    safeFetch<WhatsAppMonitoringActivity>(
+      `/whatsapp/monitoring/activity/?hours=${hours}`,
+      () =>
+        (M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview)
+          .activity,
+    ),
+  getWhatsAppMonitoringCohort: () =>
+    safeFetch<WhatsAppMonitoringCohort>(
+      "/whatsapp/monitoring/cohort/",
+      () =>
+        (M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview).cohort,
+    ),
+  getWhatsAppMonitoringAudit: (hours: number = 2, limit: number = 100) =>
+    safeFetch<WhatsAppMonitoringAuditResponse>(
+      `/whatsapp/monitoring/audit/?hours=${hours}&limit=${limit}`,
+      () => M.WHATSAPP_MONITORING_AUDIT as WhatsAppMonitoringAuditResponse,
+    ),
+  getWhatsAppMonitoringMutationSafety: (hours: number = 2) =>
+    safeFetch<WhatsAppMonitoringMutationSafety>(
+      `/whatsapp/monitoring/mutation-safety/?hours=${hours}`,
+      () =>
+        (M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview)
+          .mutationSafety,
+    ),
+  getWhatsAppMonitoringUnexpectedOutbound: (hours: number = 2) =>
+    safeFetch<WhatsAppMonitoringUnexpectedOutbound>(
+      `/whatsapp/monitoring/unexpected-outbound/?hours=${hours}`,
+      () =>
+        (M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview)
+          .unexpectedOutbound,
     ),
 };
 
