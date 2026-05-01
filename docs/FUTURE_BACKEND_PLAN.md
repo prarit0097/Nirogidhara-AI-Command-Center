@@ -862,6 +862,36 @@ Hard rules preserved:
 - No queryset filtering on tenant.
 - WhatsApp env flags untouched.
 
+## Phase 6C — Org-Scoped API Filtering Plan ✅ shipped
+
+What landed:
+
+- `apps.saas.context` module — seven resolvers
+  (`get_default_organization`, `get_user_active_organization`,
+  `resolve_request_organization`, `user_has_org_access`, etc.) and
+  four queryset helpers (`filter_queryset_by_organization`,
+  `scoped_queryset_for_user`, `scoped_queryset_for_request`,
+  `attach_default_org_filter_if_model_supports_org`).
+- `apps.audit.signals.write_event` upgraded to auto-attach the
+  active organization (explicit param > request > user > default-org
+  fallback). Backwards-compatible.
+- `apps.saas.readiness.compute_org_scoped_api_readiness` selector +
+  `inspect_org_scoped_api_readiness` management command +
+  `GET /api/v1/saas/org-scope-readiness/` API.
+- Read-only `OrgScopeReadinessCard` on the dashboard.
+- Two-org leak proofs in tests for Customer, Order,
+  WhatsAppConversation.
+
+Hard rules preserved:
+
+- `globalTenantFilteringEnabled` stays `False` — no blanket
+  queryset-filtering middleware yet (Phase 6E).
+- FKs stay nullable.
+- Superusers still see across tenants for diagnostics.
+- Models without an `organization` field are returned unchanged by
+  the helpers.
+- WhatsApp env flags untouched.
+
 ## Recommended future phases
 
 - **Phase 6B — Default-org data backfill.** ✅ shipped — see above.

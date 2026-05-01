@@ -303,6 +303,50 @@ Customer Pilot Readiness" section. It shows counts, blockers,
 It intentionally has no send, enable, approve, pause, or automation
 buttons.
 
+### Phase 6C — Org-Scoped API Filtering Plan
+
+After Phase 6B reaches ≥99.85% coverage, Phase 6C lays the read-only
+filtering foundation. No global middleware yet; existing single-tenant
+production keeps working unchanged.
+
+```bash
+# 1. Confirm readiness on the VPS.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_org_scoped_api_readiness \
+    --json | jq '{
+        defaultOrganizationExists,
+        organizationCoveragePercent,
+        auditAutoOrgContextEnabled,
+        globalTenantFilteringEnabled,
+        safeToStartPhase6D,
+        nextAction
+    }'
+# Expect: auditAutoOrgContextEnabled=true,
+#         globalTenantFilteringEnabled=false,
+#         nextAction=ready_for_phase_6d_write_path_org_assignment.
+
+# 2. Smoke-test the API.
+ADMIN_JWT=$(curl -s -X POST https://ai.nirogidhara.com/api/auth/login/ \
+    -H "Content-Type: application/json" \
+    -d '{"username":"director","password":"<admin-password>"}' | jq -r .access)
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/org-scope-readiness/ | jq
+
+# Read-only — POST returns 405.
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+    -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/org-scope-readiness/   # 405
+```
+
+What this phase deliberately did NOT do (drives Phase 6D / 6E):
+
+- No global queryset-filtering middleware — call sites still need to
+  invoke `scoped_queryset_for_request` / `scoped_queryset_for_user`
+  explicitly.
+- Write-path org assignment is Phase 6D.
+- FKs stay nullable.
+- WhatsApp env flags untouched.
+
 ### Phase 6B — Default Org Data Backfill
 
 After Phase 6A seeded the default org + branch, Phase 6B attaches

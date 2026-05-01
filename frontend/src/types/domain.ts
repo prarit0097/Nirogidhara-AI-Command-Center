@@ -1693,3 +1693,24 @@ export interface SaasDataCoverage {
   warnings: string[];
   nextAction: string;
 }
+
+// ---------- Phase 6C — Org-Scoped API Readiness ----------
+
+export interface SaasOrgScopeReadiness {
+  defaultOrganizationExists: boolean;
+  defaultOrganizationCode: string;
+  defaultBranchExists: boolean;
+  defaultBranchCode: string;
+  organizationCoveragePercent: number;
+  branchCoveragePercent: number;
+  scopedModels: string[];
+  unscopedModels: string[];
+  scopedApis: string[];
+  unscopedApis: string[];
+  auditAutoOrgContextEnabled: boolean;
+  globalTenantFilteringEnabled: boolean;
+  safeToStartPhase6D: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}

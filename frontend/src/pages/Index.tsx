@@ -8,6 +8,7 @@ import { MetricCard } from "@/components/MetricCard";
 import { StatusPill } from "@/components/StatusPill";
 import { WorkflowMap } from "@/components/WorkflowMap";
 import { SaasCoverageCard } from "@/components/SaasCoverageCard";
+import { OrgScopeReadinessCard } from "@/components/OrgScopeReadinessCard";
 import { Button } from "@/components/ui/button";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend,
@@ -176,9 +177,10 @@ export default function Index() {
         <MetricCard emphasis icon={Sparkles} label="CEO AI Approvals" value={m.ceoAlerts.value} tone="accent" sublabel="awaiting your nod" />
       </div>
 
-      {/* Phase 6B — read-only SaaS data coverage panel. */}
+      {/* Phase 6B + 6C — read-only SaaS coverage + org-scope readiness. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
         <SaasCoverageCard />
+        <OrgScopeReadinessCard />
       </div>
 
       {/* Section divider */}

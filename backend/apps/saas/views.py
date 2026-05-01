@@ -21,6 +21,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .coverage import compute_default_organization_coverage
+from .readiness import compute_org_scoped_api_readiness
 from .models import Organization, OrganizationMembership
 from .selectors import (
     get_active_organization_for_user,
@@ -142,9 +143,23 @@ class DataCoverageView(APIView):
         return Response(compute_default_organization_coverage())
 
 
+class OrgScopeReadinessView(APIView):
+    """``GET /api/v1/saas/org-scope-readiness/`` — Phase 6C diagnostic.
+
+    Read-only. Mirrors the ``inspect_org_scoped_api_readiness``
+    management command. Auth required; carries no secrets / no PII.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request):
+        return Response(compute_org_scoped_api_readiness())
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
     "FeatureFlagsView",
     "DataCoverageView",
+    "OrgScopeReadinessView",
 )

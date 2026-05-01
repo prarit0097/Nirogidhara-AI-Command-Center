@@ -7,6 +7,7 @@ from .views import (
     DataCoverageView,
     FeatureFlagsView,
     MyOrganizationsView,
+    OrgScopeReadinessView,
 )
 
 
@@ -30,5 +31,10 @@ urlpatterns = [
         "data-coverage/",
         DataCoverageView.as_view(),
         name="saas-data-coverage",
+    ),
+    path(
+        "org-scope-readiness/",
+        OrgScopeReadinessView.as_view(),
+        name="saas-org-scope-readiness",
     ),
 ]

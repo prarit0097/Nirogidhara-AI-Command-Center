@@ -232,13 +232,55 @@ ICON_BY_KIND: dict[str, str] = {
 }
 
 
-def write_event(*, kind: str, text: str, tone: str = AuditEvent.Tone.INFO, payload: dict | None = None) -> AuditEvent:
+def write_event(
+    *,
+    kind: str,
+    text: str,
+    tone: str = AuditEvent.Tone.INFO,
+    payload: dict | None = None,
+    organization=None,
+    request=None,
+    user=None,
+) -> AuditEvent:
+    """Phase 6C — auto-attach the active organization when not explicit.
+
+    Resolution order:
+
+    1. ``organization`` parameter if passed.
+    2. ``request`` (resolved via :func:`apps.saas.context.resolve_request_organization`).
+    3. ``user`` (resolved via :func:`apps.saas.context.get_user_active_organization`).
+    4. Default org fallback so single-tenant production keeps single-tenant audit
+       rows. Resolution failures are silent — audit writes must never crash a
+       parent transaction.
+
+    Backwards-compatible: every existing call site that omits the new kwargs
+    continues to work; the resolver simply returns the default org.
+    """
+    resolved_org = organization
+    if resolved_org is None:
+        try:
+            from apps.saas.context import (
+                get_default_organization,
+                get_user_active_organization,
+                resolve_request_organization,
+            )
+
+            if request is not None:
+                resolved_org = resolve_request_organization(request)
+            if resolved_org is None and user is not None:
+                resolved_org = get_user_active_organization(user)
+            if resolved_org is None:
+                resolved_org = get_default_organization()
+        except Exception:  # noqa: BLE001 - never crash on audit writes
+            resolved_org = None
+
     return AuditEvent.objects.create(
         kind=kind,
         text=text,
         tone=tone,
         icon=ICON_BY_KIND.get(kind, "activity"),
         payload=payload or {},
+        organization=resolved_org,
     )
 
 

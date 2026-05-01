@@ -136,6 +136,7 @@ import type {
   SaasDataCoverage,
   SaasFeatureFlagsResponse,
   SaasMyOrganizations,
+  SaasOrgScopeReadiness,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -1062,6 +1063,11 @@ export const api = {
     safeFetch<SaasDataCoverage>(
       "/v1/saas/data-coverage/",
       () => M.SAAS_DATA_COVERAGE as SaasDataCoverage,
+    ),
+  getSaasOrgScopeReadiness: () =>
+    safeFetch<SaasOrgScopeReadiness>(
+      "/v1/saas/org-scope-readiness/",
+      () => M.SAAS_ORG_SCOPE_READINESS as SaasOrgScopeReadiness,
     ),
 };
 
