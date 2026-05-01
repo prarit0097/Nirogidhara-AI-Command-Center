@@ -303,6 +303,64 @@ Customer Pilot Readiness" section. It shows counts, blockers,
 It intentionally has no send, enable, approve, pause, or automation
 buttons.
 
+### Phase 6D — Org-Aware Write Path Assignment
+
+After Phase 6C wires the read-side foundation, Phase 6D wires the
+write side. New business-state rows automatically inherit org/branch
+from their parent (or the seeded default) via a pre_save signal. The
+backfill command is still the way to scope pre-Phase-6D rows.
+
+```bash
+# 1. Confirm the diagnostic on the VPS.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_org_write_path_readiness \
+    --json | jq '{
+        defaultOrganizationExists,
+        writeContextHelpersAvailable,
+        auditAutoOrgContextEnabled,
+        recentRowsWithoutOrganizationLast24h,
+        recentRowsWithoutBranchLast24h,
+        safeToStartPhase6E,
+        nextAction
+    }'
+# Expect: writeContextHelpersAvailable=true,
+#         auditAutoOrgContextEnabled=true,
+#         recentRowsWithoutOrganizationLast24h=0,
+#         nextAction=ready_for_phase_6e_org_scoped_write_enforcement_plan.
+
+# 2. Smoke-test the API.
+ADMIN_JWT=$(curl -s -X POST https://ai.nirogidhara.com/api/auth/login/ \
+    -H "Content-Type: application/json" \
+    -d '{"username":"director","password":"<admin-password>"}' | jq -r .access)
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/write-path-readiness/ | jq
+
+# Read-only — POST returns 405.
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+    -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/write-path-readiness/   # 405
+```
+
+Operational notes:
+
+- The signal NEVER fires on `QuerySet.update()` bulk writes — that
+  remains the canonical path for the Phase 6B backfill command.
+- The signal NEVER overwrites an explicit `organization=...` /
+  `branch=...` assignment passed in `Model.objects.create(...)`.
+- `audit.AuditEvent` is NOT wired into the signal — the Phase 6C
+  `write_event` upgrade already covers it with full request/user
+  context resolution.
+
+What this phase deliberately did NOT do (drives Phase 6E scope):
+
+- No global queryset-filtering middleware. Phase 6E adds the
+  middleware + makes the FKs non-nullable + ships the SaaS admin
+  panel.
+- Per-org WhatsApp / Razorpay / Delhivery / Meta / Vapi credentials
+  still live in env vars.
+- Business-state status logic untouched — the signal only fills in
+  org/branch FK slots.
+
 ### Phase 6C — Org-Scoped API Filtering Plan
 
 After Phase 6B reaches ≥99.85% coverage, Phase 6C lays the read-only

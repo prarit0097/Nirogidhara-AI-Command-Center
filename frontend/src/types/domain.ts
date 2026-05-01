@@ -1714,3 +1714,22 @@ export interface SaasOrgScopeReadiness {
   warnings: string[];
   nextAction: string;
 }
+
+// ---------- Phase 6D — Write-Path Readiness ----------
+
+export interface SaasWritePathReadiness {
+  defaultOrganizationExists: boolean;
+  defaultBranchExists: boolean;
+  writeContextHelpersAvailable: boolean;
+  auditAutoOrgContextEnabled: boolean;
+  safeCreatePathsCovered: string[];
+  deferredCreatePaths: string[];
+  modelsWithOrgBranch: string[];
+  recentRowsWithoutOrganizationLast24h: number;
+  recentRowsWithoutBranchLast24h: number;
+  globalTenantFilteringEnabled: boolean;
+  safeToStartPhase6E: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}

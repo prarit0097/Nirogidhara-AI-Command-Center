@@ -137,6 +137,7 @@ import type {
   SaasFeatureFlagsResponse,
   SaasMyOrganizations,
   SaasOrgScopeReadiness,
+  SaasWritePathReadiness,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -1068,6 +1069,11 @@ export const api = {
     safeFetch<SaasOrgScopeReadiness>(
       "/v1/saas/org-scope-readiness/",
       () => M.SAAS_ORG_SCOPE_READINESS as SaasOrgScopeReadiness,
+    ),
+  getSaasWritePathReadiness: () =>
+    safeFetch<SaasWritePathReadiness>(
+      "/v1/saas/write-path-readiness/",
+      () => M.SAAS_WRITE_PATH_READINESS as SaasWritePathReadiness,
     ),
 };
 

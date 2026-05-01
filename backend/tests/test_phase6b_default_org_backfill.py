@@ -142,10 +142,15 @@ def test_ensure_default_organization_remains_idempotent(db):
 
 
 def test_backfill_dry_run_does_not_update(db):
-    _ensure_default_org()
+    # Phase 6D — seed business rows BEFORE the default org so the
+    # auto-assign pre_save signal has no default to find. Existing
+    # pre-Phase-6D rows on production behave the same way: they were
+    # written before the signal landed and have organization=NULL until
+    # the backfill runs.
     _seed_one_lead()
     _seed_one_customer()
     _seed_one_order()
+    _ensure_default_org()
 
     report = _run_backfill(apply=False)
     assert report["passed"] is True
@@ -164,10 +169,12 @@ def test_backfill_dry_run_does_not_update(db):
 
 
 def test_backfill_apply_updates_missing_organization_and_branch(db):
-    _ensure_default_org()
+    # Phase 6D — seed before default org so the auto-assign signal
+    # cannot fire; the backfill is the only thing that scopes them.
     _seed_one_lead()
     _seed_one_customer()
     _seed_one_order()
+    _ensure_default_org()
 
     report = _run_backfill(apply=True)
     assert report["passed"] is True
@@ -301,10 +308,13 @@ def test_backfill_idempotent_second_run_updates_nothing(db):
 
 
 def test_inspect_coverage_reports_missing_then_present(db):
-    _ensure_default_org()
+    # Phase 6D — seed business rows BEFORE the default org so the
+    # auto-assign signal can't fire and they remain in the legacy
+    # state the backfill is designed to remediate.
     _seed_one_lead()
     _seed_one_customer()
     _seed_one_order()
+    _ensure_default_org()
 
     before = _run_inspect()
     assert before["defaultOrganizationExists"] is True

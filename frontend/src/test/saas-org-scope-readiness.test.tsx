@@ -26,10 +26,12 @@ describe("Phase 6C — Org-Scope Readiness", () => {
     await waitFor(() =>
       expect(screen.getByText("Org-scope readiness")).toBeInTheDocument(),
     );
-    // Backend-derived header copy must surface verbatim.
-    expect(
-      screen.getByText("Off (Phase 6E)"),
-    ).toBeInTheDocument();
+    // Backend-derived header copy must surface verbatim. Multiple
+    // Phase 6 cards share the "Off (Phase 6E)" label, so use the
+    // *AllBy* variant.
+    expect(screen.getAllByText("Off (Phase 6E)").length).toBeGreaterThan(
+      0,
+    );
     // Read-only — no mutation/switch buttons.
     expect(
       screen.queryByRole("button", { name: /Switch organization/i }),

@@ -8,6 +8,7 @@ from .views import (
     FeatureFlagsView,
     MyOrganizationsView,
     OrgScopeReadinessView,
+    WritePathReadinessView,
 )
 
 
@@ -36,5 +37,10 @@ urlpatterns = [
         "org-scope-readiness/",
         OrgScopeReadinessView.as_view(),
         name="saas-org-scope-readiness",
+    ),
+    path(
+        "write-path-readiness/",
+        WritePathReadinessView.as_view(),
+        name="saas-write-path-readiness",
     ),
 ]

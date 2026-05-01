@@ -892,6 +892,34 @@ Hard rules preserved:
   the helpers.
 - WhatsApp env flags untouched.
 
+## Phase 6D — Org-Aware Write Path Assignment ✅ shipped
+
+What landed:
+
+- `apps.saas.write_context` module with six pure helpers that resolve
+  + apply org/branch context (`resolve_write_organization`,
+  `resolve_write_branch`, `apply_org_branch`,
+  `get_parent_org_branch`, `assign_org_branch_from_parent`,
+  `assign_org_branch_from_first_parent`).
+- `apps.saas.signals.auto_assign_org_branch` pre_save receiver wired
+  via `SaasConfig.ready` to 13 business-state models. Fires only on
+  create + when FK is NULL. Walks parent chain, falls back to default.
+- `apps.saas.write_readiness.compute_org_write_path_readiness`
+  selector + `inspect_org_write_path_readiness` management command +
+  `GET /api/v1/saas/write-path-readiness/` API.
+- Read-only `WritePathReadinessCard` on the dashboard.
+- Cross-tenant write-leak proof in tests.
+
+Hard rules preserved:
+
+- Signal NEVER overwrites explicit assignments.
+- Signal NEVER fires on bulk `QuerySet.update()` (backfill path).
+- Signal NEVER crashes a save (silent on errors).
+- FKs stay nullable.
+- `globalTenantFilteringEnabled` stays `False` (Phase 6E).
+- Business-state status logic untouched.
+- WhatsApp env flags untouched.
+
 ## Recommended future phases
 
 - **Phase 6B — Default-org data backfill.** ✅ shipped — see above.

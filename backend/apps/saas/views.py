@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 
 from .coverage import compute_default_organization_coverage
 from .readiness import compute_org_scoped_api_readiness
+from .write_readiness import compute_org_write_path_readiness
 from .models import Organization, OrganizationMembership
 from .selectors import (
     get_active_organization_for_user,
@@ -156,10 +157,24 @@ class OrgScopeReadinessView(APIView):
         return Response(compute_org_scoped_api_readiness())
 
 
+class WritePathReadinessView(APIView):
+    """``GET /api/v1/saas/write-path-readiness/`` — Phase 6D diagnostic.
+
+    Read-only. Mirrors the ``inspect_org_write_path_readiness``
+    management command. Auth required; carries no secrets / no PII.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request):
+        return Response(compute_org_write_path_readiness())
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
     "FeatureFlagsView",
     "DataCoverageView",
     "OrgScopeReadinessView",
+    "WritePathReadinessView",
 )
