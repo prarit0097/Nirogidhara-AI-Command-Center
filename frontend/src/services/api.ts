@@ -132,6 +132,9 @@ import type {
   WhatsAppMonitoringOverview,
   WhatsAppMonitoringPilot,
   WhatsAppMonitoringUnexpectedOutbound,
+  SaasCurrentOrganization,
+  SaasFeatureFlagsResponse,
+  SaasMyOrganizations,
 } from "@/types/domain";
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
@@ -1035,6 +1038,24 @@ export const api = {
       () =>
         (M.WHATSAPP_MONITORING_OVERVIEW as WhatsAppMonitoringOverview)
           .unexpectedOutbound,
+    ),
+
+  // ---------- Phase 6A — SaaS Foundation read-only ----------
+
+  getSaasCurrentOrganization: () =>
+    safeFetch<SaasCurrentOrganization>(
+      "/v1/saas/current-organization/",
+      () => M.SAAS_CURRENT_ORGANIZATION as SaasCurrentOrganization,
+    ),
+  getSaasMyOrganizations: () =>
+    safeFetch<SaasMyOrganizations>(
+      "/v1/saas/my-organizations/",
+      () => M.SAAS_MY_ORGANIZATIONS as SaasMyOrganizations,
+    ),
+  getSaasFeatureFlags: () =>
+    safeFetch<SaasFeatureFlagsResponse>(
+      "/v1/saas/feature-flags/",
+      () => M.SAAS_FEATURE_FLAGS as SaasFeatureFlagsResponse,
     ),
 };
 

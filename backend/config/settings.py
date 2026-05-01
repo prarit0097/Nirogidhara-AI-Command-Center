@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "apps.dashboards",
     "apps.catalog",
     "apps.whatsapp",
+    "apps.saas",
 ]
 
 MIDDLEWARE = [

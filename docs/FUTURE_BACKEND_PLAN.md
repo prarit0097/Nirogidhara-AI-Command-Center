@@ -789,7 +789,58 @@ SaaS gaps intentionally deferred to Phase 7:
 - Sandbox test infrastructure.
 - Approved learning → playbook version update.
 
-## Phase 7 — Multi-tenant SaaS
+## Phase 6A — SaaS Foundation Safe Migration ✅ shipped
+
+What landed:
+
+- `apps.saas` app with five tables: `Organization`, `Branch`,
+  `OrganizationMembership`, `OrganizationFeatureFlag`,
+  `OrganizationSetting` (rows flagged `is_sensitive=True` are
+  filtered out of every public-API selector).
+- Read-only selectors (`get_default_organization`,
+  `get_user_organizations`, `is_feature_enabled`,
+  `get_non_sensitive_settings`, …).
+- Idempotent `ensure_default_organization` management command that
+  seeds `Nirogidhara Private Limited` (code `nirogidhara`) + `Main
+  Branch` (code `main`) and attaches existing users with sane
+  default org-level roles.
+- Three read-only DRF endpoints under `/api/v1/saas/`
+  (`current-organization`, `my-organizations`, `feature-flags`).
+- Read-only `OrgBadge` in the frontend topbar.
+- One new audit kind: `saas.default_organization.ensured`.
+
+Hard rules preserved:
+
+- No existing model got an `organization` FK in this migration.
+- No request middleware filters existing endpoints by organization.
+- Customer / Order / Payment / Shipment / WhatsApp data stays
+  un-tenant-scoped.
+- WhatsApp env flags untouched.
+- No real provider credentials migrated into `OrganizationSetting`.
+
+## SaaS gaps still pending (driving Phase 6B+ scope)
+
+| Gap | Phase | Notes |
+| --- | --- | --- |
+| Add `organization` FK to `Customer / Lead / Order / Payment / Shipment / WhatsAppMessage / WhatsAppConversation` and backfill the default org for all existing rows | **6B** | Must ship a backfill management command first; only after full backfill can foreign keys go non-nullable. |
+| Org-scoped API filtering (every queryset filters on the request's active org) and a request middleware that resolves the active org from JWT claims | **6C** | Default org backstop required so any request without org context still returns the existing single-tenant view. |
+| Per-org WhatsApp settings (provider, allow-list, auto-reply flag, lifecycle / call handoff / rescue / RTO / reorder flags) | **6D** | Currently global via env vars. Phase 6D moves them into `OrganizationSetting` with `is_sensitive=True` for credentials. |
+| Per-org Meta Cloud credentials (access token, phone number id, business account id, verify token, app secret) | **6D** | Encrypted at rest before they land in `OrganizationSetting`; never returned by the public API. |
+| Per-org Razorpay / PayU / Delhivery / Vapi credentials | **6D** | Same encryption + filtering rules as Meta. |
+| Audit `organization` + `branch` context on every `AuditEvent` row | **6C** | Add nullable FKs first, then backfill. Helps multi-tenant audit dashboards. |
+| Tenant data isolation tests (one org's data never leaks into another's API responses) | **6C / 6D** | Comprehensive cross-tenant integration suite. |
+| Billing + subscription plan tables (`Plan`, `Subscription`, `BillingPeriod`, `Invoice`) | **6E** | Plus a public Stripe / Razorpay subscription webhook. |
+| Tenant admin onboarding (organization create / branch create / member invite endpoints + UI) | **6E** | Phase 6A is read-only; Phase 6E ships the writes. |
+| SaaS admin panel UI (org switcher, plan upgrade flow, member admin) | **6E** | Frontend `/saas-admin` page. |
+
+## Recommended future phases
+
+- **Phase 6B — Default-org data backfill.** Add nullable `organization` FK to every business model, ship a `python manage.py backfill_default_org_data` command that scopes every existing row to the seeded `nirogidhara` org. NEVER drops or reassigns rows. End-state: every business row has an `organization_id` set; FK is still nullable until 6C confirms zero gaps.
+- **Phase 6C — Org-scoped API filtering.** Tenant middleware + queryset filtering across every existing endpoint. Cross-tenant integration tests assert isolation. Make `organization` FK non-nullable. Add `organization` + `branch` context to `AuditEvent`.
+- **Phase 6D — Per-org integration settings.** Move WhatsApp / Meta / Razorpay / PayU / Delhivery / Vapi credentials into encrypted `OrganizationSetting` rows. Per-org WhatsApp automation flags. Per-org Claim Vault.
+- **Phase 6E — SaaS admin panel.** Org create / member invite / plan upgrade endpoints + UI. Billing + subscription tables. Public Stripe / Razorpay subscription webhooks.
+
+## Phase 7 — Multi-tenant SaaS (legacy roadmap entry — superseded by Phase 6A–E above)
 
 - Tenant model + middleware that scopes every queryset.
 - Per-tenant settings, integrations, claim vault.

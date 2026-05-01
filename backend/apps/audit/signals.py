@@ -223,6 +223,8 @@ ICON_BY_KIND: dict[str, str] = {
     # Phase 5F-Gate Limited Auto-Reply Flag Plan.
     "whatsapp.ai.auto_reply_flag_path_used": "send",
     "whatsapp.ai.auto_reply_guard_blocked": "shield-off",
+    # Phase 6A SaaS Foundation Safe Migration.
+    "saas.default_organization.ensured": "building",
 }
 
 

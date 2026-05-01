@@ -1595,3 +1595,63 @@ export interface WhatsAppMonitoringOverview {
   mutationSafety: WhatsAppMonitoringMutationSafety;
   unexpectedOutbound: WhatsAppMonitoringUnexpectedOutbound;
 }
+
+// ---------- Phase 6A — SaaS Foundation read-only types ----------
+
+export type SaasOrganizationStatus = "active" | "paused" | "archived";
+
+export type SaasOrgRole =
+  | "owner"
+  | "admin"
+  | "manager"
+  | "agent"
+  | "viewer"
+  | "";
+
+export interface SaasBranchSummary {
+  id: number;
+  code: string;
+  name: string;
+  status: string;
+}
+
+export interface SaasOrganization {
+  id: number;
+  code: string;
+  name: string;
+  legalName: string;
+  status: SaasOrganizationStatus;
+  timezone: string;
+  country: string;
+  defaultBranch: SaasBranchSummary | null;
+  userOrgRole: SaasOrgRole;
+  createdAt: string | null;
+}
+
+export interface SaasMembershipSummary {
+  total: number;
+  active: number;
+  byRole: Record<string, number>;
+}
+
+export interface SaasFeatureFlagEntry {
+  enabled: boolean;
+  config: Record<string, unknown>;
+}
+
+export interface SaasCurrentOrganization {
+  organization: SaasOrganization | null;
+  membershipSummary: SaasMembershipSummary;
+  settings: Record<string, unknown>;
+  featureFlags: Record<string, SaasFeatureFlagEntry>;
+}
+
+export interface SaasMyOrganizations {
+  count: number;
+  organizations: Array<SaasOrganization | null>;
+}
+
+export interface SaasFeatureFlagsResponse {
+  organization: SaasOrganization | null;
+  featureFlags: Record<string, SaasFeatureFlagEntry>;
+}

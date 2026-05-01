@@ -303,6 +303,66 @@ Customer Pilot Readiness" section. It shows counts, blockers,
 It intentionally has no send, enable, approve, pause, or automation
 buttons.
 
+### Phase 6A — SaaS Foundation Safe Migration
+
+The multi-tenant scaffold is in place; the existing single-tenant
+production system stays running unchanged under the seeded default
+organization (`Nirogidhara Private Limited`, code `nirogidhara`) +
+default branch (`Main Branch`, code `main`).
+
+**One-time deploy steps** (after `git pull` and a backend rebuild):
+
+```bash
+# 1. Apply the new saas migration.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py migrate
+
+# 2. Idempotent default-org seed. Safe to re-run on every deploy.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py ensure_default_organization --json
+
+# Required JSON outcome on a clean first run:
+#   { "passed": true, "organizationCode": "nirogidhara",
+#     "branchCode": "main", "createdOrganization": true,
+#     "createdBranch": true, ... }
+# Re-running shows createdOrganization=false / createdBranch=false +
+# nextAction=ready_for_phase_6b_default_org_data_backfill.
+
+# 3. Smoke-test the SaaS API (admin JWT required).
+ADMIN_JWT=$(curl -s -X POST https://ai.nirogidhara.com/api/auth/login/ \
+    -H "Content-Type: application/json" \
+    -d '{"username":"director","password":"<admin-password>"}' | jq -r .access)
+
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/current-organization/ | jq
+
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/my-organizations/ | jq
+
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/feature-flags/ | jq
+
+# Read-only — POST must return 405.
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+    -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/current-organization/  # 405
+```
+
+**What this phase deliberately did NOT do** (drives Phase 6B+ scope):
+
+- No existing model got an `organization` FK in the migration —
+  `Customer / Lead / Order / Payment / Shipment / WhatsAppMessage /
+  WhatsAppConversation` all stay un-tenant-scoped.
+- No middleware filters existing endpoints by organization.
+- WhatsApp / Razorpay / Delhivery / Meta credentials remain in env
+  vars; nothing was moved into `OrganizationSetting`.
+- WhatsApp env flags untouched.
+
+**Rollback**: this phase only adds tables, an idempotent seed, three
+read-only endpoints, and a small frontend badge. Rolling back is a
+git revert of the commit + a migration rollback (`python manage.py
+migrate saas zero`). The default org row is harmless to keep.
+
 ### Phase 5F-Gate — Auto-Reply Monitoring Dashboard
 
 The dashboard surface is the read-only operator view of every inspector

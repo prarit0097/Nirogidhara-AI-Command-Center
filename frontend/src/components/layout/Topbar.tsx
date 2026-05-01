@@ -6,6 +6,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { OrgBadge } from "./OrgBadge";
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   const [killOpen, setKillOpen] = useState(false);
@@ -36,6 +37,9 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         </div>
 
         <div className="flex-1 md:hidden" />
+
+        {/* Org badge (Phase 6A — read-only) */}
+        <OrgBadge />
 
         {/* Live */}
         <div className="hidden sm:flex items-center gap-2 px-3 h-9 rounded-full bg-success/8 border border-success/20 text-success">

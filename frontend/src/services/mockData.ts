@@ -1004,3 +1004,44 @@ export const WHATSAPP_MONITORING_AUDIT: Record<string, unknown> = {
   count: 0,
   events: [],
 };
+
+// ---------- Phase 6A — SaaS Foundation mocks ----------
+
+const SAAS_DEFAULT_ORG: Record<string, unknown> = {
+  id: 1,
+  code: "nirogidhara",
+  name: "Nirogidhara Private Limited",
+  legalName: "Nirogidhara Private Limited",
+  status: "active",
+  timezone: "Asia/Kolkata",
+  country: "IN",
+  defaultBranch: {
+    id: 1,
+    code: "main",
+    name: "Main Branch",
+    status: "active",
+  },
+  userOrgRole: "owner",
+  createdAt: new Date().toISOString(),
+};
+
+export const SAAS_CURRENT_ORGANIZATION: Record<string, unknown> = {
+  organization: SAAS_DEFAULT_ORG,
+  membershipSummary: {
+    total: 1,
+    active: 1,
+    byRole: { owner: 1 },
+  },
+  settings: {},
+  featureFlags: {},
+};
+
+export const SAAS_MY_ORGANIZATIONS: Record<string, unknown> = {
+  count: 1,
+  organizations: [SAAS_DEFAULT_ORG],
+};
+
+export const SAAS_FEATURE_FLAGS: Record<string, unknown> = {
+  organization: SAAS_DEFAULT_ORG,
+  featureFlags: {},
+};
