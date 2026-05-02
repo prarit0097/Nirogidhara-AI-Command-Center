@@ -248,6 +248,14 @@ ICON_BY_KIND: dict[str, str] = {
     "runtime.kill_switch.enabled": "shield",
     "runtime.kill_switch.disabled": "shield-off",
     "runtime.live_gate.ready_but_not_executed": "pause-circle",
+    # Phase 6I Single Internal Live Gate Simulation.
+    "runtime.live_gate.simulation_prepared": "file-plus",
+    "runtime.live_gate.simulation_approval_requested": "user-check",
+    "runtime.live_gate.simulation_approved": "badge-check",
+    "runtime.live_gate.simulation_rejected": "x-circle",
+    "runtime.live_gate.simulation_blocked": "ban",
+    "runtime.live_gate.simulation_ran": "play-circle",
+    "runtime.live_gate.simulation_rolled_back": "rotate-ccw",
 }
 
 

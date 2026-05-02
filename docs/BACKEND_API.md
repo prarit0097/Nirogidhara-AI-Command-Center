@@ -90,11 +90,12 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 ## SaaS Runtime Live Audit Gate
 
 Phase 6G Controlled Runtime Routing Dry Run is **FULL PASS**. Phase 6H adds
-the live audit gate only: default dry-run stays on, live execution stays
-blocked, the global runtime kill switch defaults enabled, and approval in
-Phase 6H never executes external calls. Runtime providers still use
+the live audit gate only, and Phase 6I adds the single internal simulation
+layer on top of that gate. Default dry-run stays on, live execution stays
+blocked, the global runtime kill switch defaults enabled, and approval/run in
+Phase 6I never executes external calls. Runtime providers still use
 env/config, not DB integration settings. Responses never expose raw secrets,
-raw payloads, or full phone numbers.
+raw payloads, full phone numbers, or real customer data.
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
@@ -106,13 +107,27 @@ raw payloads, or full phone numbers.
 | POST | `/api/v1/saas/runtime-live-gate/preview/` | admin/staff | Preview and audit a gate decision for an operation. Does not call a provider. |
 | POST | `/api/v1/saas/runtime-live-gate/requests/{id}/approve/` | admin/staff | Mark a request approved for audit/readiness only. Phase 6H still returns `externalCallWillBeMade=false`. |
 | POST | `/api/v1/saas/runtime-live-gate/requests/{id}/reject/` | admin/staff | Mark a request rejected. Does not call a provider. |
+| GET | `/api/v1/saas/runtime-live-gate/simulations/` | authenticated | List sanitized Phase 6I `RuntimeLiveGateSimulation` rows plus summary. |
+| GET | `/api/v1/saas/runtime-live-gate/simulations/{id}/` | authenticated | Fetch one sanitized simulation row. |
+| POST | `/api/v1/saas/runtime-live-gate/simulations/prepare/` | admin/staff | Prepare a simulation for `razorpay.create_order` (default), `whatsapp.send_text`, or `ai.smoke_test`. No provider call. |
+| POST | `/api/v1/saas/runtime-live-gate/simulations/{id}/request-approval/` | admin/staff | Link an audit-only `RuntimeLiveExecutionRequest`; no provider call. |
+| POST | `/api/v1/saas/runtime-live-gate/simulations/{id}/approve/` | admin/staff | Mark simulation approved for rehearsal only. Does not execute. |
+| POST | `/api/v1/saas/runtime-live-gate/simulations/{id}/reject/` | admin/staff | Mark simulation rejected. Does not execute. |
+| POST | `/api/v1/saas/runtime-live-gate/simulations/{id}/run/` | admin/staff | Run the internal simulation marker only. Always returns `externalCallWasMade=false` and `providerCallAttempted=false`. |
+| POST | `/api/v1/saas/runtime-live-gate/simulations/{id}/rollback/` | admin/staff | Mark simulation rolled back. No business-state rollback is needed because no business state was mutated. |
 
 Protected Phase 6H operations: `whatsapp.send_text`,
 `whatsapp.send_template`, `razorpay.create_order`,
 `razorpay.create_payment_link`, `payu.create_payment`,
 `delhivery.create_shipment`, `vapi.place_call`,
 `ai.customer_hinglish_chat`, `ai.caio_compliance`, `ai.ceo_planning`,
-`ai.reports_summary`, and `ai.critical_fallback`.
+`ai.reports_summary`, `ai.critical_fallback`, and `ai.smoke_test`.
+
+Protected Phase 6I simulation operations: `razorpay.create_order`
+(default), `whatsapp.send_text`, and `ai.smoke_test`. Every simulation
+response preserves `dryRun=true`, `liveExecutionAllowed=false`,
+`externalCallWillBeMade=false`, `externalCallWasMade=false`, and
+`providerCallAttempted=false`.
 
 ## Analytics
 
@@ -166,6 +181,7 @@ Receivers in `apps/audit/signals.py` write rows on:
 - `ai.budget.warning` / `.blocked` — explicit, when an agent's spend crosses the alert threshold or exceeds the configured cap (Phase 3D)
 - `runtime.live_gate.previewed` / `.request_created` / `.request_blocked` / `.request_approved` / `.request_rejected` / `.ready_but_not_executed` — explicit, on Phase 6H live-gate preview/request/approval decisions. Payloads contain only sanitized summaries and hashes.
 - `runtime.kill_switch.enabled` / `.disabled` — explicit, on Phase 6H runtime kill-switch changes. Enabled means live external side effects are blocked.
+- `runtime.live_gate.simulation_prepared` / `.simulation_approval_requested` / `.simulation_approved` / `.simulation_rejected` / `.simulation_blocked` / `.simulation_ran` / `.simulation_rolled_back` — explicit, on Phase 6I simulation lifecycle events. Payloads contain only sanitized summaries, hashes, gate decisions, and safety booleans.
 
 Phase 4+ will add: reward/penalty assigned, CAIO audit completed,
 CEO approval recorded.

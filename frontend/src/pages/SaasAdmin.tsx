@@ -12,6 +12,8 @@ import type {
   SaasLiveGatePolicy,
   SaasRuntimeDryRunOperationDecision,
   SaasRuntimeDryRunReport,
+  SaasRuntimeLiveGateSimulation,
+  SaasRuntimeLiveGateSimulationsResponse,
   SaasRuntimeRoutingProviderPreview,
   SaasRuntimeRoutingReadiness,
 } from "@/types/domain";
@@ -47,6 +49,8 @@ export default function SaasAdminPage() {
     useState<SaasAiProviderRoutingPreview | null>(null);
   const [liveGate, setLiveGate] =
     useState<SaasRuntimeLiveGateSummary | null>(null);
+  const [simulations, setSimulations] =
+    useState<SaasRuntimeLiveGateSimulationsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -57,13 +61,15 @@ export default function SaasAdminPage() {
       api.getSaasRuntimeDryRun(),
       api.getSaasAiProviderRouting(),
       api.getSaasRuntimeLiveGate(),
+      api.getSaasRuntimeLiveGateSimulations(),
     ])
-      .then(([ov, rt, dr, ai, gate]) => {
+      .then(([ov, rt, dr, ai, gate, sims]) => {
         setOverview(ov);
         setRouting(rt);
         setDryRun(dr);
         setAiRouting(ai);
         setLiveGate(gate);
+        setSimulations(sims);
       })
       .finally(() => setLoading(false));
   };
@@ -613,6 +619,113 @@ export default function SaasAdminPage() {
         </section>
       )}
 
+      {simulations && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="single-internal-live-gate-simulation"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Single Internal Live Gate Simulation
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6I prepares, approves, runs, and rolls back an
+                internal-only simulation. It does not call WhatsApp,
+                Razorpay, PayU, Delhivery, Vapi, NVIDIA, or OpenAI
+                side-effect endpoints.
+              </p>
+            </div>
+            <StatusPill tone={simulations.killSwitchActive ? "success" : "danger"}>
+              Kill switch {simulations.killSwitchActive ? "active" : "inactive"}
+            </StatusPill>
+          </div>
+
+          <div className="grid gap-3 px-6 py-4 sm:grid-cols-5">
+            <KeyValue
+              label="Default operation"
+              value={simulations.defaultOperation}
+            />
+            <KeyValue label="Dry-run" value={String(simulations.dryRun)} />
+            <KeyValue
+              label="Live allowed"
+              value={String(simulations.liveExecutionAllowed)}
+            />
+            <KeyValue
+              label="External call"
+              value={String(simulations.externalCallWillBeMade)}
+            />
+            <KeyValue
+              label="Provider attempted"
+              value={String(simulations.providerCallAttempted)}
+            />
+          </div>
+
+          <div className="grid gap-4 border-t border-border px-6 py-4 lg:grid-cols-[0.8fr_1.2fr]">
+            <div className="space-y-3">
+              <h4 className="flex items-center gap-2 font-display text-base font-semibold">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                Simulation Controls State
+              </h4>
+              <KeyValue
+                label="Allowed operations"
+                value={String(simulations.allowedOperations.length)}
+              />
+              <KeyValue
+                label="Simulations"
+                value={String(simulations.count)}
+              />
+              <KeyValue
+                label="External call made"
+                value={String(simulations.externalCallWasMade)}
+              />
+              <KeyValue
+                label="Next action"
+                value={simulations.summary?.nextAction ?? "prepare_simulation"}
+              />
+              <div className="rounded-md border border-border bg-warning/5 p-3 text-xs text-muted-foreground">
+                Approving or running a Phase 6I simulation does not execute
+                external calls.
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-sm">
+                <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-6 py-3 text-left font-medium">
+                      Operation
+                    </th>
+                    <th className="py-3 text-left font-medium">Provider</th>
+                    <th className="py-3 text-left font-medium">Status</th>
+                    <th className="py-3 text-left font-medium">Approval</th>
+                    <th className="py-3 text-left font-medium">Decision</th>
+                    <th className="px-6 py-3 text-left font-medium">
+                      Provider call
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {simulations.simulations.map((simulation) => (
+                    <LiveGateSimulationRow
+                      key={simulation.id}
+                      simulation={simulation}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="border-t border-border bg-warning/5 px-6 py-3 text-xs text-muted-foreground">
+            Allowed operations: {simulations.allowedOperations.join(", ")}.
+            Global kill switch remains active; all execution flags remain
+            false.
+          </div>
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel title="Blockers & Warnings" icon={ShieldCheck}>
           <IssueList items={overview.blockers} empty="No blockers" />
@@ -839,6 +952,42 @@ function LiveGatePolicyRow({ policy }: { policy: SaasLiveGatePolicy }) {
       <td className="px-6 py-3">
         <StatusPill tone="neutral">
           {policy.liveAllowedNow ? "true" : "false"}
+        </StatusPill>
+      </td>
+    </tr>
+  );
+}
+
+function LiveGateSimulationRow({
+  simulation,
+}: {
+  simulation: SaasRuntimeLiveGateSimulation;
+}) {
+  return (
+    <tr
+      className="border-t border-border/60"
+      data-testid="live-gate-simulation-row"
+    >
+      <td className="px-6 py-3 font-mono text-xs">
+        {simulation.operationType}
+      </td>
+      <td className="py-3">{simulation.providerType}</td>
+      <td className="py-3">
+        <StatusPill tone={toneForStatus(simulation.status)}>
+          {simulation.status}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={toneForStatus(simulation.approvalStatus)}>
+          {simulation.approvalStatus}
+        </StatusPill>
+      </td>
+      <td className="py-3 text-xs text-muted-foreground">
+        {simulation.gateDecision}
+      </td>
+      <td className="px-6 py-3">
+        <StatusPill tone="success">
+          {simulation.providerCallAttempted ? "attempted" : "not attempted"}
         </StatusPill>
       </td>
     </tr>

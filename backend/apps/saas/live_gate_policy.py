@@ -205,6 +205,17 @@ LIVE_GATE_OPERATIONS: tuple[LiveGateOperationPolicy, ...] = (
         risk_level="high",
         required_env_keys=_runtime_env_keys("ai.critical_fallback"),
     ),
+    LiveGateOperationPolicy(
+        operation_type="ai.smoke_test",
+        provider_type="nvidia",
+        risk_level="low",
+        next_phase_for_live_test="phase_6i_single_internal_live_gate_simulation",
+        metadata={
+            "providerNote": (
+                "Phase 6I simulation only; no NVIDIA/OpenAI request is made."
+            )
+        },
+    ),
 )
 
 

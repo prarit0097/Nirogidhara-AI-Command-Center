@@ -149,6 +149,8 @@ import type {
   SaasRuntimeLiveGatePoliciesResponse,
   SaasRuntimeLiveGatePreview,
   SaasRuntimeLiveGateRequestsResponse,
+  SaasRuntimeLiveGateSimulation,
+  SaasRuntimeLiveGateSimulationsResponse,
   SaasRuntimeLiveGateSummary,
   SaasRuntimeRoutingReadiness,
   SaasWritePathReadiness,
@@ -1205,6 +1207,76 @@ export const api = {
       "POST",
       { reason },
       () => (M.SAAS_RUNTIME_LIVE_GATE_REQUESTS as SaasRuntimeLiveGateRequestsResponse).requests[0],
+    ),
+
+  // ---------- Phase 6I - Single Internal Live Gate Simulation ----------
+
+  getSaasRuntimeLiveGateSimulations: () =>
+    safeFetch<SaasRuntimeLiveGateSimulationsResponse>(
+      "/v1/saas/runtime-live-gate/simulations/",
+      () =>
+        M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse,
+    ),
+  getSaasRuntimeLiveGateSimulation: (id: number) =>
+    safeFetch<SaasRuntimeLiveGateSimulation>(
+      `/v1/saas/runtime-live-gate/simulations/${id}/`,
+      () =>
+        (M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse).simulations[0],
+    ),
+  prepareSaasRuntimeLiveGateSimulation: (payload?: {
+    operationType?: string;
+    reason?: string;
+    payload?: Record<string, unknown>;
+  }) =>
+    safeMutate<SaasRuntimeLiveGateSimulation>(
+      "/v1/saas/runtime-live-gate/simulations/prepare/",
+      "POST",
+      payload ?? {},
+      () =>
+        (M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse).simulations[0],
+    ),
+  requestSaasRuntimeLiveGateSimulationApproval: (
+    id: number,
+    reason = "",
+  ) =>
+    safeMutate<SaasRuntimeLiveGateSimulation>(
+      `/v1/saas/runtime-live-gate/simulations/${id}/request-approval/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse).simulations[0],
+    ),
+  approveSaasRuntimeLiveGateSimulation: (id: number, reason = "") =>
+    safeMutate<SaasRuntimeLiveGateSimulation>(
+      `/v1/saas/runtime-live-gate/simulations/${id}/approve/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse).simulations[0],
+    ),
+  rejectSaasRuntimeLiveGateSimulation: (id: number, reason = "") =>
+    safeMutate<SaasRuntimeLiveGateSimulation>(
+      `/v1/saas/runtime-live-gate/simulations/${id}/reject/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse).simulations[0],
+    ),
+  runSaasRuntimeLiveGateSimulation: (id: number, reason = "") =>
+    safeMutate<SaasRuntimeLiveGateSimulation>(
+      `/v1/saas/runtime-live-gate/simulations/${id}/run/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse).simulations[0],
+    ),
+  rollbackSaasRuntimeLiveGateSimulation: (id: number, reason = "") =>
+    safeMutate<SaasRuntimeLiveGateSimulation>(
+      `/v1/saas/runtime-live-gate/simulations/${id}/rollback/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse).simulations[0],
     ),
 };
 

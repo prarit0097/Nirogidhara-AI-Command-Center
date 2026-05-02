@@ -2257,3 +2257,87 @@ export interface SaasRuntimeLiveGatePreview {
   gateDecision: SaasLiveGateDecision;
   nextAction: string;
 }
+
+// ---------- Phase 6I - Single Internal Live Gate Simulation ----------
+
+export interface SaasRuntimeLiveGateSimulation {
+  id: number;
+  organization: { id: number; code: string; name: string } | null;
+  branch: { id: number; code: string; name: string } | null;
+  liveExecutionRequestId: number | null;
+  operationType: "razorpay.create_order" | "whatsapp.send_text" | "ai.smoke_test" | string;
+  providerType: string;
+  status: string;
+  approvalStatus: string;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  dryRun: true;
+  liveExecutionRequested: boolean;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+  externalCallWasMade: false;
+  providerCallAttempted: false;
+  killSwitchActive: boolean;
+  riskLevel: string;
+  payloadHash: string;
+  safePayloadSummary: Record<string, unknown>;
+  blockers: string[];
+  warnings: string[];
+  gateDecision: SaasLiveGateDecision;
+  idempotencyKey: string;
+  simulationResult: Record<string, unknown>;
+  preparedBy: number | null;
+  approvalRequestedBy: number | null;
+  approvedBy: number | null;
+  rejectedBy: number | null;
+  runBy: number | null;
+  rolledBackBy: number | null;
+  preparedAt: string | null;
+  approvalRequestedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  runAt: string | null;
+  rolledBackAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  nextAction: string;
+}
+
+export interface SaasRuntimeLiveGateSimulationSummary {
+  organization: { id: number; code: string; name: string } | null;
+  allowedOperations: string[];
+  defaultOperation: "razorpay.create_order";
+  simulationCount: number;
+  approvalPendingCount: number;
+  approvedCount: number;
+  simulatedCount: number;
+  latestSimulation: SaasRuntimeLiveGateSimulation | null;
+  dryRun: true;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+  externalCallWasMade: false;
+  providerCallAttempted: false;
+  killSwitchActive: boolean;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  safeToPreparePhase6ISimulation: boolean;
+  safeToRunInternalSimulation: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasRuntimeLiveGateSimulationsResponse {
+  count: number;
+  simulations: SaasRuntimeLiveGateSimulation[];
+  allowedOperations: string[];
+  defaultOperation: "razorpay.create_order";
+  dryRun: true;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+  externalCallWasMade: false;
+  providerCallAttempted: false;
+  killSwitchActive: boolean;
+  summary?: SaasRuntimeLiveGateSimulationSummary;
+}

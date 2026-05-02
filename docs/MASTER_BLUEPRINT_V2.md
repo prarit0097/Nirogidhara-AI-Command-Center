@@ -48,18 +48,18 @@ Reward and penalty are calculated against **delivered profitable orders**, not o
 
 ## 2. Current Production Reality
 
-Phase 6H SaaS runtime live-gate note: Phase 6G Controlled Runtime Routing
-Dry Run + AI Provider Routing is **FULL PASS**. Phase 6H adds a central
-Controlled Runtime Routing Live Audit Gate only: protected operation policy
-registry, sanitized live-execution request records, default-enabled global
-kill switch, audit events, management commands, admin APIs, and a
-`/saas-admin` visibility section. Default live execution remains blocked
-(`dryRun=true`, `liveExecutionAllowed=false`,
-`externalCallWillBeMade=false`), runtime providers still use env/config,
-and approval in Phase 6H does not execute external calls. No real
-WhatsApp/payment/shipment/call/provider side effect is allowed in this
-phase. Next phase is **Phase 6I Single Internal Live Gate Simulation / Live
-Readiness Gate**.
+Phase 6I SaaS runtime live-gate note: Phase 6H Controlled Runtime Live
+Audit Gate is **FULL PASS**. Phase 6I adds a Single Internal Live Gate
+Simulation layer only: `RuntimeLiveGateSimulation`, simulation service,
+management commands, admin APIs, and `/saas-admin` visibility. Allowed
+simulation operations are `razorpay.create_order` (default),
+`whatsapp.send_text`, and `ai.smoke_test`. Default live execution remains
+blocked (`dryRun=true`, `liveExecutionAllowed=false`,
+`externalCallWillBeMade=false`, `externalCallWasMade=false`,
+`providerCallAttempted=false`), runtime providers still use env/config, the
+global kill switch remains active, and approval/run in Phase 6I does not
+execute external calls. No real WhatsApp/payment/shipment/call/provider side
+effect is allowed in this phase.
 
 Phase 6E SaaS note: Phase 6D org-aware write assignment is **FULL PASS**.
 Phase 6E adds safe SaaS admin/readiness APIs, per-organization integration

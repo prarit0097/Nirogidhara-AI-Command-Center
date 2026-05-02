@@ -1782,13 +1782,16 @@ const _LIVE_GATE_OPS = [
   "ai.ceo_planning",
   "ai.reports_summary",
   "ai.critical_fallback",
+  "ai.smoke_test",
 ];
 
 const _LIVE_GATE_POLICY_FIXTURES = _LIVE_GATE_OPS.map((operationType) => {
   const runtimeOp = _RUNTIME_OPS.find((op) => op.operationType === operationType);
   const providerType =
-    runtimeOp?.providerType ??
-    (operationType.startsWith("ai.") ? "openai" : "other");
+    operationType === "ai.smoke_test"
+      ? "nvidia"
+      : runtimeOp?.providerType ??
+        (operationType.startsWith("ai.") ? "openai" : "other");
   const riskLevel =
     operationType === "vapi.place_call" ||
     operationType === "ai.customer_hinglish_chat"
@@ -1991,4 +1994,121 @@ export const SAAS_RUNTIME_LIVE_GATE_PREVIEW: Record<string, unknown> = {
   warnings: ["dry_run_preview_only"],
   gateDecision: "dry_run_allowed",
   nextAction: "dry_run_preview_only",
+};
+
+const _LIVE_GATE_SIMULATION = {
+  id: 1,
+  organization: {
+    id: SAAS_DEFAULT_ORG.id,
+    code: SAAS_DEFAULT_ORG.code,
+    name: SAAS_DEFAULT_ORG.name,
+  },
+  branch: null,
+  liveExecutionRequestId: null,
+  operationType: "razorpay.create_order",
+  providerType: "razorpay",
+  status: "prepared",
+  approvalStatus: "not_required",
+  runtimeSource: "env_config",
+  perOrgRuntimeEnabled: false,
+  dryRun: true,
+  liveExecutionRequested: false,
+  liveExecutionAllowed: false,
+  externalCallWillBeMade: false,
+  externalCallWasMade: false,
+  providerCallAttempted: false,
+  killSwitchActive: true,
+  riskLevel: "medium",
+  payloadHash: "mock-phase6i-hash",
+  safePayloadSummary: {
+    simulation: true,
+    internalOnly: true,
+    idempotencyKey: "phase6i:razorpay.create_order:mock",
+    amountInPaise: 100,
+    currency: "INR",
+  },
+  blockers: [
+    "runtime_kill_switch_active:global",
+    "phase_6h_live_execution_disabled",
+  ],
+  warnings: [
+    "Phase 6I simulation never calls providers or creates external side effects.",
+  ],
+  gateDecision: "blocked_by_default",
+  idempotencyKey: "phase6i:razorpay.create_order:mock",
+  simulationResult: {
+    passed: false,
+    externalCallWasMade: false,
+    providerCallAttempted: false,
+  },
+  preparedBy: null,
+  approvalRequestedBy: null,
+  approvedBy: null,
+  rejectedBy: null,
+  runBy: null,
+  rolledBackBy: null,
+  preparedAt: new Date().toISOString(),
+  approvalRequestedAt: null,
+  approvedAt: null,
+  rejectedAt: null,
+  runAt: null,
+  rolledBackAt: null,
+  metadata: {
+    phase: "6I",
+    noProviderCall: true,
+  },
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  nextAction: "request_internal_approval_before_simulation_run",
+};
+
+export const SAAS_RUNTIME_LIVE_GATE_SIMULATIONS: Record<string, unknown> = {
+  count: 1,
+  simulations: [_LIVE_GATE_SIMULATION],
+  allowedOperations: [
+    "razorpay.create_order",
+    "whatsapp.send_text",
+    "ai.smoke_test",
+  ],
+  defaultOperation: "razorpay.create_order",
+  dryRun: true,
+  liveExecutionAllowed: false,
+  externalCallWillBeMade: false,
+  externalCallWasMade: false,
+  providerCallAttempted: false,
+  killSwitchActive: true,
+  summary: {
+    organization: {
+      id: SAAS_DEFAULT_ORG.id,
+      code: SAAS_DEFAULT_ORG.code,
+      name: SAAS_DEFAULT_ORG.name,
+    },
+    allowedOperations: [
+      "razorpay.create_order",
+      "whatsapp.send_text",
+      "ai.smoke_test",
+    ],
+    defaultOperation: "razorpay.create_order",
+    simulationCount: 1,
+    approvalPendingCount: 0,
+    approvedCount: 0,
+    simulatedCount: 0,
+    latestSimulation: _LIVE_GATE_SIMULATION,
+    dryRun: true,
+    liveExecutionAllowed: false,
+    externalCallWillBeMade: false,
+    externalCallWasMade: false,
+    providerCallAttempted: false,
+    killSwitchActive: true,
+    runtimeSource: "env_config",
+    perOrgRuntimeEnabled: false,
+    safeToPreparePhase6ISimulation: true,
+    safeToRunInternalSimulation: true,
+    blockers: [],
+    warnings: [
+      "Phase 6I simulation never calls providers or creates external side effects.",
+      "Default operation is razorpay.create_order but no Razorpay API call is made.",
+    ],
+    nextAction: "request_internal_approval_before_simulation_run",
+  },
 };

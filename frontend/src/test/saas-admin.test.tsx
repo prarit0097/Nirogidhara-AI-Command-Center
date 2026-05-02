@@ -142,7 +142,7 @@ describe("Phase 6H - Controlled Runtime Live Audit Gate", () => {
     expect(gate.liveExecutionAllowed).toBe(false);
     expect(gate.externalCallWillBeMade).toBe(false);
     expect(gate.killSwitch.globalEnabled).toBe(true);
-    expect(gate.operationPolicies.length).toBe(12);
+    expect(gate.operationPolicies.length).toBe(13);
 
     const preview = await api.previewSaasRuntimeLiveGate({
       operationType: "whatsapp.send_text",
@@ -165,7 +165,7 @@ describe("Phase 6H - Controlled Runtime Live Audit Gate", () => {
     expect(screen.getByText("Approval Queue")).toBeInTheDocument();
 
     const rows = await screen.findAllByTestId("live-gate-policy-row");
-    expect(rows.length).toBe(12);
+    expect(rows.length).toBe(13);
 
     const body = document.body.textContent ?? "";
     expect(body).toContain("whatsapp.send_text");
@@ -186,6 +186,68 @@ describe("Phase 6H - Controlled Runtime Live Audit Gate", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /place call/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /execute/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("Phase 6I - Single Internal Live Gate Simulation", () => {
+  it("exposes Phase 6I API client methods with no-provider-call invariants", async () => {
+    expect(typeof api.getSaasRuntimeLiveGateSimulations).toBe("function");
+    expect(typeof api.prepareSaasRuntimeLiveGateSimulation).toBe("function");
+    expect(typeof api.requestSaasRuntimeLiveGateSimulationApproval).toBe(
+      "function",
+    );
+    expect(typeof api.approveSaasRuntimeLiveGateSimulation).toBe("function");
+    expect(typeof api.rejectSaasRuntimeLiveGateSimulation).toBe("function");
+    expect(typeof api.runSaasRuntimeLiveGateSimulation).toBe("function");
+    expect(typeof api.rollbackSaasRuntimeLiveGateSimulation).toBe("function");
+
+    const simulations = await api.getSaasRuntimeLiveGateSimulations();
+    expect(simulations.defaultOperation).toBe("razorpay.create_order");
+    expect(simulations.allowedOperations).toEqual([
+      "razorpay.create_order",
+      "whatsapp.send_text",
+      "ai.smoke_test",
+    ]);
+    expect(simulations.dryRun).toBe(true);
+    expect(simulations.liveExecutionAllowed).toBe(false);
+    expect(simulations.externalCallWillBeMade).toBe(false);
+    expect(simulations.externalCallWasMade).toBe(false);
+    expect(simulations.providerCallAttempted).toBe(false);
+    expect(simulations.killSwitchActive).toBe(true);
+  });
+
+  it("renders Phase 6I simulation section without provider execution controls", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText("Single Internal Live Gate Simulation"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Approving or running a Phase 6I simulation/i),
+    ).toBeInTheDocument();
+
+    const rows = await screen.findAllByTestId("live-gate-simulation-row");
+    expect(rows.length).toBeGreaterThan(0);
+
+    const body = document.body.textContent ?? "";
+    expect(body).toContain("razorpay.create_order");
+    expect(body).toContain("ai.smoke_test");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("META_WA_ACCESS_TOKEN");
+    expect(body).not.toContain("+91 9");
+
+    expect(
+      screen.queryByRole("button", { name: /send whatsapp/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create razorpay/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /run provider/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /execute/i }),

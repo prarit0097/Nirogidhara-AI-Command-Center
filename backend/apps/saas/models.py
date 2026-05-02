@@ -561,6 +561,159 @@ class RuntimeLiveExecutionRequest(models.Model):
         return f"{self.operation_type} ({self.approval_status})"
 
 
+class RuntimeLiveGateSimulation(models.Model):
+    """Phase 6I single internal live-gate simulation.
+
+    This model records an operator-approved simulation around the Phase
+    6H live gate. A row here is never a provider call and never implies a
+    payment, WhatsApp send, shipment, call, or customer-facing AI output.
+    """
+
+    class Status(models.TextChoices):
+        PREPARED = "prepared", "Prepared"
+        APPROVAL_REQUESTED = "approval_requested", "Approval requested"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        BLOCKED = "blocked", "Blocked"
+        SIMULATED = "simulated", "Simulated"
+        ROLLED_BACK = "rolled_back", "Rolled back"
+        FAILED = "failed", "Failed"
+
+    organization = models.ForeignKey(
+        Organization,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_gate_simulations",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_gate_simulations",
+    )
+    live_execution_request = models.ForeignKey(
+        RuntimeLiveExecutionRequest,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="simulations",
+    )
+    operation_type = models.CharField(
+        max_length=96,
+        default="razorpay.create_order",
+        db_index=True,
+    )
+    provider_type = models.CharField(
+        max_length=48,
+        default="razorpay",
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.PREPARED,
+        db_index=True,
+    )
+    approval_status = models.CharField(
+        max_length=24,
+        choices=RuntimeLiveExecutionRequest.ApprovalStatus.choices,
+        default=RuntimeLiveExecutionRequest.ApprovalStatus.NOT_REQUIRED,
+        db_index=True,
+    )
+    runtime_source = models.CharField(max_length=32, default="env_config")
+    per_org_runtime_enabled = models.BooleanField(default=False)
+    dry_run = models.BooleanField(default=True)
+    live_execution_requested = models.BooleanField(default=False)
+    live_execution_allowed = models.BooleanField(default=False)
+    external_call_will_be_made = models.BooleanField(default=False)
+    external_call_was_made = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    kill_switch_active = models.BooleanField(default=True)
+    risk_level = models.CharField(max_length=16, default="medium")
+    payload_hash = models.CharField(max_length=64, blank=True, default="")
+    safe_payload_summary = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    gate_decision = models.CharField(
+        max_length=48,
+        choices=RuntimeLiveExecutionRequest.GateDecision.choices,
+        default=RuntimeLiveExecutionRequest.GateDecision.BLOCKED_BY_DEFAULT,
+        db_index=True,
+    )
+    idempotency_key = models.CharField(
+        max_length=160,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    simulation_result = models.JSONField(default=dict, blank=True)
+    audit_event_id = models.PositiveIntegerField(null=True, blank=True)
+    prepared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_gate_simulations_prepared",
+    )
+    approval_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_gate_simulations_requested",
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_gate_simulations_approved",
+    )
+    rejected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_gate_simulations_rejected",
+    )
+    run_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_gate_simulations_run",
+    )
+    rolled_back_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_gate_simulations_rolled_back",
+    )
+    prepared_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    approval_requested_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    run_at = models.DateTimeField(null=True, blank=True)
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("organization", "operation_type")),
+            models.Index(fields=("status", "approval_status")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.operation_type} simulation ({self.status})"
+
+
 class RuntimeKillSwitch(models.Model):
     """Live side-effect kill switch.
 

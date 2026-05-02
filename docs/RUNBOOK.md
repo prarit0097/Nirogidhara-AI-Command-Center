@@ -77,11 +77,11 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6H inclusive
+python -m pytest -q                     # Phase 1 -> 6I inclusive
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6H vitest tests
+npm test                                # Phase 1 -> 6I vitest tests
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
@@ -113,6 +113,36 @@ global kill switch enabled, and
 when missing-provider warnings are understood and all live execution stays
 blocked. `/saas-admin` should show **Controlled Runtime Live Audit Gate**
 with the warning: "Approving in Phase 6H does not execute external calls."
+
+## Phase 6I single internal live-gate simulation diagnostics
+
+Phase 6I is simulation-only. It prepares, requests, approves, runs, and
+rolls back a single internal live-gate rehearsal without external side
+effects. Allowed operations are `razorpay.create_order` (default),
+`whatsapp.send_text`, and `ai.smoke_test`.
+
+```bash
+cd backend
+python manage.py prepare_single_internal_live_gate_simulation --operation razorpay.create_order --json
+python manage.py inspect_single_internal_live_gate_simulation --json
+```
+
+Optional lifecycle rehearsal, still without provider calls:
+
+```bash
+python manage.py request_single_internal_live_gate_approval --simulation-id <id> --reason "internal rehearsal" --json
+python manage.py approve_single_internal_live_gate_simulation --simulation-id <id> --reason "approved for simulation only" --json
+python manage.py run_single_internal_live_gate_simulation --simulation-id <id> --reason "run simulation only" --json
+python manage.py rollback_single_internal_live_gate_simulation --simulation-id <id> --reason "close rehearsal" --json
+```
+
+Expected Phase 6I posture in every CLI/API/UI response:
+`dryRun=true`, `liveExecutionAllowed=false`,
+`externalCallWillBeMade=false`, `externalCallWasMade=false`,
+`providerCallAttempted=false`, global kill switch active, no raw secrets,
+no full phone numbers, and no real customer data. `/saas-admin` should show
+**Single Internal Live Gate Simulation** with no send/payment/shipment/call
+or provider-execution controls.
 
 ## Phase 6E SaaS admin diagnostics
 

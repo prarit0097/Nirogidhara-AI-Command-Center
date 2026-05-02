@@ -58,6 +58,7 @@ def test_policy_registry_has_required_phase6h_operations(db):
         "ai.ceo_planning",
         "ai.reports_summary",
         "ai.critical_fallback",
+        "ai.smoke_test",
     }
     assert {p.operation_type for p in list_live_gate_policies()} == required
     for policy in list_live_gate_policies():

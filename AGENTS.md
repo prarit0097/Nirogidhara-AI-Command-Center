@@ -157,14 +157,16 @@ backend/apps/whatsapp/v1_urls.py          ← `/api/v1/whatsapp/monitoring/{over
 backend/apps/saas/write_context.py        ← Phase 6D/6E org-aware write assignment + safe enforcement helpers
 backend/apps/saas/integration_settings.py ← Phase 6E per-org integration readiness selectors + secret-ref masking; runtime providers still use env/config
 backend/apps/saas/admin_readiness.py      ← Phase 6E SaaS admin overview selector for org/write/integration/safety locks
-frontend/src/pages/SaasAdmin.tsx          ← Phase 6E read-only `/saas-admin`; Phase 6G adds Controlled Runtime Routing Dry Run + AI Provider Routing sections; no send/run-live/execute controls
+frontend/src/pages/SaasAdmin.tsx          ← Phase 6E read-only `/saas-admin`; Phase 6G adds Controlled Runtime Routing Dry Run + AI Provider Routing; Phase 6H adds Controlled Runtime Live Audit Gate; Phase 6I adds Single Internal Live Gate Simulation; no send/run-live/execute controls
 backend/apps/saas/runtime_operations.py   ← Phase 6G operation taxonomy — 14 ops, dryRunAllowed=True, liveAllowedInPhase6G=False, side-effect risk, env keys
 backend/apps/saas/ai_runtime_preview.py   ← Phase 6G NVIDIA-primary AI routing table (minimax-m2.7 / kimi-k2.6 / mistral-medium / gemma-4-31b-it) + task-wise max_tokens
 backend/apps/saas/runtime_dry_run.py      ← Phase 6G dry-run engine + validate_dry_run_has_no_side_effects (runtimeSource=env_config + perOrgRuntimeEnabled=False + liveExecutionAllowed=False asserted)
 backend/apps/saas/live_gate_policy.py     ← Phase 6H live audit gate policy registry for WhatsApp/Razorpay/PayU/Delhivery/Vapi/AI operations; no provider calls
 backend/apps/saas/live_gate.py            ← Phase 6H central live execution gate + default-enabled kill switch + audit-only approval flow; Phase 6H never sets externalCallWillBeMade=true
+backend/apps/saas/live_gate_simulation.py ← Phase 6I single internal live-gate simulation service; allowed operations razorpay.create_order / whatsapp.send_text / ai.smoke_test; never calls providers and always keeps externalCallWasMade=false + providerCallAttempted=false
 backend/apps/saas/management/commands/inspect_runtime_live_audit_gate.py ← Phase 6H live audit gate readiness inspector
 backend/apps/saas/management/commands/preview_live_gate_decision.py ← Phase 6H single-operation gate preview; writes sanitized audit only, never executes
+backend/apps/saas/management/commands/*single_internal_live_gate_simulation.py ← Phase 6I prepare/request/approve/reject/run/rollback/inspect commands; simulation-only, no provider side effects
 backend/apps/saas/management/commands/inspect_controlled_runtime_routing_dry_run.py ← read-only registry walk; never calls a provider
 backend/apps/saas/management/commands/inspect_ai_provider_routing.py ← read-only AI runtime + per-task preview
 backend/apps/saas/management/commands/preview_runtime_operation.py ← read-only single-operation preview

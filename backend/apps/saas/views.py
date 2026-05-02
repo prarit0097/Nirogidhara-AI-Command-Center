@@ -36,6 +36,17 @@ from .live_gate import (
     summarize_live_gate_readiness,
 )
 from .live_gate_policy import list_live_gate_policies
+from .live_gate_simulation import (
+    approve_single_internal_live_gate_simulation,
+    inspect_single_internal_live_gate_simulation,
+    list_live_gate_simulations,
+    prepare_single_internal_live_gate_simulation,
+    reject_single_internal_live_gate_simulation,
+    request_single_internal_live_gate_approval,
+    rollback_single_internal_live_gate_simulation,
+    run_single_internal_live_gate_simulation,
+    serialize_live_gate_simulation,
+)
 from .runtime_dry_run import (
     preview_all_runtime_operations,
     preview_runtime_routing_for_operation,
@@ -52,6 +63,7 @@ from .models import (
     Organization,
     OrganizationIntegrationSetting,
     RuntimeLiveExecutionRequest,
+    RuntimeLiveGateSimulation,
 )
 from .selectors import (
     get_active_organization_for_user,
@@ -611,6 +623,151 @@ class RuntimeLiveGateRejectView(APIView):
         return Response(serialize_live_execution_request(row))
 
 
+class RuntimeLiveGateSimulationsView(APIView):
+    """List Phase 6I live-gate simulations or prepare a new one."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        org = _get_admin_org(request)
+        report = list_live_gate_simulations()
+        report["summary"] = inspect_single_internal_live_gate_simulation(
+            organization=org
+        )
+        return Response(report)
+
+
+class RuntimeLiveGateSimulationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request, simulation_id):
+        row = RuntimeLiveGateSimulation.objects.filter(id=simulation_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Runtime live-gate simulation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(serialize_live_gate_simulation(row))
+
+
+class RuntimeLiveGateSimulationPrepareView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request):
+        operation = (
+            request.data.get("operationType")
+            or request.data.get("operation")
+            or "razorpay.create_order"
+        ).strip()
+        try:
+            row = prepare_single_internal_live_gate_simulation(
+                operation_type=operation,
+                organization=_get_admin_org(request),
+                user=request.user,
+                payload=request.data.get("payload") or None,
+                reason=request.data.get("reason") or "",
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            serialize_live_gate_simulation(row),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RuntimeLiveGateSimulationRequestApprovalView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, simulation_id):
+        row = RuntimeLiveGateSimulation.objects.filter(id=simulation_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Runtime live-gate simulation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        row = request_single_internal_live_gate_approval(
+            simulation_id,
+            user=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_live_gate_simulation(row))
+
+
+class RuntimeLiveGateSimulationApproveView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, simulation_id):
+        row = RuntimeLiveGateSimulation.objects.filter(id=simulation_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Runtime live-gate simulation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        row = approve_single_internal_live_gate_simulation(
+            simulation_id,
+            approver=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_live_gate_simulation(row))
+
+
+class RuntimeLiveGateSimulationRejectView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, simulation_id):
+        row = RuntimeLiveGateSimulation.objects.filter(id=simulation_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Runtime live-gate simulation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        row = reject_single_internal_live_gate_simulation(
+            simulation_id,
+            rejector=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_live_gate_simulation(row))
+
+
+class RuntimeLiveGateSimulationRunView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, simulation_id):
+        row = RuntimeLiveGateSimulation.objects.filter(id=simulation_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Runtime live-gate simulation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        row = run_single_internal_live_gate_simulation(
+            simulation_id,
+            user=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_live_gate_simulation(row))
+
+
+class RuntimeLiveGateSimulationRollbackView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, simulation_id):
+        row = RuntimeLiveGateSimulation.objects.filter(id=simulation_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Runtime live-gate simulation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        row = rollback_single_internal_live_gate_simulation(
+            simulation_id,
+            user=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_live_gate_simulation(row))
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -635,4 +792,12 @@ __all__ = (
     "RuntimeLiveGatePreviewView",
     "RuntimeLiveGateApproveView",
     "RuntimeLiveGateRejectView",
+    "RuntimeLiveGateSimulationsView",
+    "RuntimeLiveGateSimulationDetailView",
+    "RuntimeLiveGateSimulationPrepareView",
+    "RuntimeLiveGateSimulationRequestApprovalView",
+    "RuntimeLiveGateSimulationApproveView",
+    "RuntimeLiveGateSimulationRejectView",
+    "RuntimeLiveGateSimulationRunView",
+    "RuntimeLiveGateSimulationRollbackView",
 )

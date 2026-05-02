@@ -113,9 +113,8 @@ missing `phone_number_id` / `webhook_secret` surfaces as
 warning. Raw NVIDIA / OpenAI / Anthropic / Razorpay / Meta /
 Vapi keys NEVER appear in any output (asserted with fake env
 values). **56 new backend tests + 2 new frontend tests; 1071
-backend + 34 frontend, all green.** Phase 6H has now shipped the
-audit-only live gate; next phase is **Phase 6I Single Internal Live
-Gate Simulation / Live Readiness Gate**.
+backend + 34 frontend, all green.** Phase 6H shipped the audit-only live
+gate, and Phase 6I now ships the simulation-only rehearsal layer.
 
 **Phase 6H note:** **Phase 6H Controlled Runtime Routing Live Audit
 Gate shipped.** Phase 6G Controlled Runtime Routing Dry Run is **FULL
@@ -125,7 +124,7 @@ New `apps.saas.live_gate_policy` defines the protected operations
 (`whatsapp.{send_text,send_template}`, `razorpay.{create_order,
 create_payment_link}`, `payu.create_payment`, `delhivery.create_shipment`,
 `vapi.place_call`, `ai.{customer_hinglish_chat,caio_compliance,
-ceo_planning,reports_summary,critical_fallback}`), and every policy keeps
+ceo_planning,reports_summary,critical_fallback,smoke_test}`), and every policy keeps
 `liveAllowedByDefault=false`, `approvalRequired=true`, and
 `allowedInPhase6H=false`. New `RuntimeLiveGatePolicySnapshot`,
 `RuntimeLiveExecutionRequest`, and `RuntimeKillSwitch` models store
@@ -142,8 +141,27 @@ gains "Controlled Runtime Live Audit Gate" with global safety state,
 operation table, approval queue, recent audit events, and warnings. No
 real WhatsApp/payment/shipment/call/provider side effect happens in Phase
 6H. **16 new backend tests + 2 new frontend tests; 1087 backend + 36
-frontend, all green.** Next phase: **Phase 6I Single Internal Live Gate
-Simulation / Live Readiness Gate**.
+frontend, all green.**
+
+**Phase 6I note:** **Phase 6I Single Internal Live Gate Simulation
+shipped.** It adds `RuntimeLiveGateSimulation` plus
+`apps.saas.live_gate_simulation` as a simulation-only layer on top of the
+Phase 6H gate. Allowed operations are `razorpay.create_order` (default),
+`whatsapp.send_text`, and `ai.smoke_test`. Commands:
+`prepare_single_internal_live_gate_simulation`,
+`request_single_internal_live_gate_approval`,
+`approve_single_internal_live_gate_simulation`,
+`reject_single_internal_live_gate_simulation`,
+`run_single_internal_live_gate_simulation`,
+`rollback_single_internal_live_gate_simulation`, and
+`inspect_single_internal_live_gate_simulation`. APIs live under
+`/api/v1/saas/runtime-live-gate/simulations/`. Frontend `/saas-admin`
+shows "Single Internal Live Gate Simulation". Hard invariant: no
+WhatsApp/Razorpay/PayU/Delhivery/Vapi/AI provider side-effect call is made;
+`dryRun=true`, `liveExecutionAllowed=false`,
+`externalCallWillBeMade=false`, `externalCallWasMade=false`, and
+`providerCallAttempted=false` stay false in every simulation response. Global
+kill switch remains active; runtime providers still use env/config.
 
 ---
 
@@ -409,6 +427,7 @@ git push origin main
 | Phase 6H live gate service | `backend/apps/saas/live_gate.py` - evaluates/records sanitized audit-only gate decisions; never calls providers and always keeps `externalCallWillBeMade=false` in Phase 6H. |
 | Phase 6H live gate models | `backend/apps/saas/models.py` (`RuntimeLiveGatePolicySnapshot`, `RuntimeLiveExecutionRequest`, `RuntimeKillSwitch`) |
 | Phase 6H live gate commands/API/UI | `inspect_runtime_live_audit_gate`, `preview_live_gate_decision`, `request/approve/reject_live_execution_*`, `enable/disable_runtime_kill_switch`; `/api/v1/saas/runtime-live-gate/...`; `frontend/src/pages/SaasAdmin.tsx` Controlled Runtime Live Audit Gate section. |
+| Phase 6I live gate simulation | `backend/apps/saas/live_gate_simulation.py`, `RuntimeLiveGateSimulation`, `*single_internal_live_gate_simulation` commands, `/api/v1/saas/runtime-live-gate/simulations/...`, and `/saas-admin` Single Internal Live Gate Simulation section; simulation-only, no provider calls. |
 | Reward/Penalty engine (Phase 4B) | `backend/apps/rewards/engine.py` |
 | RewardPenaltyEvent model | `backend/apps/rewards/models.py` |
 | Reward/Penalty Celery task | `backend/apps/rewards/tasks.py` |

@@ -72,14 +72,15 @@ to live before keys are valid will fail closed (the adapters refuse to
 load), but configuring them prematurely with the wrong values risks
 sending a customer message during a smoke test — keep them mocked.
 
-Phase 6H runtime live gate note: Phase 6G Controlled Runtime Routing Dry
-Run is **FULL PASS**, and Phase 6H adds the live audit gate only. Do not
-move live Meta/Razorpay/PayU/Delhivery/Vapi/OpenAI secrets from
-`.env.production` into the database. Only `ENV:` / `VAULT:` secret
-references are allowed, and runtime providers still read env/config. The
-default global runtime kill switch must stay enabled until Phase 6I. An
-approved Phase 6H live request is audit-only and does not execute external
-calls.
+Phase 6I runtime live-gate note: Phase 6H Controlled Runtime Live Audit
+Gate is **FULL PASS**, and Phase 6I adds simulation-only rehearsal rows
+and APIs. Do not move live Meta/Razorpay/PayU/Delhivery/Vapi/OpenAI
+secrets from `.env.production` into the database. Only `ENV:` / `VAULT:`
+secret references are allowed, and runtime providers still read
+env/config. The default global runtime kill switch must stay enabled. An
+approved Phase 6I simulation is audit/readiness-only and does not send
+WhatsApp, create Razorpay/PayU payments, create Delhivery shipments, place
+Vapi calls, or call AI/provider side-effect endpoints.
 
 > **Never commit `.env.production`.** It is gitignored at the repo root.
 
