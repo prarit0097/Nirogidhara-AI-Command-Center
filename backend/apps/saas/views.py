@@ -24,7 +24,13 @@ from rest_framework.views import APIView
 
 from .admin_readiness import get_saas_admin_overview
 from .coverage import compute_default_organization_coverage
+from .ai_runtime_preview import preview_all_ai_provider_routes
 from .integration_runtime import get_all_provider_runtime_previews
+from .runtime_dry_run import (
+    preview_all_runtime_operations,
+    preview_runtime_routing_for_operation,
+    summarize_runtime_dry_run_readiness,
+)
 from .integration_settings import (
     get_org_integration_readiness,
     get_org_integration_settings,
@@ -352,6 +358,52 @@ class SaasIntegrationReadinessView(APIView):
         return Response(get_org_integration_readiness(org))
 
 
+class RuntimeDryRunView(APIView):
+    """``GET /api/v1/saas/runtime-dry-run/[?operation=<type>]`` — Phase 6G.
+
+    Read-only. Returns the controlled runtime dry-run preview for the
+    admin's organization (or the default org). Strict invariants:
+    ``runtimeSource="env_config"``, ``perOrgRuntimeEnabled=False``,
+    ``dryRun=True``, ``liveExecutionAllowed=False``,
+    ``externalCallWillBeMade=False``.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        org = _get_admin_org(request)
+        operation = (request.query_params.get("operation") or "").strip()
+        include_ai = (
+            request.query_params.get("include_ai") or "true"
+        ).lower() not in {"false", "0", "no"}
+        if operation and operation != "all":
+            return Response(
+                preview_runtime_routing_for_operation(operation, org=org)
+            )
+        return Response(
+            preview_all_runtime_operations(org, include_ai=include_ai)
+        )
+
+
+class AiProviderRoutingView(APIView):
+    """``GET /api/v1/saas/ai-provider-routing/`` — Phase 6G AI preview."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(preview_all_ai_provider_routes())
+
+
+class ControlledRuntimeReadinessView(APIView):
+    """``GET /api/v1/saas/controlled-runtime-readiness/`` — Phase 6G summary."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        org = _get_admin_org(request)
+        return Response(summarize_runtime_dry_run_readiness(org))
+
+
 class RuntimeRoutingReadinessView(APIView):
     """``GET /api/v1/saas/runtime-routing-readiness/`` — Phase 6F preview.
 
@@ -385,4 +437,7 @@ __all__ = (
     "SaasIntegrationSettingDetailView",
     "SaasIntegrationReadinessView",
     "RuntimeRoutingReadinessView",
+    "RuntimeDryRunView",
+    "AiProviderRoutingView",
+    "ControlledRuntimeReadinessView",
 )

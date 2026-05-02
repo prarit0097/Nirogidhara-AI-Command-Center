@@ -1938,3 +1938,137 @@ export interface SaasRuntimeRoutingReadiness {
   blockers: string[];
   nextAction: string;
 }
+
+// ---------- Phase 6G — Controlled Runtime Routing Dry Run ----------
+
+export interface SaasRuntimeOperationDefinition {
+  operationType: string;
+  providerType: string;
+  sideEffectRisk: "none" | "low" | "medium" | "high";
+  dryRunAllowed: boolean;
+  liveAllowedInPhase6G: false;
+  requiredOrg: boolean;
+  requiredSecretRefs: string[];
+  requiredEnvKeys: string[];
+  requiredConfigKeys: string[];
+  readinessNotes: string;
+  nextPhaseForLiveExecution: string;
+}
+
+export interface SaasAiProviderRoutePreview {
+  taskType: string;
+  primaryProvider: "nvidia" | string;
+  primaryModel: string;
+  primaryModelSource: "env" | "default";
+  expectedPrimaryModel: string;
+  fallbackProvider: "openai" | string;
+  fallbackModel: string;
+  fallbackModelSource: "env" | "default";
+  fallbackConfigured: boolean;
+  anthropicFallbackConfigured: boolean;
+  runtimeMode: string;
+  maxTokens: number;
+  maxTokensSource: string;
+  maxTokensFromEnv: boolean;
+  apiBaseUrlPresent: boolean;
+  apiKeyPresent: boolean;
+  openaiKeyPresent: boolean;
+  liveCallWillBeMade: false;
+  dryRun: true;
+  safetyWrappersRequired: boolean;
+  safetyNotes: string[];
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  valid: boolean;
+}
+
+export interface SaasAiProviderRoutingPreview {
+  runtime: {
+    runtimeMode: string;
+    primaryProvider: string;
+    fallbackProvider: string;
+    envKeyPresence: Record<string, boolean>;
+  };
+  tasks: SaasAiProviderRoutePreview[];
+  safeToStartAiDryRun: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  dryRun: true;
+  liveCallWillBeMade: false;
+}
+
+export interface SaasRuntimeDryRunOperationDecision {
+  operationType: string;
+  operationDefinition: SaasRuntimeOperationDefinition;
+  organization: { id: number; code: string; name: string } | null;
+  branch: { id: number; code: string; name: string } | null;
+  providerType: string;
+  providerLabel: string;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  dryRun: true;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+  sideEffectRisk: "none" | "low" | "medium" | "high";
+  providerSettingExists: boolean;
+  settingStatus: string;
+  secretRefsStatus: Record<
+    string,
+    {
+      maskedRef?: string;
+      source?: string;
+      present?: boolean | null;
+      canResolveAtRuntime?: boolean;
+      reason?: string;
+    }
+  >;
+  envKeyStatus: Record<string, boolean>;
+  configStatus: Record<string, boolean>;
+  providerRuntimePreview: {
+    secretRefsPresent: boolean;
+    missingSecretRefs: string[];
+    configPresent: boolean;
+  };
+  aiProviderRoute: SaasAiProviderRoutePreview | null;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  auditKind: string;
+}
+
+export interface SaasRuntimeDryRunReport {
+  organization: { id: number; code: string; name: string } | null;
+  runtimeUsesPerOrgSettings: false;
+  perOrgRuntimeEnabled: false;
+  runtimeSource: "env_config";
+  dryRun: true;
+  liveExecutionAllowed: false;
+  operations: SaasRuntimeDryRunOperationDecision[];
+  aiProviderRoutes: SaasAiProviderRoutingPreview | null;
+  global: {
+    safeToStartPhase6H: boolean;
+    blockers: string[];
+    warnings: string[];
+    nextAction: string;
+  };
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasControlledRuntimeReadiness {
+  organization: { id: number; code: string; name: string } | null;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  runtimeUsesPerOrgSettings: false;
+  dryRun: true;
+  liveExecutionAllowed: false;
+  operationCount: number;
+  aiTaskCount: number;
+  safeToStartPhase6H: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}

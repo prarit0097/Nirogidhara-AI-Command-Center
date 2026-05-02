@@ -5,15 +5,21 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
 import type {
   SaasAdminOverview,
+  SaasAiProviderRoutePreview,
+  SaasAiProviderRoutingPreview,
   SaasProviderReadiness,
+  SaasRuntimeDryRunOperationDecision,
+  SaasRuntimeDryRunReport,
   SaasRuntimeRoutingProviderPreview,
   SaasRuntimeRoutingReadiness,
 } from "@/types/domain";
 import {
   Building2,
   CheckCircle2,
+  Cpu,
   KeyRound,
   LockKeyhole,
+  PlayCircle,
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
@@ -32,6 +38,9 @@ export default function SaasAdminPage() {
   const [overview, setOverview] = useState<SaasAdminOverview | null>(null);
   const [routing, setRouting] =
     useState<SaasRuntimeRoutingReadiness | null>(null);
+  const [dryRun, setDryRun] = useState<SaasRuntimeDryRunReport | null>(null);
+  const [aiRouting, setAiRouting] =
+    useState<SaasAiProviderRoutingPreview | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -39,10 +48,14 @@ export default function SaasAdminPage() {
     Promise.all([
       api.getSaasAdminOverview(),
       api.getSaasRuntimeRoutingReadiness(),
+      api.getSaasRuntimeDryRun(),
+      api.getSaasAiProviderRouting(),
     ])
-      .then(([ov, rt]) => {
+      .then(([ov, rt, dr, ai]) => {
         setOverview(ov);
         setRouting(rt);
+        setDryRun(dr);
+        setAiRouting(ai);
       })
       .finally(() => setLoading(false));
   };
@@ -312,6 +325,153 @@ export default function SaasAdminPage() {
         </section>
       )}
 
+      {dryRun && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="runtime-dry-run-preview"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <PlayCircle className="h-5 w-5 text-primary" />
+                Controlled Runtime Routing Dry Run
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6G preview only. No external provider calls, no
+                customer-facing side effects. Runtime stays on env/config
+                — per-org runtime routing is not active.
+              </p>
+            </div>
+            <StatusPill
+              tone={dryRun.global.safeToStartPhase6H ? "success" : "warning"}
+            >
+              {dryRun.global.safeToStartPhase6H
+                ? "Phase 6H ready"
+                : "Phase 6H blocked"}
+            </StatusPill>
+          </div>
+          <div className="grid gap-3 px-6 py-4 sm:grid-cols-4">
+            <KeyValue label="Operations" value={String(dryRun.operations.length)} />
+            <KeyValue
+              label="Live execution"
+              value="false (Phase 6G)"
+            />
+            <KeyValue label="External call" value="false" />
+            <KeyValue label="Next action" value={dryRun.nextAction} />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-6 py-3 text-left font-medium">
+                    Operation
+                  </th>
+                  <th className="py-3 text-left font-medium">Provider</th>
+                  <th className="py-3 text-left font-medium">Risk</th>
+                  <th className="py-3 text-left font-medium">Setting</th>
+                  <th className="py-3 text-left font-medium">Dry-run</th>
+                  <th className="py-3 text-left font-medium">Live</th>
+                  <th className="px-6 py-3 text-left font-medium">
+                    Next action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {dryRun.operations.map((op) => (
+                  <RuntimeOperationRow
+                    key={op.operationType}
+                    decision={op}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-border bg-warning/5 px-6 py-3 text-xs text-muted-foreground">
+            Phase 6G is preview only. PayU + Delhivery are deferred until
+            credentials are provisioned. Vapi awaits phone_number_id +
+            webhook_secret.
+          </div>
+        </section>
+      )}
+
+      {aiRouting && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="ai-provider-routing"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Cpu className="h-5 w-5 text-primary" />
+                AI Provider Routing Preview
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                NVIDIA primary models with OpenAI / Anthropic fallback.
+                Customer-facing drafts must still pass Claim Vault, safety
+                stack, and approval matrix before any future live send.
+              </p>
+            </div>
+            <StatusPill tone={aiRouting.safeToStartAiDryRun ? "success" : "warning"}>
+              {aiRouting.runtime.runtimeMode === "preview"
+                ? "Preview mode"
+                : aiRouting.runtime.runtimeMode}
+            </StatusPill>
+          </div>
+          <div className="grid gap-3 px-6 py-4 sm:grid-cols-4">
+            <KeyValue
+              label="Primary"
+              value={aiRouting.runtime.primaryProvider}
+            />
+            <KeyValue
+              label="Fallback"
+              value={aiRouting.runtime.fallbackProvider}
+            />
+            <KeyValue
+              label="NVIDIA key"
+              value={
+                aiRouting.runtime.envKeyPresence?.NVIDIA_API_KEY
+                  ? "present"
+                  : "missing"
+              }
+            />
+            <KeyValue
+              label="OpenAI fallback"
+              value={
+                aiRouting.runtime.envKeyPresence?.OPENAI_API_KEY
+                  ? "present"
+                  : "missing"
+              }
+            />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-6 py-3 text-left font-medium">Task</th>
+                  <th className="py-3 text-left font-medium">Primary</th>
+                  <th className="py-3 text-left font-medium">Fallback</th>
+                  <th className="py-3 text-left font-medium">Max tokens</th>
+                  <th className="py-3 text-left font-medium">Safety</th>
+                  <th className="px-6 py-3 text-left font-medium">
+                    Next action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {aiRouting.tasks.map((task) => (
+                  <AiTaskRow key={task.taskType} task={task} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {aiRouting.blockers.length > 0 && (
+            <div className="border-t border-border bg-warning/5 px-6 py-3 text-xs text-muted-foreground">
+              {aiRouting.blockers.join(" · ")}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel title="Blockers & Warnings" icon={ShieldCheck}>
           <IssueList items={overview.blockers} empty="No blockers" />
@@ -438,6 +598,83 @@ function ProviderRow({ provider }: { provider: SaasProviderReadiness }) {
       <td className="py-3">{provider.validationStatus}</td>
       <td className="px-6 py-3">
         <StatusPill tone="neutral">Env/config</StatusPill>
+      </td>
+    </tr>
+  );
+}
+
+function RuntimeOperationRow({
+  decision,
+}: {
+  decision: SaasRuntimeDryRunOperationDecision;
+}) {
+  return (
+    <tr
+      className="border-t border-border/60"
+      data-testid="runtime-operation-row"
+    >
+      <td className="px-6 py-3 font-mono text-xs">
+        {decision.operationType}
+      </td>
+      <td className="py-3">{decision.providerLabel}</td>
+      <td className="py-3">
+        <StatusPill
+          tone={
+            decision.sideEffectRisk === "high"
+              ? "warning"
+              : decision.sideEffectRisk === "medium"
+                ? "warning"
+                : "neutral"
+          }
+        >
+          {decision.sideEffectRisk}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill
+          tone={decision.providerSettingExists ? "success" : "warning"}
+        >
+          {decision.providerSettingExists ? "Configured" : "Missing"}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={decision.dryRun ? "success" : "danger"}>
+          true
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone="neutral">false</StatusPill>
+      </td>
+      <td className="px-6 py-3 text-xs text-muted-foreground">
+        {decision.nextAction}
+      </td>
+    </tr>
+  );
+}
+
+function AiTaskRow({ task }: { task: SaasAiProviderRoutePreview }) {
+  return (
+    <tr className="border-t border-border/60" data-testid="ai-task-row">
+      <td className="px-6 py-3 font-mono text-xs">{task.taskType}</td>
+      <td className="py-3 text-xs">
+        {task.primaryProvider} / {task.primaryModel}
+      </td>
+      <td className="py-3 text-xs">
+        {task.fallbackProvider} / {task.fallbackModel}
+      </td>
+      <td className="py-3 text-xs">
+        {task.maxTokens}{" "}
+        <span className="text-muted-foreground">
+          ({task.maxTokensFromEnv ? "env" : "default"})
+        </span>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={task.safetyWrappersRequired ? "warning" : "neutral"}>
+          {task.safetyWrappersRequired ? "Wrappers required" : "Internal only"}
+        </StatusPill>
+      </td>
+      <td className="px-6 py-3 text-xs text-muted-foreground">
+        {task.nextAction}
       </td>
     </tr>
   );

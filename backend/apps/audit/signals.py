@@ -234,6 +234,11 @@ ICON_BY_KIND: dict[str, str] = {
     "saas.integration_setting.updated": "settings",
     # Phase 6F Per-Org Runtime Integration Routing Plan.
     "saas.integration_refs.seeded": "key",
+    # Phase 6G Controlled Runtime Routing Dry Run.
+    "saas.runtime_dry_run.previewed": "scan",
+    "ai.provider_route.previewed": "sparkles",
+    "ai.provider_smoke_test.completed": "check-circle",
+    "ai.provider_smoke_test.failed": "shield-off",
 }
 
 

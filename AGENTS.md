@@ -157,7 +157,14 @@ backend/apps/whatsapp/v1_urls.py          ← `/api/v1/whatsapp/monitoring/{over
 backend/apps/saas/write_context.py        ← Phase 6D/6E org-aware write assignment + safe enforcement helpers
 backend/apps/saas/integration_settings.py ← Phase 6E per-org integration readiness selectors + secret-ref masking; runtime providers still use env/config
 backend/apps/saas/admin_readiness.py      ← Phase 6E SaaS admin overview selector for org/write/integration/safety locks
-frontend/src/pages/SaasAdmin.tsx          ← Phase 6E read-only `/saas-admin`; no provider activation/send controls
+frontend/src/pages/SaasAdmin.tsx          ← Phase 6E read-only `/saas-admin`; Phase 6G adds Controlled Runtime Routing Dry Run + AI Provider Routing sections; no send/run-live/execute controls
+backend/apps/saas/runtime_operations.py   ← Phase 6G operation taxonomy — 14 ops, dryRunAllowed=True, liveAllowedInPhase6G=False, side-effect risk, env keys
+backend/apps/saas/ai_runtime_preview.py   ← Phase 6G NVIDIA-primary AI routing table (minimax-m2.7 / kimi-k2.6 / mistral-medium / gemma-4-31b-it) + task-wise max_tokens
+backend/apps/saas/runtime_dry_run.py      ← Phase 6G dry-run engine + validate_dry_run_has_no_side_effects (runtimeSource=env_config + perOrgRuntimeEnabled=False + liveExecutionAllowed=False asserted)
+backend/apps/saas/management/commands/inspect_controlled_runtime_routing_dry_run.py ← read-only registry walk; never calls a provider
+backend/apps/saas/management/commands/inspect_ai_provider_routing.py ← read-only AI runtime + per-task preview
+backend/apps/saas/management/commands/preview_runtime_operation.py ← read-only single-operation preview
+backend/apps/saas/management/commands/smoke_test_ai_provider_routes.py ← OPERATOR-ONLY smoke test (the ONLY Phase 6G path that may issue a live NVIDIA/OpenAI request); default prompt "Reply only OK"; API keys never logged or returned
 backend/apps/whatsapp/language.py        ← Phase 5C deterministic Hindi/Hinglish/English detection (devanagari ratio + Hinglish marker word list)
 backend/apps/whatsapp/ai_schema.py        ← Phase 5C strict JSON schema + ChatAgentDecision dataclass + BLOCKED_CLAIM_PHRASES list + reply_contains_blocked_phrase()
 backend/apps/whatsapp/discount_policy.py  ← Phase 5C wrapper around apps.orders.discounts: never offer upfront, MIN_OBJECTION_TURNS_BEFORE_OFFER, refusal-rescue trigger, validate_total_discount_cap (50% hard cap)
@@ -230,13 +237,13 @@ python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
 python manage.py makemigrations --check --dry-run  # MUST report "No changes detected"
-python -m pytest -q                 # 1015 tests today
+python -m pytest -q                 # 1071 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                         # http://localhost:8080
-npm test                            # 13 tests today
+npm test                            # 34 tests today
 npm run lint                        # 0 errors expected
 npm run build                       # production build
 ```

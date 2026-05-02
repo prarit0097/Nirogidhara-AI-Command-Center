@@ -137,10 +137,13 @@ import type {
   SaasAdminOverview,
   SaasDataCoverage,
   SaasFeatureFlagsResponse,
+  SaasAiProviderRoutingPreview,
+  SaasControlledRuntimeReadiness,
   SaasIntegrationReadiness,
   SaasIntegrationSettingsResponse,
   SaasMyOrganizations,
   SaasOrgScopeReadiness,
+  SaasRuntimeDryRunReport,
   SaasRuntimeRoutingReadiness,
   SaasWritePathReadiness,
 } from "@/types/domain";
@@ -1112,6 +1115,28 @@ export const api = {
       "/v1/saas/runtime-routing-readiness/",
       () =>
         M.SAAS_RUNTIME_ROUTING_READINESS as SaasRuntimeRoutingReadiness,
+    ),
+
+  // ---------- Phase 6G — Controlled Runtime Routing Dry Run ----------
+
+  getSaasRuntimeDryRun: (operation?: string) =>
+    safeFetch<SaasRuntimeDryRunReport>(
+      operation && operation !== "all"
+        ? `/v1/saas/runtime-dry-run/?operation=${encodeURIComponent(operation)}`
+        : "/v1/saas/runtime-dry-run/",
+      () => M.SAAS_RUNTIME_DRY_RUN_REPORT as SaasRuntimeDryRunReport,
+    ),
+  getSaasAiProviderRouting: () =>
+    safeFetch<SaasAiProviderRoutingPreview>(
+      "/v1/saas/ai-provider-routing/",
+      () =>
+        M.SAAS_AI_PROVIDER_ROUTING_PREVIEW as SaasAiProviderRoutingPreview,
+    ),
+  getSaasControlledRuntimeReadiness: () =>
+    safeFetch<SaasControlledRuntimeReadiness>(
+      "/v1/saas/controlled-runtime-readiness/",
+      () =>
+        M.SAAS_CONTROLLED_RUNTIME_READINESS as SaasControlledRuntimeReadiness,
     ),
 };
 

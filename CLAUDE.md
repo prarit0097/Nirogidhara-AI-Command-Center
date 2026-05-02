@@ -66,10 +66,58 @@ setting status / secret-ref counts / resolvable preview / runtime
 source columns, and a clear warning banner: "Per-org runtime routing
 is not active. Runtime still uses env/config." **No activation /
 enable / send / campaign buttons anywhere.** **24 new backend tests +
-3 new frontend tests; 1015 backend + 32 frontend, all green.** Next
-phase: **Phase 6G Controlled Runtime Routing Dry Run** — a per-provider
-opt-in shadow mode that compares env/config and per-org resolution
-without affecting live traffic.
+3 new frontend tests; 1015 backend + 32 frontend, all green.**
+
+**Phase 6G note:** **Phase 6G Controlled Runtime Routing Dry Run +
+AI Provider Routing shipped.** New `apps.saas.runtime_operations`
+declares 14 operations (`whatsapp.{send_text,send_template}`,
+`razorpay.{create_order,create_payment_link}`, `payu.create_payment`,
+`delhivery.create_shipment`, `vapi.place_call`,
+`openai.agent_completion`, `ai.{reports_summary,ceo_planning,
+caio_compliance,customer_hinglish_chat,critical_fallback,smoke_test}`)
+— each with `dryRunAllowed=True` + `liveAllowedInPhase6G=False`,
+provider type, side-effect risk, expected env keys, secret refs,
+config keys, and `next_phase_for_live_execution`. New
+`apps.saas.ai_runtime_preview` ships the **NVIDIA-primary AI routing
+table** (reports → minimaxai/minimax-m2.7; ceo_planning →
+moonshotai/kimi-k2.6; caio_compliance / critical_fallback →
+mistralai/mistral-medium-3.5-128b; hinglish_customer_chat /
+smoke_test → google/gemma-4-31b-it) with OpenAI fallback +
+Anthropic Claude secondary fallback. Task-wise `max_tokens` resolves
+from env (`AI_MAX_TOKENS_REPORTS=3000`, `_CEO=2048`,
+`_COMPLIANCE=1024`, `_CUSTOMER_CHAT=512`, `_SMOKE=32`) with default
+fallback. New `apps.saas.runtime_dry_run` composes operation
+taxonomy + Phase 6F provider preview + AI route preview into a
+single decision; every output is asserted by
+`validate_dry_run_has_no_side_effects` (`runtimeSource="env_config"`,
+`perOrgRuntimeEnabled=False`, `dryRun=True`,
+`liveExecutionAllowed=False`, `externalCallWillBeMade=False`).
+Three read-only management commands
+(`inspect_controlled_runtime_routing_dry_run`,
+`inspect_ai_provider_routing`, `preview_runtime_operation`) +
+one operator-only `smoke_test_ai_provider_routes` (the ONLY path
+that may issue a tiny live NVIDIA / OpenAI request — default
+prompt `"Reply only OK"`, never customer data, API keys never
+logged or returned, audit rows for every run). Three new
+admin-only DRF endpoints (`/api/v1/saas/runtime-dry-run/`,
+`/api/v1/saas/ai-provider-routing/`,
+`/api/v1/saas/controlled-runtime-readiness/`) — POST/PATCH/DELETE
+return 405. Frontend `/saas-admin` gains "Controlled Runtime
+Routing Dry Run" (14-row operation table) + "AI Provider Routing
+Preview" (NVIDIA primary / OpenAI fallback summary, per-task
+primary / fallback / max-tokens / safety wrappers / next action)
+sections. **No "Run live" / "Execute" / "Go live" / "Send"
+buttons anywhere on the UI.** PayU + Delhivery missing envs
+surface as deferred-provider warnings, not blockers; Vapi
+missing `phone_number_id` / `webhook_secret` surfaces as
+warning. Raw NVIDIA / OpenAI / Anthropic / Razorpay / Meta /
+Vapi keys NEVER appear in any output (asserted with fake env
+values). **56 new backend tests + 2 new frontend tests; 1071
+backend + 34 frontend, all green.** Next phase: **Phase 6H
+Controlled Runtime Live Execution Audit** — per-operation
+opt-in to issue a tiny side-effect-bounded real call against a
+fenced cohort, with mandatory audit + CEO approval before any
+new operation can earn live status.
 
 ---
 
@@ -167,13 +215,13 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 979 tests today
+python -m pytest -q                    # 1071 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                            # http://localhost:8080
-npm test                               # 27 tests today
+npm test                               # 34 tests today
 npm run lint                           # 0 errors expected
 npm run build                          # production build
 

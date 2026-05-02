@@ -1391,3 +1391,378 @@ export const SAAS_RUNTIME_ROUTING_READINESS: Record<string, unknown> = {
   blockers: [],
   nextAction: "configure_org_integration_settings_before_runtime_routing",
 };
+
+// ---------- Phase 6G — Controlled Runtime Routing Dry Run fixtures ----------
+
+const _RUNTIME_OPS: Array<{
+  operationType: string;
+  providerType: string;
+  providerLabel: string;
+  sideEffectRisk: "none" | "low" | "medium" | "high";
+  envKeys: string[];
+}> = [
+  {
+    operationType: "whatsapp.send_text",
+    providerType: "whatsapp_meta",
+    providerLabel: "WhatsApp Meta",
+    sideEffectRisk: "high",
+    envKeys: [
+      "META_WA_ACCESS_TOKEN",
+      "META_WA_PHONE_NUMBER_ID",
+      "META_WA_BUSINESS_ACCOUNT_ID",
+      "META_WA_VERIFY_TOKEN",
+      "META_WA_APP_SECRET",
+    ],
+  },
+  {
+    operationType: "whatsapp.send_template",
+    providerType: "whatsapp_meta",
+    providerLabel: "WhatsApp Meta",
+    sideEffectRisk: "high",
+    envKeys: [
+      "META_WA_ACCESS_TOKEN",
+      "META_WA_PHONE_NUMBER_ID",
+      "META_WA_BUSINESS_ACCOUNT_ID",
+      "META_WA_VERIFY_TOKEN",
+      "META_WA_APP_SECRET",
+    ],
+  },
+  {
+    operationType: "razorpay.create_order",
+    providerType: "razorpay",
+    providerLabel: "Razorpay",
+    sideEffectRisk: "high",
+    envKeys: ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET"],
+  },
+  {
+    operationType: "razorpay.create_payment_link",
+    providerType: "razorpay",
+    providerLabel: "Razorpay",
+    sideEffectRisk: "high",
+    envKeys: ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET"],
+  },
+  {
+    operationType: "payu.create_payment",
+    providerType: "payu",
+    providerLabel: "PayU",
+    sideEffectRisk: "high",
+    envKeys: ["PAYU_KEY", "PAYU_SECRET"],
+  },
+  {
+    operationType: "delhivery.create_shipment",
+    providerType: "delhivery",
+    providerLabel: "Delhivery",
+    sideEffectRisk: "high",
+    envKeys: ["DELHIVERY_API_TOKEN"],
+  },
+  {
+    operationType: "vapi.place_call",
+    providerType: "vapi",
+    providerLabel: "Vapi",
+    sideEffectRisk: "high",
+    envKeys: ["VAPI_API_KEY", "VAPI_PHONE_NUMBER_ID", "VAPI_WEBHOOK_SECRET"],
+  },
+  {
+    operationType: "openai.agent_completion",
+    providerType: "openai",
+    providerLabel: "OpenAI",
+    sideEffectRisk: "low",
+    envKeys: ["OPENAI_API_KEY"],
+  },
+  {
+    operationType: "ai.reports_summary",
+    providerType: "openai",
+    providerLabel: "OpenAI",
+    sideEffectRisk: "none",
+    envKeys: ["NVIDIA_API_KEY", "NVIDIA_API_BASE_URL", "AI_MAX_TOKENS_REPORTS"],
+  },
+  {
+    operationType: "ai.ceo_planning",
+    providerType: "openai",
+    providerLabel: "OpenAI",
+    sideEffectRisk: "none",
+    envKeys: ["NVIDIA_API_KEY", "NVIDIA_API_BASE_URL", "AI_MAX_TOKENS_CEO"],
+  },
+  {
+    operationType: "ai.caio_compliance",
+    providerType: "openai",
+    providerLabel: "OpenAI",
+    sideEffectRisk: "none",
+    envKeys: [
+      "NVIDIA_API_KEY",
+      "NVIDIA_API_BASE_URL",
+      "AI_MAX_TOKENS_COMPLIANCE",
+    ],
+  },
+  {
+    operationType: "ai.customer_hinglish_chat",
+    providerType: "openai",
+    providerLabel: "OpenAI",
+    sideEffectRisk: "medium",
+    envKeys: [
+      "NVIDIA_API_KEY",
+      "NVIDIA_API_BASE_URL",
+      "AI_MAX_TOKENS_CUSTOMER_CHAT",
+    ],
+  },
+  {
+    operationType: "ai.critical_fallback",
+    providerType: "openai",
+    providerLabel: "OpenAI",
+    sideEffectRisk: "low",
+    envKeys: ["OPENAI_API_KEY"],
+  },
+  {
+    operationType: "ai.smoke_test",
+    providerType: "openai",
+    providerLabel: "OpenAI",
+    sideEffectRisk: "none",
+    envKeys: ["NVIDIA_API_KEY", "AI_MAX_TOKENS_SMOKE"],
+  },
+];
+
+const _AI_TASK_FIXTURES = [
+  {
+    taskType: "reports_summaries",
+    primaryModel: "minimaxai/minimax-m2.7",
+    fallbackModel: "gpt-4o-mini",
+    maxTokens: 3000,
+    maxTokensSource: "AI_MAX_TOKENS_REPORTS",
+    safetyWrappersRequired: false,
+    safetyNotes: [],
+  },
+  {
+    taskType: "ceo_planning",
+    primaryModel: "moonshotai/kimi-k2.6",
+    fallbackModel: "gpt-4o",
+    maxTokens: 2048,
+    maxTokensSource: "AI_MAX_TOKENS_CEO",
+    safetyWrappersRequired: false,
+    safetyNotes: [],
+  },
+  {
+    taskType: "caio_compliance",
+    primaryModel: "mistralai/mistral-medium-3.5-128b",
+    fallbackModel: "gpt-4o",
+    maxTokens: 1024,
+    maxTokensSource: "AI_MAX_TOKENS_COMPLIANCE",
+    safetyWrappersRequired: true,
+    safetyNotes: [
+      "Low-confidence compliance findings must escalate to the existing human-review CAIO workflow.",
+    ],
+  },
+  {
+    taskType: "hinglish_customer_chat",
+    primaryModel: "google/gemma-4-31b-it",
+    fallbackModel: "gpt-4o-mini",
+    maxTokens: 512,
+    maxTokensSource: "AI_MAX_TOKENS_CUSTOMER_CHAT",
+    safetyWrappersRequired: true,
+    safetyNotes: [
+      "Customer-facing drafts must still pass through Claim Vault, blocked phrase filter, safety stack, and approval matrix before any live send.",
+    ],
+  },
+  {
+    taskType: "critical_fallback",
+    primaryModel: "mistralai/mistral-medium-3.5-128b",
+    fallbackModel: "gpt-4o",
+    maxTokens: 1024,
+    maxTokensSource: "AI_MAX_TOKENS_COMPLIANCE",
+    safetyWrappersRequired: false,
+    safetyNotes: [],
+  },
+  {
+    taskType: "smoke_test",
+    primaryModel: "google/gemma-4-31b-it",
+    fallbackModel: "gpt-4o-mini",
+    maxTokens: 32,
+    maxTokensSource: "AI_MAX_TOKENS_SMOKE",
+    safetyWrappersRequired: false,
+    safetyNotes: [],
+  },
+];
+
+const _AI_TASK_PREVIEWS = _AI_TASK_FIXTURES.map((task) => ({
+  taskType: task.taskType,
+  primaryProvider: "nvidia",
+  primaryModel: task.primaryModel,
+  primaryModelSource: "default",
+  expectedPrimaryModel: task.primaryModel,
+  fallbackProvider: "openai",
+  fallbackModel: task.fallbackModel,
+  fallbackModelSource: "default",
+  fallbackConfigured: false,
+  anthropicFallbackConfigured: false,
+  runtimeMode: "preview",
+  maxTokens: task.maxTokens,
+  maxTokensSource: task.maxTokensSource,
+  maxTokensFromEnv: false,
+  apiBaseUrlPresent: false,
+  apiKeyPresent: false,
+  openaiKeyPresent: false,
+  liveCallWillBeMade: false,
+  dryRun: true,
+  safetyWrappersRequired: task.safetyWrappersRequired,
+  safetyNotes: task.safetyNotes,
+  blockers: ["NVIDIA_API_KEY is not set"],
+  warnings: [
+    "NVIDIA_API_BASE_URL is not set; the adapter will use its built-in default.",
+    "OPENAI_API_KEY is not set; the OpenAI fallback path will be unavailable.",
+    ...task.safetyNotes,
+  ],
+  nextAction: "fix_ai_provider_env_before_dry_run",
+  valid: true,
+}));
+
+export const SAAS_AI_PROVIDER_ROUTING_PREVIEW: Record<string, unknown> = {
+  runtime: {
+    runtimeMode: "preview",
+    primaryProvider: "nvidia",
+    fallbackProvider: "openai",
+    envKeyPresence: {
+      NVIDIA_API_KEY: false,
+      NVIDIA_API_BASE_URL: false,
+      OPENAI_API_KEY: false,
+      OPENAI_API_BASE_URL: false,
+      ANTHROPIC_API_KEY: false,
+      AI_PROVIDER_RUNTIME_MODE: false,
+      AI_PRIMARY_PROVIDER: false,
+      AI_FALLBACK_PROVIDER: false,
+    },
+  },
+  tasks: _AI_TASK_PREVIEWS,
+  safeToStartAiDryRun: false,
+  blockers: ["NVIDIA_API_KEY is not set"],
+  warnings: [],
+  nextAction: "fix_ai_provider_env_before_dry_run",
+  dryRun: true,
+  liveCallWillBeMade: false,
+};
+
+const _OP_DRY_RUN_DECISIONS = _RUNTIME_OPS.map((op) => {
+  const aiTaskMap: Record<string, string> = {
+    "ai.reports_summary": "reports_summaries",
+    "ai.ceo_planning": "ceo_planning",
+    "ai.caio_compliance": "caio_compliance",
+    "ai.customer_hinglish_chat": "hinglish_customer_chat",
+    "ai.critical_fallback": "critical_fallback",
+    "ai.smoke_test": "smoke_test",
+  };
+  const aiTaskName = aiTaskMap[op.operationType] ?? "";
+  const aiPreview = aiTaskName
+    ? (_AI_TASK_PREVIEWS.find((t) => t.taskType === aiTaskName) ?? null)
+    : null;
+  const warnings: string[] = [
+    "No per-org integration setting configured. Runtime stays on env / config.",
+  ];
+  if (op.providerType === "payu" || op.providerType === "delhivery") {
+    warnings.push(
+      `${op.providerType} env keys missing — deferred provider; live execution remains blocked.`,
+    );
+  } else if (op.providerType === "vapi") {
+    warnings.push(
+      "Vapi env partially configured — phone_number_id and webhook_secret are still missing; live calls remain blocked.",
+    );
+  } else if (op.envKeys.length) {
+    warnings.push(
+      `Required env keys missing for ${op.operationType}: ${op.envKeys.join(", ")}`,
+    );
+  }
+  const blockers = aiPreview?.blockers ?? [];
+  return {
+    operationType: op.operationType,
+    operationDefinition: {
+      operationType: op.operationType,
+      providerType: op.providerType,
+      sideEffectRisk: op.sideEffectRisk,
+      dryRunAllowed: true,
+      liveAllowedInPhase6G: false,
+      requiredOrg: true,
+      requiredSecretRefs: [],
+      requiredEnvKeys: op.envKeys,
+      requiredConfigKeys: [],
+      readinessNotes: "",
+      nextPhaseForLiveExecution:
+        op.providerType === "payu"
+          ? "deferred_until_payu_credentials_available"
+          : op.providerType === "delhivery"
+            ? "deferred_until_delhivery_credentials_available"
+            : "phase_6h_controlled_live_execution_audit",
+    },
+    organization: {
+      id: SAAS_DEFAULT_ORG.id,
+      code: SAAS_DEFAULT_ORG.code,
+      name: SAAS_DEFAULT_ORG.name,
+    },
+    branch: null,
+    providerType: op.providerType,
+    providerLabel: op.providerLabel,
+    runtimeSource: "env_config",
+    perOrgRuntimeEnabled: false,
+    dryRun: true,
+    liveExecutionAllowed: false,
+    externalCallWillBeMade: false,
+    sideEffectRisk: op.sideEffectRisk,
+    providerSettingExists: false,
+    settingStatus: "not_configured",
+    secretRefsStatus: {},
+    envKeyStatus: Object.fromEntries(op.envKeys.map((key) => [key, false])),
+    configStatus: {},
+    providerRuntimePreview: {
+      secretRefsPresent: false,
+      missingSecretRefs: [],
+      configPresent: false,
+    },
+    aiProviderRoute: aiPreview,
+    blockers,
+    warnings,
+    nextAction:
+      blockers.length > 0
+        ? "fix_runtime_routing_blockers"
+        : "ready_for_phase_6h_controlled_runtime_live_audit",
+    auditKind: "saas.runtime_dry_run.previewed",
+  };
+});
+
+export const SAAS_RUNTIME_DRY_RUN_REPORT: Record<string, unknown> = {
+  organization: {
+    id: SAAS_DEFAULT_ORG.id,
+    code: SAAS_DEFAULT_ORG.code,
+    name: SAAS_DEFAULT_ORG.name,
+  },
+  runtimeUsesPerOrgSettings: false,
+  perOrgRuntimeEnabled: false,
+  runtimeSource: "env_config",
+  dryRun: true,
+  liveExecutionAllowed: false,
+  operations: _OP_DRY_RUN_DECISIONS,
+  aiProviderRoutes: SAAS_AI_PROVIDER_ROUTING_PREVIEW,
+  global: {
+    safeToStartPhase6H: false,
+    blockers: ["NVIDIA_API_KEY is not set"],
+    warnings: [],
+    nextAction: "fix_runtime_routing_blockers",
+  },
+  blockers: ["NVIDIA_API_KEY is not set"],
+  warnings: [],
+  nextAction: "fix_runtime_routing_blockers",
+};
+
+export const SAAS_CONTROLLED_RUNTIME_READINESS: Record<string, unknown> = {
+  organization: {
+    id: SAAS_DEFAULT_ORG.id,
+    code: SAAS_DEFAULT_ORG.code,
+    name: SAAS_DEFAULT_ORG.name,
+  },
+  runtimeSource: "env_config",
+  perOrgRuntimeEnabled: false,
+  runtimeUsesPerOrgSettings: false,
+  dryRun: true,
+  liveExecutionAllowed: false,
+  operationCount: _RUNTIME_OPS.length,
+  aiTaskCount: _AI_TASK_FIXTURES.length,
+  safeToStartPhase6H: false,
+  blockers: ["NVIDIA_API_KEY is not set"],
+  warnings: [],
+  nextAction: "fix_runtime_routing_blockers",
+};

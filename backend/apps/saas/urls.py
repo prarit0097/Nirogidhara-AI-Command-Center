@@ -3,11 +3,14 @@ from __future__ import annotations
 from django.urls import path
 
 from .views import (
+    AiProviderRoutingView,
+    ControlledRuntimeReadinessView,
     CurrentOrganizationView,
     DataCoverageView,
     FeatureFlagsView,
     MyOrganizationsView,
     OrgScopeReadinessView,
+    RuntimeDryRunView,
     RuntimeRoutingReadinessView,
     SaasAdminOrganizationDetailView,
     SaasAdminOrganizationsView,
@@ -84,5 +87,20 @@ urlpatterns = [
         "runtime-routing-readiness/",
         RuntimeRoutingReadinessView.as_view(),
         name="saas-runtime-routing-readiness",
+    ),
+    path(
+        "runtime-dry-run/",
+        RuntimeDryRunView.as_view(),
+        name="saas-runtime-dry-run",
+    ),
+    path(
+        "ai-provider-routing/",
+        AiProviderRoutingView.as_view(),
+        name="saas-ai-provider-routing",
+    ),
+    path(
+        "controlled-runtime-readiness/",
+        ControlledRuntimeReadinessView.as_view(),
+        name="saas-controlled-runtime-readiness",
     ),
 ]
