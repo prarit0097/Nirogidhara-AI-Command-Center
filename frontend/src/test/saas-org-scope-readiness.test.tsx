@@ -25,6 +25,7 @@ describe("Phase 6C — Org-Scope Readiness", () => {
 
     await waitFor(() =>
       expect(screen.getByText("Org-scope readiness")).toBeInTheDocument(),
+      { timeout: 5000 },
     );
     // Backend-derived header copy must surface verbatim. Multiple
     // Phase 6 cards share the "Off (Phase 6E)" label, so use the

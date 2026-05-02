@@ -1766,3 +1766,229 @@ export const SAAS_CONTROLLED_RUNTIME_READINESS: Record<string, unknown> = {
   warnings: [],
   nextAction: "fix_runtime_routing_blockers",
 };
+
+// ---------- Phase 6H - Controlled Runtime Live Audit Gate fixtures ----------
+
+const _LIVE_GATE_OPS = [
+  "whatsapp.send_text",
+  "whatsapp.send_template",
+  "razorpay.create_order",
+  "razorpay.create_payment_link",
+  "payu.create_payment",
+  "delhivery.create_shipment",
+  "vapi.place_call",
+  "ai.customer_hinglish_chat",
+  "ai.caio_compliance",
+  "ai.ceo_planning",
+  "ai.reports_summary",
+  "ai.critical_fallback",
+];
+
+const _LIVE_GATE_POLICY_FIXTURES = _LIVE_GATE_OPS.map((operationType) => {
+  const runtimeOp = _RUNTIME_OPS.find((op) => op.operationType === operationType);
+  const providerType =
+    runtimeOp?.providerType ??
+    (operationType.startsWith("ai.") ? "openai" : "other");
+  const riskLevel =
+    operationType === "vapi.place_call" ||
+    operationType === "ai.customer_hinglish_chat"
+      ? "critical"
+      : operationType.includes("payment_link") ||
+          operationType.includes("shipment") ||
+          operationType.startsWith("whatsapp.")
+        ? "high"
+        : operationType.includes("create_order") ||
+            operationType.includes("create_payment")
+          ? "medium"
+          : "low";
+  return {
+    operationType,
+    providerType,
+    riskLevel,
+    liveAllowedByDefault: false,
+    approvalRequired: true,
+    caioReviewRequired:
+      operationType === "whatsapp.send_text" ||
+      operationType.includes("customer_hinglish") ||
+      operationType.includes("caio"),
+    consentRequired:
+      operationType.startsWith("whatsapp.") || operationType === "vapi.place_call",
+    claimVaultRequired:
+      operationType === "whatsapp.send_text" ||
+      operationType === "ai.customer_hinglish_chat",
+    webhookRequired:
+      operationType.includes("razorpay") ||
+      operationType.includes("delhivery") ||
+      operationType.includes("vapi"),
+    idempotencyRequired: true,
+    auditRequired: true,
+    killSwitchCanBlock: true,
+    allowedInPhase6H: false,
+    nextPhaseForLiveTest: operationType.includes("payu")
+      ? "deferred_until_payu_credentials_available"
+      : operationType.includes("delhivery")
+        ? "deferred_until_delhivery_credentials_available"
+        : "phase_6i_single_internal_live_gate_simulation",
+    templateApprovalRequired: operationType === "whatsapp.send_template",
+    paymentApprovalRequired: operationType.includes("razorpay") || operationType.includes("payu"),
+    customerIntentRequired: operationType === "razorpay.create_payment_link",
+    addressValidationRequired: operationType === "delhivery.create_shipment",
+    providerDeferred: operationType.includes("payu") || operationType.includes("delhivery"),
+    humanApprovalRequired: operationType === "ai.customer_hinglish_chat",
+    requiredEnvKeys: runtimeOp?.envKeys ?? [],
+    requiredConfigKeys: [],
+    policyVersion: "phase6h.v1",
+    currentGateDecision: "blocked_by_default",
+    liveAllowedNow: false,
+    blockers: ["runtime_kill_switch_active:global", "phase_6h_live_execution_disabled"],
+    warnings: [],
+    nextAction: "keep_live_execution_blocked",
+    metadata: {},
+  };
+});
+
+export const SAAS_RUNTIME_LIVE_GATE: Record<string, unknown> = {
+  organization: {
+    id: SAAS_DEFAULT_ORG.id,
+    code: SAAS_DEFAULT_ORG.code,
+    name: SAAS_DEFAULT_ORG.name,
+  },
+  killSwitch: {
+    globalEnabled: true,
+    orgEnabled: false,
+    providerEnabled: false,
+    operationEnabled: false,
+    active: true,
+    activeBlockers: ["global"],
+  },
+  operationPolicies: _LIVE_GATE_POLICY_FIXTURES,
+  recentLiveExecutionRequests: [],
+  approvalQueue: {
+    approvalPendingCount: 0,
+    approvedButNotExecutedCount: 0,
+    blockedCount: 0,
+    rejectedCount: 0,
+  },
+  approvalPendingCount: 0,
+  approvedButNotExecutedCount: 0,
+  blockedCount: 0,
+  rejectedCount: 0,
+  recentGateAuditEvents: [],
+  runtimeSource: "env_config",
+  perOrgRuntimeEnabled: false,
+  runtimeUsesPerOrgSettings: false,
+  defaultDryRun: true,
+  defaultLiveExecutionAllowed: false,
+  liveExecutionAllowed: false,
+  externalCallWillBeMade: false,
+  safeToStartPhase6I: true,
+  blockers: [],
+  warnings: [
+    "PayU deferred.",
+    "Delhivery deferred.",
+    "Vapi missing phone_number_id/webhook_secret until env is configured.",
+    "WhatsApp auto-reply OFF; campaigns/broadcast locked.",
+    "AI customer send requires Claim Vault + CAIO + approval.",
+    "Approving in Phase 6H does not execute external calls.",
+  ],
+  nextAction: "ready_for_phase_6i_single_internal_live_gate_simulation",
+};
+
+export const SAAS_RUNTIME_LIVE_GATE_POLICIES: Record<string, unknown> = {
+  policies: _LIVE_GATE_POLICY_FIXTURES,
+  dryRun: true,
+  liveExecutionAllowed: false,
+  externalCallWillBeMade: false,
+};
+
+export const SAAS_RUNTIME_LIVE_GATE_KILL_SWITCH: Record<string, unknown> = {
+  scope: "global",
+  enabled: true,
+  reason: "Phase 6H default global live execution block.",
+  dryRun: true,
+  liveExecutionAllowed: false,
+  externalCallWillBeMade: false,
+  killSwitchActive: true,
+  approvalStatus: "",
+  gateDecision: "blocked_by_kill_switch",
+  blockers: ["global_runtime_kill_switch_enabled"],
+  warnings: ["Phase 6H does not execute external calls even when disabled."],
+  nextAction: "keep_live_execution_blocked",
+};
+
+const _LIVE_GATE_REQUEST = {
+  id: 1,
+  organization: {
+    id: SAAS_DEFAULT_ORG.id,
+    code: SAAS_DEFAULT_ORG.code,
+    name: SAAS_DEFAULT_ORG.name,
+  },
+  branch: null,
+  operationType: "razorpay.create_order",
+  providerType: "razorpay",
+  runtimeSource: "env_config",
+  perOrgRuntimeEnabled: false,
+  dryRun: true,
+  liveExecutionRequested: true,
+  liveExecutionAllowed: false,
+  externalCallWillBeMade: false,
+  approvalRequired: true,
+  approvalStatus: "pending",
+  requestedBy: null,
+  approvedBy: null,
+  rejectedBy: null,
+  requestedAt: new Date().toISOString(),
+  approvedAt: null,
+  rejectedAt: null,
+  expiresAt: null,
+  riskLevel: "medium",
+  payloadHash: "mockhash",
+  safePayloadSummary: { amount: 499, phone: "+91******1234" },
+  blockers: ["runtime_kill_switch_active:global", "phase_6h_live_execution_disabled"],
+  warnings: ["Approving in Phase 6H does not execute external calls."],
+  gateDecision: "blocked_by_default",
+  idempotencyKey: "mock-idempotency-key",
+  auditEventId: null,
+  metadata: { phase: "6H", no_provider_call: true },
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  killSwitchActive: true,
+  nextAction: "keep_live_execution_blocked",
+};
+
+export const SAAS_RUNTIME_LIVE_GATE_REQUESTS: Record<string, unknown> = {
+  count: 1,
+  requests: [_LIVE_GATE_REQUEST],
+  dryRun: true,
+  liveExecutionAllowed: false,
+  externalCallWillBeMade: false,
+};
+
+export const SAAS_RUNTIME_LIVE_GATE_PREVIEW: Record<string, unknown> = {
+  operationType: "whatsapp.send_text",
+  providerType: "whatsapp_meta",
+  valid: true,
+  policy: _LIVE_GATE_POLICY_FIXTURES[0],
+  organization: {
+    id: SAAS_DEFAULT_ORG.id,
+    code: SAAS_DEFAULT_ORG.code,
+    name: SAAS_DEFAULT_ORG.name,
+  },
+  branch: null,
+  runtimeSource: "env_config",
+  perOrgRuntimeEnabled: false,
+  dryRun: true,
+  liveExecutionRequested: false,
+  liveExecutionAllowed: false,
+  externalCallWillBeMade: false,
+  approvalRequired: true,
+  approvalStatus: "not_required",
+  killSwitchActive: true,
+  riskLevel: "high",
+  payloadHash: "",
+  safePayloadSummary: {},
+  blockers: [],
+  warnings: ["dry_run_preview_only"],
+  gateDecision: "dry_run_allowed",
+  nextAction: "dry_run_preview_only",
+};

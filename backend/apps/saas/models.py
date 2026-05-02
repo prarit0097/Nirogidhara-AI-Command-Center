@@ -371,3 +371,245 @@ class OrganizationIntegrationSetting(models.Model):
     def __str__(self) -> str:  # pragma: no cover
         name = self.display_name or self.provider_type
         return f"{self.organization.code}/{name} ({self.status})"
+
+
+class RuntimeLiveGatePolicySnapshot(models.Model):
+    """Immutable-ish snapshot of a live-gate policy decision.
+
+    Phase 6H keeps runtime execution blocked by default. Snapshots let
+    operators audit which policy was evaluated without depending on the
+    current in-code registry staying identical forever.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_gate_policy_snapshots",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_gate_policy_snapshots",
+    )
+    operation_type = models.CharField(max_length=96, db_index=True)
+    provider_type = models.CharField(max_length=48, db_index=True)
+    risk_level = models.CharField(max_length=16, default="high")
+    live_allowed_by_default = models.BooleanField(default=False)
+    approval_required = models.BooleanField(default=True)
+    caio_review_required = models.BooleanField(default=False)
+    consent_required = models.BooleanField(default=False)
+    claim_vault_required = models.BooleanField(default=False)
+    webhook_required = models.BooleanField(default=False)
+    idempotency_required = models.BooleanField(default=True)
+    kill_switch_can_block = models.BooleanField(default=True)
+    policy_version = models.CharField(max_length=32, default="phase6h.v1")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("organization", "operation_type")),
+            models.Index(fields=("provider_type", "risk_level")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.operation_type} [{self.policy_version}]"
+
+
+class RuntimeLiveExecutionRequest(models.Model):
+    """Auditable live-execution request.
+
+    A row here is never a provider call. It records whether an operator
+    asked for a future live side effect and why the Phase 6H gate refused
+    or accepted the request for audit-only readiness.
+    """
+
+    class ApprovalStatus(models.TextChoices):
+        NOT_REQUIRED = "not_required", "Not required"
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        EXPIRED = "expired", "Expired"
+        BLOCKED = "blocked", "Blocked"
+
+    class GateDecision(models.TextChoices):
+        DRY_RUN_ALLOWED = "dry_run_allowed", "Dry-run allowed"
+        BLOCKED_BY_DEFAULT = "blocked_by_default", "Blocked by default"
+        BLOCKED_BY_KILL_SWITCH = (
+            "blocked_by_kill_switch",
+            "Blocked by kill switch",
+        )
+        BLOCKED_MISSING_APPROVAL = (
+            "blocked_missing_approval",
+            "Blocked missing approval",
+        )
+        BLOCKED_MISSING_PROVIDER_CONFIG = (
+            "blocked_missing_provider_config",
+            "Blocked missing provider config",
+        )
+        BLOCKED_MISSING_CONSENT = (
+            "blocked_missing_consent",
+            "Blocked missing consent",
+        )
+        BLOCKED_MISSING_CAIO_REVIEW = (
+            "blocked_missing_caio_review",
+            "Blocked missing CAIO review",
+        )
+        BLOCKED_MISSING_CLAIM_VAULT = (
+            "blocked_missing_claim_vault",
+            "Blocked missing Claim Vault",
+        )
+        BLOCKED_MISSING_WEBHOOK = (
+            "blocked_missing_webhook",
+            "Blocked missing webhook",
+        )
+        LIVE_READY_BUT_NOT_EXECUTED = (
+            "live_ready_but_not_executed",
+            "Live ready but not executed",
+        )
+
+    organization = models.ForeignKey(
+        Organization,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_execution_requests",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_execution_requests",
+    )
+    operation_type = models.CharField(max_length=96, db_index=True)
+    provider_type = models.CharField(max_length=48, db_index=True)
+    runtime_source = models.CharField(max_length=32, default="env_config")
+    per_org_runtime_enabled = models.BooleanField(default=False)
+    dry_run = models.BooleanField(default=True)
+    live_execution_requested = models.BooleanField(default=False)
+    live_execution_allowed = models.BooleanField(default=False)
+    external_call_will_be_made = models.BooleanField(default=False)
+    approval_required = models.BooleanField(default=True)
+    approval_status = models.CharField(
+        max_length=24,
+        choices=ApprovalStatus.choices,
+        default=ApprovalStatus.PENDING,
+        db_index=True,
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_requests_created",
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_requests_approved",
+    )
+    rejected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_live_requests_rejected",
+    )
+    requested_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    risk_level = models.CharField(max_length=16, default="high")
+    payload_hash = models.CharField(max_length=64, blank=True, default="")
+    safe_payload_summary = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    gate_decision = models.CharField(
+        max_length=48,
+        choices=GateDecision.choices,
+        default=GateDecision.BLOCKED_BY_DEFAULT,
+        db_index=True,
+    )
+    idempotency_key = models.CharField(
+        max_length=160,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    audit_event_id = models.PositiveIntegerField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("organization", "operation_type")),
+            models.Index(fields=("approval_status", "gate_decision")),
+            models.Index(fields=("-created_at", "operation_type")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.operation_type} ({self.approval_status})"
+
+
+class RuntimeKillSwitch(models.Model):
+    """Live side-effect kill switch.
+
+    ``enabled=True`` means the switch blocks matching live external
+    side effects. Phase 6H seeds the global switch enabled.
+    """
+
+    class Scope(models.TextChoices):
+        GLOBAL = "global", "Global"
+        ORGANIZATION = "organization", "Organization"
+        PROVIDER = "provider", "Provider"
+        OPERATION = "operation", "Operation"
+
+    organization = models.ForeignKey(
+        Organization,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_kill_switches",
+    )
+    scope = models.CharField(
+        max_length=24,
+        choices=Scope.choices,
+        default=Scope.GLOBAL,
+        db_index=True,
+    )
+    provider_type = models.CharField(max_length=48, blank=True, default="")
+    operation_type = models.CharField(max_length=96, blank=True, default="")
+    enabled = models.BooleanField(default=True, db_index=True)
+    reason = models.TextField(blank=True, default="")
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_kill_switch_changes",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("scope", "provider_type", "operation_type")
+        indexes = (
+            models.Index(fields=("scope", "enabled")),
+            models.Index(fields=("organization", "scope")),
+            models.Index(fields=("provider_type", "operation_type")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        target = self.operation_type or self.provider_type or "all"
+        return f"{self.scope}:{target} enabled={self.enabled}"

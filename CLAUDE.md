@@ -113,11 +113,37 @@ missing `phone_number_id` / `webhook_secret` surfaces as
 warning. Raw NVIDIA / OpenAI / Anthropic / Razorpay / Meta /
 Vapi keys NEVER appear in any output (asserted with fake env
 values). **56 new backend tests + 2 new frontend tests; 1071
-backend + 34 frontend, all green.** Next phase: **Phase 6H
-Controlled Runtime Live Execution Audit** — per-operation
-opt-in to issue a tiny side-effect-bounded real call against a
-fenced cohort, with mandatory audit + CEO approval before any
-new operation can earn live status.
+backend + 34 frontend, all green.** Phase 6H has now shipped the
+audit-only live gate; next phase is **Phase 6I Single Internal Live
+Gate Simulation / Live Readiness Gate**.
+
+**Phase 6H note:** **Phase 6H Controlled Runtime Routing Live Audit
+Gate shipped.** Phase 6G Controlled Runtime Routing Dry Run is **FULL
+PASS**. Phase 6H adds the mandatory audit/approval/kill-switch gate for
+future provider-side side effects, without enabling any live execution.
+New `apps.saas.live_gate_policy` defines the protected operations
+(`whatsapp.{send_text,send_template}`, `razorpay.{create_order,
+create_payment_link}`, `payu.create_payment`, `delhivery.create_shipment`,
+`vapi.place_call`, `ai.{customer_hinglish_chat,caio_compliance,
+ceo_planning,reports_summary,critical_fallback}`), and every policy keeps
+`liveAllowedByDefault=false`, `approvalRequired=true`, and
+`allowedInPhase6H=false`. New `RuntimeLiveGatePolicySnapshot`,
+`RuntimeLiveExecutionRequest`, and `RuntimeKillSwitch` models store
+sanitized decisions, payload hashes, approval state, blockers/warnings,
+and kill-switch state; the default global kill switch is enabled.
+New `apps.saas.live_gate` evaluates/records decisions and always returns
+`runtimeSource="env_config"`, `perOrgRuntimeEnabled=false`, `dryRun=true`,
+`liveExecutionAllowed=false`, and `externalCallWillBeMade=false` in Phase
+6H. Approval in Phase 6H is audit-only and does not execute external
+calls. New commands and `/api/v1/saas/runtime-live-gate/...` APIs expose
+readiness, policies, requests, preview, approve, and reject flows with no
+raw payloads, raw secrets, or full phone numbers. Frontend `/saas-admin`
+gains "Controlled Runtime Live Audit Gate" with global safety state,
+operation table, approval queue, recent audit events, and warnings. No
+real WhatsApp/payment/shipment/call/provider side effect happens in Phase
+6H. **16 new backend tests + 2 new frontend tests; 1087 backend + 36
+frontend, all green.** Next phase: **Phase 6I Single Internal Live Gate
+Simulation / Live Readiness Gate**.
 
 ---
 
@@ -215,7 +241,7 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 1071 tests today
+python -m pytest -q                    # 1087 tests today
 
 # Frontend
 cd frontend
@@ -379,6 +405,10 @@ git push origin main
 | Phase 6E integration selectors | `backend/apps/saas/integration_settings.py` — provider readiness and secret-ref masking. APIs return masked refs/booleans only. |
 | Phase 6E SaaS admin selectors/API | `backend/apps/saas/admin_readiness.py`, `backend/apps/saas/views.py`, `backend/apps/saas/urls.py` — admin overview, organizations, integration settings, integration readiness. |
 | Phase 6E SaaS Admin Panel | `frontend/src/pages/SaasAdmin.tsx` at `/saas-admin` — read-only org scope, write readiness, integration readiness, safety locks, SaaS audit events; no send/enable/provider-activation controls. |
+| Phase 6H live gate policy | `backend/apps/saas/live_gate_policy.py` - source of truth for protected live operations; all Phase 6H policies keep `allowedInPhase6H=false`. |
+| Phase 6H live gate service | `backend/apps/saas/live_gate.py` - evaluates/records sanitized audit-only gate decisions; never calls providers and always keeps `externalCallWillBeMade=false` in Phase 6H. |
+| Phase 6H live gate models | `backend/apps/saas/models.py` (`RuntimeLiveGatePolicySnapshot`, `RuntimeLiveExecutionRequest`, `RuntimeKillSwitch`) |
+| Phase 6H live gate commands/API/UI | `inspect_runtime_live_audit_gate`, `preview_live_gate_decision`, `request/approve/reject_live_execution_*`, `enable/disable_runtime_kill_switch`; `/api/v1/saas/runtime-live-gate/...`; `frontend/src/pages/SaasAdmin.tsx` Controlled Runtime Live Audit Gate section. |
 | Reward/Penalty engine (Phase 4B) | `backend/apps/rewards/engine.py` |
 | RewardPenaltyEvent model | `backend/apps/rewards/models.py` |
 | Reward/Penalty Celery task | `backend/apps/rewards/tasks.py` |

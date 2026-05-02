@@ -26,6 +26,16 @@ from .admin_readiness import get_saas_admin_overview
 from .coverage import compute_default_organization_coverage
 from .ai_runtime_preview import preview_all_ai_provider_routes
 from .integration_runtime import get_all_provider_runtime_previews
+from .live_gate import (
+    _serialize_request as serialize_live_execution_request,
+    approve_live_execution_request,
+    create_live_execution_request,
+    evaluate_live_execution_gate,
+    get_or_create_default_runtime_kill_switch,
+    reject_live_execution_request,
+    summarize_live_gate_readiness,
+)
+from .live_gate_policy import list_live_gate_policies
 from .runtime_dry_run import (
     preview_all_runtime_operations,
     preview_runtime_routing_for_operation,
@@ -38,7 +48,11 @@ from .integration_settings import (
 )
 from .readiness import compute_org_scoped_api_readiness
 from .write_readiness import compute_org_write_path_readiness
-from .models import Organization, OrganizationIntegrationSetting
+from .models import (
+    Organization,
+    OrganizationIntegrationSetting,
+    RuntimeLiveExecutionRequest,
+)
 from .selectors import (
     get_active_organization_for_user,
     get_default_organization,
@@ -423,6 +437,180 @@ class RuntimeRoutingReadinessView(APIView):
         return Response(get_all_provider_runtime_previews(org))
 
 
+class RuntimeLiveGateView(APIView):
+    """``GET /api/v1/saas/runtime-live-gate/``.
+
+    Authenticated read-only overview of the Phase 6H live audit gate.
+    No endpoint in this view executes a provider call.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        org = _get_admin_org(request)
+        return Response(summarize_live_gate_readiness(org))
+
+
+class RuntimeLiveGateRequestsView(APIView):
+    """List or create audit-only live execution requests."""
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated()]
+        return [AdminSaasPermission()]
+
+    def get(self, request):
+        rows = RuntimeLiveExecutionRequest.objects.order_by("-created_at")[
+            :50
+        ]
+        return Response(
+            {
+                "count": len(rows),
+                "requests": [
+                    serialize_live_execution_request(row) for row in rows
+                ],
+                "dryRun": True,
+                "liveExecutionAllowed": False,
+                "externalCallWillBeMade": False,
+            }
+        )
+
+    def post(self, request):
+        operation = (
+            request.data.get("operationType")
+            or request.data.get("operation")
+            or ""
+        ).strip()
+        if not operation:
+            return Response(
+                {"detail": "operationType is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        row = create_live_execution_request(
+            operation,
+            request=request,
+            user=request.user,
+            payload=request.data.get("payload") or {},
+            live_requested=bool(
+                request.data.get("liveRequested")
+                if "liveRequested" in request.data
+                else True
+            ),
+        )
+        return Response(
+            serialize_live_execution_request(row),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RuntimeLiveGatePoliciesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request):
+        return Response(
+            {
+                "policies": [
+                    policy.to_dict() for policy in list_live_gate_policies()
+                ],
+                "dryRun": True,
+                "liveExecutionAllowed": False,
+                "externalCallWillBeMade": False,
+            }
+        )
+
+
+class RuntimeLiveGateKillSwitchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request):
+        switch = get_or_create_default_runtime_kill_switch()
+        return Response(
+            {
+                "scope": switch.scope,
+                "enabled": switch.enabled,
+                "reason": switch.reason,
+                "dryRun": True,
+                "liveExecutionAllowed": False,
+                "externalCallWillBeMade": False,
+                "killSwitchActive": switch.enabled,
+                "approvalStatus": "",
+                "gateDecision": (
+                    "blocked_by_kill_switch"
+                    if switch.enabled
+                    else "kill_switch_disabled"
+                ),
+                "blockers": ["global_runtime_kill_switch_enabled"]
+                if switch.enabled
+                else [],
+                "warnings": [
+                    "Phase 6H does not execute external calls even when disabled."
+                ],
+                "nextAction": "keep_live_execution_blocked",
+            }
+        )
+
+
+class RuntimeLiveGatePreviewView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request):
+        operation = (
+            request.data.get("operationType")
+            or request.data.get("operation")
+            or ""
+        ).strip()
+        if not operation:
+            return Response(
+                {"detail": "operationType is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        decision = evaluate_live_execution_gate(
+            operation,
+            request=request,
+            user=request.user,
+            payload=request.data.get("payload") or {},
+            live_requested=bool(request.data.get("liveRequested", False)),
+            audit_preview=True,
+        )
+        return Response(decision)
+
+
+class RuntimeLiveGateApproveView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, request_id):
+        row = RuntimeLiveExecutionRequest.objects.filter(id=request_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Runtime live execution request not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        row = approve_live_execution_request(
+            request_id,
+            request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_live_execution_request(row))
+
+
+class RuntimeLiveGateRejectView(APIView):
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, request_id):
+        row = RuntimeLiveExecutionRequest.objects.filter(id=request_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Runtime live execution request not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        row = reject_live_execution_request(
+            request_id,
+            request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_live_execution_request(row))
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -440,4 +628,11 @@ __all__ = (
     "RuntimeDryRunView",
     "AiProviderRoutingView",
     "ControlledRuntimeReadinessView",
+    "RuntimeLiveGateView",
+    "RuntimeLiveGateRequestsView",
+    "RuntimeLiveGatePoliciesView",
+    "RuntimeLiveGateKillSwitchView",
+    "RuntimeLiveGatePreviewView",
+    "RuntimeLiveGateApproveView",
+    "RuntimeLiveGateRejectView",
 )

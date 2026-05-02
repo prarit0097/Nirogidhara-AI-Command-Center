@@ -5,13 +5,15 @@ direction.
 
 ## Status (current)
 
-Phase 6E SaaS admin update: `/saas-admin` adds a read-only SaaS control
-panel backed by backend-computed admin/readiness APIs. It shows organization
-overview, org scope readiness, write-path readiness, integration readiness,
-safety locks, and SaaS audit events. Runtime providers still use env/config
-instead of DB integration settings, raw secrets are never rendered, per-org
-provider routing is deferred to Phase 6F, global tenant filtering remains
-not blanket-enabled, and WhatsApp flags remain untouched/off.
+Phase 6H SaaS admin update: Phase 6G Controlled Runtime Routing Dry Run is
+**FULL PASS**. `/saas-admin` now includes a read-only/admin-safe
+"Controlled Runtime Live Audit Gate" section backed by backend-computed
+Phase 6H APIs. It shows global live safety state, default-enabled kill
+switch, operation gate table, approval queue, recent gate audit events, and
+warnings. Runtime providers still use env/config, default dry-run remains
+true, live execution remains blocked, and approving in Phase 6H does not
+execute external calls. No raw secrets, raw payloads, or full phone numbers
+are rendered.
 
 Phase 5F-Gate pilot readiness update: `/whatsapp-monitoring` now includes
 a read-only "Approved Customer Pilot Readiness" section backed by
@@ -23,7 +25,7 @@ earlier 4-hour soak was accelerated, not full-duration.
 
 Item | Status
 --- | ---
-Phase 6E `/saas-admin` | done - read-only SaaS admin panel with organization overview, org/write readiness, integration readiness, safety locks, and SaaS audit events; no provider activation, WhatsApp enable, send, campaign, or org-switch mutation controls.
+Phase 6H `/saas-admin` | done - SaaS admin panel now includes Controlled Runtime Live Audit Gate with global kill-switch state, operation policies, approval queue, and recent audit events; no provider execution, WhatsApp send/enable, payment/shipment/call, campaign, or org-switch mutation controls.
 All 21 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page; Phase 4B enhanced the Rewards page; Phase 4C added an Approval queue table on Governance; Phase 4D added an Execute button on approved rows; Phase 4A added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed and the Governance "Approval queue"; Phase 4E is backend-only; Phase 5A added a read-only `/whatsapp-templates` page + Settings → WABA section + new "Messaging" sidebar group; Phase 5B added a three-pane `/whatsapp-inbox` page + Customer 360 WhatsApp tab; Phase 5C replaces the Phase 5B "AI suggestions disabled" placeholder with a live `AiAgentPanel`; Phase 5D adds a "Call customer" button on the `AiAgentPanel` + handoff and lifecycle event endpoints; **Phase 5E** adds a Rescue Discount cap card to the `AiAgentPanel` (current cumulative %, cap remaining out of 50%, customer ask count) plus six new TS types (`DiscountOffer`, `DiscountOfferListResponse`, `CreateRescueOfferPayload`, `DiscountOfferCap`, `ReorderDay20StatusResponse`, `ReorderDay20RunResponse`) and six new `api` methods (`getOrderDiscountOffers`, `createRescueDiscountOffer`, `acceptRescueDiscountOffer`, `rejectRescueDiscountOffer`, `getReorderDay20Status`, `runReorderDay20Sweep`). All cap math and CEO escalation logic lives in the backend (`apps.orders.rescue_discount`); the frontend renders cap state and dispatches API calls only.
 Pages go through `src/services/api.ts` only | done — no page imports `mockData.ts` directly
 TypeScript shared types in `src/types/domain.ts` | done
@@ -31,7 +33,7 @@ Sidebar collapse layout | done — shared collapsed state
 Mobile responsiveness | baseline done — KPI stack, sidebar drawer, tables horizontal-scroll on small screens; per-page tuning continues
 Dashboard polish | baseline done — premium spacing, hierarchy, executive feel; iterate as needed
 Workflow visuals | UI-component diagrams in `WorkflowMap`
-Vitest tests | 20 tests passing (5 page/sidebar + 3 API fallback + 5 realtime + 7 WhatsApp monitoring)
+Vitest tests | Phase 6H SaaS admin tests cover live gate render, kill switch, operation table, approval queue, warning text, no raw secrets/full phones, and no provider execution buttons.
 ESLint warnings | 8 pre-existing shadcn warnings (`react-refresh/only-export-components`); 0 errors
 Mock fallback in `api.ts` | done — pages never break when backend is offline
 
@@ -83,8 +85,8 @@ cd ../frontend && npm run dev
 | `/whatsapp-inbox` | `WhatsAppInbox.tsx` | 5B | Three-pane manual-only WhatsApp inbox + internal notes + manual template send + AI-suggestions-disabled placeholder |
 | `/whatsapp-templates` | `WhatsAppTemplates.tsx` | 5A | Meta-mirrored WhatsApp templates (read-only) + Sync from Meta button |
 | `/whatsapp-monitoring` | `WhatsAppMonitoring.tsx` | 5F-Gate | Read-only auto-reply safety dashboard + Approved Customer Pilot Readiness; masked phones only; no send/enable controls |
-| `/saas-admin` | `SaasAdmin.tsx` | 6E | Read-only SaaS admin panel: organization overview, org/write readiness, integration readiness, safety locks, audit timeline; no activation/send controls |
+| `/saas-admin` | `SaasAdmin.tsx` | 6E-6H | SaaS admin panel: organization overview, org/write readiness, integration readiness, safety locks, runtime routing preview, AI provider routing preview, Controlled Runtime Live Audit Gate; no activation/send/provider-execution controls |
 | `/settings` | `Settings.tsx` | 1 / 5A | Settings & Control + WABA section |
 
-Phase 6E note: the route inventory now includes `/saas-admin`, so the current page count is 23.
+Phase 6H note: `/saas-admin` now includes live-gate visibility only. Approval buttons, when used, call backend audit endpoints that still do not execute providers.
 Current total: 23 pages. Sidebar groups include Overview, Sales, Operations, AI Layer, Governance, Insights, Messaging, and System.

@@ -239,6 +239,15 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.provider_route.previewed": "sparkles",
     "ai.provider_smoke_test.completed": "check-circle",
     "ai.provider_smoke_test.failed": "shield-off",
+    # Phase 6H Controlled Runtime Routing Live Audit Gate.
+    "runtime.live_gate.previewed": "scan",
+    "runtime.live_gate.request_created": "file-plus",
+    "runtime.live_gate.request_blocked": "ban",
+    "runtime.live_gate.request_approved": "badge-check",
+    "runtime.live_gate.request_rejected": "x-circle",
+    "runtime.kill_switch.enabled": "shield",
+    "runtime.kill_switch.disabled": "shield-off",
+    "runtime.live_gate.ready_but_not_executed": "pause-circle",
 }
 
 

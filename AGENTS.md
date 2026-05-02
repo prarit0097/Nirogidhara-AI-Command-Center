@@ -161,6 +161,10 @@ frontend/src/pages/SaasAdmin.tsx          ← Phase 6E read-only `/saas-admin`; 
 backend/apps/saas/runtime_operations.py   ← Phase 6G operation taxonomy — 14 ops, dryRunAllowed=True, liveAllowedInPhase6G=False, side-effect risk, env keys
 backend/apps/saas/ai_runtime_preview.py   ← Phase 6G NVIDIA-primary AI routing table (minimax-m2.7 / kimi-k2.6 / mistral-medium / gemma-4-31b-it) + task-wise max_tokens
 backend/apps/saas/runtime_dry_run.py      ← Phase 6G dry-run engine + validate_dry_run_has_no_side_effects (runtimeSource=env_config + perOrgRuntimeEnabled=False + liveExecutionAllowed=False asserted)
+backend/apps/saas/live_gate_policy.py     ← Phase 6H live audit gate policy registry for WhatsApp/Razorpay/PayU/Delhivery/Vapi/AI operations; no provider calls
+backend/apps/saas/live_gate.py            ← Phase 6H central live execution gate + default-enabled kill switch + audit-only approval flow; Phase 6H never sets externalCallWillBeMade=true
+backend/apps/saas/management/commands/inspect_runtime_live_audit_gate.py ← Phase 6H live audit gate readiness inspector
+backend/apps/saas/management/commands/preview_live_gate_decision.py ← Phase 6H single-operation gate preview; writes sanitized audit only, never executes
 backend/apps/saas/management/commands/inspect_controlled_runtime_routing_dry_run.py ← read-only registry walk; never calls a provider
 backend/apps/saas/management/commands/inspect_ai_provider_routing.py ← read-only AI runtime + per-task preview
 backend/apps/saas/management/commands/preview_runtime_operation.py ← read-only single-operation preview

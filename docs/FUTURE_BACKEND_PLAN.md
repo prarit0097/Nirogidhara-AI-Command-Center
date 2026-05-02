@@ -1,5 +1,24 @@
 # Backend Roadmap (Phase 2+)
 
+## Current SaaS runtime gate status
+
+Phase 6G Controlled Runtime Routing Dry Run + AI Provider Routing is
+**FULL PASS**. Phase 6H ships the Controlled Runtime Routing Live Audit
+Gate only: operation policy registry, sanitized live-execution request
+records, default-enabled global runtime kill switch, audit events,
+management commands, admin APIs, and `/saas-admin` visibility. Default live
+execution remains blocked (`dryRun=true`, `liveExecutionAllowed=false`,
+`externalCallWillBeMade=false`), runtime providers still use env/config,
+and approval in Phase 6H does not execute external calls. No real
+WhatsApp/payment/shipment/call/provider side effect is allowed in this
+phase.
+
+Next backend phase: **Phase 6I Single Internal Live Gate Simulation / Live
+Readiness Gate**. Phase 6I may simulate one tightly bounded internal live
+approval path through the gate, but only after the kill-switch, approval,
+idempotency, provider-config, Claim-Vault, CAIO, and consent checks all
+prove safe.
+
 Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4A + 4B + 4C + 4D + 4E are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
 gateway integrations, and the full governance UI live in the phases below —

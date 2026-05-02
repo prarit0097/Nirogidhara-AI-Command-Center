@@ -48,6 +48,19 @@ Reward and penalty are calculated against **delivered profitable orders**, not o
 
 ## 2. Current Production Reality
 
+Phase 6H SaaS runtime live-gate note: Phase 6G Controlled Runtime Routing
+Dry Run + AI Provider Routing is **FULL PASS**. Phase 6H adds a central
+Controlled Runtime Routing Live Audit Gate only: protected operation policy
+registry, sanitized live-execution request records, default-enabled global
+kill switch, audit events, management commands, admin APIs, and a
+`/saas-admin` visibility section. Default live execution remains blocked
+(`dryRun=true`, `liveExecutionAllowed=false`,
+`externalCallWillBeMade=false`), runtime providers still use env/config,
+and approval in Phase 6H does not execute external calls. No real
+WhatsApp/payment/shipment/call/provider side effect is allowed in this
+phase. Next phase is **Phase 6I Single Internal Live Gate Simulation / Live
+Readiness Gate**.
+
 Phase 6E SaaS note: Phase 6D org-aware write assignment is **FULL PASS**.
 Phase 6E adds safe SaaS admin/readiness APIs, per-organization integration
 settings metadata, and the read-only `/saas-admin` panel. Runtime providers

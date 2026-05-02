@@ -8,6 +8,8 @@ import type {
   SaasAiProviderRoutePreview,
   SaasAiProviderRoutingPreview,
   SaasProviderReadiness,
+  SaasRuntimeLiveGateSummary,
+  SaasLiveGatePolicy,
   SaasRuntimeDryRunOperationDecision,
   SaasRuntimeDryRunReport,
   SaasRuntimeRoutingProviderPreview,
@@ -17,11 +19,13 @@ import {
   Building2,
   CheckCircle2,
   Cpu,
+  AlertTriangle,
   KeyRound,
   LockKeyhole,
   PlayCircle,
   RefreshCw,
   ShieldCheck,
+  ShieldAlert,
   SlidersHorizontal,
   Workflow,
   type LucideIcon,
@@ -41,6 +45,8 @@ export default function SaasAdminPage() {
   const [dryRun, setDryRun] = useState<SaasRuntimeDryRunReport | null>(null);
   const [aiRouting, setAiRouting] =
     useState<SaasAiProviderRoutingPreview | null>(null);
+  const [liveGate, setLiveGate] =
+    useState<SaasRuntimeLiveGateSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -50,12 +56,14 @@ export default function SaasAdminPage() {
       api.getSaasRuntimeRoutingReadiness(),
       api.getSaasRuntimeDryRun(),
       api.getSaasAiProviderRouting(),
+      api.getSaasRuntimeLiveGate(),
     ])
-      .then(([ov, rt, dr, ai]) => {
+      .then(([ov, rt, dr, ai, gate]) => {
         setOverview(ov);
         setRouting(rt);
         setDryRun(dr);
         setAiRouting(ai);
+        setLiveGate(gate);
       })
       .finally(() => setLoading(false));
   };
@@ -472,6 +480,139 @@ export default function SaasAdminPage() {
         </section>
       )}
 
+      {liveGate && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="runtime-live-gate"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldAlert className="h-5 w-5 text-primary" />
+                Controlled Runtime Live Audit Gate
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Approving in Phase 6H does not execute external calls. The
+                gate records readiness, approvals, blockers, and kill-switch
+                state before any future provider-side execution.
+              </p>
+            </div>
+            <StatusPill
+              tone={liveGate.killSwitch.globalEnabled ? "success" : "warning"}
+            >
+              Global kill switch {liveGate.killSwitch.globalEnabled ? "enabled" : "disabled"}
+            </StatusPill>
+          </div>
+
+          <div className="grid gap-3 px-6 py-4 sm:grid-cols-5">
+            <KeyValue label="Runtime source" value={liveGate.runtimeSource} />
+            <KeyValue
+              label="Per-org runtime"
+              value={String(liveGate.perOrgRuntimeEnabled)}
+            />
+            <KeyValue
+              label="Default dry-run"
+              value={String(liveGate.defaultDryRun)}
+            />
+            <KeyValue
+              label="Live execution"
+              value={String(liveGate.liveExecutionAllowed)}
+            />
+            <KeyValue
+              label="External calls"
+              value={String(liveGate.externalCallWillBeMade)}
+            />
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1080px] text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-6 py-3 text-left font-medium">Operation</th>
+                  <th className="py-3 text-left font-medium">Provider</th>
+                  <th className="py-3 text-left font-medium">Risk</th>
+                  <th className="py-3 text-left font-medium">Approval</th>
+                  <th className="py-3 text-left font-medium">CAIO</th>
+                  <th className="py-3 text-left font-medium">Consent</th>
+                  <th className="py-3 text-left font-medium">Claim Vault</th>
+                  <th className="py-3 text-left font-medium">Webhook</th>
+                  <th className="py-3 text-left font-medium">Decision</th>
+                  <th className="px-6 py-3 text-left font-medium">Live now</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveGate.operationPolicies.map((policy) => (
+                  <LiveGatePolicyRow
+                    key={policy.operationType}
+                    policy={policy}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid gap-4 border-t border-border px-6 py-4 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="space-y-3">
+              <h4 className="flex items-center gap-2 font-display text-base font-semibold">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                Approval Queue
+              </h4>
+              <KeyValue
+                label="Pending"
+                value={String(liveGate.approvalQueue.approvalPendingCount)}
+              />
+              <KeyValue
+                label="Approved but not executed"
+                value={String(liveGate.approvalQueue.approvedButNotExecutedCount)}
+              />
+              <KeyValue
+                label="Rejected"
+                value={String(liveGate.approvalQueue.rejectedCount)}
+              />
+              <KeyValue
+                label="Blocked"
+                value={String(liveGate.approvalQueue.blockedCount)}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="flex items-center gap-2 font-display text-base font-semibold">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Recent Gate Audit Events
+              </h4>
+              {liveGate.recentGateAuditEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No live gate audit events yet.
+                </p>
+              ) : (
+                liveGate.recentGateAuditEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="rounded-md border border-border bg-muted/20 p-3"
+                  >
+                    <div className="text-sm font-medium">
+                      {event.kind} - {event.operationType || "runtime"}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {event.gateDecision || "recorded"} -{" "}
+                      {new Date(event.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-border bg-warning/5 px-6 py-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-warning">
+              <AlertTriangle className="h-4 w-4" />
+              Phase 6H warnings
+            </div>
+            <IssueList items={liveGate.warnings} empty="No warnings" />
+          </div>
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel title="Blockers & Warnings" icon={ShieldCheck}>
           <IssueList items={overview.blockers} empty="No blockers" />
@@ -647,6 +788,58 @@ function RuntimeOperationRow({
       </td>
       <td className="px-6 py-3 text-xs text-muted-foreground">
         {decision.nextAction}
+      </td>
+    </tr>
+  );
+}
+
+function LiveGatePolicyRow({ policy }: { policy: SaasLiveGatePolicy }) {
+  const decision = policy.currentGateDecision ?? "blocked_by_default";
+  return (
+    <tr className="border-t border-border/60" data-testid="live-gate-policy-row">
+      <td className="px-6 py-3 font-mono text-xs">{policy.operationType}</td>
+      <td className="py-3">{policy.providerType}</td>
+      <td className="py-3">
+        <StatusPill
+          tone={
+            policy.riskLevel === "critical" || policy.riskLevel === "high"
+              ? "warning"
+              : "neutral"
+          }
+        >
+          {policy.riskLevel}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={policy.approvalRequired ? "warning" : "neutral"}>
+          {policy.approvalRequired ? "Required" : "No"}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={policy.caioReviewRequired ? "warning" : "neutral"}>
+          {policy.caioReviewRequired ? "Required" : "No"}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={policy.consentRequired ? "warning" : "neutral"}>
+          {policy.consentRequired ? "Required" : "No"}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={policy.claimVaultRequired ? "warning" : "neutral"}>
+          {policy.claimVaultRequired ? "Required" : "No"}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={policy.webhookRequired ? "warning" : "neutral"}>
+          {policy.webhookRequired ? "Required" : "No"}
+        </StatusPill>
+      </td>
+      <td className="py-3 text-xs text-muted-foreground">{decision}</td>
+      <td className="px-6 py-3">
+        <StatusPill tone="neutral">
+          {policy.liveAllowedNow ? "true" : "false"}
+        </StatusPill>
       </td>
     </tr>
   );

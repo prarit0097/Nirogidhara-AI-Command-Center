@@ -126,3 +126,69 @@ describe("Phase 6G - Controlled Runtime Routing Dry Run", () => {
     expect(body).toContain("Wrappers required");
   });
 });
+
+describe("Phase 6H - Controlled Runtime Live Audit Gate", () => {
+  it("exposes Phase 6H API client methods with no-execution invariants", async () => {
+    expect(typeof api.getSaasRuntimeLiveGate).toBe("function");
+    expect(typeof api.getSaasRuntimeLiveGateRequests).toBe("function");
+    expect(typeof api.getSaasRuntimeLiveGatePolicies).toBe("function");
+    expect(typeof api.getSaasRuntimeLiveGateKillSwitch).toBe("function");
+    expect(typeof api.previewSaasRuntimeLiveGate).toBe("function");
+
+    const gate = await api.getSaasRuntimeLiveGate();
+    expect(gate.runtimeSource).toBe("env_config");
+    expect(gate.perOrgRuntimeEnabled).toBe(false);
+    expect(gate.defaultDryRun).toBe(true);
+    expect(gate.liveExecutionAllowed).toBe(false);
+    expect(gate.externalCallWillBeMade).toBe(false);
+    expect(gate.killSwitch.globalEnabled).toBe(true);
+    expect(gate.operationPolicies.length).toBe(12);
+
+    const preview = await api.previewSaasRuntimeLiveGate({
+      operationType: "whatsapp.send_text",
+    });
+    expect(preview.dryRun).toBe(true);
+    expect(preview.liveExecutionAllowed).toBe(false);
+    expect(preview.externalCallWillBeMade).toBe(false);
+  });
+
+  it("renders live audit gate section without provider execution buttons or secrets", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText("Controlled Runtime Live Audit Gate"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Approving in Phase 6H does not execute external calls."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Global kill switch enabled/i)).toBeInTheDocument();
+    expect(screen.getByText("Approval Queue")).toBeInTheDocument();
+
+    const rows = await screen.findAllByTestId("live-gate-policy-row");
+    expect(rows.length).toBe(12);
+
+    const body = document.body.textContent ?? "";
+    expect(body).toContain("whatsapp.send_text");
+    expect(body).toContain("razorpay.create_order");
+    expect(body).toContain("PayU deferred.");
+    expect(body).not.toContain("META_WA_ACCESS_TOKEN");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("+91 9");
+
+    expect(
+      screen.queryByRole("button", { name: /send whatsapp/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create payment/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create shipment/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /place call/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /execute/i }),
+    ).not.toBeInTheDocument();
+  });
+});

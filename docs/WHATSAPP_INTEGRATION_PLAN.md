@@ -8,6 +8,17 @@
 
 ## Phase 6E SaaS integration-settings note
 
+Phase 6H live-gate note: Phase 6G Controlled Runtime Routing Dry Run is
+**FULL PASS**. Phase 6H adds the audit-only live gate that future WhatsApp
+sends and template sends must pass before any real provider-side execution.
+The default global runtime kill switch is enabled, live execution remains
+blocked, and approval in Phase 6H does not send WhatsApp messages or call
+Meta. WhatsApp runtime still uses env/config; no raw Meta tokens or full
+phone numbers are exposed. Auto-reply stays OFF, limited Meta test mode
+stays ON, and campaigns/broadcast/lifecycle/call/rescue/RTO/reorder remain
+locked/off. Next phase is Phase 6I Single Internal Live Gate Simulation /
+Live Readiness Gate.
+
 Phase 6D org-aware write assignment is **FULL PASS**. Phase 6E adds
 `OrganizationIntegrationSetting` as a readiness layer for per-org WhatsApp
 Meta and other providers, but WhatsApp runtime still reads the existing

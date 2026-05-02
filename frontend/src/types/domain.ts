@@ -2072,3 +2072,188 @@ export interface SaasControlledRuntimeReadiness {
   warnings: string[];
   nextAction: string;
 }
+
+// ---------- Phase 6H - Controlled Runtime Live Audit Gate ----------
+
+export type SaasLiveGateDecision =
+  | "dry_run_allowed"
+  | "blocked_by_default"
+  | "blocked_by_kill_switch"
+  | "blocked_missing_approval"
+  | "blocked_missing_provider_config"
+  | "blocked_missing_consent"
+  | "blocked_missing_caio_review"
+  | "blocked_missing_claim_vault"
+  | "blocked_missing_webhook"
+  | "live_ready_but_not_executed"
+  | string;
+
+export interface SaasLiveGatePolicy {
+  operationType: string;
+  providerType: string;
+  riskLevel: "low" | "medium" | "high" | "critical" | string;
+  liveAllowedByDefault: false;
+  approvalRequired: boolean;
+  caioReviewRequired: boolean;
+  consentRequired: boolean;
+  claimVaultRequired: boolean;
+  webhookRequired: boolean;
+  idempotencyRequired: boolean;
+  auditRequired: boolean;
+  killSwitchCanBlock: boolean;
+  allowedInPhase6H: false;
+  nextPhaseForLiveTest: string;
+  templateApprovalRequired: boolean;
+  paymentApprovalRequired: boolean;
+  customerIntentRequired: boolean;
+  addressValidationRequired: boolean;
+  providerDeferred: boolean;
+  humanApprovalRequired: boolean;
+  requiredEnvKeys: string[];
+  requiredConfigKeys: string[];
+  policyVersion: string;
+  currentGateDecision?: SaasLiveGateDecision;
+  liveAllowedNow?: false;
+  blockers?: string[];
+  warnings?: string[];
+  nextAction?: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SaasLiveGateRequest {
+  id: number;
+  organization: { id: number; code: string; name: string } | null;
+  branch: { id: number; code: string; name: string } | null;
+  operationType: string;
+  providerType: string;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  dryRun: true;
+  liveExecutionRequested: boolean;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+  approvalRequired: boolean;
+  approvalStatus: string;
+  requestedBy: number | null;
+  approvedBy: number | null;
+  rejectedBy: number | null;
+  requestedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  expiresAt: string | null;
+  riskLevel: string;
+  payloadHash: string;
+  safePayloadSummary: Record<string, unknown>;
+  blockers: string[];
+  warnings: string[];
+  gateDecision: SaasLiveGateDecision;
+  idempotencyKey: string;
+  auditEventId: number | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  killSwitchActive: boolean;
+  nextAction: string;
+}
+
+export interface SaasLiveGateAuditEvent {
+  id: number;
+  kind: string;
+  operationType: string;
+  providerType: string;
+  gateDecision: string;
+  actor: string;
+  createdAt: string;
+  text: string;
+}
+
+export interface SaasRuntimeLiveGateSummary {
+  organization: { id: number; code: string; name: string } | null;
+  killSwitch: {
+    globalEnabled: boolean;
+    orgEnabled: boolean;
+    providerEnabled?: boolean;
+    operationEnabled?: boolean;
+    active: boolean;
+    activeBlockers: string[];
+  };
+  operationPolicies: SaasLiveGatePolicy[];
+  recentLiveExecutionRequests: SaasLiveGateRequest[];
+  approvalQueue: {
+    approvalPendingCount: number;
+    approvedButNotExecutedCount: number;
+    blockedCount: number;
+    rejectedCount: number;
+  };
+  approvalPendingCount: number;
+  approvedButNotExecutedCount: number;
+  blockedCount: number;
+  rejectedCount: number;
+  recentGateAuditEvents: SaasLiveGateAuditEvent[];
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  runtimeUsesPerOrgSettings: false;
+  defaultDryRun: true;
+  defaultLiveExecutionAllowed: false;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+  safeToStartPhase6I: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasRuntimeLiveGateRequestsResponse {
+  count: number;
+  requests: SaasLiveGateRequest[];
+  dryRun: true;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+}
+
+export interface SaasRuntimeLiveGatePoliciesResponse {
+  policies: SaasLiveGatePolicy[];
+  dryRun: true;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+}
+
+export interface SaasRuntimeLiveGateKillSwitch {
+  scope: string;
+  enabled: boolean;
+  reason: string;
+  dryRun: true;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+  killSwitchActive: boolean;
+  approvalStatus: string;
+  gateDecision: string;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasRuntimeLiveGatePreview {
+  operationType: string;
+  providerType: string;
+  valid: boolean;
+  policy?: SaasLiveGatePolicy;
+  organization: { id: number; code: string; name: string } | null;
+  branch: { id: number; code: string; name: string } | null;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  dryRun: true;
+  liveExecutionRequested: boolean;
+  liveExecutionAllowed: false;
+  externalCallWillBeMade: false;
+  approvalRequired: boolean;
+  approvalStatus: string;
+  killSwitchActive: boolean;
+  riskLevel: string;
+  payloadHash: string;
+  safePayloadSummary: Record<string, unknown>;
+  blockers: string[];
+  warnings: string[];
+  gateDecision: SaasLiveGateDecision;
+  nextAction: string;
+}

@@ -87,6 +87,33 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 | GET | `/api/rewards/` | `RewardPenalty[]` |
 | GET | `/api/learning/recordings/` | `LearningRecording[]` |
 
+## SaaS Runtime Live Audit Gate
+
+Phase 6G Controlled Runtime Routing Dry Run is **FULL PASS**. Phase 6H adds
+the live audit gate only: default dry-run stays on, live execution stays
+blocked, the global runtime kill switch defaults enabled, and approval in
+Phase 6H never executes external calls. Runtime providers still use
+env/config, not DB integration settings. Responses never expose raw secrets,
+raw payloads, or full phone numbers.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/runtime-live-gate/` | authenticated | Summary/readiness for the live gate, kill-switch state, recent requests, recent gate audit events, blockers, warnings, and next action. |
+| GET | `/api/v1/saas/runtime-live-gate/requests/` | authenticated | Recent sanitized `RuntimeLiveExecutionRequest` rows. |
+| POST | `/api/v1/saas/runtime-live-gate/requests/` | admin/staff | Create an audit-only live execution approval request. Does not call a provider. |
+| GET | `/api/v1/saas/runtime-live-gate/policies/` | authenticated | Phase 6H operation policy registry. All operations have `allowedInPhase6H=false`. |
+| GET | `/api/v1/saas/runtime-live-gate/kill-switch/` | authenticated | Current global kill-switch state. `enabled=true` means live external side effects are blocked. |
+| POST | `/api/v1/saas/runtime-live-gate/preview/` | admin/staff | Preview and audit a gate decision for an operation. Does not call a provider. |
+| POST | `/api/v1/saas/runtime-live-gate/requests/{id}/approve/` | admin/staff | Mark a request approved for audit/readiness only. Phase 6H still returns `externalCallWillBeMade=false`. |
+| POST | `/api/v1/saas/runtime-live-gate/requests/{id}/reject/` | admin/staff | Mark a request rejected. Does not call a provider. |
+
+Protected Phase 6H operations: `whatsapp.send_text`,
+`whatsapp.send_template`, `razorpay.create_order`,
+`razorpay.create_payment_link`, `payu.create_payment`,
+`delhivery.create_shipment`, `vapi.place_call`,
+`ai.customer_hinglish_chat`, `ai.caio_compliance`, `ai.ceo_planning`,
+`ai.reports_summary`, and `ai.critical_fallback`.
+
 ## Analytics
 
 | Method | Path | Returns |
@@ -137,6 +164,8 @@ Receivers in `apps/audit/signals.py` write rows on:
 - `ai.prompt_version.created` / `.activated` / `.rolled_back` — explicit, on PromptVersion CRUD + activate + rollback (Phase 3D)
 - `ai.sandbox.enabled` / `.disabled` — explicit, on PATCH `/api/ai/sandbox/status/` (Phase 3D)
 - `ai.budget.warning` / `.blocked` — explicit, when an agent's spend crosses the alert threshold or exceeds the configured cap (Phase 3D)
+- `runtime.live_gate.previewed` / `.request_created` / `.request_blocked` / `.request_approved` / `.request_rejected` / `.ready_but_not_executed` — explicit, on Phase 6H live-gate preview/request/approval decisions. Payloads contain only sanitized summaries and hashes.
+- `runtime.kill_switch.enabled` / `.disabled` — explicit, on Phase 6H runtime kill-switch changes. Enabled means live external side effects are blocked.
 
 Phase 4+ will add: reward/penalty assigned, CAIO audit completed,
 CEO approval recorded.

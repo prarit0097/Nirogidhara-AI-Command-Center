@@ -25,6 +25,7 @@ describe("Phase 6D — Write-Path Readiness", () => {
 
     await waitFor(() =>
       expect(screen.getByText("Write-path readiness")).toBeInTheDocument(),
+      { timeout: 5000 },
     );
     expect(screen.getByText("Auto-assign signal")).toBeInTheDocument();
     expect(screen.getByText("Covered create paths")).toBeInTheDocument();

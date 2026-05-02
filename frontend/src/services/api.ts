@@ -144,6 +144,12 @@ import type {
   SaasMyOrganizations,
   SaasOrgScopeReadiness,
   SaasRuntimeDryRunReport,
+  SaasLiveGateRequest,
+  SaasRuntimeLiveGateKillSwitch,
+  SaasRuntimeLiveGatePoliciesResponse,
+  SaasRuntimeLiveGatePreview,
+  SaasRuntimeLiveGateRequestsResponse,
+  SaasRuntimeLiveGateSummary,
   SaasRuntimeRoutingReadiness,
   SaasWritePathReadiness,
 } from "@/types/domain";
@@ -1137,6 +1143,68 @@ export const api = {
       "/v1/saas/controlled-runtime-readiness/",
       () =>
         M.SAAS_CONTROLLED_RUNTIME_READINESS as SaasControlledRuntimeReadiness,
+    ),
+
+  // ---------- Phase 6H - Controlled Runtime Live Audit Gate ----------
+
+  getSaasRuntimeLiveGate: () =>
+    safeFetch<SaasRuntimeLiveGateSummary>(
+      "/v1/saas/runtime-live-gate/",
+      () => M.SAAS_RUNTIME_LIVE_GATE as SaasRuntimeLiveGateSummary,
+    ),
+  getSaasRuntimeLiveGateRequests: () =>
+    safeFetch<SaasRuntimeLiveGateRequestsResponse>(
+      "/v1/saas/runtime-live-gate/requests/",
+      () =>
+        M.SAAS_RUNTIME_LIVE_GATE_REQUESTS as SaasRuntimeLiveGateRequestsResponse,
+    ),
+  getSaasRuntimeLiveGatePolicies: () =>
+    safeFetch<SaasRuntimeLiveGatePoliciesResponse>(
+      "/v1/saas/runtime-live-gate/policies/",
+      () =>
+        M.SAAS_RUNTIME_LIVE_GATE_POLICIES as SaasRuntimeLiveGatePoliciesResponse,
+    ),
+  getSaasRuntimeLiveGateKillSwitch: () =>
+    safeFetch<SaasRuntimeLiveGateKillSwitch>(
+      "/v1/saas/runtime-live-gate/kill-switch/",
+      () =>
+        M.SAAS_RUNTIME_LIVE_GATE_KILL_SWITCH as SaasRuntimeLiveGateKillSwitch,
+    ),
+  previewSaasRuntimeLiveGate: (payload: {
+    operationType: string;
+    liveRequested?: boolean;
+    payload?: Record<string, unknown>;
+  }) =>
+    safeMutate<SaasRuntimeLiveGatePreview>(
+      "/v1/saas/runtime-live-gate/preview/",
+      "POST",
+      payload,
+      () => M.SAAS_RUNTIME_LIVE_GATE_PREVIEW as SaasRuntimeLiveGatePreview,
+    ),
+  requestSaasRuntimeLiveExecution: (payload: {
+    operationType: string;
+    reason?: string;
+    payload?: Record<string, unknown>;
+  }) =>
+    safeMutate<SaasLiveGateRequest>(
+      "/v1/saas/runtime-live-gate/requests/",
+      "POST",
+      payload,
+      () => (M.SAAS_RUNTIME_LIVE_GATE_REQUESTS as SaasRuntimeLiveGateRequestsResponse).requests[0],
+    ),
+  approveSaasRuntimeLiveExecutionRequest: (id: number, reason = "") =>
+    safeMutate<SaasLiveGateRequest>(
+      `/v1/saas/runtime-live-gate/requests/${id}/approve/`,
+      "POST",
+      { reason },
+      () => (M.SAAS_RUNTIME_LIVE_GATE_REQUESTS as SaasRuntimeLiveGateRequestsResponse).requests[0],
+    ),
+  rejectSaasRuntimeLiveExecutionRequest: (id: number, reason = "") =>
+    safeMutate<SaasLiveGateRequest>(
+      `/v1/saas/runtime-live-gate/requests/${id}/reject/`,
+      "POST",
+      { reason },
+      () => (M.SAAS_RUNTIME_LIVE_GATE_REQUESTS as SaasRuntimeLiveGateRequestsResponse).requests[0],
     ),
 };
 

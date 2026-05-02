@@ -77,14 +77,42 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6E inclusive
+python -m pytest -q                     # Phase 1 -> 6H inclusive
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6E vitest tests
+npm test                                # Phase 1 -> 6H vitest tests
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
+
+## Phase 6H runtime live audit gate diagnostics
+
+Phase 6G Controlled Runtime Routing Dry Run is **FULL PASS**. Phase 6H
+adds the live audit gate only: runtime providers still use env/config,
+dry-run remains the default, the global runtime kill switch defaults
+enabled, and approval in Phase 6H does not execute external calls. Do not
+send WhatsApp messages, create payment links/orders, create shipments,
+place calls, or call provider side-effect endpoints from this phase.
+
+```bash
+cd backend
+python manage.py ensure_default_organization --json
+python manage.py inspect_saas_admin_readiness --json
+python manage.py inspect_controlled_runtime_routing_dry_run --operation all --include-ai --json
+python manage.py inspect_runtime_live_audit_gate --json
+python manage.py preview_live_gate_decision --operation whatsapp.send_text --json
+python manage.py preview_live_gate_decision --operation razorpay.create_order --live-requested --json
+```
+
+Expected Phase 6H posture: `runtimeSource=env_config`,
+`perOrgRuntimeEnabled=false`, `dryRun=true`,
+`defaultLiveExecutionAllowed=false`, `externalCallWillBeMade=false`,
+global kill switch enabled, and
+`nextAction=ready_for_phase_6i_single_internal_live_gate_simulation` only
+when missing-provider warnings are understood and all live execution stays
+blocked. `/saas-admin` should show **Controlled Runtime Live Audit Gate**
+with the warning: "Approving in Phase 6H does not execute external calls."
 
 ## Phase 6E SaaS admin diagnostics
 
