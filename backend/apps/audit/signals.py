@@ -256,6 +256,14 @@ ICON_BY_KIND: dict[str, str] = {
     "runtime.live_gate.simulation_blocked": "ban",
     "runtime.live_gate.simulation_ran": "play-circle",
     "runtime.live_gate.simulation_rolled_back": "rotate-ccw",
+    # Phase 6J Single Internal Provider Test Plan.
+    "runtime.provider_test_plan.prepared": "file-plus",
+    "runtime.provider_test_plan.validated": "check-circle",
+    "runtime.provider_test_plan.approved": "badge-check",
+    "runtime.provider_test_plan.rejected": "x-circle",
+    "runtime.provider_test_plan.archived": "archive",
+    "runtime.provider_test_plan.blocked": "ban",
+    "runtime.provider_test_plan.invariant_violation_blocked": "shield-off",
 }
 
 

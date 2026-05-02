@@ -766,3 +766,151 @@ class RuntimeKillSwitch(models.Model):
     def __str__(self) -> str:  # pragma: no cover
         target = self.operation_type or self.provider_type or "all"
         return f"{self.scope}:{target} enabled={self.enabled}"
+
+
+class RuntimeProviderTestPlan(models.Model):
+    """Phase 6J — Single Internal Provider Test Plan.
+
+    Plan-only artefact. A row records the operator's intent to test
+    one provider operation in test mode in a *future* phase. Phase 6J
+    NEVER calls the provider. Every row asserts:
+
+    - ``dry_run=True``
+    - ``provider_call_allowed=False``
+    - ``external_call_will_be_made=False``
+    - ``external_call_was_made=False``
+    - ``provider_call_attempted=False``
+    - ``real_money=False``
+    - ``real_customer_data_allowed=False``
+
+    Real provider execution is gated by a future Phase 6K controlled
+    test-mode execution gate.
+    """
+
+    class ProviderEnvironment(models.TextChoices):
+        TEST = "test", "Test"
+        SANDBOX = "sandbox", "Sandbox"
+        PRODUCTION = "production", "Production"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PREPARED = "prepared", "Prepared"
+        VALIDATED = "validated", "Validated"
+        APPROVAL_REQUIRED = "approval_required", "Approval required"
+        APPROVED_FOR_FUTURE_EXECUTION = (
+            "approved_for_future_execution",
+            "Approved for future execution",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    plan_id = models.CharField(max_length=64, unique=True, db_index=True)
+    organization = models.ForeignKey(
+        Organization,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_provider_test_plans",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_provider_test_plans",
+    )
+    provider_type = models.CharField(max_length=48, db_index=True)
+    operation_type = models.CharField(max_length=96, db_index=True)
+    provider_environment = models.CharField(
+        max_length=24,
+        choices=ProviderEnvironment.choices,
+        default=ProviderEnvironment.TEST,
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=40,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    runtime_source = models.CharField(max_length=32, default="env_config")
+    per_org_runtime_enabled = models.BooleanField(default=False)
+    dry_run = models.BooleanField(default=True)
+    provider_call_allowed = models.BooleanField(default=False)
+    external_call_will_be_made = models.BooleanField(default=False)
+    external_call_was_made = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    real_customer_data_allowed = models.BooleanField(default=False)
+    real_money = models.BooleanField(default=False)
+    amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    currency = models.CharField(max_length=8, default="INR")
+    idempotency_key = models.CharField(
+        max_length=160,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    payload_hash = models.CharField(max_length=64, blank=True, default="")
+    safe_payload_summary = models.JSONField(default=dict, blank=True)
+    env_readiness = models.JSONField(default=dict, blank=True)
+    secret_ref_readiness = models.JSONField(default=dict, blank=True)
+    gate_requirements = models.JSONField(default=dict, blank=True)
+    approval_requirements = models.JSONField(default=dict, blank=True)
+    rollback_plan = models.JSONField(default=dict, blank=True)
+    abort_criteria = models.JSONField(default=list, blank=True)
+    verification_checklist = models.JSONField(default=list, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_phase = models.CharField(
+        max_length=96,
+        default="phase_6k_single_internal_razorpay_test_mode_execution_gate",
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_test_plans_requested",
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_test_plans_approved",
+    )
+    rejected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_test_plans_rejected",
+    )
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_test_plans_archived",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    audit_event_id = models.PositiveIntegerField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("organization", "operation_type")),
+            models.Index(fields=("status", "provider_environment")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"{self.plan_id} {self.operation_type} ({self.status})"
+        )

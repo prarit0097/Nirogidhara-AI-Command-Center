@@ -8,6 +8,8 @@ import type {
   SaasAiProviderRoutePreview,
   SaasAiProviderRoutingPreview,
   SaasProviderReadiness,
+  SaasProviderTestPlan,
+  SaasProviderTestPlanReadiness,
   SaasRuntimeLiveGateSummary,
   SaasLiveGatePolicy,
   SaasRuntimeDryRunOperationDecision,
@@ -22,6 +24,7 @@ import {
   CheckCircle2,
   Cpu,
   AlertTriangle,
+  ClipboardList,
   KeyRound,
   LockKeyhole,
   PlayCircle,
@@ -51,6 +54,8 @@ export default function SaasAdminPage() {
     useState<SaasRuntimeLiveGateSummary | null>(null);
   const [simulations, setSimulations] =
     useState<SaasRuntimeLiveGateSimulationsResponse | null>(null);
+  const [providerTestPlans, setProviderTestPlans] =
+    useState<SaasProviderTestPlanReadiness | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -62,14 +67,16 @@ export default function SaasAdminPage() {
       api.getSaasAiProviderRouting(),
       api.getSaasRuntimeLiveGate(),
       api.getSaasRuntimeLiveGateSimulations(),
+      api.getSaasProviderTestPlans(),
     ])
-      .then(([ov, rt, dr, ai, gate, sims]) => {
+      .then(([ov, rt, dr, ai, gate, sims, ptp]) => {
         setOverview(ov);
         setRouting(rt);
         setDryRun(dr);
         setAiRouting(ai);
         setLiveGate(gate);
         setSimulations(sims);
+        setProviderTestPlans(ptp);
       })
       .finally(() => setLoading(false));
   };
@@ -726,6 +733,71 @@ export default function SaasAdminPage() {
         </section>
       )}
 
+      {providerTestPlans && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="provider-test-plan-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ClipboardList className="h-5 w-5 text-primary" />
+                Single Internal Provider Test Plan
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6J planning only. Razorpay test-mode create_order
+                is the implementation target. No external provider call
+                is made in Phase 6J. Approval here unlocks the future
+                Phase 6K execution gate, NOT execution itself.
+              </p>
+            </div>
+            <StatusPill
+              tone={
+                providerTestPlans.safeToStartPhase6K ? "success" : "warning"
+              }
+            >
+              {providerTestPlans.safeToStartPhase6K
+                ? "Phase 6K ready"
+                : "Phase 6K blocked"}
+            </StatusPill>
+          </div>
+          <div className="grid gap-3 px-6 py-4 sm:grid-cols-4">
+            <KeyValue
+              label="Latest plan"
+              value={
+                providerTestPlans.latestPlan?.planId ?? "no plan yet"
+              }
+            />
+            <KeyValue label="Provider" value="Razorpay" />
+            <KeyValue label="Operation" value="razorpay.create_order" />
+            <KeyValue
+              label="Environment"
+              value={
+                providerTestPlans.latestPlan?.providerEnvironment ?? "test"
+              }
+            />
+          </div>
+          <div className="grid gap-4 px-6 pb-4 lg:grid-cols-2">
+            <ProviderTestPlanInvariants plan={providerTestPlans.latestPlan} />
+            <ProviderTestPlanEnvReadiness
+              plan={providerTestPlans.latestPlan}
+            />
+          </div>
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Read-only.</strong> No "Execute Razorpay" / "Create
+            Order" / "Create Payment Link" buttons exist on this page.
+            Approval only marks the plan as ready for the future Phase
+            6K execution gate.
+          </div>
+          <div className="border-t border-border bg-warning/5 px-6 py-3 text-xs text-muted-foreground">
+            Next action:{" "}
+            <span className="font-medium">
+              {providerTestPlans.nextAction}
+            </span>
+          </div>
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel title="Blockers & Warnings" icon={ShieldCheck}>
           <IssueList items={overview.blockers} empty="No blockers" />
@@ -1061,5 +1133,146 @@ function RuntimeProviderRow({
         <StatusPill tone="neutral">{provider.runtimeSource}</StatusPill>
       </td>
     </tr>
+  );
+}
+
+function ProviderTestPlanInvariants({
+  plan,
+}: {
+  plan: SaasProviderTestPlan | null;
+}) {
+  const rows: Array<{ label: string; value: boolean; safeWhenFalse?: boolean }> =
+    plan
+      ? [
+          { label: "dryRun", value: plan.dryRun },
+          {
+            label: "providerCallAllowed",
+            value: plan.providerCallAllowed,
+            safeWhenFalse: true,
+          },
+          {
+            label: "externalCallWillBeMade",
+            value: plan.externalCallWillBeMade,
+            safeWhenFalse: true,
+          },
+          {
+            label: "externalCallWasMade",
+            value: plan.externalCallWasMade,
+            safeWhenFalse: true,
+          },
+          {
+            label: "providerCallAttempted",
+            value: plan.providerCallAttempted,
+            safeWhenFalse: true,
+          },
+          { label: "realMoney", value: plan.realMoney, safeWhenFalse: true },
+          {
+            label: "realCustomerDataAllowed",
+            value: plan.realCustomerDataAllowed,
+            safeWhenFalse: true,
+          },
+        ]
+      : [];
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3">
+      <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        <ShieldCheck className="h-4 w-4 text-primary" />
+        Safety invariants
+      </h4>
+      {plan === null ? (
+        <p className="text-xs text-muted-foreground">
+          No plan prepared yet.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((row) => {
+            const safe =
+              row.safeWhenFalse === true ? row.value === false : row.value;
+            return (
+              <div
+                key={row.label}
+                className="flex items-center justify-between text-xs"
+              >
+                <span className="font-mono text-muted-foreground">
+                  {row.label}
+                </span>
+                <StatusPill tone={safe ? "success" : "danger"}>
+                  {String(row.value)}
+                </StatusPill>
+              </div>
+            );
+          })}
+          <div className="pt-1 text-[11px] text-muted-foreground">
+            amount: {plan.amountPaise ?? "n/a"} paise · {plan.currency} ·
+            payloadHash: {plan.payloadHash ? "present" : "missing"}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProviderTestPlanEnvReadiness({
+  plan,
+}: {
+  plan: SaasProviderTestPlan | null;
+}) {
+  const env = plan?.envReadiness;
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3">
+      <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        <KeyRound className="h-4 w-4 text-primary" />
+        Razorpay env readiness
+      </h4>
+      {env === undefined ? (
+        <p className="text-xs text-muted-foreground">
+          No plan prepared yet.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          <EnvRow
+            label="Razorpay key id"
+            present={!!env.envPresence?.RAZORPAY_KEY_ID}
+            blockingWhenMissing
+          />
+          <EnvRow
+            label="Razorpay key secret"
+            present={!!env.envPresence?.RAZORPAY_KEY_SECRET}
+            blockingWhenMissing
+          />
+          <EnvRow
+            label="Razorpay webhook secret"
+            present={!!env.envPresence?.RAZORPAY_WEBHOOK_SECRET}
+          />
+          <div className="pt-1 text-[11px] text-muted-foreground">
+            Masked refs only — raw values are never returned.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EnvRow({
+  label,
+  present,
+  blockingWhenMissing = false,
+}: {
+  label: string;
+  present: boolean;
+  blockingWhenMissing?: boolean;
+}) {
+  const tone: "success" | "warning" | "danger" = present
+    ? "success"
+    : blockingWhenMissing
+      ? "danger"
+      : "warning";
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="font-mono text-muted-foreground">{label}</span>
+      <StatusPill tone={tone}>
+        {present ? "present" : "missing"}
+      </StatusPill>
+    </div>
   );
 }

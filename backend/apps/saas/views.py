@@ -47,6 +47,15 @@ from .live_gate_simulation import (
     run_single_internal_live_gate_simulation,
     serialize_live_gate_simulation,
 )
+from .provider_test_plan import (
+    approve_single_provider_test_plan,
+    archive_single_provider_test_plan,
+    inspect_single_provider_test_plan,
+    prepare_single_provider_test_plan,
+    reject_single_provider_test_plan,
+    serialize_provider_test_plan,
+    validate_single_provider_test_plan,
+)
 from .runtime_dry_run import (
     preview_all_runtime_operations,
     preview_runtime_routing_for_operation,
@@ -64,6 +73,7 @@ from .models import (
     OrganizationIntegrationSetting,
     RuntimeLiveExecutionRequest,
     RuntimeLiveGateSimulation,
+    RuntimeProviderTestPlan,
 )
 from .selectors import (
     get_active_organization_for_user,
@@ -768,6 +778,148 @@ class RuntimeLiveGateSimulationRollbackView(APIView):
         return Response(serialize_live_gate_simulation(row))
 
 
+class ProviderTestPlansListView(APIView):
+    """``GET /api/v1/saas/provider-test-plans/`` — Phase 6J.
+
+    Read-only. Returns the inspector report for the current org.
+    POST/PATCH/DELETE return 405. No raw secrets ever returned.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        org = _get_admin_org(request)
+        return Response(inspect_single_provider_test_plan(organization=org))
+
+
+class ProviderTestPlanDetailView(APIView):
+    """``GET /api/v1/saas/provider-test-plans/<plan_id>/`` — Phase 6J."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request, plan_id):
+        plan = RuntimeProviderTestPlan.objects.filter(plan_id=plan_id).first()
+        if plan is None:
+            return Response(
+                {"detail": "Provider test plan not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(serialize_provider_test_plan(plan))
+
+
+class ProviderTestPlanPrepareView(APIView):
+    """``POST /api/v1/saas/provider-test-plans/prepare/`` — Phase 6J.
+
+    Admin-only. Creates a new ``RuntimeProviderTestPlan``. Phase 6J
+    NEVER calls a provider; this endpoint records intent only.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request):
+        operation = (
+            request.data.get("operationType")
+            or request.data.get("operation_type")
+            or "razorpay.create_order"
+        )
+        org_id = request.data.get("organizationId")
+        org = (
+            Organization.objects.filter(id=org_id).first()
+            if org_id
+            else _get_admin_org(request)
+        )
+        plan = prepare_single_provider_test_plan(
+            operation_type=operation,
+            organization=org,
+            user=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(
+            serialize_provider_test_plan(plan),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ProviderTestPlanValidateView(APIView):
+    """``POST /api/v1/saas/provider-test-plans/<plan_id>/validate/``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, plan_id):
+        plan = RuntimeProviderTestPlan.objects.filter(plan_id=plan_id).first()
+        if plan is None:
+            return Response(
+                {"detail": "Provider test plan not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        plan = validate_single_provider_test_plan(plan_id, user=request.user)
+        return Response(serialize_provider_test_plan(plan))
+
+
+class ProviderTestPlanApproveView(APIView):
+    """``POST /api/v1/saas/provider-test-plans/<plan_id>/approve/``.
+
+    Approval ONLY enables the future Phase 6K execution gate. It NEVER
+    unlocks a provider call in Phase 6J.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, plan_id):
+        plan = RuntimeProviderTestPlan.objects.filter(plan_id=plan_id).first()
+        if plan is None:
+            return Response(
+                {"detail": "Provider test plan not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        plan = approve_single_provider_test_plan(
+            plan_id,
+            approver=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_provider_test_plan(plan))
+
+
+class ProviderTestPlanRejectView(APIView):
+    """``POST /api/v1/saas/provider-test-plans/<plan_id>/reject/``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, plan_id):
+        plan = RuntimeProviderTestPlan.objects.filter(plan_id=plan_id).first()
+        if plan is None:
+            return Response(
+                {"detail": "Provider test plan not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        plan = reject_single_provider_test_plan(
+            plan_id,
+            rejector=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_provider_test_plan(plan))
+
+
+class ProviderTestPlanArchiveView(APIView):
+    """``POST /api/v1/saas/provider-test-plans/<plan_id>/archive/``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, plan_id):
+        plan = RuntimeProviderTestPlan.objects.filter(plan_id=plan_id).first()
+        if plan is None:
+            return Response(
+                {"detail": "Provider test plan not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        plan = archive_single_provider_test_plan(
+            plan_id,
+            user=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_provider_test_plan(plan))
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -800,4 +952,11 @@ __all__ = (
     "RuntimeLiveGateSimulationRejectView",
     "RuntimeLiveGateSimulationRunView",
     "RuntimeLiveGateSimulationRollbackView",
+    "ProviderTestPlansListView",
+    "ProviderTestPlanDetailView",
+    "ProviderTestPlanPrepareView",
+    "ProviderTestPlanValidateView",
+    "ProviderTestPlanApproveView",
+    "ProviderTestPlanRejectView",
+    "ProviderTestPlanArchiveView",
 )

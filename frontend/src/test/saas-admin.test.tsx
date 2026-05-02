@@ -47,6 +47,68 @@ describe("Phase 6E - SaaS Admin Panel", () => {
   });
 });
 
+describe("Phase 6J - Single Internal Provider Test Plan", () => {
+  it("exposes Phase 6J API client methods with locked invariants", async () => {
+    expect(typeof api.getSaasProviderTestPlans).toBe("function");
+    expect(typeof api.prepareSaasProviderTestPlan).toBe("function");
+    expect(typeof api.validateSaasProviderTestPlan).toBe("function");
+    expect(typeof api.approveSaasProviderTestPlan).toBe("function");
+    expect(typeof api.rejectSaasProviderTestPlan).toBe("function");
+    expect(typeof api.archiveSaasProviderTestPlan).toBe("function");
+
+    const report = await api.getSaasProviderTestPlans();
+    expect(report.dryRun).toBe(true);
+    expect(report.providerCallAllowed).toBe(false);
+    expect(report.externalCallWillBeMade).toBe(false);
+    expect(report.externalCallWasMade).toBe(false);
+    expect(report.providerCallAttempted).toBe(false);
+    expect(report.runtimeSource).toBe("env_config");
+    expect(report.perOrgRuntimeEnabled).toBe(false);
+    expect(report.phase6jImplementationTargets).toEqual([
+      "razorpay.create_order",
+    ]);
+    if (report.latestPlan) {
+      expect(report.latestPlan.realMoney).toBe(false);
+      expect(report.latestPlan.realCustomerDataAllowed).toBe(false);
+      expect(report.latestPlan.providerCallAllowed).toBe(false);
+      expect(report.latestPlan.dryRun).toBe(true);
+    }
+  });
+
+  it("renders Single Internal Provider Test Plan section without execute buttons", async () => {
+    render(<SaasAdminPage />);
+    expect(
+      await screen.findByText("Single Internal Provider Test Plan"),
+    ).toBeInTheDocument();
+    const section = await screen.findByTestId("provider-test-plan-section");
+    expect(section).toBeInTheDocument();
+
+    // Safety invariants are rendered.
+    expect(section.textContent).toContain("Safety invariants");
+    expect(section.textContent).toContain("Razorpay env readiness");
+    expect(section.textContent).toContain("razorpay.create_order");
+
+    // No execute / create / live buttons exist.
+    expect(
+      screen.queryByRole("button", { name: /execute/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create order/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create payment link/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /go live/i }),
+    ).not.toBeInTheDocument();
+
+    // No raw secret values in the document body.
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_test_FAKE");
+    expect(body).not.toContain("rzp_live_");
+  });
+});
+
 describe("Phase 6G - Controlled Runtime Routing Dry Run", () => {
   it("exposes Phase 6G API client methods with locked invariants", async () => {
     expect(typeof api.getSaasRuntimeDryRun).toBe("function");

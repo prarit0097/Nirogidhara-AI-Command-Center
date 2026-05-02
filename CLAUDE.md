@@ -163,6 +163,42 @@ WhatsApp/Razorpay/PayU/Delhivery/Vapi/AI provider side-effect call is made;
 `providerCallAttempted=false` stay false in every simulation response. Global
 kill switch remains active; runtime providers still use env/config.
 
+**Phase 6J note:** **Phase 6J Single Internal Provider Test Plan
+shipped.** New `apps.saas.provider_test_plan_policy` registers seven
+plan policies (Razorpay create_order + create_payment_link, WhatsApp
+send_text, AI smoke_test, Vapi place_call, Delhivery create_shipment,
+PayU create_payment); Phase 6J's only **implementation target** is
+`razorpay.create_order`. New `RuntimeProviderTestPlan` model
+(migration `0005_add_runtime_provider_test_plan`) stores plan state
+through `draft → prepared → validated → approved_for_future_execution
+→ rejected → archived → blocked`. Every plan declares `dry_run=True`,
+`provider_call_allowed=False`, `external_call_will_be_made=False`,
+`external_call_was_made=False`, `provider_call_attempted=False`,
+`real_money=False`, `real_customer_data_allowed=False` (asserted by
+`assert_provider_test_plan_has_no_side_effects`). Razorpay synthetic
+payload: `{amount: 100, currency: "INR", receipt:
+"phase6j_internal_test_plan_<plan_id>"}` — never customer data.
+Six new strictly-read-only / plan-only management commands
+(`prepare_single_provider_test_plan`,
+`validate_single_provider_test_plan`,
+`approve_single_provider_test_plan`,
+`reject_single_provider_test_plan`,
+`archive_single_provider_test_plan`,
+`inspect_single_provider_test_plan`) emit one
+`runtime.provider_test_plan.{prepared,validated,approved,rejected,archived,blocked,invariant_violation_blocked}`
+audit row each. Seven new admin-only DRF endpoints under
+`/api/v1/saas/provider-test-plans/`. Frontend `/saas-admin` gains
+"Single Internal Provider Test Plan" with safety-invariant
+sub-card + Razorpay env-readiness sub-card. **No "Execute
+Razorpay" / "Create Order" / "Create Payment Link" buttons exist
+anywhere on the UI.** Approval ONLY unlocks a future Phase 6K
+execution gate; it NEVER enables a provider call in Phase 6J.
+Raw NVIDIA / OpenAI / Razorpay / Meta / Vapi keys NEVER appear
+in any plan, audit, command output, or API response. Global kill
+switch remains active; runtime providers still use env/config.
+**31 new backend tests + 2 new frontend tests; 1131 backend + 40
+frontend, all green.**
+
 ---
 
 ## 1. Working agreement (binding rule)
@@ -259,13 +295,13 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 1087 tests today
+python -m pytest -q                    # 1131 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                            # http://localhost:8080
-npm test                               # 34 tests today
+npm test                               # 40 tests today
 npm run lint                           # 0 errors expected
 npm run build                          # production build
 

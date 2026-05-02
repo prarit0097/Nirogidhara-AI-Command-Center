@@ -171,6 +171,14 @@ backend/apps/saas/management/commands/inspect_controlled_runtime_routing_dry_run
 backend/apps/saas/management/commands/inspect_ai_provider_routing.py ← read-only AI runtime + per-task preview
 backend/apps/saas/management/commands/preview_runtime_operation.py ← read-only single-operation preview
 backend/apps/saas/management/commands/smoke_test_ai_provider_routes.py ← OPERATOR-ONLY smoke test (the ONLY Phase 6G path that may issue a live NVIDIA/OpenAI request); default prompt "Reply only OK"; API keys never logged or returned
+backend/apps/saas/provider_test_plan_policy.py ← Phase 6J — provider test plan policy registry; only razorpay.create_order is implementation target; every policy declares realMoney=false, providerCallAllowed=false, maxTestAmountPaise=100
+backend/apps/saas/provider_test_plan.py ← Phase 6J — RuntimeProviderTestPlan service (prepare/validate/approve/reject/archive/inspect + assert_provider_test_plan_has_no_side_effects); never calls Razorpay/PayU/Delhivery/Vapi/Meta/AI providers
+backend/apps/saas/management/commands/prepare_single_provider_test_plan.py ← Phase 6J — creates a plan row, no provider call
+backend/apps/saas/management/commands/validate_single_provider_test_plan.py ← Phase 6J — re-asserts invariants + env presence + payload hash
+backend/apps/saas/management/commands/approve_single_provider_test_plan.py ← Phase 6J — approval ONLY unlocks future Phase 6K gate; never unlocks a Phase 6J provider call
+backend/apps/saas/management/commands/reject_single_provider_test_plan.py ← Phase 6J
+backend/apps/saas/management/commands/archive_single_provider_test_plan.py ← Phase 6J
+backend/apps/saas/management/commands/inspect_single_provider_test_plan.py ← Phase 6J — read-only registry inspector with safeToStartPhase6K boolean
 backend/apps/whatsapp/language.py        ← Phase 5C deterministic Hindi/Hinglish/English detection (devanagari ratio + Hinglish marker word list)
 backend/apps/whatsapp/ai_schema.py        ← Phase 5C strict JSON schema + ChatAgentDecision dataclass + BLOCKED_CLAIM_PHRASES list + reply_contains_blocked_phrase()
 backend/apps/whatsapp/discount_policy.py  ← Phase 5C wrapper around apps.orders.discounts: never offer upfront, MIN_OBJECTION_TURNS_BEFORE_OFFER, refusal-rescue trigger, validate_total_discount_cap (50% hard cap)
@@ -243,13 +251,13 @@ python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
 python manage.py makemigrations --check --dry-run  # MUST report "No changes detected"
-python -m pytest -q                 # 1071 tests today
+python -m pytest -q                 # 1131 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                         # http://localhost:8080
-npm test                            # 34 tests today
+npm test                            # 40 tests today
 npm run lint                        # 0 errors expected
 npm run build                       # production build
 ```

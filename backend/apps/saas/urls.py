@@ -10,6 +10,13 @@ from .views import (
     FeatureFlagsView,
     MyOrganizationsView,
     OrgScopeReadinessView,
+    ProviderTestPlanApproveView,
+    ProviderTestPlanArchiveView,
+    ProviderTestPlanDetailView,
+    ProviderTestPlanPrepareView,
+    ProviderTestPlanRejectView,
+    ProviderTestPlanValidateView,
+    ProviderTestPlansListView,
     RuntimeDryRunView,
     RuntimeLiveGateApproveView,
     RuntimeLiveGateKillSwitchView,
@@ -192,5 +199,41 @@ urlpatterns = [
         "runtime-live-gate/simulations/<int:simulation_id>/rollback/",
         RuntimeLiveGateSimulationRollbackView.as_view(),
         name="saas-runtime-live-gate-simulation-rollback",
+    ),
+    # Phase 6J — Single Internal Provider Test Plan.
+    path(
+        "provider-test-plans/",
+        ProviderTestPlansListView.as_view(),
+        name="saas-provider-test-plans",
+    ),
+    path(
+        "provider-test-plans/prepare/",
+        ProviderTestPlanPrepareView.as_view(),
+        name="saas-provider-test-plans-prepare",
+    ),
+    path(
+        "provider-test-plans/<str:plan_id>/",
+        ProviderTestPlanDetailView.as_view(),
+        name="saas-provider-test-plan-detail",
+    ),
+    path(
+        "provider-test-plans/<str:plan_id>/validate/",
+        ProviderTestPlanValidateView.as_view(),
+        name="saas-provider-test-plan-validate",
+    ),
+    path(
+        "provider-test-plans/<str:plan_id>/approve/",
+        ProviderTestPlanApproveView.as_view(),
+        name="saas-provider-test-plan-approve",
+    ),
+    path(
+        "provider-test-plans/<str:plan_id>/reject/",
+        ProviderTestPlanRejectView.as_view(),
+        name="saas-provider-test-plan-reject",
+    ),
+    path(
+        "provider-test-plans/<str:plan_id>/archive/",
+        ProviderTestPlanArchiveView.as_view(),
+        name="saas-provider-test-plan-archive",
     ),
 ]

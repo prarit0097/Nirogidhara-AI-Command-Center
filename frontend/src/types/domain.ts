@@ -2341,3 +2341,135 @@ export interface SaasRuntimeLiveGateSimulationsResponse {
   killSwitchActive: boolean;
   summary?: SaasRuntimeLiveGateSimulationSummary;
 }
+
+// ---------- Phase 6J - Single Internal Provider Test Plan ----------
+
+export type SaasProviderTestPlanStatus =
+  | "draft"
+  | "prepared"
+  | "validated"
+  | "approval_required"
+  | "approved_for_future_execution"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasProviderTestPlanPolicyEntry {
+  operationType: string;
+  providerType: string;
+  providerEnvironment: "test" | "sandbox" | "production";
+  realMoney: false;
+  realCustomerDataAllowed: false;
+  externalProviderCallAllowedInPhase6J: false;
+  providerCallAllowed: false;
+  approvalRequired: boolean;
+  liveGateRequired: boolean;
+  killSwitchMustRemainEnabled: boolean;
+  idempotencyRequired: boolean;
+  webhookRequiredForFutureExecution: boolean;
+  syntheticPayloadRequired: boolean;
+  safeAmountOnly: boolean;
+  maxTestAmountPaise: number;
+  currency: string;
+  nextPhaseForExecution: string;
+  rollbackRequired: boolean;
+  auditRequired: boolean;
+  implementationTargetInPhase6J: boolean;
+  notes: string;
+  requiredEnvKeys: string[];
+  optionalEnvKeys: string[];
+  requiredConfigKeys: string[];
+  policyVersion: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SaasProviderTestPlanEnvReadiness {
+  providerType: string;
+  envPresence: Record<string, boolean>;
+  secretRefStatus: Record<string, {
+    valid: boolean;
+    source: string;
+    maskedRef: string;
+    present: boolean | null;
+    canResolveAtRuntime: boolean;
+    reason: string;
+  }>;
+  maskedSecretRefs: Record<string, string>;
+  envReady: boolean;
+  webhookReady: boolean;
+}
+
+export interface SaasProviderTestPlan {
+  id: number;
+  planId: string;
+  organization: { id: number; code: string; name: string } | null;
+  branch: { id: number; code: string; name: string } | null;
+  providerType: string;
+  operationType: string;
+  providerEnvironment: "test" | "sandbox" | "production";
+  status: SaasProviderTestPlanStatus;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  dryRun: true;
+  providerCallAllowed: false;
+  externalCallWillBeMade: false;
+  externalCallWasMade: false;
+  providerCallAttempted: false;
+  realCustomerDataAllowed: false;
+  realMoney: false;
+  amountPaise: number | null;
+  currency: string;
+  idempotencyKey: string;
+  payloadHash: string;
+  safePayloadSummary: Record<string, unknown>;
+  envReadiness: SaasProviderTestPlanEnvReadiness;
+  secretRefReadiness: Record<string, unknown>;
+  gateRequirements: Record<string, unknown>;
+  approvalRequirements: Record<string, unknown>;
+  rollbackPlan: Record<string, unknown>;
+  abortCriteria: string[];
+  verificationChecklist: Array<{ key: string; expected: unknown }>;
+  blockers: string[];
+  warnings: string[];
+  nextPhase: string;
+  requestedBy: number | null;
+  approvedBy: number | null;
+  rejectedBy: number | null;
+  archivedBy: number | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  nextAction: string;
+}
+
+export interface SaasProviderTestPlanReadiness {
+  organization: { id: number; code: string; name: string } | null;
+  policyVersion: string;
+  phase6jImplementationTargets: string[];
+  policies: SaasProviderTestPlanPolicyEntry[];
+  planCount: number;
+  preparedCount: number;
+  validatedCount: number;
+  approvedCount: number;
+  archivedCount: number;
+  blockedCount: number;
+  providerCallAttemptedCount: number;
+  externalCallMadeCount: number;
+  latestPlan: SaasProviderTestPlan | null;
+  plans: SaasProviderTestPlan[];
+  killSwitchActive: boolean;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  dryRun: true;
+  providerCallAllowed: false;
+  externalCallWillBeMade: false;
+  externalCallWasMade: false;
+  providerCallAttempted: false;
+  safeToStartPhase6K: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}

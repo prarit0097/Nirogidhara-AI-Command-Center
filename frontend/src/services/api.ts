@@ -143,6 +143,8 @@ import type {
   SaasIntegrationSettingsResponse,
   SaasMyOrganizations,
   SaasOrgScopeReadiness,
+  SaasProviderTestPlan,
+  SaasProviderTestPlanReadiness,
   SaasRuntimeDryRunReport,
   SaasLiveGateRequest,
   SaasRuntimeLiveGateKillSwitch,
@@ -1277,6 +1279,69 @@ export const api = {
       { reason },
       () =>
         (M.SAAS_RUNTIME_LIVE_GATE_SIMULATIONS as SaasRuntimeLiveGateSimulationsResponse).simulations[0],
+    ),
+
+  // ---------- Phase 6J - Single Internal Provider Test Plan ----------
+
+  getSaasProviderTestPlans: () =>
+    safeFetch<SaasProviderTestPlanReadiness>(
+      "/v1/saas/provider-test-plans/",
+      () => M.SAAS_PROVIDER_TEST_PLAN_READINESS as SaasProviderTestPlanReadiness,
+    ),
+  getSaasProviderTestPlan: (planId: string) =>
+    safeFetch<SaasProviderTestPlan>(
+      `/v1/saas/provider-test-plans/${encodeURIComponent(planId)}/`,
+      () =>
+        (M.SAAS_PROVIDER_TEST_PLAN_READINESS as SaasProviderTestPlanReadiness)
+          .latestPlan as SaasProviderTestPlan,
+    ),
+  prepareSaasProviderTestPlan: (
+    operationType = "razorpay.create_order",
+    reason = "",
+  ) =>
+    safeMutate<SaasProviderTestPlan>(
+      "/v1/saas/provider-test-plans/prepare/",
+      "POST",
+      { operationType, reason },
+      () =>
+        (M.SAAS_PROVIDER_TEST_PLAN_READINESS as SaasProviderTestPlanReadiness)
+          .latestPlan as SaasProviderTestPlan,
+    ),
+  validateSaasProviderTestPlan: (planId: string) =>
+    safeMutate<SaasProviderTestPlan>(
+      `/v1/saas/provider-test-plans/${encodeURIComponent(planId)}/validate/`,
+      "POST",
+      {},
+      () =>
+        (M.SAAS_PROVIDER_TEST_PLAN_READINESS as SaasProviderTestPlanReadiness)
+          .latestPlan as SaasProviderTestPlan,
+    ),
+  approveSaasProviderTestPlan: (planId: string, reason = "") =>
+    safeMutate<SaasProviderTestPlan>(
+      `/v1/saas/provider-test-plans/${encodeURIComponent(planId)}/approve/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_PROVIDER_TEST_PLAN_READINESS as SaasProviderTestPlanReadiness)
+          .latestPlan as SaasProviderTestPlan,
+    ),
+  rejectSaasProviderTestPlan: (planId: string, reason = "") =>
+    safeMutate<SaasProviderTestPlan>(
+      `/v1/saas/provider-test-plans/${encodeURIComponent(planId)}/reject/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_PROVIDER_TEST_PLAN_READINESS as SaasProviderTestPlanReadiness)
+          .latestPlan as SaasProviderTestPlan,
+    ),
+  archiveSaasProviderTestPlan: (planId: string, reason = "") =>
+    safeMutate<SaasProviderTestPlan>(
+      `/v1/saas/provider-test-plans/${encodeURIComponent(planId)}/archive/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_PROVIDER_TEST_PLAN_READINESS as SaasProviderTestPlanReadiness)
+          .latestPlan as SaasProviderTestPlan,
     ),
 };
 
