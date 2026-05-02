@@ -25,7 +25,9 @@ describe("Phase 6E - SaaS Admin Panel", () => {
     expect(screen.getByText("Safety Locks")).toBeInTheDocument();
 
     await waitFor(() =>
-      expect(screen.getByText("WhatsApp Meta")).toBeInTheDocument(),
+      expect(
+        screen.getAllByText("WhatsApp Meta").length,
+      ).toBeGreaterThan(0),
     );
 
     const body = document.body.textContent ?? "";

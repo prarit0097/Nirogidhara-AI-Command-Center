@@ -41,6 +41,36 @@ deferred to **Phase 6F Per-Org Runtime Integration Routing Plan**. Global
 tenant filtering is still not blanket-enabled and WhatsApp flags remain
 untouched/off.
 
+**Phase 6F note:** **Phase 6F Per-Org Runtime Integration Routing Plan
+shipped.** New `apps.saas.integration_runtime` ships a read-only resolver
+layer: `mask_secret_ref`, `validate_secret_ref_format`,
+`get_secret_ref_status` / `resolve_secret_ref_preview` (ENV: refs check
+`os.environ` presence only — never return the value; VAULT: refs return
+`planned/not_configured`), per-provider preview composition, and a
+combined `get_all_provider_runtime_previews` that derives a
+`safeToStartPhase6G` boolean. **`runtimeSource` is always `env_config`**
+and **`perOrgRuntimeEnabled` / `runtimeUsesPerOrgSettings` are always
+`False`** in this phase — the live runtime is unchanged. New
+`python manage.py inspect_runtime_integration_routing --json`
+management command + `GET /api/v1/saas/runtime-routing-readiness/`
+admin-only DRF endpoint return the per-provider preview; both consume
+the same selector. New idempotent
+`python manage.py seed_default_org_integration_refs --dry-run|--apply
+--json` writes ENV: secret refs only (never raw values), defaults to
+`--dry-run`, emits `saas.integration_refs.seeded` audit rows on apply,
+and never activates runtime routing. SaaS Admin Panel (`/saas-admin`)
+gains a new "Runtime Integration Routing Preview" section showing
+runtime source = Env/config, per-org runtime disabled, six provider
+rows (WhatsApp Meta / Razorpay / PayU / Delhivery / Vapi / OpenAI) with
+setting status / secret-ref counts / resolvable preview / runtime
+source columns, and a clear warning banner: "Per-org runtime routing
+is not active. Runtime still uses env/config." **No activation /
+enable / send / campaign buttons anywhere.** **24 new backend tests +
+3 new frontend tests; 1015 backend + 32 frontend, all green.** Next
+phase: **Phase 6G Controlled Runtime Routing Dry Run** — a per-provider
+opt-in shadow mode that compares env/config and per-org resolution
+without affecting live traffic.
+
 ---
 
 ## 1. Working agreement (binding rule)

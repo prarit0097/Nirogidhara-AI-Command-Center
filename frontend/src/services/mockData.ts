@@ -1333,3 +1333,61 @@ export const SAAS_ADMIN_ORGANIZATIONS: Record<string, unknown> = {
     },
   ],
 };
+
+// Phase 6F — Runtime integration routing readiness preview.
+const _PROVIDER_PREVIEW_TEMPLATE = (
+  providerType: string,
+  providerLabel: string,
+  expectedRefs: string[],
+) => ({
+  providerType,
+  providerLabel,
+  integrationSettingExists: false,
+  settingStatus: "missing",
+  isActive: false,
+  runtimeSource: "env_config" as const,
+  perOrgRuntimeEnabled: false as const,
+  secretRefsPresent: false,
+  secretRefsResolvablePreview: { perRef: {}, anyMissingEnv: true },
+  missingSecretRefs: expectedRefs,
+  configPresent: false,
+  envKeyStatus: {},
+  expectedSecretRefKeys: expectedRefs,
+  setting: null,
+  blockers: [],
+  warnings: ["No per-org integration setting configured."],
+  nextAction: "configure_org_integration_settings_before_runtime_routing",
+});
+
+export const SAAS_RUNTIME_ROUTING_READINESS: Record<string, unknown> = {
+  organization: {
+    id: SAAS_DEFAULT_ORG.id,
+    code: SAAS_DEFAULT_ORG.code,
+    name: SAAS_DEFAULT_ORG.name,
+  },
+  runtimeUsesPerOrgSettings: false,
+  perOrgRuntimeEnabled: false,
+  providers: [
+    _PROVIDER_PREVIEW_TEMPLATE("whatsapp_meta", "WhatsApp Meta", [
+      "access_token",
+      "app_secret",
+      "verify_token",
+    ]),
+    _PROVIDER_PREVIEW_TEMPLATE("razorpay", "Razorpay", ["key_secret"]),
+    _PROVIDER_PREVIEW_TEMPLATE("payu", "PayU", ["merchant_key", "salt"]),
+    _PROVIDER_PREVIEW_TEMPLATE("delhivery", "Delhivery", ["api_token"]),
+    _PROVIDER_PREVIEW_TEMPLATE("vapi", "Vapi", ["api_key"]),
+    _PROVIDER_PREVIEW_TEMPLATE("openai", "OpenAI", ["api_key"]),
+  ],
+  global: {
+    safeToStartPhase6G: false,
+    blockers: [],
+    warnings: [
+      "At least one provider has no per-org integration setting; Phase 6G dry-run is blocked until every provider is configured.",
+    ],
+    nextAction: "configure_org_integration_settings_before_runtime_routing",
+  },
+  warnings: [],
+  blockers: [],
+  nextAction: "configure_org_integration_settings_before_runtime_routing",
+};

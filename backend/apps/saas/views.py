@@ -24,6 +24,7 @@ from rest_framework.views import APIView
 
 from .admin_readiness import get_saas_admin_overview
 from .coverage import compute_default_organization_coverage
+from .integration_runtime import get_all_provider_runtime_previews
 from .integration_settings import (
     get_org_integration_readiness,
     get_org_integration_settings,
@@ -351,6 +352,25 @@ class SaasIntegrationReadinessView(APIView):
         return Response(get_org_integration_readiness(org))
 
 
+class RuntimeRoutingReadinessView(APIView):
+    """``GET /api/v1/saas/runtime-routing-readiness/`` — Phase 6F preview.
+
+    Read-only. Returns the per-provider runtime preview for the current
+    admin's organization (or the default org). Strict invariants:
+
+    - ``runtimeUsesPerOrgSettings=False`` always in this phase.
+    - No raw secrets returned. ENV: refs return presence (true/false)
+      and a masked label only.
+    - No external provider calls.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        org = _get_admin_org(request)
+        return Response(get_all_provider_runtime_previews(org))
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -364,4 +384,5 @@ __all__ = (
     "SaasIntegrationSettingsView",
     "SaasIntegrationSettingDetailView",
     "SaasIntegrationReadinessView",
+    "RuntimeRoutingReadinessView",
 )

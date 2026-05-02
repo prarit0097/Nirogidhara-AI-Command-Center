@@ -8,6 +8,7 @@ from .views import (
     FeatureFlagsView,
     MyOrganizationsView,
     OrgScopeReadinessView,
+    RuntimeRoutingReadinessView,
     SaasAdminOrganizationDetailView,
     SaasAdminOrganizationsView,
     SaasAdminOverviewView,
@@ -78,5 +79,10 @@ urlpatterns = [
         "admin/integration-readiness/",
         SaasIntegrationReadinessView.as_view(),
         name="saas-admin-integration-readiness",
+    ),
+    path(
+        "runtime-routing-readiness/",
+        RuntimeRoutingReadinessView.as_view(),
+        name="saas-runtime-routing-readiness",
     ),
 ]

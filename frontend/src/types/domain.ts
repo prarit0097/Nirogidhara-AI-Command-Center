@@ -1878,3 +1878,63 @@ export interface SaasIntegrationSettingsResponse {
   settings: SaasIntegrationSetting[];
   runtimeUsesPerOrgSettings: false;
 }
+
+// ---------- Phase 6F — Per-Org Runtime Integration Routing Plan ----------
+
+export interface SaasRuntimeRoutingSecretRefStatus {
+  valid: boolean;
+  source: "env" | "vault" | "unknown";
+  maskedRef: string;
+  present: boolean | null;
+  canResolveAtRuntime: boolean;
+  reason: string;
+}
+
+export interface SaasRuntimeRoutingProviderPreview {
+  providerType: string;
+  providerLabel: string;
+  integrationSettingExists: boolean;
+  settingStatus: string;
+  isActive: boolean;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  secretRefsPresent: boolean;
+  secretRefsResolvablePreview: {
+    perRef: Record<string, SaasRuntimeRoutingSecretRefStatus>;
+    anyMissingEnv: boolean;
+  };
+  missingSecretRefs: string[];
+  configPresent: boolean;
+  envKeyStatus: Record<string, { envVar: string; present: boolean }>;
+  expectedSecretRefKeys: string[];
+  setting: {
+    id: number;
+    providerType: string;
+    displayName: string;
+    status: string;
+    isActive: boolean;
+    validationStatus: string;
+    validationMessage: string;
+    secretRefs: Record<string, unknown>;
+    config: Record<string, unknown>;
+  } | null;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasRuntimeRoutingReadiness {
+  organization: { id: number; code: string; name: string } | null;
+  runtimeUsesPerOrgSettings: false;
+  perOrgRuntimeEnabled: false;
+  providers: SaasRuntimeRoutingProviderPreview[];
+  global: {
+    safeToStartPhase6G: boolean;
+    blockers: string[];
+    warnings: string[];
+    nextAction: string;
+  };
+  warnings: string[];
+  blockers: string[];
+  nextAction: string;
+}

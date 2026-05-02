@@ -141,6 +141,7 @@ import type {
   SaasIntegrationSettingsResponse,
   SaasMyOrganizations,
   SaasOrgScopeReadiness,
+  SaasRuntimeRoutingReadiness,
   SaasWritePathReadiness,
 } from "@/types/domain";
 
@@ -1102,6 +1103,15 @@ export const api = {
     safeFetch<SaasIntegrationReadiness>(
       "/v1/saas/admin/integration-readiness/",
       () => M.SAAS_INTEGRATION_READINESS as SaasIntegrationReadiness,
+    ),
+
+  // ---------- Phase 6F — Runtime Integration Routing Preview ----------
+
+  getSaasRuntimeRoutingReadiness: () =>
+    safeFetch<SaasRuntimeRoutingReadiness>(
+      "/v1/saas/runtime-routing-readiness/",
+      () =>
+        M.SAAS_RUNTIME_ROUTING_READINESS as SaasRuntimeRoutingReadiness,
     ),
 };
 

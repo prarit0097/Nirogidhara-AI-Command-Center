@@ -6,6 +6,8 @@ import { api } from "@/services/api";
 import type {
   SaasAdminOverview,
   SaasProviderReadiness,
+  SaasRuntimeRoutingProviderPreview,
+  SaasRuntimeRoutingReadiness,
 } from "@/types/domain";
 import {
   Building2,
@@ -28,13 +30,20 @@ function boolTone(
 
 export default function SaasAdminPage() {
   const [overview, setOverview] = useState<SaasAdminOverview | null>(null);
+  const [routing, setRouting] =
+    useState<SaasRuntimeRoutingReadiness | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
     setLoading(true);
-    api
-      .getSaasAdminOverview()
-      .then(setOverview)
+    Promise.all([
+      api.getSaasAdminOverview(),
+      api.getSaasRuntimeRoutingReadiness(),
+    ])
+      .then(([ov, rt]) => {
+        setOverview(ov);
+        setRouting(rt);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -227,6 +236,82 @@ export default function SaasAdminPage() {
         </div>
       </section>
 
+      {routing && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="runtime-routing-preview"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <SlidersHorizontal className="h-5 w-5 text-primary" />
+                Runtime Integration Routing Preview
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6F preview only. Per-org runtime routing is not
+                active — runtime still uses env/config. Secret refs are
+                checked for presence only; raw values are never exposed.
+              </p>
+            </div>
+            <StatusPill
+              tone={routing.global.safeToStartPhase6G ? "success" : "warning"}
+            >
+              {routing.global.safeToStartPhase6G
+                ? "Phase 6G ready"
+                : "Phase 6G blocked"}
+            </StatusPill>
+          </div>
+          <div className="grid gap-3 px-6 py-4 sm:grid-cols-3">
+            <KeyValue
+              label="Runtime source"
+              value="Env/config (active)"
+            />
+            <KeyValue
+              label="Per-org runtime enabled"
+              value="false (Phase 6F)"
+            />
+            <KeyValue
+              label="Next action"
+              value={routing.nextAction}
+            />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px] text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-6 py-3 text-left font-medium">
+                    Provider
+                  </th>
+                  <th className="py-3 text-left font-medium">Setting</th>
+                  <th className="py-3 text-left font-medium">Status</th>
+                  <th className="py-3 text-left font-medium">
+                    Secret refs
+                  </th>
+                  <th className="py-3 text-left font-medium">
+                    Resolvable
+                  </th>
+                  <th className="px-6 py-3 text-left font-medium">
+                    Runtime source
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {routing.providers.map((provider) => (
+                  <RuntimeProviderRow
+                    key={provider.providerType}
+                    provider={provider}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-border bg-warning/5 px-6 py-3 text-xs text-muted-foreground">
+            Per-org runtime routing is not active. Runtime still uses
+            env/config.
+          </div>
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel title="Blockers & Warnings" icon={ShieldCheck}>
           <IssueList items={overview.blockers} empty="No blockers" />
@@ -353,6 +438,48 @@ function ProviderRow({ provider }: { provider: SaasProviderReadiness }) {
       <td className="py-3">{provider.validationStatus}</td>
       <td className="px-6 py-3">
         <StatusPill tone="neutral">Env/config</StatusPill>
+      </td>
+    </tr>
+  );
+}
+
+function RuntimeProviderRow({
+  provider,
+}: {
+  provider: SaasRuntimeRoutingProviderPreview;
+}) {
+  const refsResolvable =
+    provider.secretRefsPresent &&
+    !provider.secretRefsResolvablePreview.anyMissingEnv;
+  return (
+    <tr className="border-t border-border/60" data-testid="runtime-provider-row">
+      <td className="px-6 py-3 font-medium">{provider.providerLabel}</td>
+      <td className="py-3">
+        <StatusPill
+          tone={provider.integrationSettingExists ? "success" : "warning"}
+        >
+          {provider.integrationSettingExists ? "Configured" : "Missing"}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={toneForStatus(provider.settingStatus)}>
+          {provider.settingStatus}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={provider.secretRefsPresent ? "success" : "warning"}>
+          {provider.secretRefsPresent
+            ? `${provider.expectedSecretRefKeys.length - provider.missingSecretRefs.length}/${provider.expectedSecretRefKeys.length} present`
+            : "Missing"}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={refsResolvable ? "success" : "warning"}>
+          {refsResolvable ? "Resolvable" : "Preview blocked"}
+        </StatusPill>
+      </td>
+      <td className="px-6 py-3">
+        <StatusPill tone="neutral">{provider.runtimeSource}</StatusPill>
       </td>
     </tr>
   );

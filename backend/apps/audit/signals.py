@@ -232,6 +232,8 @@ ICON_BY_KIND: dict[str, str] = {
     # Phase 6E SaaS Admin + Integration Settings.
     "saas.integration_setting.created": "plug",
     "saas.integration_setting.updated": "settings",
+    # Phase 6F Per-Org Runtime Integration Routing Plan.
+    "saas.integration_refs.seeded": "key",
 }
 
 

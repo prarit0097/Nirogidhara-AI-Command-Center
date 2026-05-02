@@ -950,6 +950,32 @@ Hard rules preserved:
 - WhatsApp flags remain untouched/off; campaigns/broadcast/lifecycle/call/
   rescue/RTO/reorder remain locked.
 
+## Phase 6F — Per-Org Runtime Integration Routing Plan ✅ shipped
+
+What landed:
+
+- `apps.saas.integration_runtime` resolver layer with secret-ref
+  helpers, per-provider preview, and combined `safeToStartPhase6G`
+  composition. Live runtime is unchanged (`runtimeSource="env_config"`
+  always, `runtimeUsesPerOrgSettings=False` always).
+- `inspect_runtime_integration_routing` management command +
+  `GET /api/v1/saas/runtime-routing-readiness/` admin-only API.
+- Idempotent `seed_default_org_integration_refs` command — writes
+  ENV: secret refs only (no raw values), defaults to dry-run, emits
+  `saas.integration_refs.seeded` audit rows on apply.
+- SaaS Admin Panel "Runtime Integration Routing Preview" section
+  with six provider rows and a clear "Per-org runtime routing is
+  not active" banner.
+
+Hard rules preserved:
+
+- Raw secret values NEVER stored, logged, or returned.
+- ENV: refs return PRESENCE only (boolean); VAULT: refs return
+  `planned/not_configured`.
+- No external provider calls; no live runtime switch.
+- WhatsApp env flags untouched; broad-automation flags remain
+  LOCKED OFF; campaigns / broadcast remain LOCKED.
+
 ## Recommended future phases
 
 - **Phase 6B — Default-org data backfill.** ✅ shipped — see above.

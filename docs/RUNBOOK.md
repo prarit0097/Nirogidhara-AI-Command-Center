@@ -329,6 +329,73 @@ Customer Pilot Readiness" section. It shows counts, blockers,
 It intentionally has no send, enable, approve, pause, or automation
 buttons.
 
+### Phase 6F — Per-Org Runtime Integration Routing Plan
+
+After Phase 6E ships the SaaS admin + integration-settings foundation,
+Phase 6F adds the **read-only resolver + preview surface** for the
+future per-org runtime. Live runtime stays on env / config; this phase
+only tells the operator what a per-org switch would look like.
+
+```bash
+# 1. Confirm the diagnostic on the VPS.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_runtime_integration_routing \
+    --json | jq '{
+        runtimeUsesPerOrgSettings,
+        perOrgRuntimeEnabled,
+        providers: (.providers | map({
+            providerType,
+            integrationSettingExists,
+            settingStatus,
+            runtimeSource,
+            secretRefsPresent,
+            missingSecretRefs,
+            nextAction
+        })),
+        safeToStartPhase6G: .global.safeToStartPhase6G,
+        nextAction
+    }'
+# Expect: runtimeUsesPerOrgSettings=false, perOrgRuntimeEnabled=false,
+#         every provider runtimeSource=env_config.
+
+# 2. Smoke-test the API.
+ADMIN_JWT=$(curl -s -X POST https://ai.nirogidhara.com/api/auth/login/ \
+    -H "Content-Type: application/json" \
+    -d '{"username":"director","password":"<admin-password>"}' | jq -r .access)
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/runtime-routing-readiness/ | jq
+
+# Read-only — POST returns 405.
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+    -H "Authorization: Bearer $ADMIN_JWT" \
+    https://ai.nirogidhara.com/api/v1/saas/runtime-routing-readiness/  # 405
+
+# 3. (Optional) seed ENV: refs for the default org. Dry-run first.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py seed_default_org_integration_refs \
+    --dry-run --json | jq
+
+# Apply only after reviewing the dry-run output. Stores ENV: refs only;
+# never raw secret values; never activates runtime routing.
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py seed_default_org_integration_refs \
+    --apply --json | jq
+```
+
+What this phase deliberately did NOT do (drives Phase 6G scope):
+
+- No live runtime is switched off env / config.
+- No provider is contacted by the diagnostic.
+- No raw secret value is stored, logged, or returned.
+- No activation / enable / send buttons land on the UI.
+- WhatsApp env flags untouched.
+
+Open `https://ai.nirogidhara.com/saas-admin` (logged in as
+director / admin) and verify the new **"Runtime Integration Routing
+Preview"** section renders with six provider rows and the
+**"Per-org runtime routing is not active. Runtime still uses
+env/config."** footer banner.
+
 ### Phase 6D — Org-Aware Write Path Assignment
 
 After Phase 6C wires the read-side foundation, Phase 6D wires the
