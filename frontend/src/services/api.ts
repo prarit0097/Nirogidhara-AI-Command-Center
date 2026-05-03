@@ -143,6 +143,8 @@ import type {
   SaasIntegrationSettingsResponse,
   SaasMyOrganizations,
   SaasOrgScopeReadiness,
+  SaasProviderExecutionAttempt,
+  SaasProviderExecutionReadiness,
   SaasProviderTestPlan,
   SaasProviderTestPlanReadiness,
   SaasRuntimeDryRunReport,
@@ -1342,6 +1344,49 @@ export const api = {
       () =>
         (M.SAAS_PROVIDER_TEST_PLAN_READINESS as SaasProviderTestPlanReadiness)
           .latestPlan as SaasProviderTestPlan,
+    ),
+
+  // ---------- Phase 6K - Razorpay test-mode execution gate (read-only) ----------
+
+  getSaasProviderExecutionAttempts: () =>
+    safeFetch<SaasProviderExecutionReadiness>(
+      "/v1/saas/provider-execution-attempts/",
+      () =>
+        M.SAAS_PROVIDER_EXECUTION_READINESS as SaasProviderExecutionReadiness,
+    ),
+  getSaasProviderExecutionAttempt: (executionId: string) =>
+    safeFetch<SaasProviderExecutionAttempt>(
+      `/v1/saas/provider-execution-attempts/${encodeURIComponent(executionId)}/`,
+      () =>
+        (M.SAAS_PROVIDER_EXECUTION_READINESS as SaasProviderExecutionReadiness)
+          .latestAttempt as SaasProviderExecutionAttempt,
+    ),
+  prepareSaasProviderExecutionAttempt: (planId: string) =>
+    safeMutate<SaasProviderExecutionAttempt>(
+      "/v1/saas/provider-execution-attempts/prepare/",
+      "POST",
+      { planId },
+      () =>
+        (M.SAAS_PROVIDER_EXECUTION_READINESS as SaasProviderExecutionReadiness)
+          .latestAttempt as SaasProviderExecutionAttempt,
+    ),
+  rollbackSaasProviderExecutionAttempt: (executionId: string, reason = "") =>
+    safeMutate<SaasProviderExecutionAttempt>(
+      `/v1/saas/provider-execution-attempts/${encodeURIComponent(executionId)}/rollback/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_PROVIDER_EXECUTION_READINESS as SaasProviderExecutionReadiness)
+          .latestAttempt as SaasProviderExecutionAttempt,
+    ),
+  archiveSaasProviderExecutionAttempt: (executionId: string, reason = "") =>
+    safeMutate<SaasProviderExecutionAttempt>(
+      `/v1/saas/provider-execution-attempts/${encodeURIComponent(executionId)}/archive/`,
+      "POST",
+      { reason },
+      () =>
+        (M.SAAS_PROVIDER_EXECUTION_READINESS as SaasProviderExecutionReadiness)
+          .latestAttempt as SaasProviderExecutionAttempt,
     ),
 };
 

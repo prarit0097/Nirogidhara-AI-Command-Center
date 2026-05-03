@@ -179,6 +179,14 @@ backend/apps/saas/management/commands/approve_single_provider_test_plan.py ← P
 backend/apps/saas/management/commands/reject_single_provider_test_plan.py ← Phase 6J
 backend/apps/saas/management/commands/archive_single_provider_test_plan.py ← Phase 6J
 backend/apps/saas/management/commands/inspect_single_provider_test_plan.py ← Phase 6J — read-only registry inspector with safeToStartPhase6K boolean
+backend/apps/saas/provider_execution_policy.py ← Phase 6K — Razorpay test-mode execution policy (only razorpay.create_order, amount_paise=100, currency=INR, env flag + CLI confirm + approved plan + test key required)
+backend/apps/saas/razorpay_test_execution.py ← Phase 6K — separate adapter from the production payment-link client; owns Orders API .create() against test key only; never logs raw key
+backend/apps/saas/provider_execution.py ← Phase 6K — RuntimeProviderExecutionAttempt service (prepare/execute/rollback/archive/inspect + assert_execution_invariants)
+backend/apps/saas/management/commands/inspect_single_provider_execution_gate.py ← Phase 6K — read-only readiness inspector
+backend/apps/saas/management/commands/prepare_single_provider_execution_attempt.py ← Phase 6K — creates attempt row, no provider call
+backend/apps/saas/management/commands/execute_single_razorpay_test_order.py ← Phase 6K — the ONE manual CLI command that may dispatch a Razorpay test create_order; requires --confirm-test-execution + PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=true + rzp_test key + approved Phase 6J plan
+backend/apps/saas/management/commands/rollback_single_provider_execution_attempt.py ← Phase 6K — local rollback only; never calls Razorpay cancel/refund (test order unpaid)
+backend/apps/saas/management/commands/archive_single_provider_execution_attempt.py ← Phase 6K
 backend/apps/whatsapp/language.py        ← Phase 5C deterministic Hindi/Hinglish/English detection (devanagari ratio + Hinglish marker word list)
 backend/apps/whatsapp/ai_schema.py        ← Phase 5C strict JSON schema + ChatAgentDecision dataclass + BLOCKED_CLAIM_PHRASES list + reply_contains_blocked_phrase()
 backend/apps/whatsapp/discount_policy.py  ← Phase 5C wrapper around apps.orders.discounts: never offer upfront, MIN_OBJECTION_TURNS_BEFORE_OFFER, refusal-rescue trigger, validate_total_discount_cap (50% hard cap)
@@ -251,13 +259,13 @@ python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
 python manage.py makemigrations --check --dry-run  # MUST report "No changes detected"
-python -m pytest -q                 # 1131 tests today
+python -m pytest -q                 # 1165 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                         # http://localhost:8080
-npm test                            # 40 tests today
+npm test                            # 42 tests today
 npm run lint                        # 0 errors expected
 npm run build                       # production build
 ```

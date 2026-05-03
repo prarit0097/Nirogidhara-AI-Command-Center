@@ -914,3 +914,158 @@ class RuntimeProviderTestPlan(models.Model):
         return (
             f"{self.plan_id} {self.operation_type} ({self.status})"
         )
+
+
+class RuntimeProviderExecutionAttempt(models.Model):
+    """Phase 6K — Single Internal Razorpay Test-Mode Execution Attempt.
+
+    Records the operator's intent + outcome for ONE controlled
+    Razorpay test-mode ``create_order`` call. Phase 6K bounds:
+
+    - Always tied to an APPROVED ``RuntimeProviderTestPlan``.
+    - Only ``razorpay.create_order`` against a Razorpay TEST key.
+    - ``amount_paise`` is locked to 100; ``currency`` is locked to INR.
+    - ``business_mutation_was_made`` / ``payment_link_created`` /
+      ``payment_captured`` / ``customer_notification_sent`` are
+      asserted ``False`` at every save site.
+    - Only one successful execution per approved plan.
+    """
+
+    class Status(models.TextChoices):
+        PREPARED = "prepared", "Prepared"
+        BLOCKED = "blocked", "Blocked"
+        READY = "ready", "Ready"
+        EXECUTING = "executing", "Executing"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        ROLLED_BACK = "rolled_back", "Rolled back"
+        ARCHIVED = "archived", "Archived"
+
+    class RollbackStatus(models.TextChoices):
+        NOT_REQUIRED = "not_required", "Not required"
+        READY = "ready", "Ready"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    execution_id = models.CharField(max_length=64, unique=True, db_index=True)
+    plan = models.ForeignKey(
+        "RuntimeProviderTestPlan",
+        on_delete=models.PROTECT,
+        related_name="execution_attempts",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_provider_execution_attempts",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="runtime_provider_execution_attempts",
+    )
+    provider_type = models.CharField(max_length=48, db_index=True)
+    operation_type = models.CharField(max_length=96, db_index=True)
+    provider_environment = models.CharField(
+        max_length=24,
+        default="test",
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=24,
+        choices=Status.choices,
+        default=Status.PREPARED,
+        db_index=True,
+    )
+    runtime_source = models.CharField(max_length=32, default="env_config")
+    per_org_runtime_enabled = models.BooleanField(default=False)
+    dry_run = models.BooleanField(default=False)
+    test_mode = models.BooleanField(default=True)
+    real_money = models.BooleanField(default=False)
+    real_customer_data_allowed = models.BooleanField(default=False)
+    amount_paise = models.PositiveIntegerField(default=100)
+    currency = models.CharField(max_length=8, default="INR")
+    provider_call_allowed = models.BooleanField(default=False)
+    external_call_will_be_made = models.BooleanField(default=False)
+    external_call_was_made = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    business_mutation_was_made = models.BooleanField(default=False)
+    payment_link_created = models.BooleanField(default=False)
+    payment_captured = models.BooleanField(default=False)
+    customer_notification_sent = models.BooleanField(default=False)
+    idempotency_key = models.CharField(
+        max_length=160,
+        unique=True,
+        db_index=True,
+    )
+    receipt = models.CharField(max_length=160, blank=True, default="")
+    request_payload_hash = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    safe_request_summary = models.JSONField(default=dict, blank=True)
+    safe_response_summary = models.JSONField(default=dict, blank=True)
+    provider_object_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    provider_status = models.CharField(max_length=48, blank=True, default="")
+    env_readiness = models.JSONField(default=dict, blank=True)
+    gate_decision = models.CharField(max_length=48, blank=True, default="")
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    rollback_plan = models.JSONField(default=dict, blank=True)
+    rollback_status = models.CharField(
+        max_length=24,
+        choices=RollbackStatus.choices,
+        default=RollbackStatus.NOT_REQUIRED,
+        db_index=True,
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_execution_attempts_requested",
+    )
+    executed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_execution_attempts_executed",
+    )
+    rolled_back_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_execution_attempts_rolled_back",
+    )
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_execution_attempts_archived",
+    )
+    executed_at = models.DateTimeField(null=True, blank=True)
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    audit_event_id = models.PositiveIntegerField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("plan", "status")),
+            models.Index(fields=("organization", "status")),
+            models.Index(fields=("provider_type", "status")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.execution_id} {self.operation_type} ({self.status})"

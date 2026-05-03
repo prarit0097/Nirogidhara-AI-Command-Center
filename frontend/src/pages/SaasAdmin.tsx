@@ -8,6 +8,8 @@ import type {
   SaasAiProviderRoutePreview,
   SaasAiProviderRoutingPreview,
   SaasProviderReadiness,
+  SaasProviderExecutionAttempt,
+  SaasProviderExecutionReadiness,
   SaasProviderTestPlan,
   SaasProviderTestPlanReadiness,
   SaasRuntimeLiveGateSummary,
@@ -25,6 +27,7 @@ import {
   Cpu,
   AlertTriangle,
   ClipboardList,
+  CreditCard,
   KeyRound,
   LockKeyhole,
   PlayCircle,
@@ -56,6 +59,8 @@ export default function SaasAdminPage() {
     useState<SaasRuntimeLiveGateSimulationsResponse | null>(null);
   const [providerTestPlans, setProviderTestPlans] =
     useState<SaasProviderTestPlanReadiness | null>(null);
+  const [providerExecutionGate, setProviderExecutionGate] =
+    useState<SaasProviderExecutionReadiness | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -68,8 +73,9 @@ export default function SaasAdminPage() {
       api.getSaasRuntimeLiveGate(),
       api.getSaasRuntimeLiveGateSimulations(),
       api.getSaasProviderTestPlans(),
+      api.getSaasProviderExecutionAttempts(),
     ])
-      .then(([ov, rt, dr, ai, gate, sims, ptp]) => {
+      .then(([ov, rt, dr, ai, gate, sims, ptp, exec]) => {
         setOverview(ov);
         setRouting(rt);
         setDryRun(dr);
@@ -77,6 +83,7 @@ export default function SaasAdminPage() {
         setLiveGate(gate);
         setSimulations(sims);
         setProviderTestPlans(ptp);
+        setProviderExecutionGate(exec);
       })
       .finally(() => setLoading(false));
   };
@@ -798,6 +805,86 @@ export default function SaasAdminPage() {
         </section>
       )}
 
+      {providerExecutionGate && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="provider-execution-gate-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <CreditCard className="h-5 w-5 text-primary" />
+                Single Internal Razorpay Test-Mode Execution Gate
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6K. Razorpay test-mode <code>create_order</code>{" "}
+                only — synthetic ₹1.00 (100 paise) payload, no
+                customer data, no payment link, no capture, no business
+                mutation. Actual provider call is{" "}
+                <strong>CLI-only</strong> via{" "}
+                <code>manage.py execute_single_razorpay_test_order</code>{" "}
+                with the <code>--confirm-test-execution</code> flag.
+              </p>
+            </div>
+            <StatusPill
+              tone={
+                providerExecutionGate.safeToRunPhase6KExecution
+                  ? "success"
+                  : "warning"
+              }
+            >
+              {providerExecutionGate.safeToRunPhase6KExecution
+                ? "Ready (CLI only)"
+                : "Gate blocked"}
+            </StatusPill>
+          </div>
+          <div className="grid gap-3 px-6 py-4 sm:grid-cols-4">
+            <KeyValue
+              label="Approved plan"
+              value={
+                providerExecutionGate.latestApprovedPlan?.planId ??
+                "no approved plan"
+              }
+            />
+            <KeyValue
+              label="Successful executions"
+              value={String(providerExecutionGate.successfulExecutionCount)}
+            />
+            <KeyValue
+              label="Provider calls attempted"
+              value={String(providerExecutionGate.providerCallAttemptedCount)}
+            />
+            <KeyValue
+              label="Business mutations"
+              value={String(providerExecutionGate.businessMutationCount)}
+            />
+          </div>
+          <div className="grid gap-4 px-6 pb-4 lg:grid-cols-2">
+            <ProviderExecutionEnvCard
+              env={providerExecutionGate.envReadiness}
+            />
+            <ProviderExecutionInvariants
+              attempt={providerExecutionGate.latestAttempt}
+            />
+          </div>
+          <ProviderExecutionAttemptsTable
+            attempts={providerExecutionGate.attempts}
+          />
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Read-only.</strong> No "Execute Razorpay" / "Create
+            Order" / "Create Payment Link" buttons exist on this page.
+            Phase 6K provider execution is exclusively triggered by
+            the CLI command after every gate is satisfied.
+          </div>
+          <div className="border-t border-border bg-warning/5 px-6 py-3 text-xs text-muted-foreground">
+            Next action:{" "}
+            <span className="font-medium">
+              {providerExecutionGate.nextAction}
+            </span>
+          </div>
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel title="Blockers & Warnings" icon={ShieldCheck}>
           <IssueList items={overview.blockers} empty="No blockers" />
@@ -1273,6 +1360,255 @@ function EnvRow({
       <StatusPill tone={tone}>
         {present ? "present" : "missing"}
       </StatusPill>
+    </div>
+  );
+}
+
+
+function ProviderExecutionEnvCard({
+  env,
+}: {
+  env: SaasProviderExecutionReadiness["envReadiness"];
+}) {
+  const keyTone: "success" | "warning" | "danger" = env.isLiveKey
+    ? "danger"
+    : env.isTestKey
+      ? "success"
+      : "warning";
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3">
+      <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        <KeyRound className="h-4 w-4 text-primary" />
+        Razorpay execution-gate env
+      </h4>
+      <div className="space-y-1.5 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-muted-foreground">
+            Phase 6K env flag
+          </span>
+          <StatusPill tone={env.envFlagEnabled ? "success" : "warning"}>
+            {env.envFlagEnabled ? "enabled" : "disabled"}
+          </StatusPill>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-muted-foreground">
+            Razorpay key mode
+          </span>
+          <StatusPill tone={keyTone}>{env.razorpayKeyMode}</StatusPill>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-muted-foreground">
+            Key id (masked)
+          </span>
+          <span className="font-mono text-[11px]">
+            {env.razorpayKeyIdMasked || "missing"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-muted-foreground">
+            Key secret
+          </span>
+          <StatusPill
+            tone={env.razorpayKeySecretPresent ? "success" : "danger"}
+          >
+            {env.razorpayKeySecretPresent ? "present" : "missing"}
+          </StatusPill>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-muted-foreground">
+            Webhook secret
+          </span>
+          <StatusPill
+            tone={env.razorpayWebhookSecretPresent ? "success" : "warning"}
+          >
+            {env.razorpayWebhookSecretPresent ? "present" : "missing"}
+          </StatusPill>
+        </div>
+      </div>
+      <div className="pt-2 text-[11px] text-muted-foreground">
+        Masked refs only. Raw secrets are never exposed.
+      </div>
+    </div>
+  );
+}
+
+function ProviderExecutionInvariants({
+  attempt,
+}: {
+  attempt: SaasProviderExecutionAttempt | null;
+}) {
+  const rows: Array<{ label: string; value: boolean; safeWhenFalse?: boolean }> =
+    attempt
+      ? [
+          { label: "testMode", value: attempt.testMode },
+          {
+            label: "realMoney",
+            value: attempt.realMoney,
+            safeWhenFalse: true,
+          },
+          {
+            label: "realCustomerDataAllowed",
+            value: attempt.realCustomerDataAllowed,
+            safeWhenFalse: true,
+          },
+          {
+            label: "businessMutationWasMade",
+            value: attempt.businessMutationWasMade,
+            safeWhenFalse: true,
+          },
+          {
+            label: "paymentLinkCreated",
+            value: attempt.paymentLinkCreated,
+            safeWhenFalse: true,
+          },
+          {
+            label: "paymentCaptured",
+            value: attempt.paymentCaptured,
+            safeWhenFalse: true,
+          },
+          {
+            label: "customerNotificationSent",
+            value: attempt.customerNotificationSent,
+            safeWhenFalse: true,
+          },
+        ]
+      : [];
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3">
+      <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        <ShieldCheck className="h-4 w-4 text-primary" />
+        Latest attempt safety invariants
+      </h4>
+      {attempt === null ? (
+        <p className="text-xs text-muted-foreground">
+          No execution attempt yet.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((row) => {
+            const safe =
+              row.safeWhenFalse === true ? row.value === false : row.value;
+            return (
+              <div
+                key={row.label}
+                className="flex items-center justify-between text-xs"
+              >
+                <span className="font-mono text-muted-foreground">
+                  {row.label}
+                </span>
+                <StatusPill tone={safe ? "success" : "danger"}>
+                  {String(row.value)}
+                </StatusPill>
+              </div>
+            );
+          })}
+          <div className="pt-1 text-[11px] text-muted-foreground">
+            providerObjectId:{" "}
+            <span className="font-mono">
+              {attempt.providerObjectId || "n/a"}
+            </span>{" "}
+            · status: {attempt.providerStatus || attempt.status}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProviderExecutionAttemptsTable({
+  attempts,
+}: {
+  attempts: SaasProviderExecutionAttempt[];
+}) {
+  if (!attempts.length) {
+    return (
+      <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+        No execution attempts recorded yet.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto border-t border-border">
+      <table className="w-full min-w-[860px] text-sm">
+        <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+          <tr>
+            <th className="px-6 py-3 text-left font-medium">Execution</th>
+            <th className="py-3 text-left font-medium">Status</th>
+            <th className="py-3 text-left font-medium">
+              Provider obj id
+            </th>
+            <th className="py-3 text-left font-medium">Provider call</th>
+            <th className="py-3 text-left font-medium">External call</th>
+            <th className="py-3 text-left font-medium">Mutation</th>
+            <th className="py-3 text-left font-medium">Payment captured</th>
+            <th className="px-6 py-3 text-left font-medium">Notify sent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {attempts.map((attempt) => (
+            <tr
+              key={attempt.executionId}
+              className="border-t border-border/60"
+              data-testid="provider-execution-attempt-row"
+            >
+              <td className="px-6 py-3 font-mono text-xs">
+                {attempt.executionId}
+              </td>
+              <td className="py-3">
+                <StatusPill tone={toneForStatus(attempt.status)}>
+                  {attempt.status}
+                </StatusPill>
+              </td>
+              <td className="py-3 text-xs font-mono">
+                {attempt.providerObjectId || "—"}
+              </td>
+              <td className="py-3">
+                <StatusPill
+                  tone={
+                    attempt.providerCallAttempted ? "warning" : "success"
+                  }
+                >
+                  {String(attempt.providerCallAttempted)}
+                </StatusPill>
+              </td>
+              <td className="py-3">
+                <StatusPill
+                  tone={
+                    attempt.externalCallWasMade ? "warning" : "success"
+                  }
+                >
+                  {String(attempt.externalCallWasMade)}
+                </StatusPill>
+              </td>
+              <td className="py-3">
+                <StatusPill
+                  tone={
+                    attempt.businessMutationWasMade ? "danger" : "success"
+                  }
+                >
+                  {String(attempt.businessMutationWasMade)}
+                </StatusPill>
+              </td>
+              <td className="py-3">
+                <StatusPill
+                  tone={attempt.paymentCaptured ? "danger" : "success"}
+                >
+                  {String(attempt.paymentCaptured)}
+                </StatusPill>
+              </td>
+              <td className="px-6 py-3">
+                <StatusPill
+                  tone={
+                    attempt.customerNotificationSent ? "danger" : "success"
+                  }
+                >
+                  {String(attempt.customerNotificationSent)}
+                </StatusPill>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

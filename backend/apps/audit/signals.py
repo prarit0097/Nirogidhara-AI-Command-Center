@@ -264,6 +264,15 @@ ICON_BY_KIND: dict[str, str] = {
     "runtime.provider_test_plan.archived": "archive",
     "runtime.provider_test_plan.blocked": "ban",
     "runtime.provider_test_plan.invariant_violation_blocked": "shield-off",
+    # Phase 6K Single Internal Razorpay Test-Mode Execution Gate.
+    "runtime.provider_execution.prepared": "file-plus",
+    "runtime.provider_execution.blocked": "ban",
+    "runtime.provider_execution.started": "play-circle",
+    "runtime.provider_execution.succeeded": "check-circle",
+    "runtime.provider_execution.failed": "shield-off",
+    "runtime.provider_execution.rolled_back": "rotate-ccw",
+    "runtime.provider_execution.archived": "archive",
+    "runtime.provider_execution.invariant_violation_blocked": "shield-off",
 }
 
 

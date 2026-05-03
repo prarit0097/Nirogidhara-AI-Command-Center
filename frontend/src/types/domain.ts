@@ -2473,3 +2473,150 @@ export interface SaasProviderTestPlanReadiness {
   warnings: string[];
   nextAction: string;
 }
+
+// ---------- Phase 6K - Single Internal Razorpay Test-Mode Execution Gate ----------
+
+export type SaasProviderExecutionStatus =
+  | "prepared"
+  | "blocked"
+  | "ready"
+  | "executing"
+  | "succeeded"
+  | "failed"
+  | "rolled_back"
+  | "archived";
+
+export type SaasProviderExecutionRollbackStatus =
+  | "not_required"
+  | "ready"
+  | "completed"
+  | "failed";
+
+export interface SaasProviderExecutionPolicy {
+  operationType: string;
+  providerType: string;
+  providerEnvironment: "test" | "sandbox" | "production";
+  allowedInPhase6K: boolean;
+  amountPaise: number;
+  currency: string;
+  realMoney: false;
+  realCustomerDataAllowed: false;
+  syntheticPayloadRequired: true;
+  approvedProviderTestPlanRequired: true;
+  idempotencyRequired: true;
+  explicitCliConfirmationRequired: true;
+  envFlagRequired: true;
+  envFlagName: string;
+  apiExecutionAllowed: false;
+  frontendExecutionAllowed: false;
+  maxExecutionsPerApprovedPlan: number;
+  safeResponseSummaryOnly: true;
+  businessMutationAllowed: false;
+  paymentLinkCreationAllowed: false;
+  captureAllowed: false;
+  customerNotificationAllowed: false;
+  requiredEnvKeys: string[];
+  nextPhaseAfterSuccess: string;
+  notes: string;
+  policyVersion: string;
+}
+
+export interface SaasProviderExecutionEnvReadiness {
+  envFlag: string;
+  envFlagPresent: boolean;
+  envFlagEnabled: boolean;
+  razorpayKeyIdPresent: boolean;
+  razorpayKeyMode: "test" | "live" | "unknown" | "missing";
+  razorpayKeyIdMasked: string;
+  razorpayKeySecretPresent: boolean;
+  razorpayWebhookSecretPresent: boolean;
+  isTestKey: boolean;
+  isLiveKey: boolean;
+}
+
+export interface SaasProviderExecutionAttempt {
+  id: number;
+  executionId: string;
+  planId: string;
+  organization: { id: number; code: string; name: string } | null;
+  branch: { id: number; code: string; name: string } | null;
+  providerType: string;
+  operationType: string;
+  providerEnvironment: "test" | "sandbox" | "production";
+  status: SaasProviderExecutionStatus;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  dryRun: boolean;
+  testMode: true;
+  realMoney: false;
+  realCustomerDataAllowed: false;
+  amountPaise: number;
+  currency: string;
+  providerCallAllowed: boolean;
+  externalCallWillBeMade: boolean;
+  externalCallWasMade: boolean;
+  providerCallAttempted: boolean;
+  businessMutationWasMade: false;
+  paymentLinkCreated: false;
+  paymentCaptured: false;
+  customerNotificationSent: false;
+  idempotencyKey: string;
+  receipt: string;
+  requestPayloadHash: string;
+  safeRequestSummary: Record<string, unknown>;
+  safeResponseSummary: Record<string, unknown>;
+  providerObjectId: string;
+  providerStatus: string;
+  envReadiness: SaasProviderExecutionEnvReadiness;
+  gateDecision: string;
+  blockers: string[];
+  warnings: string[];
+  rollbackPlan: Record<string, unknown>;
+  rollbackStatus: SaasProviderExecutionRollbackStatus;
+  requestedBy: number | null;
+  executedBy: number | null;
+  rolledBackBy: number | null;
+  archivedBy: number | null;
+  executedAt: string | null;
+  rolledBackAt: string | null;
+  archivedAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  nextAction: string;
+}
+
+export interface SaasProviderExecutionReadiness {
+  organization: { id: number; code: string; name: string } | null;
+  policyVersion: string;
+  envReadiness: SaasProviderExecutionEnvReadiness;
+  killSwitchActive: boolean;
+  latestApprovedPlan: {
+    planId: string;
+    providerType: string;
+    operationType: string;
+    providerEnvironment: string;
+    amountPaise: number;
+    currency: string;
+    status: string;
+    approvedAt: string | null;
+  } | null;
+  executionAttemptCount: number;
+  successfulExecutionCount: number;
+  failedExecutionCount: number;
+  blockedExecutionCount: number;
+  rolledBackExecutionCount: number;
+  archivedExecutionCount: number;
+  providerCallAttemptedCount: number;
+  externalCallMadeCount: number;
+  businessMutationCount: number;
+  latestAttempt: SaasProviderExecutionAttempt | null;
+  attempts: SaasProviderExecutionAttempt[];
+  policy: SaasProviderExecutionPolicy | null;
+  runtimeSource: "env_config";
+  perOrgRuntimeEnabled: false;
+  safeToRunPhase6KExecution: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}

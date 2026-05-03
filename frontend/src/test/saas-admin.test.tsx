@@ -47,6 +47,62 @@ describe("Phase 6E - SaaS Admin Panel", () => {
   });
 });
 
+describe("Phase 6K - Single Internal Razorpay Test-Mode Execution Gate", () => {
+  it("exposes Phase 6K API client methods with locked invariants", async () => {
+    expect(typeof api.getSaasProviderExecutionAttempts).toBe("function");
+    expect(typeof api.getSaasProviderExecutionAttempt).toBe("function");
+    expect(typeof api.prepareSaasProviderExecutionAttempt).toBe("function");
+    expect(typeof api.rollbackSaasProviderExecutionAttempt).toBe("function");
+    expect(typeof api.archiveSaasProviderExecutionAttempt).toBe("function");
+
+    const report = await api.getSaasProviderExecutionAttempts();
+    expect(report.runtimeSource).toBe("env_config");
+    expect(report.perOrgRuntimeEnabled).toBe(false);
+    expect(report.businessMutationCount).toBe(0);
+    expect(report.providerCallAttemptedCount).toBe(0);
+    expect(report.externalCallMadeCount).toBe(0);
+    expect(report.policy?.allowedInPhase6K).toBe(true);
+    expect(report.policy?.amountPaise).toBe(100);
+    expect(report.policy?.currency).toBe("INR");
+    expect(report.policy?.apiExecutionAllowed).toBe(false);
+    expect(report.policy?.frontendExecutionAllowed).toBe(false);
+    expect(report.policy?.maxExecutionsPerApprovedPlan).toBe(1);
+  });
+
+  it("renders Razorpay execution gate section without execute buttons", async () => {
+    render(<SaasAdminPage />);
+    expect(
+      await screen.findByText(
+        "Single Internal Razorpay Test-Mode Execution Gate",
+      ),
+    ).toBeInTheDocument();
+    const section = await screen.findByTestId(
+      "provider-execution-gate-section",
+    );
+    expect(section).toBeInTheDocument();
+    expect(section.textContent).toContain("Razorpay execution-gate env");
+
+    // No execute / create-order / capture / send buttons.
+    expect(
+      screen.queryByRole("button", { name: /execute razorpay/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create order/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /capture/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /go live/i }),
+    ).not.toBeInTheDocument();
+
+    const body = document.body.textContent ?? "";
+    // Raw test-mode key sample (used by tests only) must never appear.
+    expect(body).not.toContain("rzp_test_FAKEphase6k");
+    expect(body).not.toContain("rzp_live_");
+  });
+});
+
 describe("Phase 6J - Single Internal Provider Test Plan", () => {
   it("exposes Phase 6J API client methods with locked invariants", async () => {
     expect(typeof api.getSaasProviderTestPlans).toBe("function");

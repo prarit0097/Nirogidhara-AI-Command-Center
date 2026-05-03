@@ -10,6 +10,11 @@ from .views import (
     FeatureFlagsView,
     MyOrganizationsView,
     OrgScopeReadinessView,
+    ProviderExecutionAttemptArchiveView,
+    ProviderExecutionAttemptDetailView,
+    ProviderExecutionAttemptPrepareView,
+    ProviderExecutionAttemptRollbackView,
+    ProviderExecutionAttemptsListView,
     ProviderTestPlanApproveView,
     ProviderTestPlanArchiveView,
     ProviderTestPlanDetailView,
@@ -235,5 +240,31 @@ urlpatterns = [
         "provider-test-plans/<str:plan_id>/archive/",
         ProviderTestPlanArchiveView.as_view(),
         name="saas-provider-test-plan-archive",
+    ),
+    # Phase 6K — Single Internal Razorpay Test-Mode Execution Gate.
+    path(
+        "provider-execution-attempts/",
+        ProviderExecutionAttemptsListView.as_view(),
+        name="saas-provider-execution-attempts",
+    ),
+    path(
+        "provider-execution-attempts/prepare/",
+        ProviderExecutionAttemptPrepareView.as_view(),
+        name="saas-provider-execution-attempts-prepare",
+    ),
+    path(
+        "provider-execution-attempts/<str:execution_id>/",
+        ProviderExecutionAttemptDetailView.as_view(),
+        name="saas-provider-execution-attempt-detail",
+    ),
+    path(
+        "provider-execution-attempts/<str:execution_id>/rollback/",
+        ProviderExecutionAttemptRollbackView.as_view(),
+        name="saas-provider-execution-attempt-rollback",
+    ),
+    path(
+        "provider-execution-attempts/<str:execution_id>/archive/",
+        ProviderExecutionAttemptArchiveView.as_view(),
+        name="saas-provider-execution-attempt-archive",
     ),
 ]

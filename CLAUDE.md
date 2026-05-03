@@ -199,6 +199,51 @@ switch remains active; runtime providers still use env/config.
 **31 new backend tests + 2 new frontend tests; 1131 backend + 40
 frontend, all green.**
 
+**Phase 6K note:** **Phase 6K Single Internal Razorpay Test-Mode
+Execution Gate shipped (Phase 6K-A: code/gate/readiness only).** New
+`apps.saas.provider_execution_policy` allows ONE Phase 6K target —
+`razorpay.create_order` against a Razorpay TEST key — and locks
+`amount_paise=100`, `currency="INR"`, `real_money=False`,
+`real_customer_data_allowed=False`,
+`api_execution_allowed=False` (CLI-only),
+`frontend_execution_allowed=False`,
+`max_executions_per_approved_plan=1`. New
+`RuntimeProviderExecutionAttempt` model (migration
+`0006_add_runtime_provider_execution_attempt`) tracks status
++ rollback_status + locked safety booleans (real_money / real_customer_data_allowed
+/ business_mutation_was_made / payment_link_created /
+payment_captured / customer_notification_sent — all False) +
+masked env_readiness + safe_request_summary + safe_response_summary
+(id/status/amount/currency/receipt only) + provider_object_id.
+New `apps.saas.razorpay_test_execution` is a SEPARATE adapter
+from the Phase 2B production payment-link client; owns one
+endpoint only (`Orders API .create()` against a test key).
+Five management commands:
+`inspect_single_provider_execution_gate` (read-only readiness),
+`prepare_single_provider_execution_attempt` (no provider call),
+`execute_single_razorpay_test_order` (the ONE manual command
+that may dispatch — refuses unless approved Phase 6J plan +
+`PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=true` env flag +
+`--confirm-test-execution` + `RAZORPAY_KEY_ID` starts with
+`rzp_test` + no prior successful execution + amount=100 paise
++ kill switch enabled),
+`rollback_single_provider_execution_attempt`,
+`archive_single_provider_execution_attempt`. Eight new audit
+kinds (`runtime.provider_execution.*`). Five admin-only DRF
+endpoints under `/api/v1/saas/provider-execution-attempts/`
+(GET list, GET detail, POST prepare, POST rollback, POST
+archive). **No POST execute endpoint** — execution is
+exclusively CLI-driven in Phase 6K. Frontend `/saas-admin`
+gains "Single Internal Razorpay Test-Mode Execution Gate"
+section with readiness sub-card + invariants sub-card +
+attempts table. **No "Execute Razorpay" / "Create Order" /
+"Capture" / "Go Live" / "Send" buttons exist on the UI.**
+Phase 6K never creates a payment link, never captures a
+payment, never sends a customer notification, never mutates
+business records. Raw secrets NEVER appear in any output.
+**34 new backend tests + 2 new frontend tests; 1165 backend +
+42 frontend, all green.**
+
 ---
 
 ## 1. Working agreement (binding rule)
@@ -295,13 +340,13 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 1131 tests today
+python -m pytest -q                    # 1165 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                            # http://localhost:8080
-npm test                               # 40 tests today
+npm test                               # 42 tests today
 npm run lint                           # 0 errors expected
 npm run build                          # production build
 

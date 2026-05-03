@@ -47,6 +47,13 @@ from .live_gate_simulation import (
     run_single_internal_live_gate_simulation,
     serialize_live_gate_simulation,
 )
+from .provider_execution import (
+    archive_single_provider_execution_attempt,
+    inspect_single_provider_execution_attempt,
+    prepare_single_provider_execution_attempt,
+    rollback_single_provider_execution_attempt,
+    serialize_execution_attempt,
+)
 from .provider_test_plan import (
     approve_single_provider_test_plan,
     archive_single_provider_test_plan,
@@ -73,6 +80,7 @@ from .models import (
     OrganizationIntegrationSetting,
     RuntimeLiveExecutionRequest,
     RuntimeLiveGateSimulation,
+    RuntimeProviderExecutionAttempt,
     RuntimeProviderTestPlan,
 )
 from .selectors import (
@@ -920,6 +928,116 @@ class ProviderTestPlanArchiveView(APIView):
         return Response(serialize_provider_test_plan(plan))
 
 
+class ProviderExecutionAttemptsListView(APIView):
+    """``GET /api/v1/saas/provider-execution-attempts/`` — Phase 6K.
+
+    Read-only inspector for Razorpay test-mode execution attempts.
+    Auth required. POST/PATCH/DELETE return 405 (the actual provider
+    execution is CLI-only in Phase 6K).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        org = _get_admin_org(request)
+        return Response(
+            inspect_single_provider_execution_attempt(organization=org)
+        )
+
+
+class ProviderExecutionAttemptDetailView(APIView):
+    """``GET /api/v1/saas/provider-execution-attempts/<execution_id>/``."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request, execution_id):
+        attempt = RuntimeProviderExecutionAttempt.objects.filter(
+            execution_id=execution_id
+        ).first()
+        if attempt is None:
+            return Response(
+                {"detail": "Provider execution attempt not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(serialize_execution_attempt(attempt))
+
+
+class ProviderExecutionAttemptPrepareView(APIView):
+    """``POST /api/v1/saas/provider-execution-attempts/prepare/``.
+
+    Admin-only. Creates an attempt row in ``prepared``/``blocked``;
+    NEVER calls Razorpay. Actual execution remains CLI-only via
+    ``manage.py execute_single_razorpay_test_order``.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request):
+        plan_id = request.data.get("planId") or request.data.get("plan_id")
+        if not plan_id:
+            return Response(
+                {"detail": "planId required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        plan = RuntimeProviderTestPlan.objects.filter(plan_id=plan_id).first()
+        if plan is None:
+            return Response(
+                {"detail": "Provider test plan not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        attempt = prepare_single_provider_execution_attempt(
+            plan_id, actor=request.user
+        )
+        return Response(
+            serialize_execution_attempt(attempt),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ProviderExecutionAttemptRollbackView(APIView):
+    """``POST /api/v1/saas/provider-execution-attempts/<execution_id>/rollback/``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, execution_id):
+        attempt = RuntimeProviderExecutionAttempt.objects.filter(
+            execution_id=execution_id
+        ).first()
+        if attempt is None:
+            return Response(
+                {"detail": "Provider execution attempt not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        attempt = rollback_single_provider_execution_attempt(
+            execution_id,
+            actor=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_execution_attempt(attempt))
+
+
+class ProviderExecutionAttemptArchiveView(APIView):
+    """``POST /api/v1/saas/provider-execution-attempts/<execution_id>/archive/``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, execution_id):
+        attempt = RuntimeProviderExecutionAttempt.objects.filter(
+            execution_id=execution_id
+        ).first()
+        if attempt is None:
+            return Response(
+                {"detail": "Provider execution attempt not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        attempt = archive_single_provider_execution_attempt(
+            execution_id,
+            actor=request.user,
+            reason=request.data.get("reason") or "",
+        )
+        return Response(serialize_execution_attempt(attempt))
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -959,4 +1077,9 @@ __all__ = (
     "ProviderTestPlanApproveView",
     "ProviderTestPlanRejectView",
     "ProviderTestPlanArchiveView",
+    "ProviderExecutionAttemptsListView",
+    "ProviderExecutionAttemptDetailView",
+    "ProviderExecutionAttemptPrepareView",
+    "ProviderExecutionAttemptRollbackView",
+    "ProviderExecutionAttemptArchiveView",
 )
