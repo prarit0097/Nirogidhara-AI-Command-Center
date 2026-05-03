@@ -12,6 +12,9 @@ import type {
   SaasProviderExecutionReadiness,
   SaasProviderTestPlan,
   SaasProviderTestPlanReadiness,
+  SaasRazorpayAuditReview,
+  SaasRazorpayWebhookPlan,
+  SaasRazorpayWebhookReadiness,
   SaasRuntimeLiveGateSummary,
   SaasLiveGatePolicy,
   SaasRuntimeDryRunOperationDecision,
@@ -28,7 +31,9 @@ import {
   AlertTriangle,
   ClipboardList,
   CreditCard,
+  FileSearch,
   KeyRound,
+  Webhook,
   LockKeyhole,
   PlayCircle,
   RefreshCw,
@@ -61,6 +66,12 @@ export default function SaasAdminPage() {
     useState<SaasProviderTestPlanReadiness | null>(null);
   const [providerExecutionGate, setProviderExecutionGate] =
     useState<SaasProviderExecutionReadiness | null>(null);
+  const [razorpayWebhookReadiness, setRazorpayWebhookReadiness] =
+    useState<SaasRazorpayWebhookReadiness | null>(null);
+  const [razorpayWebhookPlan, setRazorpayWebhookPlan] =
+    useState<SaasRazorpayWebhookPlan | null>(null);
+  const [razorpayAuditReview, setRazorpayAuditReview] =
+    useState<SaasRazorpayAuditReview | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -74,17 +85,34 @@ export default function SaasAdminPage() {
       api.getSaasRuntimeLiveGateSimulations(),
       api.getSaasProviderTestPlans(),
       api.getSaasProviderExecutionAttempts(),
+      api.getSaasRazorpayWebhookReadiness(),
+      api.getSaasRazorpayWebhookPlan(),
     ])
-      .then(([ov, rt, dr, ai, gate, sims, ptp, exec]) => {
-        setOverview(ov);
-        setRouting(rt);
-        setDryRun(dr);
-        setAiRouting(ai);
-        setLiveGate(gate);
-        setSimulations(sims);
-        setProviderTestPlans(ptp);
-        setProviderExecutionGate(exec);
-      })
+      .then(
+        ([ov, rt, dr, ai, gate, sims, ptp, exec, wbr, wbp]) => {
+          setOverview(ov);
+          setRouting(rt);
+          setDryRun(dr);
+          setAiRouting(ai);
+          setLiveGate(gate);
+          setSimulations(sims);
+          setProviderTestPlans(ptp);
+          setProviderExecutionGate(exec);
+          setRazorpayWebhookReadiness(wbr);
+          setRazorpayWebhookPlan(wbp);
+          // Auto-load the audit review for the latest succeeded
+          // execution if present.
+          const latestSucceeded = wbr?.latestSucceededExecutionId;
+          if (latestSucceeded) {
+            api
+              .getSaasRazorpayExecutionAudit(latestSucceeded)
+              .then(setRazorpayAuditReview)
+              .catch(() => setRazorpayAuditReview(null));
+          } else {
+            setRazorpayAuditReview(null);
+          }
+        },
+      )
       .finally(() => setLoading(false));
   };
 
@@ -885,6 +913,54 @@ export default function SaasAdminPage() {
         </section>
       )}
 
+      {(razorpayAuditReview || razorpayWebhookReadiness || razorpayWebhookPlan) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-audit-webhook-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <FileSearch className="h-5 w-5 text-primary" />
+                Razorpay Test Execution Audit + Webhook Readiness
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6L — read-only review of the Phase 6K Razorpay
+                test-mode execution audit trail + the planning policy
+                for the future Razorpay webhook receiver. No new
+                Razorpay calls. No payment / order status mutation.
+              </p>
+            </div>
+            {razorpayAuditReview && (
+              <StatusPill
+                tone={razorpayAuditReview.passed ? "success" : "warning"}
+              >
+                {razorpayAuditReview.passed
+                  ? "Audit PASS"
+                  : "Audit FAIL"}
+              </StatusPill>
+            )}
+          </div>
+          {razorpayAuditReview && (
+            <RazorpayAuditReviewCard review={razorpayAuditReview} />
+          )}
+          {razorpayWebhookReadiness && (
+            <RazorpayWebhookReadinessCard
+              readiness={razorpayWebhookReadiness}
+            />
+          )}
+          {razorpayWebhookPlan && (
+            <RazorpayWebhookPlanCard plan={razorpayWebhookPlan} />
+          )}
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Read-only.</strong> Phase 6L never registers a
+            webhook receiver, never calls Razorpay, never mutates a
+            business row, never exposes raw secrets. Webhook handler
+            ships in Phase 6M.
+          </div>
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel title="Blockers & Warnings" icon={ShieldCheck}>
           <IssueList items={overview.blockers} empty="No blockers" />
@@ -1609,6 +1685,226 @@ function ProviderExecutionAttemptsTable({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+
+function RazorpayAuditReviewCard({
+  review,
+}: {
+  review: SaasRazorpayAuditReview;
+}) {
+  return (
+    <div className="border-t border-border px-6 py-4">
+      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <ShieldCheck className="h-4 w-4 text-primary" />
+        Phase 6K execution audit
+      </h4>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <KeyValue label="Execution" value={review.executionId} />
+        <KeyValue
+          label="Provider order id"
+          value={review.providerObjectId ?? "n/a"}
+        />
+        <KeyValue label="Status" value={review.status ?? "n/a"} />
+        <KeyValue
+          label="Rollback"
+          value={review.rollbackStatus ?? "n/a"}
+        />
+      </div>
+      {review.invariantResults && review.invariantResults.length > 0 && (
+        <div className="mt-4 grid gap-1.5">
+          {review.invariantResults.map((inv) => (
+            <div
+              key={inv.key}
+              className="flex items-center justify-between text-xs"
+              data-testid="razorpay-audit-invariant-row"
+            >
+              <span className="font-mono text-muted-foreground">
+                {inv.key}
+              </span>
+              <StatusPill tone={inv.passed ? "success" : "danger"}>
+                {String(inv.actual)}
+              </StatusPill>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-3 text-[11px] text-muted-foreground">
+        Audit events: {review.auditEventCount ?? 0} ·
+        rawSecretLeakDetected:{" "}
+        <span className="font-mono">
+          {String(Boolean(review.rawSecretLeakDetected))}
+        </span>
+      </div>
+      {review.blockers && review.blockers.length > 0 && (
+        <IssueList items={review.blockers} empty="No blockers" />
+      )}
+    </div>
+  );
+}
+
+function RazorpayWebhookReadinessCard({
+  readiness,
+}: {
+  readiness: SaasRazorpayWebhookReadiness;
+}) {
+  const keyTone: "success" | "warning" | "danger" = readiness.isLiveKey
+    ? "danger"
+    : readiness.isTestKey
+      ? "success"
+      : "warning";
+  return (
+    <div className="border-t border-border px-6 py-4">
+      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Webhook className="h-4 w-4 text-primary" />
+        Webhook readiness
+      </h4>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <KeyValue label="Key mode" value={readiness.razorpayKeyMode} />
+        <KeyValue
+          label="Key id (masked)"
+          value={readiness.razorpayKeyIdMasked || "missing"}
+        />
+        <KeyValue
+          label="Webhook secret"
+          value={
+            readiness.razorpayWebhookSecretPresent ? "present" : "missing"
+          }
+        />
+        <KeyValue
+          label="Latest succeeded"
+          value={readiness.latestSucceededProviderObjectId ?? "n/a"}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        <StatusPill tone={keyTone}>
+          {readiness.isTestKey ? "test mode" : readiness.razorpayKeyMode}
+        </StatusPill>
+        <StatusPill
+          tone={
+            readiness.safeToPlanWebhookReadiness ? "success" : "warning"
+          }
+        >
+          {readiness.safeToPlanWebhookReadiness
+            ? "Safe to plan"
+            : "Plan blocked"}
+        </StatusPill>
+        <span className="text-muted-foreground">
+          Phase 6K succeeded:{" "}
+          <span className="font-mono">
+            {readiness.phase6KSucceededExecutionCount}
+          </span>
+        </span>
+      </div>
+      {readiness.blockers && readiness.blockers.length > 0 && (
+        <IssueList items={readiness.blockers} empty="No blockers" />
+      )}
+    </div>
+  );
+}
+
+function RazorpayWebhookPlanCard({
+  plan,
+}: {
+  plan: SaasRazorpayWebhookPlan;
+}) {
+  return (
+    <div className="border-t border-border px-6 py-4">
+      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <ClipboardList className="h-4 w-4 text-primary" />
+        Webhook readiness plan ({plan.policyVersion})
+      </h4>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <KeyValue
+          label="Endpoint"
+          value={`${plan.endpointDesign.method} ${plan.endpointDesign.path}`}
+        />
+        <KeyValue
+          label="Signature"
+          value={`${plan.signatureVerificationDesign.algorithm} on ${plan.signatureVerificationDesign.header}`}
+        />
+        <KeyValue
+          label="Replay window"
+          value={`${plan.replayProtection.windowSeconds}s`}
+        />
+        <KeyValue
+          label="Idempotency key"
+          value={plan.idempotencyDesign.key}
+        />
+        <KeyValue
+          label="Allowlist size"
+          value={String(plan.eventAllowlist.length)}
+        />
+        <KeyValue
+          label="Denylist size"
+          value={String(plan.eventDenylist.length)}
+        />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-md border border-border bg-muted/20 p-3 text-xs">
+          <div className="mb-1 font-semibold text-muted-foreground">
+            Allowlist
+          </div>
+          <ul className="space-y-1 font-mono text-[11px]">
+            {plan.eventAllowlist.map((event) => (
+              <li
+                key={event}
+                data-testid="razorpay-webhook-allowlist-row"
+              >
+                {event}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded-md border border-border bg-muted/20 p-3 text-xs">
+          <div className="mb-1 font-semibold text-muted-foreground">
+            Denylist
+          </div>
+          <ul className="space-y-1 font-mono text-[11px]">
+            {plan.eventDenylist.map((event) => (
+              <li
+                key={event}
+                data-testid="razorpay-webhook-denylist-row"
+              >
+                {event}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-1.5 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-muted-foreground">
+            Phase 6L mutation policy
+          </span>
+          <StatusPill tone="success">
+            no order/payment/shipment/notify mutations
+          </StatusPill>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-muted-foreground">
+            Phase 6L registers webhook
+          </span>
+          <StatusPill tone="success">
+            {String(plan.endpointDesign.phase6LRegistration)}
+          </StatusPill>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-muted-foreground">
+            Sensitive payload keys scrubbed
+          </span>
+          <span className="font-mono text-[11px]">
+            {plan.auditLoggingPlan.payloadHandling.sensitiveKeysToScrub.length}
+          </span>
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] text-muted-foreground">
+        Next action:{" "}
+        <span className="font-medium">{plan.nextAction}</span> · Next
+        phase: {plan.nextPhase}
+      </div>
     </div>
   );
 }

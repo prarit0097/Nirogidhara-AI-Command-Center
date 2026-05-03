@@ -147,6 +147,9 @@ import type {
   SaasProviderExecutionReadiness,
   SaasProviderTestPlan,
   SaasProviderTestPlanReadiness,
+  SaasRazorpayAuditReview,
+  SaasRazorpayWebhookPlan,
+  SaasRazorpayWebhookReadiness,
   SaasRuntimeDryRunReport,
   SaasLiveGateRequest,
   SaasRuntimeLiveGateKillSwitch,
@@ -1387,6 +1390,25 @@ export const api = {
       () =>
         (M.SAAS_PROVIDER_EXECUTION_READINESS as SaasProviderExecutionReadiness)
           .latestAttempt as SaasProviderExecutionAttempt,
+    ),
+
+  // ---------- Phase 6L - Razorpay audit review + webhook readiness ----------
+
+  getSaasRazorpayExecutionAudit: (executionId: string) =>
+    safeFetch<SaasRazorpayAuditReview>(
+      `/v1/saas/razorpay/execution-audit/?execution_id=${encodeURIComponent(executionId)}`,
+      () => M.SAAS_RAZORPAY_AUDIT_REVIEW as SaasRazorpayAuditReview,
+    ),
+  getSaasRazorpayWebhookReadiness: () =>
+    safeFetch<SaasRazorpayWebhookReadiness>(
+      "/v1/saas/razorpay/webhook-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_WEBHOOK_READINESS as SaasRazorpayWebhookReadiness,
+    ),
+  getSaasRazorpayWebhookPlan: () =>
+    safeFetch<SaasRazorpayWebhookPlan>(
+      "/v1/saas/razorpay/webhook-plan/",
+      () => M.SAAS_RAZORPAY_WEBHOOK_PLAN as SaasRazorpayWebhookPlan,
     ),
 };
 

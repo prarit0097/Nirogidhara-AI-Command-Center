@@ -244,6 +244,47 @@ business records. Raw secrets NEVER appear in any output.
 **34 new backend tests + 2 new frontend tests; 1165 backend +
 42 frontend, all green.**
 
+**Phase 6L note:** **Phase 6L Razorpay Test Execution Audit
+Review + Webhook Readiness Plan shipped.** Phase 6K-B execution
+on the VPS is **FULL PASS** (`pex_8f309650e9644cfaae4418f9` →
+`order_Sks3KPf0vntKhf`, amount 100 paise INR, no payment link, no
+capture, no notification, no business mutation,
+`rollback_status=completed`,
+`PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false`). New
+`apps.saas.razorpay_audit_review` ships three read-only / planning
+functions:
+`review_razorpay_test_execution_audit(execution_id)` (replays the
+ten Phase 6K invariants + scans every linked AuditEvent for raw-key
+leak; FAILs on flipped safety booleans / missing rollback / missing
+provider object id / leaked secret),
+`inspect_razorpay_webhook_readiness()` (env presence-only check —
+key mode + masked id + webhook secret presence boolean — never
+the raw value), `plan_razorpay_webhook_readiness()` (canonical
+policy doc with `POST /api/webhooks/razorpay/test/` endpoint
+design, HMAC-SHA256 signature on `X-Razorpay-Signature`,
+constant-time compare, `x_razorpay_event_id` idempotency,
+300-second replay window, 9-event allowlist + 9-event denylist,
+8 future audit kinds, 13-key sensitive-payload scrub list,
+`businessMutationPolicy` all-False). Three new strictly-read-only
+management commands
+(`inspect_razorpay_test_execution_audit`,
+`inspect_razorpay_webhook_readiness`,
+`plan_razorpay_webhook_readiness`). Three auth-required DRF
+endpoints under `/api/v1/saas/razorpay/`
+(`/execution-audit/?execution_id=<ID>`,
+`/webhook-readiness/`, `/webhook-plan/`) — POST/PATCH/DELETE
+return 405. Frontend `/saas-admin` gains
+"Razorpay Test Execution Audit + Webhook Readiness" section
+(audit invariants card / readiness card / webhook plan card with
+allowlist + denylist tables). **No "Execute Razorpay" / "Register
+Webhook" / "Capture" / "Send WhatsApp" / "Go Live" buttons exist
+on the UI.** Phase 6L never calls Razorpay, never creates a
+payment link, never captures, never sends a customer notification,
+never mutates business records, never returns raw secrets,
+never returns the raw provider response (whitelisted summary
+only). **33 new backend tests + 2 new frontend tests; 1198
+backend + 44 frontend, all green.**
+
 ---
 
 ## 1. Working agreement (binding rule)
@@ -340,13 +381,13 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 1165 tests today
+python -m pytest -q                    # 1198 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                            # http://localhost:8080
-npm test                               # 42 tests today
+npm test                               # 44 tests today
 npm run lint                           # 0 errors expected
 npm run build                          # production build
 

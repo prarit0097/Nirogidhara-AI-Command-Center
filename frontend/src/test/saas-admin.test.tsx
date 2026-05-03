@@ -47,6 +47,79 @@ describe("Phase 6E - SaaS Admin Panel", () => {
   });
 });
 
+describe("Phase 6L - Razorpay Audit Review + Webhook Readiness", () => {
+  it("exposes Phase 6L API methods returning safe shapes", async () => {
+    expect(typeof api.getSaasRazorpayExecutionAudit).toBe("function");
+    expect(typeof api.getSaasRazorpayWebhookReadiness).toBe("function");
+    expect(typeof api.getSaasRazorpayWebhookPlan).toBe("function");
+
+    const audit = await api.getSaasRazorpayExecutionAudit("pex_demo");
+    expect(audit.passed).toBe(true);
+    expect(audit.rollbackStatus).toBe("completed");
+    expect(audit.rawSecretLeakDetected).toBe(false);
+
+    const readiness = await api.getSaasRazorpayWebhookReadiness();
+    expect(readiness.razorpayWebhookSecretPresent).toBe(true);
+    expect(readiness.isTestKey).toBe(true);
+    expect(readiness.isLiveKey).toBe(false);
+    expect(readiness.safeToPlanWebhookReadiness).toBe(true);
+
+    const plan = await api.getSaasRazorpayWebhookPlan();
+    expect(plan.phase).toBe("6L");
+    expect(plan.endpointDesign.phase6LRegistration).toBe(false);
+    expect(plan.signatureVerificationDesign.algorithm).toBe("HMAC-SHA256");
+    expect(plan.replayProtection.windowSeconds).toBe(300);
+    expect(plan.eventAllowlist.length).toBeGreaterThan(0);
+    expect(plan.eventDenylist.length).toBeGreaterThan(0);
+    for (const value of Object.values(plan.businessMutationPolicy)) {
+      expect(value).toBe(false);
+    }
+  });
+
+  it("renders the Razorpay audit + webhook section without execute buttons", async () => {
+    render(<SaasAdminPage />);
+    expect(
+      await screen.findByText(
+        "Razorpay Test Execution Audit + Webhook Readiness",
+      ),
+    ).toBeInTheDocument();
+    const section = await screen.findByTestId(
+      "razorpay-audit-webhook-section",
+    );
+    expect(section).toBeInTheDocument();
+
+    // Allow/deny lists render.
+    const allowRows = await screen.findAllByTestId(
+      "razorpay-webhook-allowlist-row",
+    );
+    expect(allowRows.length).toBeGreaterThan(0);
+    const denyRows = await screen.findAllByTestId(
+      "razorpay-webhook-denylist-row",
+    );
+    expect(denyRows.length).toBeGreaterThan(0);
+
+    // Section text contains the Phase 6L scope copy.
+    expect(section.textContent).toContain("HMAC-SHA256");
+    expect(section.textContent).toContain("Phase 6K execution audit");
+
+    // No execute / register-webhook / capture buttons.
+    expect(
+      screen.queryByRole("button", { name: /execute razorpay/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /register webhook/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /capture/i }),
+    ).not.toBeInTheDocument();
+
+    // Document body must not carry the test-fixture raw key.
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_test_FAKEphase6l");
+    expect(body).not.toContain("rzp_live_");
+  });
+});
+
 describe("Phase 6K - Single Internal Razorpay Test-Mode Execution Gate", () => {
   it("exposes Phase 6K API client methods with locked invariants", async () => {
     expect(typeof api.getSaasProviderExecutionAttempts).toBe("function");

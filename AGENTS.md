@@ -187,6 +187,10 @@ backend/apps/saas/management/commands/prepare_single_provider_execution_attempt.
 backend/apps/saas/management/commands/execute_single_razorpay_test_order.py ← Phase 6K — the ONE manual CLI command that may dispatch a Razorpay test create_order; requires --confirm-test-execution + PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=true + rzp_test key + approved Phase 6J plan
 backend/apps/saas/management/commands/rollback_single_provider_execution_attempt.py ← Phase 6K — local rollback only; never calls Razorpay cancel/refund (test order unpaid)
 backend/apps/saas/management/commands/archive_single_provider_execution_attempt.py ← Phase 6K
+backend/apps/saas/razorpay_audit_review.py ← Phase 6L — read-only audit-review + webhook-readiness service (review_razorpay_test_execution_audit / inspect_razorpay_webhook_readiness / plan_razorpay_webhook_readiness); never calls Razorpay; never returns raw secrets / raw provider response
+backend/apps/saas/management/commands/inspect_razorpay_test_execution_audit.py ← Phase 6L — read-only review of one Phase 6K execution attempt
+backend/apps/saas/management/commands/inspect_razorpay_webhook_readiness.py ← Phase 6L — env presence + Phase 6K artefact sanity check
+backend/apps/saas/management/commands/plan_razorpay_webhook_readiness.py ← Phase 6L — emits canonical webhook-readiness plan (allowlist + denylist + signature design + idempotency + replay window + audit logging + sensitive-keys-to-scrub); Phase 6L never registers a webhook receiver
 backend/apps/whatsapp/language.py        ← Phase 5C deterministic Hindi/Hinglish/English detection (devanagari ratio + Hinglish marker word list)
 backend/apps/whatsapp/ai_schema.py        ← Phase 5C strict JSON schema + ChatAgentDecision dataclass + BLOCKED_CLAIM_PHRASES list + reply_contains_blocked_phrase()
 backend/apps/whatsapp/discount_policy.py  ← Phase 5C wrapper around apps.orders.discounts: never offer upfront, MIN_OBJECTION_TURNS_BEFORE_OFFER, refusal-rescue trigger, validate_total_discount_cap (50% hard cap)
@@ -259,13 +263,13 @@ python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
 python manage.py makemigrations --check --dry-run  # MUST report "No changes detected"
-python -m pytest -q                 # 1165 tests today
+python -m pytest -q                 # 1198 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                         # http://localhost:8080
-npm test                            # 42 tests today
+npm test                            # 44 tests today
 npm run lint                        # 0 errors expected
 npm run build                       # production build
 ```

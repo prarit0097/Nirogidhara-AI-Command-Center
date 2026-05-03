@@ -54,6 +54,11 @@ from .provider_execution import (
     rollback_single_provider_execution_attempt,
     serialize_execution_attempt,
 )
+from .razorpay_audit_review import (
+    inspect_razorpay_webhook_readiness,
+    plan_razorpay_webhook_readiness,
+    review_razorpay_test_execution_audit,
+)
 from .provider_test_plan import (
     approve_single_provider_test_plan,
     archive_single_provider_test_plan,
@@ -1038,6 +1043,60 @@ class ProviderExecutionAttemptArchiveView(APIView):
         return Response(serialize_execution_attempt(attempt))
 
 
+class RazorpayExecutionAuditReviewView(APIView):
+    """``GET /api/v1/saas/razorpay/execution-audit/?execution_id=<ID>``.
+
+    Phase 6L — read-only audit review of one Phase 6K Razorpay
+    test-mode execution attempt. Auth required. POST returns 405.
+    NEVER calls Razorpay. NEVER returns the raw provider response.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        execution_id = (
+            request.query_params.get("execution_id")
+            or request.query_params.get("executionId")
+            or ""
+        ).strip()
+        if not execution_id:
+            return Response(
+                {"detail": "execution_id query parameter required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            review_razorpay_test_execution_audit(execution_id)
+        )
+
+
+class RazorpayWebhookReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/webhook-readiness/`` — Phase 6L.
+
+    Read-only env + Phase 6K artefact sanity check. Reports presence
+    only — never the raw webhook secret value. Auth required; POST
+    returns 405.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request):
+        return Response(inspect_razorpay_webhook_readiness())
+
+
+class RazorpayWebhookPlanView(APIView):
+    """``GET /api/v1/saas/razorpay/webhook-plan/`` — Phase 6L policy doc.
+
+    Returns the canonical Razorpay webhook readiness plan. Pure
+    policy — does NOT register a webhook receiver. Auth required;
+    POST returns 405.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, _request):
+        return Response(plan_razorpay_webhook_readiness())
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -1082,4 +1141,7 @@ __all__ = (
     "ProviderExecutionAttemptPrepareView",
     "ProviderExecutionAttemptRollbackView",
     "ProviderExecutionAttemptArchiveView",
+    "RazorpayExecutionAuditReviewView",
+    "RazorpayWebhookReadinessView",
+    "RazorpayWebhookPlanView",
 )

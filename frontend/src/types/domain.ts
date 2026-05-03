@@ -2620,3 +2620,135 @@ export interface SaasProviderExecutionReadiness {
   warnings: string[];
   nextAction: string;
 }
+
+// ---------- Phase 6L - Razorpay Test Execution Audit Review + Webhook Readiness ----------
+
+export interface SaasRazorpayAuditInvariant {
+  key: string;
+  expected: unknown;
+  actual: unknown;
+  passed: boolean;
+}
+
+export interface SaasRazorpayAuditEvent {
+  id: number;
+  kind: string;
+  tone: string;
+  createdAt: string;
+  text: string;
+  payloadKeys: string[];
+}
+
+export interface SaasRazorpayAuditReview {
+  passed: boolean;
+  executionId: string;
+  planId?: string;
+  providerType?: string;
+  operationType?: string;
+  providerEnvironment?: string;
+  status?: string;
+  providerObjectId?: string;
+  providerStatus?: string;
+  amountPaise?: number;
+  currency?: string;
+  rollbackStatus?: string;
+  envSnapshot?: {
+    envFlagEnabled: boolean;
+    razorpayKeyMode: string;
+    razorpayKeyIdMasked: string;
+    razorpayWebhookSecretPresent: boolean;
+  };
+  invariantResults?: SaasRazorpayAuditInvariant[];
+  auditEventCount?: number;
+  auditEvents?: SaasRazorpayAuditEvent[];
+  safeResponseSummary?: Record<string, unknown>;
+  rawSecretLeakDetected?: boolean;
+  blockers: string[];
+  warnings: string[];
+  errors?: string[];
+  nextAction: string;
+}
+
+export interface SaasRazorpayWebhookReadiness {
+  razorpayKeyMode: string;
+  razorpayKeyIdMasked: string;
+  razorpayKeyIdPresent: boolean;
+  razorpayKeySecretPresent: boolean;
+  razorpayWebhookSecretPresent: boolean;
+  envFlagEnabled: boolean;
+  isTestKey: boolean;
+  isLiveKey: boolean;
+  latestSucceededExecutionId: string | null;
+  latestSucceededProviderObjectId: string | null;
+  latestSucceededRollbackStatus: string | null;
+  latestPhase6KArtefactExecutionId: string | null;
+  phase6KSucceededExecutionCount: number;
+  blockers: string[];
+  warnings: string[];
+  safeToPlanWebhookReadiness: boolean;
+  nextAction: string;
+}
+
+export interface SaasRazorpayWebhookPlan {
+  phase: "6L";
+  policyVersion: string;
+  summary: string;
+  preconditions: Record<string, boolean>;
+  envReadiness: SaasRazorpayWebhookReadiness;
+  endpointDesign: {
+    path: string;
+    method: string;
+    csrfExempt: boolean;
+    authentication: string;
+    phase6LRegistration: false;
+    phase6MRegistration: boolean;
+  };
+  signatureVerificationDesign: {
+    algorithm: string;
+    secretSource: string;
+    header: string;
+    rawBodyMustBeUsed: boolean;
+    constantTimeCompare: boolean;
+    rejectOnMissingHeader: boolean;
+    rejectOnEmptySecret: boolean;
+    implementationReference: string;
+  };
+  idempotencyDesign: {
+    key: string;
+    fallbackKey: string;
+    storage: string;
+    uniqueConstraint: boolean;
+    duplicateBehaviour: string;
+  };
+  eventAllowlist: string[];
+  eventDenylist: string[];
+  replayProtection: {
+    windowSeconds: number;
+    rejectOlderThanWindow: boolean;
+    useEventCreatedAt: boolean;
+    audit: string;
+  };
+  auditLoggingPlan: {
+    kindsToAdd: string[];
+    phase6LAuditMutationAllowed: false;
+    phase6MAuditMutationAllowed: boolean;
+    payloadHandling: {
+      storeRawBody: false;
+      storePayloadHash: boolean;
+      storePayloadKeysOnly: boolean;
+      sensitiveKeysToScrub: string[];
+    };
+  };
+  testModeOnlyValidationPlan: {
+    razorpayKeyModeMustBeTest: boolean;
+    envFlagPattern: string;
+    phase6MWebhookHandlerEnabledByDefault: false;
+    phase6MMaxEventsPerRun: number;
+    phase6MEventCanMutateBusinessTables: false;
+  };
+  businessMutationPolicy: Record<string, false>;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  nextPhase: string;
+}

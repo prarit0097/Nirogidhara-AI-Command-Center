@@ -22,6 +22,9 @@ from .views import (
     ProviderTestPlanRejectView,
     ProviderTestPlanValidateView,
     ProviderTestPlansListView,
+    RazorpayExecutionAuditReviewView,
+    RazorpayWebhookPlanView,
+    RazorpayWebhookReadinessView,
     RuntimeDryRunView,
     RuntimeLiveGateApproveView,
     RuntimeLiveGateKillSwitchView,
@@ -266,5 +269,21 @@ urlpatterns = [
         "provider-execution-attempts/<str:execution_id>/archive/",
         ProviderExecutionAttemptArchiveView.as_view(),
         name="saas-provider-execution-attempt-archive",
+    ),
+    # Phase 6L — Razorpay Test Execution Audit Review + Webhook Readiness Plan.
+    path(
+        "razorpay/execution-audit/",
+        RazorpayExecutionAuditReviewView.as_view(),
+        name="saas-razorpay-execution-audit",
+    ),
+    path(
+        "razorpay/webhook-readiness/",
+        RazorpayWebhookReadinessView.as_view(),
+        name="saas-razorpay-webhook-readiness",
+    ),
+    path(
+        "razorpay/webhook-plan/",
+        RazorpayWebhookPlanView.as_view(),
+        name="saas-razorpay-webhook-plan",
     ),
 ]
