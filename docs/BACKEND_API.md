@@ -7,11 +7,10 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 6N baseline:** documented through Phase 6N (Razorpay
-> webhook business-mutation **sandbox plan**, planning-only /
-> readiness-only). Phase 6O is the next planned phase and will own
-> implementation behind a NEW env flag distinct from the Phase 6M
-> handler flag.
+> **Phase 6O baseline:** documented through Phase 6O (Razorpay
+> sandbox status mapping + manual review, sandbox-review-only).
+> Phase 6P is the next planned phase and will own implementation
+> behind a NEW env flag distinct from `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED`.
 
 ## Health
 
@@ -232,6 +231,32 @@ Every response preserves `business_mutation_was_made=false`,
 `customer_notification_sent=false`, `raw_secret_exposed=false`,
 `full_pii_exposed=false`. Production webhook secret is **never** consumed
 by this handler.
+
+## Phase 6O — Razorpay Sandbox Status Mapping + Manual Review (sandbox-review-only)
+
+Read-only / review-only layer for converting verified Phase 6M
+`RazorpayWebhookEvent` rows into proposed sandbox status mapping
+review records. **Phase 6O never mutates `Order` / `Payment` /
+`Shipment` / `DiscountOfferLog` / `Customer`, never sends a customer
+notification, never calls Razorpay, never flips an env flag.**
+Approving a review only marks it `approved_for_future_phase6p` —
+permission to consider the mapping in Phase 6P, not application.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/sandbox-status-mapping-readiness/` | admin/staff | Phase 6O readiness composition: locked-False safety state, the 9-event mapping plan, review counters, blockers, warnings, `safeToStartPhase6P`, `nextAction`. |
+| GET | `/api/v1/saas/razorpay/sandbox-status-reviews/?limit=N` | admin/staff | List recent `RazorpaySandboxStatusReview` rows (sanitized — no raw payload, no PII) + counts + locked safety booleans. |
+| GET | `/api/v1/saas/razorpay/sandbox-status-reviews/<id>/` | admin/staff | Detail (sanitized). |
+| POST | `/api/v1/saas/razorpay/sandbox-status-reviews/prepare/` | admin/staff | Create / re-fetch a review row from a Phase 6M-verified event. Refuses unless `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=true` AND the source event is synthetic-eligible (signature_valid / replay_window_valid / first_seen / no business mutation / no customer notification / no PII / amount ≤ 100 paise / event allowlisted). 201 on create, 200 on reuse. |
+| POST | `/api/v1/saas/razorpay/sandbox-status-reviews/<id>/approve/` | admin/staff | Mark the review **approved for future Phase 6P only**. NEVER mutates business tables. NEVER calls Razorpay. NEVER sends a customer notification. |
+| POST | `/api/v1/saas/razorpay/sandbox-status-reviews/<id>/reject/` | admin/staff | Mark the review rejected. Audit-only. |
+| POST | `/api/v1/saas/razorpay/sandbox-status-reviews/<id>/archive/` | admin/staff | Archive the review. Audit-only. |
+
+Every response preserves `mutationAllowedInPhase6O=false`,
+`businessMutationWasMade=false`, `customerNotificationSent=false`,
+`providerCallAttempted=false`, `shipmentEffectAllowed=false`,
+`discountEffectAllowed=false`. POST/PATCH/DELETE on read endpoints
+return 405. Admin/director/superuser auth required for every endpoint.
 
 ## Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan (planning-only / readiness-only)
 

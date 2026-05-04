@@ -1156,6 +1156,42 @@ Expected: `mcp_enabled=false`, `mcp_read_only_mode=true`,
 Re-run after every Docker recreate so the env is read fresh from
 `.env.production`.
 
+## 8.84 Phase 6O production posture — Razorpay sandbox status mapping + manual review (sandbox-review-only)
+
+Phase 6O is **sandbox-review-only**. It maps verified Phase 6M
+`RazorpayWebhookEvent` rows into proposed sandbox status reviews.
+**It never mutates `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer`, never sends a customer notification,
+never calls Razorpay, never flips an env flag.** Approving a review
+flips its `status` to `approved_for_future_phase6p` only.
+
+Required posture in `.env.production`:
+
+```dotenv
+# Phase 6O Razorpay Sandbox Status Mapping + Manual Review — keep false on production
+RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false
+```
+
+Verify dormant state after every deploy:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_sandbox_status_mapping_readiness --json
+```
+
+Expected: `phase=6O`, `status=sandbox_review_only`,
+`razorpaySandboxStatusMappingEnabled=false`,
+`businessMutationEnabled=false`,
+`customerNotificationEnabled=false`,
+`providerCallAttempted=false`,
+`reviewCounts.businessMutationWasMade=0`,
+`reviewCounts.customerNotificationSent=0`,
+`reviewCounts.providerCallAttempted=0`. Do **not** flip
+`RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED` to `true` on production
+without a written Director sign-off — and even then, the flag only
+unlocks review preparation; mutation paths stay closed (Phase 6P
+implementation will own those behind a SEPARATE env flag).
+
 ## 8.85 Phase 6N production posture — Razorpay business-mutation sandbox plan (planning-only)
 
 Phase 6N is **planning + readiness only**. Verify the read-only
@@ -1215,6 +1251,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec backen
     RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED=false \
     RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false \
     RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false \
+    RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false \
     python -m pytest -q
 ```
 
@@ -1283,7 +1320,8 @@ the container is configured:
 - CAIO-originated customer messages (LOCKED — CAIO is monitor / audit only)
 - Phase 6K-style real Razorpay test execution (gated by `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false`; one-shot only)
 - Phase 6M Razorpay webhook handler (dormant by default — all four `RAZORPAY_WEBHOOK_*` env flags stay false)
-- Phase 6N Razorpay webhook business-mutation sandbox path (planning-only — Phase 6N has no execution path; Phase 6O will own implementation behind a NEW env flag)
+- Phase 6N Razorpay webhook business-mutation sandbox path (planning-only — Phase 6N has no execution path)
+- Phase 6O Razorpay sandbox status mapping (review-only — `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false` default; even when `true`, only review preparation is unlocked, never any Order/Payment/Shipment/DiscountOfferLog mutation; Phase 6P will own synthetic-only mutation behind a SEPARATE env flag)
 - MCP Gateway tools / provider tools (gated by `MCP_ENABLED=false` and `MCP_*` flag siblings)
 - Per-org runtime provider routing (Phase 6F preview only — `runtimeSource=env_config`, `perOrgRuntimeEnabled=false`)
 - Live execution through the Runtime Live Audit Gate (Phase 6H — `RuntimeKillSwitch.enabled=true`, every operation `allowedInPhase6H=false`)

@@ -2915,6 +2915,178 @@ export const SAAS_RAZORPAY_WEBHOOK_EVENTS: Record<string, unknown> = {
   providerCallAttempted: false,
 };
 
+// ---------- Phase 6O — Razorpay Sandbox Status Mapping + Manual Review ----------
+
+const PHASE_6O_EVENT_NAMES = [
+  "payment_link.paid",
+  "payment.captured",
+  "payment.failed",
+  "payment.authorized",
+  "order.paid",
+  "payment_link.cancelled",
+  "payment_link.expired",
+  "refund.created",
+  "refund.processed",
+];
+
+const PHASE_6O_FORBIDDEN_ACTIONS = [
+  "mark_order_paid",
+  "mark_payment_captured",
+  "create_payment_link",
+  "capture_razorpay_payment",
+  "refund_razorpay_payment",
+  "send_whatsapp_template",
+  "send_freeform_whatsapp",
+  "place_vapi_call",
+  "create_or_update_shipment",
+  "create_or_update_discount_offer",
+  "execute_webhook_replay",
+  "enable_business_mutation_env_flag",
+];
+
+const PHASE_6O_REVIEW_COUNTS = {
+  proposed: 0,
+  pendingManualReview: 0,
+  approvedForFuturePhase6P: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+  businessMutationWasMade: 0,
+  customerNotificationSent: 0,
+  providerCallAttempted: 0,
+};
+
+export const SAAS_RAZORPAY_SANDBOX_STATUS_MAPPING_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "6O",
+  status: "sandbox_review_only",
+  latestCompletedPhase: "6N",
+  nextPhase: "6P",
+  businessMutationEnabled: false,
+  customerNotificationEnabled: false,
+  providerCallAttempted: false,
+  rawPayloadStorageEnabled: false,
+  razorpaySandboxStatusMappingEnabled: false,
+  phase6MWebhookTestModeEnabled: false,
+  phase6MVerifiedEventCount: 0,
+  phase6MBusinessMutationCount: 0,
+  phase6MCustomerNotificationCount: 0,
+  phase6MRawSecretExposureCount: 0,
+  phase6MFullPiiExposureCount: 0,
+  reviewCounts: PHASE_6O_REVIEW_COUNTS,
+  eventMappings: PHASE_6O_EVENT_NAMES.map((name) => ({
+    razorpayEventName: name,
+    futureSandboxPaymentStatus: "pending",
+    futureSandboxOrderEffect: "no_change",
+    proposedReviewAction: `review_${name.replace(".", "_")}_for_synthetic_order`,
+    manualReviewRequired: true,
+    mutationAllowedInPhase6O: false,
+    mutationAllowedInFuturePhase6P:
+      "only_if_synthetic_review_approved_and_director_signed_off",
+    customerNotificationAllowed: false,
+    shipmentEffectAllowed: false,
+    discountEffectAllowed: false,
+    idempotencyRequired: true,
+    rollbackRequired: true,
+    blockers: ["phase_6o_sandbox_review_only_no_mutation_path"],
+    notes: ["Sandbox-only acknowledgement; production rows stay untouched."],
+  })),
+  safetyInvariants: {
+    businessMutationEnabled: false,
+    customerNotificationEnabled: false,
+    rawPayloadStorageEnabled: false,
+    providerCallAllowed: false,
+    razorpayApiInvocationAllowed: false,
+    whatsappSendAllowed: false,
+    vapiCallAllowed: false,
+    envFlagFlipAllowed: false,
+    phase6OPathCanMutateProductionRecord: false,
+    phase6OPathCanCreateShipment: false,
+    phase6OPathCanCreateDiscountOffer: false,
+    phase6OPathCanSendCustomerNotification: false,
+    phase6OPathCanCallRazorpay: false,
+    phase6OPathCanFlipEnvFlag: false,
+    phase6OPathCanWriteToOrderTable: false,
+    phase6OPathCanWriteToPaymentTable: false,
+    phase6OPathRespectsKillSwitch: true,
+    approvalAppliesMutation: false,
+  },
+  manualReviewChecklist: [
+    {
+      key: "verifyPhase6MEventIsVerifiedAndSafe",
+      description:
+        "Source RazorpayWebhookEvent has signature_valid=True, replay_window_valid=True, idempotency_status=first_seen, safety counters all zero.",
+      automated: true,
+    },
+    {
+      key: "verifyEnvFlagsLockedOff",
+      description:
+        "RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED, RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED and RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD all remain false.",
+      automated: true,
+    },
+    {
+      key: "verifySyntheticReferenceOnly",
+      description:
+        "Provider order/payment/payment-link ids are synthetic test markers. Amount must be ≤ 100 paise.",
+      automated: true,
+    },
+    {
+      key: "verifyDirectorSignOff",
+      description:
+        "Written Director sign-off recorded in the Master Event Ledger before any Phase 6P sandbox mutation is rehearsed.",
+      automated: false,
+    },
+  ],
+  rollbackPlan: {
+    phase: "6O",
+    rollbackTriggers: [
+      "approval_button_click_observed_to_mutate_business_table",
+      "any_real_order_payment_shipment_or_discount_mutation_observed",
+    ],
+    rollbackSteps: [
+      {
+        order: 1,
+        action: "set_RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED_to_false",
+        owner: "operator",
+        phase6OEnforced: true,
+      },
+      {
+        order: 2,
+        action: "mark_open_reviews_archived_with_rollback_reason",
+        owner: "operator",
+        phase6OEnforced: true,
+      },
+    ],
+    rollbackVerification: [
+      "RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED == false",
+    ],
+    phase6OCanExecuteRollback: false,
+    rollbackOwnedByOperatorOnly: true,
+    rollbackNeverInvokesProviderApi: true,
+  },
+  forbiddenActions: PHASE_6O_FORBIDDEN_ACTIONS,
+  maxSafeAmountPaise: 100,
+  safeToStartPhase6P: false,
+  blockers: [],
+  warnings: [
+    "Phase 6O is sandbox-review-only. NEVER mutates Order/Payment/Shipment/DiscountOfferLog, NEVER sends customer notification, NEVER calls Razorpay, NEVER flips env flags. Approving a review only marks it approved_for_future_phase6p — Phase 6P will own any sandbox-only mutation against synthetic test orders.",
+  ],
+  nextAction: "approve_at_least_one_phase6o_review_for_future_phase6p",
+  recentReviews: [],
+};
+
+export const SAAS_RAZORPAY_SANDBOX_STATUS_REVIEWS: Record<string, unknown> = {
+  phase: "6O",
+  limit: 25,
+  counts: PHASE_6O_REVIEW_COUNTS,
+  items: [],
+  businessMutationWasMade: false,
+  customerNotificationSent: false,
+  providerCallAttempted: false,
+};
+
 // ---------- Phase 6N — Razorpay Business-Mutation Sandbox Plan ----------
 
 const PHASE_6N_EVENT_NAMES = [

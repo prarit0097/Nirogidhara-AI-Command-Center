@@ -18,15 +18,20 @@ artefact), runtime providers still use env/config, the global kill switch
 remains active, `MCP_ENABLED=false`, and
 `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`.
 
-**Phase 6N Razorpay Webhook Business-Mutation Sandbox Plan is FULL
-PASS (planning-only / readiness-only).** Plan + readiness selectors +
-two read-only management commands + two admin GET endpoints +
-`/saas-admin` section all shipped. **Next backend phase: Phase 6O —
-Sandbox payment status mapping + manual review** (implementation-only
-of the Phase 6N plan, behind a NEW env flag distinct from the Phase 6M
-handler flag, gated by Director sign-off). Do **not** enable any
-sandbox env flag until Phase 6O implementation lands and passes its
-own acceptance criteria.
+**Phase 6O Razorpay Sandbox Status Mapping + Manual Review is FULL
+PASS (sandbox-review-only).** New `RazorpaySandboxStatusReview` model
++ migration `payments.0005_phase6o_razorpay_sandbox_status_review`,
+service module + 6 management commands + 7 admin/auth-protected DRF
+endpoints + `/saas-admin` section + 8 audit kinds + new env flag
+`RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED` (default `False`). Approving
+a review only flips its `status` to `approved_for_future_phase6p`;
+no business-table mutation in Phase 6O. **Next backend phase: Phase
+6P — Controlled internal paid-status mutation test** (implementation-only
+synthetic `Order` / `Payment` status flip, behind a NEW env flag
+distinct from `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED`, gated by an
+approved Phase 6O review + Director sign-off). Do **not** enable any
+sandbox env flag in production until Phase 6P implementation lands
+and passes its own acceptance criteria.
 
 Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4A + 4B + 4C + 4D + 4E are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
@@ -1092,33 +1097,71 @@ Hard rules preserved:
 - `RuntimeKillSwitch` remains enabled.
 - Raw secrets / planted PII never appear in any Phase 6N output (asserted in tests with planted env values + planted Customer rows).
 
-## Phase 6O — Sandbox payment status mapping + manual review (Planned · Not started)
+## Phase 6O — Razorpay Sandbox Status Mapping + Manual Review ✅ shipped (sandbox-review-only)
 
-Implementation-only of the Phase 6N plan, behind a NEW env flag
-distinct from the Phase 6M handler flag. Phase 6O must:
+What landed: new `apps.payments.RazorpaySandboxStatusReview` model
+(migration `payments.0005_phase6o_razorpay_sandbox_status_review` —
+new table only, no existing-row schema drift). New
+`apps.payments.razorpay_sandbox_status_mapping` service module ships
+10 functions covering the full review lifecycle (mapping + readiness
++ eligibility + preview + prepare + approve + reject + archive +
+invariant-violation assertion + summary). Six management commands
+(`inspect_razorpay_sandbox_status_mapping_readiness`,
+`preview_razorpay_sandbox_status_mapping`,
+`prepare_razorpay_sandbox_status_review`,
+`approve_razorpay_sandbox_status_review`,
+`reject_razorpay_sandbox_status_review`,
+`archive_razorpay_sandbox_status_review`). Seven admin/auth-protected
+DRF endpoints under `/api/v1/saas/razorpay/sandbox-status-...`.
+Eight new audit kinds. New env flag
+`RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED` (default `False`) gates
+`prepare`. `/saas-admin` adds a "Razorpay Sandbox Status Mapping +
+Manual Review" section with **only** "Approve Review Only" /
+"Reject Review" / "Archive Review" buttons.
 
-1. Introduce a synthetic-order resolver that refuses any non-synthetic
-   Razorpay reference (only `phase6j_internal_test_plan_*` and
-   `phase6n_sandbox_synthetic_*` prefixes accepted).
-2. Add the new env flag (default off) + new safety booleans on
-   `RazorpayWebhookEvent` + new audit kinds
-   (`razorpay.sandbox.mutation.applied / blocked / rolled_back`).
-3. Stage the rehearsal exactly as the Phase 6N rollback plan describes
-   — audit-only first, then sandbox-only Order/Payment status flip on
-   a synthetic row.
-4. Emit a Director sign-off `AuditEvent` BEFORE any sandbox mutation
-   lands.
-5. Provide a CLI rollback command that restores synthetic Order/Payment
-   to pre-mutation state.
+Hard rules preserved (asserted in 29 new pytest cases):
 
-Acceptance criteria for the Phase 6O implementation:
-- every Phase 6N safety invariant remains true on real (non-synthetic)
+- Approving a review flips its `status` to
+  `approved_for_future_phase6p` only — `Order` / `Payment` /
+  `Shipment` / `DiscountOfferLog` / `Customer` are NEVER touched
+  (asserted with before/after counts).
+- No Razorpay client / WhatsApp send / Vapi trigger invocation
+  (asserted with mock spies).
+- `mutationAllowedInPhase6O=False` on every event-mapping row and
+  every persisted review.
+- Output never carries planted secrets (`RAZORPAY_KEY_*`,
+  `RAZORPAY_WEBHOOK_SECRET`) or planted PII (Customer phone / name).
+- Endpoints admin/auth gated; POST/PATCH/DELETE on read endpoints
+  return 405.
+- Production `.env.production` is not edited.
+
+## Phase 6P — Controlled internal paid-status mutation test (Planned · Not started)
+
+Implementation-only synthetic `Order.status` / `Payment.status` flip,
+behind a NEW env flag distinct from
+`RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED`. Phase 6P must:
+
+1. Introduce the new env flag (default off) — suggested name
+   `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED`.
+2. Refuse to mutate unless: (a) source `RazorpaySandboxStatusReview.status
+   == approved_for_future_phase6p`, (b) the linked
+   `RazorpayWebhookEvent` is synthetic-eligible per Phase 6O policy,
+   (c) the new env flag is `True`, (d) a Director sign-off
+   `AuditEvent` exists for the review id, (e) the synthetic-order
+   resolver accepts only `phase6j_internal_test_plan_*` /
+   `phase6n_sandbox_synthetic_*` prefixes.
+3. Add audit kinds `razorpay.sandbox_paid_status.{applied,blocked,rolled_back}`.
+4. Provide a CLI rollback command that restores the synthetic row to
+   pre-mutation state.
+
+Acceptance criteria for the Phase 6P implementation:
+
+- Every Phase 6N + 6O safety invariant stays true on real (non-synthetic)
   rows;
-- the new sandbox env flag stays off in `.env.production`;
-- `business_mutation_was_made` / `customer_notification_sent` stay false
-  on every real `RazorpayWebhookEvent`;
-- the Phase 6N rollback plan is followed step-by-step on the staged
-  rehearsal.
+- The new sandbox env flag stays `False` in `.env.production`;
+- `business_mutation_was_made` / `customer_notification_sent` stay
+  `False` on every real `RazorpayWebhookEvent` and every
+  `RazorpaySandboxStatusReview` row.
 
 ## Recommended future phases
 

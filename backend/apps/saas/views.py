@@ -63,6 +63,17 @@ from .razorpay_business_mutation_plan import (
     get_razorpay_business_mutation_sandbox_plan,
     inspect_razorpay_business_mutation_sandbox_readiness,
 )
+from apps.payments.razorpay_sandbox_status_mapping import (
+    approve_phase6o_sandbox_status_review,
+    archive_phase6o_sandbox_status_review,
+    inspect_phase6o_sandbox_status_mapping_readiness,
+    prepare_phase6o_sandbox_status_review,
+    preview_phase6o_status_mapping_for_event,
+    reject_phase6o_sandbox_status_review,
+    summarize_phase6o_reviews,
+    _serialize_review as _serialize_phase6o_review,
+)
+from apps.payments.models import RazorpaySandboxStatusReview
 from apps.payments.razorpay_webhook_readiness import (
     get_razorpay_webhook_handler_readiness,
 )
@@ -1254,6 +1265,136 @@ class RazorpayWebhookSimulateView(APIView):
         return Response(result)
 
 
+class RazorpaySandboxStatusMappingReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/sandbox-status-mapping-readiness/`` — Phase 6O.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER mutates business tables.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(inspect_phase6o_sandbox_status_mapping_readiness())
+
+
+class RazorpaySandboxStatusReviewsListView(APIView):
+    """``GET /api/v1/saas/razorpay/sandbox-status-reviews/`` — Phase 6O list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase6o_reviews(limit=limit)
+        # Locked-False posture asserted in the response shape so the
+        # frontend can render a "Disabled" badge straight from the API.
+        return Response(
+            {
+                "phase": "6O",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "businessMutationWasMade": False,
+                "customerNotificationSent": False,
+                "providerCallAttempted": False,
+            }
+        )
+
+
+class RazorpaySandboxStatusReviewDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/sandbox-status-reviews/<id>/`` — Phase 6O."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = RazorpaySandboxStatusReview.objects.filter(pk=pk).first()
+        if row is None:
+            return Response(
+                {"detail": "Phase 6O sandbox review not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase6o_review(row))
+
+
+class RazorpaySandboxStatusReviewPrepareView(APIView):
+    """``POST /api/v1/saas/razorpay/sandbox-status-reviews/prepare/`` — Phase 6O.
+
+    Requires admin auth. NEVER mutates business tables. NEVER calls
+    Razorpay. Refuses unless ``RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED``
+    is ``True`` AND the source event is synthetic-eligible.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request):
+        event_id = request.data.get("eventId") or request.data.get("event_id")
+        try:
+            event_id_int = int(event_id) if event_id is not None else 0
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "eventId must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        report = prepare_phase6o_sandbox_status_review(
+            event_id_int, requested_by=request.user
+        )
+        http_status = (
+            status.HTTP_201_CREATED
+            if report.get("created")
+            else status.HTTP_200_OK
+        )
+        return Response(report, status=http_status)
+
+
+class RazorpaySandboxStatusReviewApproveView(APIView):
+    """``POST /api/v1/saas/razorpay/sandbox-status-reviews/<id>/approve/``.
+
+    Phase 6O — marks the review approved **for future Phase 6P only**.
+    NEVER mutates ``Order`` / ``Payment`` / ``Shipment`` /
+    ``DiscountOfferLog``. NEVER sends a customer notification. NEVER
+    calls Razorpay.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, pk: int):
+        reason = (request.data.get("reason") or "").strip()
+        report = approve_phase6o_sandbox_status_review(
+            pk, reviewed_by=request.user, reason=reason
+        )
+        return Response(report)
+
+
+class RazorpaySandboxStatusReviewRejectView(APIView):
+    """``POST /api/v1/saas/razorpay/sandbox-status-reviews/<id>/reject/`` — Phase 6O."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, pk: int):
+        reason = (request.data.get("reason") or "").strip()
+        report = reject_phase6o_sandbox_status_review(
+            pk, reviewed_by=request.user, reason=reason
+        )
+        return Response(report)
+
+
+class RazorpaySandboxStatusReviewArchiveView(APIView):
+    """``POST /api/v1/saas/razorpay/sandbox-status-reviews/<id>/archive/`` — Phase 6O."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request, pk: int):
+        reason = (request.data.get("reason") or "").strip()
+        report = archive_phase6o_sandbox_status_review(
+            pk, archived_by=request.user, reason=reason
+        )
+        return Response(report)
+
+
 class RazorpayBusinessMutationSandboxPlanView(APIView):
     """``GET /api/v1/saas/razorpay/business-mutation-sandbox-plan/`` — Phase 6N.
 
@@ -1337,4 +1478,11 @@ __all__ = (
     "RazorpayWebhookSimulateView",
     "RazorpayBusinessMutationSandboxPlanView",
     "RazorpayBusinessMutationSandboxReadinessView",
+    "RazorpaySandboxStatusMappingReadinessView",
+    "RazorpaySandboxStatusReviewsListView",
+    "RazorpaySandboxStatusReviewDetailView",
+    "RazorpaySandboxStatusReviewPrepareView",
+    "RazorpaySandboxStatusReviewApproveView",
+    "RazorpaySandboxStatusReviewRejectView",
+    "RazorpaySandboxStatusReviewArchiveView",
 )

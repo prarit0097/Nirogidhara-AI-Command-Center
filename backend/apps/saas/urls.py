@@ -24,6 +24,13 @@ from .views import (
     ProviderTestPlansListView,
     RazorpayBusinessMutationSandboxPlanView,
     RazorpayBusinessMutationSandboxReadinessView,
+    RazorpaySandboxStatusMappingReadinessView,
+    RazorpaySandboxStatusReviewApproveView,
+    RazorpaySandboxStatusReviewArchiveView,
+    RazorpaySandboxStatusReviewDetailView,
+    RazorpaySandboxStatusReviewPrepareView,
+    RazorpaySandboxStatusReviewRejectView,
+    RazorpaySandboxStatusReviewsListView,
     RazorpayExecutionAuditReviewView,
     RazorpayWebhookEventDetailView,
     RazorpayWebhookEventsListView,
@@ -323,5 +330,41 @@ urlpatterns = [
         "razorpay/business-mutation-sandbox-readiness/",
         RazorpayBusinessMutationSandboxReadinessView.as_view(),
         name="saas-razorpay-business-mutation-sandbox-readiness",
+    ),
+    # Phase 6O — Razorpay Sandbox Status Mapping + Manual Review.
+    path(
+        "razorpay/sandbox-status-mapping-readiness/",
+        RazorpaySandboxStatusMappingReadinessView.as_view(),
+        name="saas-razorpay-sandbox-status-mapping-readiness",
+    ),
+    path(
+        "razorpay/sandbox-status-reviews/",
+        RazorpaySandboxStatusReviewsListView.as_view(),
+        name="saas-razorpay-sandbox-status-reviews",
+    ),
+    path(
+        "razorpay/sandbox-status-reviews/prepare/",
+        RazorpaySandboxStatusReviewPrepareView.as_view(),
+        name="saas-razorpay-sandbox-status-review-prepare",
+    ),
+    path(
+        "razorpay/sandbox-status-reviews/<int:pk>/",
+        RazorpaySandboxStatusReviewDetailView.as_view(),
+        name="saas-razorpay-sandbox-status-review-detail",
+    ),
+    path(
+        "razorpay/sandbox-status-reviews/<int:pk>/approve/",
+        RazorpaySandboxStatusReviewApproveView.as_view(),
+        name="saas-razorpay-sandbox-status-review-approve",
+    ),
+    path(
+        "razorpay/sandbox-status-reviews/<int:pk>/reject/",
+        RazorpaySandboxStatusReviewRejectView.as_view(),
+        name="saas-razorpay-sandbox-status-review-reject",
+    ),
+    path(
+        "razorpay/sandbox-status-reviews/<int:pk>/archive/",
+        RazorpaySandboxStatusReviewArchiveView.as_view(),
+        name="saas-razorpay-sandbox-status-review-archive",
     ),
 ]

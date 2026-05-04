@@ -3091,6 +3091,138 @@ export interface SaasRazorpayBusinessMutationSandboxReadiness {
   forbiddenActions: string[];
 }
 
+// ---------- Phase 6O - Razorpay Sandbox Status Mapping + Manual Review ----------
+
+export interface SaasRazorpaySandboxStatusEventMapping {
+  razorpayEventName: string;
+  futureSandboxPaymentStatus: string;
+  futureSandboxOrderEffect: string;
+  proposedReviewAction: string;
+  manualReviewRequired: true;
+  mutationAllowedInPhase6O: false;
+  mutationAllowedInFuturePhase6P: string;
+  customerNotificationAllowed: false;
+  shipmentEffectAllowed: false;
+  discountEffectAllowed: false;
+  idempotencyRequired: true;
+  rollbackRequired: true;
+  blockers: string[];
+  notes: string[];
+}
+
+export type SaasRazorpaySandboxStatusReviewStatus =
+  | "proposed"
+  | "pending_manual_review"
+  | "approved_for_future_phase6p"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasRazorpaySandboxStatusReviewDto {
+  id: number;
+  razorpayWebhookEventId: number;
+  sourceEventId: string;
+  eventName: string;
+  providerEnvironment: string;
+  providerOrderId: string;
+  providerPaymentId: string;
+  providerPaymentLinkId: string;
+  providerRefundId: string;
+  amountPaise: number | null;
+  currency: string;
+  proposedPaymentStatus: string;
+  proposedOrderEffect: string;
+  proposedReviewAction: string;
+  status: SaasRazorpaySandboxStatusReviewStatus;
+  syntheticEligible: boolean;
+  manualReviewRequired: boolean;
+  mutationAllowedInPhase6O: false;
+  businessMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+  shipmentEffectAllowed: false;
+  discountEffectAllowed: false;
+  rollbackRequired: boolean;
+  idempotencyKey: string;
+  blockers: string[];
+  warnings: string[];
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReason: string;
+  archivedByUsername: string;
+  archivedAt: string | null;
+  archiveReason: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasRazorpaySandboxStatusReviewCounts {
+  proposed: number;
+  pendingManualReview: number;
+  approvedForFuturePhase6P: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+  businessMutationWasMade: number;
+  customerNotificationSent: number;
+  providerCallAttempted: number;
+}
+
+export interface SaasRazorpaySandboxStatusMappingReadiness {
+  phase: "6O";
+  status: "sandbox_review_only";
+  latestCompletedPhase: "6N";
+  nextPhase: "6P";
+  businessMutationEnabled: false;
+  customerNotificationEnabled: false;
+  providerCallAttempted: false;
+  rawPayloadStorageEnabled: false;
+  razorpaySandboxStatusMappingEnabled: boolean;
+  phase6MWebhookTestModeEnabled: boolean;
+  phase6MVerifiedEventCount: number;
+  phase6MBusinessMutationCount: number;
+  phase6MCustomerNotificationCount: number;
+  phase6MRawSecretExposureCount: number;
+  phase6MFullPiiExposureCount: number;
+  reviewCounts: SaasRazorpaySandboxStatusReviewCounts;
+  eventMappings: SaasRazorpaySandboxStatusEventMapping[];
+  safetyInvariants: Record<string, boolean>;
+  manualReviewChecklist: Array<{
+    key: string;
+    description: string;
+    automated: boolean;
+  }>;
+  rollbackPlan: Record<string, unknown>;
+  forbiddenActions: string[];
+  maxSafeAmountPaise: number;
+  safeToStartPhase6P: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  recentReviews: SaasRazorpaySandboxStatusReviewDto[];
+}
+
+export interface SaasRazorpaySandboxStatusReviewsResponse {
+  phase: "6O";
+  limit: number;
+  counts: SaasRazorpaySandboxStatusReviewCounts;
+  items: SaasRazorpaySandboxStatusReviewDto[];
+  businessMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+}
+
+export interface SaasRazorpaySandboxStatusReviewActionResult {
+  phase: "6O";
+  ok?: boolean;
+  created?: boolean;
+  reused?: boolean;
+  review: SaasRazorpaySandboxStatusReviewDto | null;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
 export interface SaasRazorpayBusinessMutationSandboxPlan {
   phase: "6N";
   policyVersion: string;

@@ -212,6 +212,17 @@ RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED = _razorpay_webhook_bool(
 RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD"
 )
+# ----- Phase 6O — Sandbox Payment Status Mapping + Manual Review -----
+# Default off. When true (and only when true), the Phase 6O service can
+# prepare a ``RazorpaySandboxStatusReview`` from a Phase 6M-verified
+# ``RazorpayWebhookEvent``. The flag NEVER unlocks any mutation of
+# real ``Order`` / ``Payment`` / ``Shipment`` / ``DiscountOfferLog``;
+# the gating purely controls whether new sandbox review rows can be
+# created. Production ``.env.production`` is not edited — this default
+# IS the production posture.
+RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

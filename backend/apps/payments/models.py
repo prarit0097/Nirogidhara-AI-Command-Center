@@ -225,3 +225,140 @@ class RazorpayWebhookEvent(models.Model):
             f"{self.event_name} ({self.processing_status}) "
             f"[{self.source_event_id or self.event_id or 'no-id'}]"
         )
+
+
+class RazorpaySandboxStatusReview(models.Model):
+    """Phase 6O — sandbox-only payment-status mapping review record.
+
+    Created from a Phase 6M ``RazorpayWebhookEvent`` for review only.
+    Phase 6O **never** mutates ``Order`` / ``Payment`` / ``Shipment`` /
+    ``DiscountOfferLog`` and **never** sends a customer notification.
+    The locked safety booleans below are persisted with ``False``
+    defaults; the service layer asserts none of them ever flip to
+    ``True`` in Phase 6O. Approving a review only changes ``status`` to
+    ``approved_for_future_phase6p`` — it is permission to future Phase
+    6P, not application of a mutation.
+    """
+
+    class Status(models.TextChoices):
+        PROPOSED = "proposed", "Proposed"
+        PENDING_MANUAL_REVIEW = "pending_manual_review", "Pending manual review"
+        APPROVED_FOR_FUTURE_PHASE6P = (
+            "approved_for_future_phase6p",
+            "Approved for future Phase 6P",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    razorpay_webhook_event = models.ForeignKey(
+        RazorpayWebhookEvent,
+        on_delete=models.PROTECT,
+        related_name="sandbox_status_reviews",
+    )
+    source_event_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    event_name = models.CharField(max_length=128, db_index=True)
+    provider_environment = models.CharField(max_length=16, default="test")
+    provider_order_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_link_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    provider_refund_id = models.CharField(max_length=64, blank=True, default="")
+    amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    currency = models.CharField(max_length=8, blank=True, default="")
+
+    proposed_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_order_effect = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_review_action = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.PROPOSED,
+        db_index=True,
+    )
+
+    # Locked-False safety booleans. Phase 6O never flips any of these
+    # to True. Asserted by ``assert_phase6o_no_business_mutation``.
+    synthetic_eligible = models.BooleanField(default=False)
+    manual_review_required = models.BooleanField(default=True)
+    mutation_allowed_in_phase6o = models.BooleanField(default=False)
+    business_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    customer_notification_sent = models.BooleanField(
+        default=False, db_index=True
+    )
+    provider_call_attempted = models.BooleanField(default=False)
+    shipment_effect_allowed = models.BooleanField(default=False)
+    discount_effect_allowed = models.BooleanField(default=False)
+    rollback_required = models.BooleanField(default=True)
+
+    idempotency_key = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    safety_invariants = models.JSONField(default=dict, blank=True)
+    manual_review_checklist = models.JSONField(default=list, blank=True)
+    rollback_plan = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6o_review_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6o_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=200, blank=True, default="")
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6o_review_archives",
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(max_length=200, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "event_name")),
+            models.Index(fields=("-created_at", "status")),
+        )
+        constraints = (
+            # One review per (event, action) — re-preparing the same
+            # mapping for the same source event is idempotent.
+            models.UniqueConstraint(
+                fields=("razorpay_webhook_event", "proposed_review_action"),
+                name="razorpay_sandbox_review_unique_event_action",
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase6O[{self.status}] {self.event_name} "
+            f"({self.source_event_id or 'no-id'})"
+        )

@@ -5,8 +5,8 @@ direction.
 
 ## Status (current)
 
-**Phase 6N baseline.** `/saas-admin` now renders every Phase 6 read-only
-section through Phase 6N:
+**Phase 6O baseline.** `/saas-admin` now renders every Phase 6 read-only
+section through Phase 6O:
 
 - **Phase 6E** — SaaS overview + integration settings metadata (read-only).
 - **Phase 6F** — Runtime Integration Routing Preview (`runtimeSource=env_config`, `perOrgRuntimeEnabled=false`).
@@ -19,6 +19,7 @@ section through Phase 6N:
 - **Phase 6M-0** — MCP Gateway Readiness (dormant: `MCP_ENABLED=false`).
 - **Phase 6M** — Razorpay Webhook Handler (Test Mode) — readiness card + sanitized event list.
 - **Phase 6N** — Razorpay Business Mutation Sandbox Plan (planning-only) — readiness grid + 9-row event-to-status mapping table + synthetic eligibility list + 8-item manual review checklist + 7-step rollback list + forbidden-action chips. **Read-only.** No mutation buttons.
+- **Phase 6O** — Razorpay Sandbox Status Mapping + Manual Review (sandbox-review-only) — readiness grid + 9-row event-to-status mapping table + reviews table with per-row "Approve Review Only" / "Reject Review" / "Archive Review" buttons (clearly labelled review-only) + manual review checklist + forbidden-action chips. Phase 6O buttons NEVER mutate Order/Payment/Shipment/DiscountOfferLog; they only flip the review row's `status`.
 
 **Forbidden UI buttons (asserted in `frontend/src/test/saas-admin.test.tsx`):**
 no "Execute Razorpay" / "Create Order" / "Create Payment Link" / "Capture"
@@ -47,6 +48,7 @@ earlier 4-hour soak was accelerated, not full-duration.
 
 Item | Status
 --- | ---
+Phase 6O `/saas-admin` | done — adds review-only "Razorpay Sandbox Status Mapping + Manual Review" section: phase status / safeToStartPhase6P badge / sandbox flag display / 9-row event-to-status mapping table (all "Disabled") / reviews table with per-row "Approve Review Only" / "Reject Review" / "Archive Review" buttons / manual review checklist / forbidden-action chips / `data-testid` hooks (`phase6o-event-mapping-table`, `phase6o-reviews-table`, `phase6o-manual-review-list`, `phase6o-forbidden-actions`, `phase6o-safe-to-start-phase6p-badge`, `phase6o-review-{id}-{approve\|reject\|archive}`). No Mark Paid / Capture Payment / Refund / Mutate Order / Apply Mutation / Execute Payment / Replay Event / Enable Mutation / Go Live / Run MCP Tool / Send WhatsApp / Create Payment Link buttons.
 Phase 6N `/saas-admin` | done — adds read-only "Razorpay Business Mutation Sandbox Plan" section: phase / status / safeToStartPhase6O badge / Phase 6M flag-lock summary / 9-row event-to-status table / synthetic eligibility list / manual review checklist / rollback step list / forbidden-action chips / `data-testid` hooks (`phase6n-event-mapping-table`, `phase6n-manual-review-list`, `phase6n-rollback-list`, `phase6n-forbidden-actions`, `phase6n-safe-to-start-phase6o-badge`). No Mark Paid / Capture Payment / Refund / Mutate Order / Send WhatsApp / Create Payment Link / Replay Event / Enable Mutation / Go Live / Run MCP Tool buttons.
 Phase 6M `/saas-admin` | done — adds read-only "Razorpay Webhook Handler (Test Mode)" + "MCP Gateway Readiness" sections on top of the Phase 6E → Phase 6L stack. All sections strictly read-only; no Replay / Apply mutation / Go Live / Activate connector controls. `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false` and `MCP_ENABLED=false` rendered as locked states.
 Phase 6L `/saas-admin` | done — Razorpay Test Execution Audit Review + Webhook Readiness Plan section; audit-invariant / readiness / webhook-plan cards (allowlist + denylist tables); no Execute / Register Webhook / Capture / Send WhatsApp buttons.
@@ -60,7 +62,7 @@ Sidebar collapse layout | done — shared collapsed state
 Mobile responsiveness | baseline done — KPI stack, sidebar drawer, tables horizontal-scroll on small screens; per-page tuning continues
 Dashboard polish | baseline done — premium spacing, hierarchy, executive feel; iterate as needed
 Workflow visuals | UI-component diagrams in `WorkflowMap`
-Vitest tests | 50 tests today. Phase 6J/6K/6L/6M-0/6M/**6N** assertions in `frontend/src/test/saas-admin.test.tsx` cover render of every new section, absence of forbidden buttons (Execute / Capture / Go Live / Activate / Replay / Disable Kill Switch / Apply Mutation / Mark Paid / Refund / Create Payment Link / Mutate Order / Run MCP Tool), no raw env-var names like `RAZORPAY_KEY_SECRET` in body text, no full Indian phone numbers (`+91XXXXXXXXXX` regex check), and no raw secrets in any rendered preview.
+Vitest tests | 52 tests today. Phase 6J/6K/6L/6M-0/6M/6N/**6O** assertions in `frontend/src/test/saas-admin.test.tsx` cover render of every new section, absence of forbidden buttons (Execute / Capture / Go Live / Activate / Replay / Disable Kill Switch / Apply Mutation / Mark Paid / Refund / Create Payment Link / Mutate Order / Run MCP Tool / Execute Payment), no raw env-var names like `RAZORPAY_KEY_SECRET` in body text, no full Indian phone numbers (`+91XXXXXXXXXX` regex check), and no raw secrets in any rendered preview. Phase 6O specifically asserts the per-row buttons are labelled exactly "Approve Review Only" / "Reject Review" / "Archive Review".
 ESLint warnings | 8 pre-existing shadcn warnings (`react-refresh/only-export-components`); 0 errors
 Mock fallback in `api.ts` | done — pages never break when backend is offline
 
@@ -112,7 +114,7 @@ cd ../frontend && npm run dev
 | `/whatsapp-inbox` | `WhatsAppInbox.tsx` | 5B | Three-pane manual-only WhatsApp inbox + internal notes + manual template send + AI-suggestions-disabled placeholder |
 | `/whatsapp-templates` | `WhatsAppTemplates.tsx` | 5A | Meta-mirrored WhatsApp templates (read-only) + Sync from Meta button |
 | `/whatsapp-monitoring` | `WhatsAppMonitoring.tsx` | 5F-Gate | Read-only auto-reply safety dashboard + Approved Customer Pilot Readiness; masked phones only; no send/enable controls |
-| `/saas-admin` | `SaasAdmin.tsx` | 6E-6N | SaaS admin panel: organization overview, org/write readiness, integration readiness, safety locks, runtime routing preview (6F), Controlled Runtime Routing Dry Run + AI Provider Routing Preview (6G), Controlled Runtime Live Audit Gate (6H), Single Internal Live Gate Simulation (6I), Single Internal Provider Test Plan (6J), Single Internal Razorpay Test-Mode Execution Gate (6K), Razorpay Test Execution Audit + Webhook Readiness (6L), MCP Gateway Readiness (6M-0), Razorpay Webhook Handler Test Mode (6M), **Razorpay Business Mutation Sandbox Plan (6N — planning-only)**; no activation / send / provider-execution / replay / apply-mutation / go-live / disable-kill-switch / mark-paid / capture-payment / refund / mutate-order / run-mcp-tool controls anywhere. |
+| `/saas-admin` | `SaasAdmin.tsx` | 6E-6O | SaaS admin panel: organization overview, org/write readiness, integration readiness, safety locks, runtime routing preview (6F), Controlled Runtime Routing Dry Run + AI Provider Routing Preview (6G), Controlled Runtime Live Audit Gate (6H), Single Internal Live Gate Simulation (6I), Single Internal Provider Test Plan (6J), Single Internal Razorpay Test-Mode Execution Gate (6K), Razorpay Test Execution Audit + Webhook Readiness (6L), MCP Gateway Readiness (6M-0), Razorpay Webhook Handler Test Mode (6M), **Razorpay Business Mutation Sandbox Plan (6N — planning-only)**; no activation / send / provider-execution / replay / apply-mutation / go-live / disable-kill-switch / mark-paid / capture-payment / refund / mutate-order / run-mcp-tool controls anywhere. |
 | `/settings` | `Settings.tsx` | 1 / 5A | Settings & Control + WABA section |
 
 Phase 6M note: `/saas-admin` is the central read-only command-center for

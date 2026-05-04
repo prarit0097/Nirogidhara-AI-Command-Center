@@ -274,6 +274,15 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.webhook.event_denied": "ban",
     "razorpay.webhook.replay_blocked": "ban",
     "razorpay.webhook.business_mutation_blocked": "shield-off",
+    # Phase 6O Razorpay Sandbox Status Mapping + Manual Review.
+    "razorpay.sandbox_status_mapping.readiness_inspected": "eye",
+    "razorpay.sandbox_status_review.previewed": "eye",
+    "razorpay.sandbox_status_review.prepared": "file-plus",
+    "razorpay.sandbox_status_review.blocked": "ban",
+    "razorpay.sandbox_status_review.approved_for_future_phase6p": "check-circle",
+    "razorpay.sandbox_status_review.rejected": "x-circle",
+    "razorpay.sandbox_status_review.archived": "archive",
+    "razorpay.sandbox_status_review.invariant_violation_blocked": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

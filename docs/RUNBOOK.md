@@ -77,13 +77,13 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6N inclusive (1318 tests)
+python -m pytest -q                     # Phase 1 -> 6O inclusive (1347 tests)
 python manage.py makemigrations --check --dry-run    # must report "No changes detected"
 python manage.py check                  # must report "0 issues"
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6N vitest tests (50 tests)
+npm test                                # Phase 1 -> 6O vitest tests (52 tests)
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
@@ -291,6 +291,49 @@ by Phase 6M code paths.
 `/saas-admin` shows **Razorpay Webhook Handler (Test Mode)** with the
 event list (masked summary only) and the readiness card. **No "Replay"
 / "Apply mutation" / "Go Live" buttons on the UI.**
+
+## Phase 6O Razorpay sandbox status mapping + manual review diagnostics
+
+Phase 6O is **sandbox-review-only**. It maps verified Phase 6M
+`RazorpayWebhookEvent` rows into proposed sandbox status reviews.
+**It never mutates `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer`, never sends a customer notification,
+never calls Razorpay, never flips an env flag.** Approving a review
+flips its `status` to `approved_for_future_phase6p` only — Phase 6P
+will own the actual sandbox `Order.status` / `Payment.status` flip.
+
+```bash
+cd backend
+python manage.py inspect_razorpay_sandbox_status_mapping_readiness --json
+python manage.py preview_razorpay_sandbox_status_mapping --event-id <RAZORPAY_WEBHOOK_EVENT_PK> --json
+# The next four commands change RazorpaySandboxStatusReview state only;
+# they NEVER touch business tables. ``prepare`` requires
+# RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=true AND a synthetic-eligible event.
+python manage.py prepare_razorpay_sandbox_status_review --event-id <RAZORPAY_WEBHOOK_EVENT_PK> --json
+python manage.py approve_razorpay_sandbox_status_review --review-id <ID> --reason "ok" --json
+python manage.py reject_razorpay_sandbox_status_review --review-id <ID> --reason "not synthetic" --json
+python manage.py archive_razorpay_sandbox_status_review --review-id <ID> --reason "close" --json
+```
+
+Expected posture for the readiness command:
+`phase=6O`, `status=sandbox_review_only`,
+`businessMutationEnabled=false`, `customerNotificationEnabled=false`,
+`providerCallAttempted=false`,
+`razorpaySandboxStatusMappingEnabled=false` (default),
+`mutationAllowedInPhase6O=false` on every event-mapping row,
+`reviewCounts.businessMutationWasMade=0`,
+`reviewCounts.customerNotificationSent=0`,
+`reviewCounts.providerCallAttempted=0`. `safeToStartPhase6P=true`
+only after at least one review row has `status=approved_for_future_phase6p`.
+
+`/saas-admin` shows **Razorpay Sandbox Status Mapping + Manual Review**
+with the readiness grid, 9-row event-to-status mapping table, reviews
+table (with per-row "Approve Review Only" / "Reject Review" /
+"Archive Review" buttons), manual review checklist, and forbidden-action
+chips. **No "Mark Paid" / "Capture Payment" / "Refund" / "Send WhatsApp"
+/ "Apply Mutation" / "Mutate Order" / "Execute Webhook" / "Replay Event"
+/ "Enable Mutation" / "Go Live" / "Run MCP Tool" buttons exist
+anywhere.**
 
 ## Phase 6N Razorpay business-mutation sandbox plan diagnostics
 

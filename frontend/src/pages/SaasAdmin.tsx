@@ -22,6 +22,9 @@ import type {
   SaasRazorpayWebhookEventDto,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpaySandboxStatusMappingReadiness,
+  SaasRazorpaySandboxStatusReviewDto,
+  SaasRazorpaySandboxStatusReviewsResponse,
   SaasRazorpayWebhookEventsResponse,
   SaasRazorpayWebhookHandlerReadiness,
   SaasRazorpayWebhookPlan,
@@ -104,6 +107,18 @@ export default function SaasAdminPage() {
     razorpayBusinessMutationSandboxReadiness,
     setRazorpayBusinessMutationSandboxReadiness,
   ] = useState<SaasRazorpayBusinessMutationSandboxReadiness | null>(null);
+  const [
+    razorpaySandboxStatusMappingReadiness,
+    setRazorpaySandboxStatusMappingReadiness,
+  ] = useState<SaasRazorpaySandboxStatusMappingReadiness | null>(null);
+  const [
+    razorpaySandboxStatusReviews,
+    setRazorpaySandboxStatusReviews,
+  ] = useState<SaasRazorpaySandboxStatusReviewsResponse | null>(null);
+  const [phase6oActionPending, setPhase6oActionPending] = useState<number | null>(
+    null,
+  );
+  const [phase6oActionMessage, setPhase6oActionMessage] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -127,6 +142,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayWebhookEvents(25),
       api.getSaasRazorpayBusinessMutationSandboxPlan(),
       api.getSaasRazorpayBusinessMutationSandboxReadiness(),
+      api.getSaasRazorpaySandboxStatusMappingReadiness(),
+      api.getSaasRazorpaySandboxStatusReviews(25),
     ])
       .then(
         ([
@@ -148,6 +165,8 @@ export default function SaasAdminPage() {
           wbe,
           bmPlan,
           bmRead,
+          smRead,
+          smReviews,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -167,6 +186,8 @@ export default function SaasAdminPage() {
           setRazorpayWebhookEvents(wbe);
           setRazorpayBusinessMutationSandboxPlan(bmPlan);
           setRazorpayBusinessMutationSandboxReadiness(bmRead);
+          setRazorpaySandboxStatusMappingReadiness(smRead);
+          setRazorpaySandboxStatusReviews(smReviews);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -1333,7 +1354,303 @@ export default function SaasAdminPage() {
             Link" / "Mutate Order" / "Execute Webhook" / "Replay
             Event" / "Enable Mutation" / "Go Live" / "Run MCP Tool"
             buttons exist on this page. Phase 6N is planning only;
-            Phase 6O remains future.
+            Phase 6P remains future.
+          </div>
+        </section>
+      )}
+
+      {(razorpaySandboxStatusMappingReadiness || razorpaySandboxStatusReviews) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-sandbox-status-mapping-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Webhook className="h-5 w-5 text-primary" />
+                Razorpay Sandbox Status Mapping + Manual Review
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6O — sandbox-review-only.{" "}
+                <strong>No business mutation</strong>, no customer
+                notification, no Razorpay API call. Approving a review
+                here only marks it{" "}
+                <code>approved_for_future_phase6p</code> — Phase 6P
+                will own any sandbox-only mutation against synthetic
+                test orders, gated by Director sign-off.
+              </p>
+            </div>
+            {razorpaySandboxStatusMappingReadiness && (
+              <div data-testid="phase6o-safe-to-start-phase6p-badge">
+                <StatusPill
+                  tone={
+                    razorpaySandboxStatusMappingReadiness.safeToStartPhase6P
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpaySandboxStatusMappingReadiness.safeToStartPhase6P
+                    ? "Ready for Phase 6P planning"
+                    : "Blocked — needs approved review for future Phase 6P"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpaySandboxStatusMappingReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpaySandboxStatusMappingReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpaySandboxStatusMappingReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={
+                  razorpaySandboxStatusMappingReadiness.latestCompletedPhase
+                }
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpaySandboxStatusMappingReadiness.nextPhase}
+              />
+              <KeyValue
+                label="Sandbox flag"
+                value={
+                  razorpaySandboxStatusMappingReadiness.razorpaySandboxStatusMappingEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue label="Business mutation" value="Disabled" />
+              <KeyValue label="Customer notification" value="Disabled" />
+              <KeyValue label="Provider call" value="Disabled" />
+              <KeyValue
+                label="Reviews pending"
+                value={String(
+                  razorpaySandboxStatusMappingReadiness.reviewCounts
+                    .pendingManualReview,
+                )}
+              />
+              <KeyValue
+                label="Reviews approved (for 6P)"
+                value={String(
+                  razorpaySandboxStatusMappingReadiness.reviewCounts
+                    .approvedForFuturePhase6P,
+                )}
+              />
+              <KeyValue
+                label="Reviews rejected"
+                value={String(
+                  razorpaySandboxStatusMappingReadiness.reviewCounts.rejected,
+                )}
+              />
+              <KeyValue
+                label="Reviews archived"
+                value={String(
+                  razorpaySandboxStatusMappingReadiness.reviewCounts.archived,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpaySandboxStatusMappingReadiness && (
+            <div className="px-6 pb-2 text-xs text-muted-foreground">
+              <strong>Next action:</strong>{" "}
+              {razorpaySandboxStatusMappingReadiness.nextAction}
+            </div>
+          )}
+
+          {razorpaySandboxStatusMappingReadiness && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Event-to-status mapping (Phase 6P target)
+              </h4>
+              <div className="overflow-x-auto">
+                <table
+                  className="w-full text-xs"
+                  data-testid="phase6o-event-mapping-table"
+                >
+                  <thead className="text-muted-foreground">
+                    <tr className="text-left">
+                      <th className="py-1 pr-3">Event</th>
+                      <th className="py-1 pr-3">Future sandbox payment</th>
+                      <th className="py-1 pr-3">Future order effect</th>
+                      <th className="py-1 pr-3">Mutation in 6O</th>
+                      <th className="py-1 pr-3">Manual review</th>
+                      <th className="py-1 pr-3">Notify</th>
+                      <th className="py-1 pr-3">Shipment</th>
+                      <th className="py-1 pr-3">Discount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {razorpaySandboxStatusMappingReadiness.eventMappings.map(
+                      (row) => (
+                        <tr
+                          key={row.razorpayEventName}
+                          className="border-t border-border"
+                        >
+                          <td className="py-1 pr-3 font-mono">
+                            {row.razorpayEventName}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.futureSandboxPaymentStatus}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.futureSandboxOrderEffect}
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600 font-medium">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.manualReviewRequired ? "Required" : "—"}
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {razorpaySandboxStatusReviews && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Sandbox status reviews ({razorpaySandboxStatusReviews.items.length})
+              </h4>
+              {razorpaySandboxStatusReviews.items.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No reviews prepared yet. Reviews are created via the
+                  backend CLI / API only — there is no "Apply Mutation"
+                  path in Phase 6O.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table
+                    className="w-full text-xs"
+                    data-testid="phase6o-reviews-table"
+                  >
+                    <thead className="text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="py-1 pr-3">ID</th>
+                        <th className="py-1 pr-3">Event</th>
+                        <th className="py-1 pr-3">Source event id</th>
+                        <th className="py-1 pr-3">Proposed payment</th>
+                        <th className="py-1 pr-3">Proposed order effect</th>
+                        <th className="py-1 pr-3">Status</th>
+                        <th className="py-1 pr-3">Mutation in 6O</th>
+                        <th className="py-1 pr-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {razorpaySandboxStatusReviews.items.map((row) => (
+                        <Phase6OReviewRow
+                          key={row.id}
+                          row={row}
+                          pending={phase6oActionPending === row.id}
+                          onAction={async (action, reason) => {
+                            setPhase6oActionPending(row.id);
+                            setPhase6oActionMessage("");
+                            try {
+                              const fn =
+                                action === "approve"
+                                  ? api.approveSaasRazorpaySandboxStatusReview
+                                  : action === "reject"
+                                  ? api.rejectSaasRazorpaySandboxStatusReview
+                                  : api.archiveSaasRazorpaySandboxStatusReview;
+                              const result = await fn(row.id, reason);
+                              if (result.ok) {
+                                setPhase6oActionMessage(
+                                  `Review ${row.id} ${action}d (review-only). Next: ${result.nextAction}`,
+                                );
+                                load();
+                              } else {
+                                setPhase6oActionMessage(
+                                  `Action blocked: ${result.blockers.join(", ") || "see backend logs"}`,
+                                );
+                              }
+                            } finally {
+                              setPhase6oActionPending(null);
+                            }
+                          }}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                  {phase6oActionMessage && (
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      {phase6oActionMessage}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {razorpaySandboxStatusMappingReadiness && (
+            <div className="px-6 pb-4 grid gap-4 lg:grid-cols-2">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Manual review checklist
+                </h4>
+                <ul
+                  className="text-xs space-y-1 list-disc pl-5"
+                  data-testid="phase6o-manual-review-list"
+                >
+                  {razorpaySandboxStatusMappingReadiness.manualReviewChecklist.map(
+                    (entry) => (
+                      <li key={entry.key} className="text-muted-foreground">
+                        <strong>{entry.key}</strong> — {entry.description}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Forbidden actions</h4>
+                <div
+                  className="flex flex-wrap gap-1 text-[11px]"
+                  data-testid="phase6o-forbidden-actions"
+                >
+                  {razorpaySandboxStatusMappingReadiness.forbiddenActions.map(
+                    (action) => (
+                      <span
+                        key={action}
+                        className="rounded border border-border bg-muted/30 px-2 py-0.5 font-mono"
+                      >
+                        {action}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Sandbox review only.</strong> The "Approve Review
+            Only" / "Reject Review" / "Archive Review" buttons above
+            change the review row's status only — they NEVER mark an
+            Order paid, NEVER capture a Payment, NEVER create a
+            Shipment, NEVER send a customer notification. No "Apply
+            Mutation" / "Mark Paid" / "Execute Payment" / "Capture" /
+            "Refund" / "Send WhatsApp" / "Run MCP Tool" buttons exist
+            on this page. Phase 6P will own any sandbox-only mutation
+            against synthetic test orders, behind a NEW env flag
+            distinct from <code>RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED</code>.
           </div>
         </section>
       )}
@@ -1418,6 +1735,82 @@ export default function SaasAdminPage() {
     </>
   );
 }
+
+function Phase6OReviewRow({
+  row,
+  pending,
+  onAction,
+}: {
+  row: SaasRazorpaySandboxStatusReviewDto;
+  pending: boolean;
+  onAction: (
+    action: "approve" | "reject" | "archive",
+    reason: string,
+  ) => Promise<void>;
+}) {
+  const finalised =
+    row.status === "approved_for_future_phase6p" ||
+    row.status === "rejected" ||
+    row.status === "archived" ||
+    row.status === "blocked";
+  return (
+    <tr className="border-t border-border align-top">
+      <td className="py-1 pr-3">{row.id}</td>
+      <td className="py-1 pr-3 font-mono">{row.eventName}</td>
+      <td className="py-1 pr-3 font-mono">{row.sourceEventId}</td>
+      <td className="py-1 pr-3">{row.proposedPaymentStatus}</td>
+      <td className="py-1 pr-3">{row.proposedOrderEffect}</td>
+      <td className="py-1 pr-3">
+        <StatusPill
+          tone={
+            row.status === "approved_for_future_phase6p"
+              ? "success"
+              : row.status === "rejected" || row.status === "blocked"
+              ? "danger"
+              : row.status === "archived"
+              ? "neutral"
+              : "info"
+          }
+        >
+          {row.status}
+        </StatusPill>
+      </td>
+      <td className="py-1 pr-3 text-emerald-600 font-medium">Disabled</td>
+      <td className="py-1 pr-3">
+        <div className="flex flex-wrap gap-1">
+          <button
+            type="button"
+            disabled={pending || finalised}
+            className="rounded border border-emerald-600/40 bg-emerald-600/5 px-2 py-0.5 text-[11px] font-medium disabled:opacity-50"
+            onClick={() => onAction("approve", "")}
+            data-testid={`phase6o-review-${row.id}-approve`}
+          >
+            Approve Review Only
+          </button>
+          <button
+            type="button"
+            disabled={pending || finalised}
+            className="rounded border border-amber-600/40 bg-amber-600/5 px-2 py-0.5 text-[11px] font-medium disabled:opacity-50"
+            onClick={() => onAction("reject", "")}
+            data-testid={`phase6o-review-${row.id}-reject`}
+          >
+            Reject Review
+          </button>
+          <button
+            type="button"
+            disabled={pending || row.status === "archived"}
+            className="rounded border border-border bg-muted/30 px-2 py-0.5 text-[11px] font-medium disabled:opacity-50"
+            onClick={() => onAction("archive", "")}
+            data-testid={`phase6o-review-${row.id}-archive`}
+          >
+            Archive Review
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 
 function MetricCard({
   icon: Icon,

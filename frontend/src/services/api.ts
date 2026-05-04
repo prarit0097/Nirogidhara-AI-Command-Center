@@ -157,6 +157,9 @@ import type {
   SaasRazorpayAuditReview,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpaySandboxStatusMappingReadiness,
+  SaasRazorpaySandboxStatusReviewActionResult,
+  SaasRazorpaySandboxStatusReviewsResponse,
   SaasRazorpayWebhookEventsResponse,
   SaasRazorpayWebhookHandlerReadiness,
   SaasRazorpayWebhookPlan,
@@ -1459,6 +1462,84 @@ export const api = {
           warnings: [],
           nextAction: "ready_for_phase_6n_business_mutation_sandbox_plan",
         }) as SaasRazorpayWebhookSimulationResult,
+    ),
+
+  // ---------- Phase 6O - Razorpay Sandbox Status Mapping + Manual Review ----------
+
+  getSaasRazorpaySandboxStatusMappingReadiness: () =>
+    safeFetch<SaasRazorpaySandboxStatusMappingReadiness>(
+      "/v1/saas/razorpay/sandbox-status-mapping-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_SANDBOX_STATUS_MAPPING_READINESS as SaasRazorpaySandboxStatusMappingReadiness,
+    ),
+  getSaasRazorpaySandboxStatusReviews: (limit: number = 25) =>
+    safeFetch<SaasRazorpaySandboxStatusReviewsResponse>(
+      `/v1/saas/razorpay/sandbox-status-reviews/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_SANDBOX_STATUS_REVIEWS as SaasRazorpaySandboxStatusReviewsResponse,
+    ),
+  prepareSaasRazorpaySandboxStatusReview: (eventId: number) =>
+    safeMutate<SaasRazorpaySandboxStatusReviewActionResult>(
+      "/v1/saas/razorpay/sandbox-status-reviews/prepare/",
+      "POST",
+      { eventId },
+      () =>
+        ({
+          phase: "6O",
+          created: false,
+          reused: false,
+          review: null,
+          blockers: [
+            "RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED_must_be_true_to_prepare_review",
+          ],
+          warnings: [],
+          nextAction: "fix_eligibility_blockers_or_enable_sandbox_status_mapping_flag",
+        }) as SaasRazorpaySandboxStatusReviewActionResult,
+    ),
+  approveSaasRazorpaySandboxStatusReview: (reviewId: number, reason = "") =>
+    safeMutate<SaasRazorpaySandboxStatusReviewActionResult>(
+      `/v1/saas/razorpay/sandbox-status-reviews/${reviewId}/approve/`,
+      "POST",
+      { reason },
+      () =>
+        ({
+          phase: "6O",
+          ok: true,
+          review: null,
+          blockers: [],
+          warnings: [],
+          nextAction: "ready_for_phase_6p_planning_after_director_signoff",
+        }) as SaasRazorpaySandboxStatusReviewActionResult,
+    ),
+  rejectSaasRazorpaySandboxStatusReview: (reviewId: number, reason = "") =>
+    safeMutate<SaasRazorpaySandboxStatusReviewActionResult>(
+      `/v1/saas/razorpay/sandbox-status-reviews/${reviewId}/reject/`,
+      "POST",
+      { reason },
+      () =>
+        ({
+          phase: "6O",
+          ok: true,
+          review: null,
+          blockers: [],
+          warnings: [],
+          nextAction: "review_finalised",
+        }) as SaasRazorpaySandboxStatusReviewActionResult,
+    ),
+  archiveSaasRazorpaySandboxStatusReview: (reviewId: number, reason = "") =>
+    safeMutate<SaasRazorpaySandboxStatusReviewActionResult>(
+      `/v1/saas/razorpay/sandbox-status-reviews/${reviewId}/archive/`,
+      "POST",
+      { reason },
+      () =>
+        ({
+          phase: "6O",
+          ok: true,
+          review: null,
+          blockers: [],
+          warnings: [],
+          nextAction: "review_finalised",
+        }) as SaasRazorpaySandboxStatusReviewActionResult,
     ),
 
   // ---------- Phase 6N - Razorpay Business-Mutation Sandbox Plan (planning) ----------
