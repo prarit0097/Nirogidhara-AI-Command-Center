@@ -3021,3 +3021,102 @@ export interface SaasRazorpayWebhookSimulationResult {
   warnings: string[];
   nextAction: string;
 }
+
+// ---------- Phase 6N - Razorpay Business-Mutation Sandbox Plan ----------
+
+export interface SaasRazorpayBusinessMutationEventMapping {
+  razorpayEventName: string;
+  futureSandboxPaymentStatus: string;
+  futureSandboxOrderEffect: string;
+  mutationAllowedInPhase6N: false;
+  mutationAllowedInFuturePhase6O: string;
+  manualReviewRequired: boolean;
+  customerNotificationAllowed: false;
+  shipmentEffectAllowed: false;
+  discountEffectAllowed: false;
+  idempotencyRequired: true;
+  rollbackRequired: true;
+  blockers: string[];
+  notes: string;
+}
+
+export interface SaasRazorpayBusinessMutationManualReviewItem {
+  key: string;
+  description: string;
+  automated: boolean;
+}
+
+export interface SaasRazorpayBusinessMutationRollbackStep {
+  order: number;
+  action: string;
+  owner: string;
+  phase6NEnforced: boolean;
+}
+
+export interface SaasRazorpayBusinessMutationRollbackPlan {
+  phase: string;
+  rollbackTriggers: string[];
+  rollbackSteps: SaasRazorpayBusinessMutationRollbackStep[];
+  rollbackVerification: string[];
+  phase6NCanExecuteRollback: false;
+  rollbackOwnedByOperatorOnly: true;
+  rollbackNeverInvokesProviderApi: true;
+}
+
+export interface SaasRazorpayBusinessMutationSandboxReadiness {
+  phase: "6N";
+  status: "planning_only";
+  latestCompletedPhase: "6M";
+  nextPhase: "6O";
+  businessMutationEnabled: false;
+  customerNotificationEnabled: false;
+  rawPayloadStorageEnabled: false;
+  phase6MWebhookTestModeEnabled: boolean;
+  phase6MVerifiedEventCount: number;
+  phase6MBusinessMutationCount: number;
+  phase6MCustomerNotificationCount: number;
+  phase6MRawSecretExposureCount: number;
+  phase6MFullPiiExposureCount: number;
+  planComplete: boolean;
+  eventMappingCount: number;
+  manualReviewChecklistSize: number;
+  rollbackStepCount: number;
+  safetyCountersZero: boolean;
+  phase6MFlagsLockedOff: boolean;
+  safeToStartPhase6O: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  requiredEnvDefaults: Record<string, boolean>;
+  forbiddenActions: string[];
+}
+
+export interface SaasRazorpayBusinessMutationSandboxPlan {
+  phase: "6N";
+  policyVersion: string;
+  status: "planning_only";
+  latestCompletedPhase: "6M";
+  nextPhase: "6O";
+  businessMutationEnabled: false;
+  customerNotificationEnabled: false;
+  rawPayloadStorageEnabled: false;
+  safeToStartPhase6O: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  summary: string;
+  eventMappings: SaasRazorpayBusinessMutationEventMapping[];
+  syntheticEligibilityPolicy: Record<string, unknown>;
+  manualReviewChecklist: SaasRazorpayBusinessMutationManualReviewItem[];
+  rollbackPlan: SaasRazorpayBusinessMutationRollbackPlan;
+  safetyInvariants: Record<string, boolean>;
+  forbiddenActions: string[];
+  requiredEnvDefaults: Record<string, boolean>;
+  auditPlan: Array<{
+    kind: string;
+    tone: string;
+    emittedBy: string;
+    payloadKeys: string[];
+    neverIncludes: string[];
+  }>;
+}

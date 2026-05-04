@@ -22,6 +22,8 @@ from .views import (
     ProviderTestPlanRejectView,
     ProviderTestPlanValidateView,
     ProviderTestPlansListView,
+    RazorpayBusinessMutationSandboxPlanView,
+    RazorpayBusinessMutationSandboxReadinessView,
     RazorpayExecutionAuditReviewView,
     RazorpayWebhookEventDetailView,
     RazorpayWebhookEventsListView,
@@ -310,5 +312,16 @@ urlpatterns = [
         "razorpay/webhook-events/<int:event_id>/",
         RazorpayWebhookEventDetailView.as_view(),
         name="saas-razorpay-webhook-event-detail",
+    ),
+    # Phase 6N — Razorpay Business-Mutation Sandbox Plan (planning only).
+    path(
+        "razorpay/business-mutation-sandbox-plan/",
+        RazorpayBusinessMutationSandboxPlanView.as_view(),
+        name="saas-razorpay-business-mutation-sandbox-plan",
+    ),
+    path(
+        "razorpay/business-mutation-sandbox-readiness/",
+        RazorpayBusinessMutationSandboxReadinessView.as_view(),
+        name="saas-razorpay-business-mutation-sandbox-readiness",
     ),
 ]

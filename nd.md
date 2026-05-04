@@ -61,10 +61,10 @@
 - **Project:** Nirogidhara AI Command Center (multi-tenant SaaS scaffold over a single-tenant Ayurvedic D2C operations stack).
 - **Production URL:** <https://ai.nirogidhara.com>
 - **VPS path:** `/opt/nirogidhara-command` (Hostinger VPS; six namespaced containers; host port `18020 → 80`; host Ubuntu Nginx + Certbot terminate TLS).
-- **Latest completed phase:** **Phase 6M — Razorpay Webhook Handler Implementation (test-mode, dormant by default).**
-- **Latest pushed commit:** `bd38bee` `feat: add razorpay webhook handler test mode` on `origin/main`.
-- **Test baseline (green):** 1283 backend tests + 48 frontend tests. `python manage.py makemigrations --check --dry-run` → `No changes detected`. `python manage.py check` → 0 issues. `npm run lint` → 0 errors (8 pre-existing shadcn warnings). `npm test` → 48 passed. `npm run build` → OK.
-- **Next planned phase:** **Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan.** **Planning-only.** Not started. No code, env, migration, or provider call yet.
+- **Latest completed phase:** **Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan (planning-only / readiness-only).**
+- **Latest pushed commit:** see `git log -1` (Phase 6N commit on `origin/main`).
+- **Test baseline (green):** **1318 backend tests + 50 frontend tests.** `python manage.py makemigrations --check --dry-run` → `No changes detected` (no Phase 6N migration required). `python manage.py check` → 0 issues. `npm run lint` → 0 errors (8 pre-existing shadcn warnings). `npm test` → 50 passed. `npm run build` → OK.
+- **Next planned phase:** **Phase 6O — Sandbox payment status mapping + manual review.** Not started. Will introduce sandbox-only mutation against synthetic test orders behind a NEW env flag distinct from the Phase 6M handler flag — guarded by Director sign-off and the Phase 6N rollback plan.
 - **Main safety flags (all stay in current state until Director explicitly flips them):**
   - `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`
   - `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`
@@ -77,7 +77,8 @@
   - Campaigns / broadcast / lifecycle automation / RTO rescue / reorder cadence → **LOCKED**
 - **Phase 6K-B real artefact (immutable record):** `execution_id=pex_8f309650e9644cfaae4418f9` → `provider_object_id=order_Sks3KPf0vntKhf`, amount = `100 paise INR` (₹1.00), Razorpay TEST key, **no payment link, no capture, no customer notification, no business mutation**, `rollback_status=completed`, `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED` flipped back to `false` immediately after the run. This is the only real provider-side write the platform has ever made.
 - **Phase 6M handler safety summary:** `POST /api/webhooks/razorpay/test/` is wired but stays dormant — refuses every inbound when `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`. When enabled (test only, never on production webhook secret), it verifies HMAC-SHA256 over the raw body in constant time, validates a 300-second replay window, dedupes on `X-Razorpay-Event-Id`, masks every payload (13-key scrub list), persists only a safe summary on `RazorpayWebhookEvent`, and **never** mutates Order / Payment / Shipment / DiscountOfferLog / Customer or sends a customer notification (asserted by `assert_no_business_mutation` in tests).
-- **Supporting docs sync status:** all docs aligned with Phase 6M as of this commit (see "Docs Sync Status" below). The next code-touching change must update this section before merging.
+- **Phase 6N planning summary:** new `apps.saas.razorpay_business_mutation_plan` ships seven pure functions (`get_razorpay_business_mutation_sandbox_plan`, `inspect_razorpay_business_mutation_sandbox_readiness`, `build_razorpay_event_status_mapping_plan`, `build_synthetic_order_eligibility_policy`, `build_phase6n_manual_review_checklist`, `build_phase6n_rollback_plan`, `validate_phase6n_no_mutation_invariants`). 9 Razorpay events mapped (`payment_link.paid`, `payment.captured`, `payment.failed`, `payment.authorized`, `order.paid`, `payment_link.cancelled`, `payment_link.expired`, `refund.created`, `refund.processed`) — every row carries `mutationAllowedInPhase6N=False`, `customerNotificationAllowed=False`, `shipmentEffectAllowed=False`, `discountEffectAllowed=False`, `idempotencyRequired=True`, `rollbackRequired=True`. Two read-only management commands (`inspect_razorpay_business_mutation_sandbox_plan --json`, `inspect_razorpay_business_mutation_sandbox_readiness --json`); two admin/auth-protected GET endpoints (`/api/v1/saas/razorpay/business-mutation-sandbox-plan/`, `/api/v1/saas/razorpay/business-mutation-sandbox-readiness/`); POST/PATCH/DELETE return 405. `/saas-admin` adds a "Razorpay Business Mutation Sandbox Plan" read-only section. **No DB migration. No env-flag flip. No provider call. No business mutation.** 35 new backend tests + 2 new frontend tests; 1318 backend / 50 frontend tests, all green.
+- **Supporting docs sync status:** all docs aligned with Phase 6N as of this commit (see "Docs Sync Status" below). The next code-touching change must update this section before merging.
 - **Outstanding live-readiness gaps (not blockers for Phase 6N planning, but required before any live launch):**
   - Vapi: `phone_number_id` and `webhook_secret` still missing in `.env.production`; runtime-routing readiness flags Vapi as "warning, not ready for live".
   - PayU: integration deferred — Razorpay remains the only payment provider rehearsed end-to-end.
@@ -85,42 +86,43 @@
   - Claim Vault: `version="demo-v2"` rows are seeded for the eight categories; **doctor-approved final claims are NOT yet committed**. Lifecycle messages requiring Claim coverage still fail closed for any category whose final approved claims are missing.
   - WhatsApp customer pilot soak was an accelerated rehearsal, not a full multi-day soak — the dashboard remains the source of truth before any flag flip.
 
-### Docs Sync Status (commit `bd38bee` — Phase 6M baseline)
+### Docs Sync Status (Phase 6N baseline)
 
 | Doc | Status | Notes |
 | --- | --- | --- |
-| `nd.md` | ✅ synced | This block + §8 + §11 + §17 reflect Phase 6M. |
-| `CLAUDE.md` | ✅ synced | Line-12 status string lists every phase through Phase 6M. |
+| `nd.md` | ✅ synced | This block lists Phase 6N as the latest completed phase. |
+| `CLAUDE.md` | ✅ synced | Line-12 status string includes Phase 6N (planning-only). |
 | `AGENTS.md` | ✅ synced | Test counts + hard-stop list current. |
 | `README.md` | ✅ synced | Phase summary + test counts current. |
-| `docs/MASTER_BLUEPRINT_V2.md` | ✅ synced | Document Control table + Completed Build Timeline + Current Production Reality reflect Phase 6M; Phase 6N marked as planning-only / not started. |
-| `docs/RUNBOOK.md` | ✅ synced | Adds Phase 6J/6K/6K-B/6L/6M-0/6M diagnostic sections; baseline `1283/48`. |
-| `docs/BACKEND_API.md` | ✅ synced | Documents `/api/v1/saas/provider-test-plans/`, `/api/v1/saas/provider-execution-attempts/`, `/api/v1/saas/razorpay/...`, `/api/v1/mcp/`, `POST /api/webhooks/razorpay/test/`. |
-| `docs/FRONTEND_AUDIT.md` | ✅ synced | Header bumped from Phase 6I → Phase 6M; lists every `/saas-admin` section currently rendered. |
-| `docs/FUTURE_BACKEND_PLAN.md` | ✅ synced | Phases 6G/6H/6I/6J/6K-A/6K-B/6L/6M-0/6M marked ✅; Phase 6N section added (Planned, planning-only). |
-| `docs/DEPLOYMENT_VPS.md` | ✅ synced | Phase 6M production posture + Phase 6K-B verification command + MCP production posture documented. |
-| `docs/WHATSAPP_INTEGRATION_PLAN.md` | ✅ synced | Top-of-file status note reflects accelerated-soak status + locked flags. |
+| `docs/MASTER_BLUEPRINT_V2.md` | ✅ synced | Document Control table reflects Phase 6N + 1318/50 baseline; Completed Build Timeline gained the Phase 6N row; Phase 6O marked as planned (not started). |
+| `docs/RUNBOOK.md` | ✅ synced | New Phase 6N diagnostics section; baseline `1318/50`. |
+| `docs/BACKEND_API.md` | ✅ synced | New `/api/v1/saas/razorpay/business-mutation-sandbox-plan/` + `/api/v1/saas/razorpay/business-mutation-sandbox-readiness/` rows. |
+| `docs/FRONTEND_AUDIT.md` | ✅ synced | Header bumped to Phase 6N; new `/saas-admin` "Razorpay Business Mutation Sandbox Plan" section listed. |
+| `docs/FUTURE_BACKEND_PLAN.md` | ✅ synced | Phase 6N marked ✅ shipped (planning-only); Phase 6O added as next planned. |
+| `docs/DEPLOYMENT_VPS.md` | ✅ synced | Phase 6N production posture documented (read-only inspectors only; no env change). |
+| `docs/WHATSAPP_INTEGRATION_PLAN.md` | ✅ synced | Top-of-file status note unchanged (Phase 6N does not touch WhatsApp). |
 
 ### Recommended next action
 
-**Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan (planning-only, not implementation).** Produce a written plan that — without flipping any env flag, without changing any code, without making any provider call — describes:
+**Phase 6O — Sandbox payment status mapping + manual review.** Implementation-only of the Phase 6N plan, behind a NEW env flag distinct from the Phase 6M handler flag. Phase 6O must:
 
-1. Exactly which event types (`payment.captured`, `payment.failed`, `refund.processed`) the future handler will react to, and what the sandbox-only mutation envelope looks like.
-2. What new safety booleans / approval matrix rows / audit kinds the implementation will require.
-3. A Phase 6K-style staged rehearsal (synthetic webhook → audit-only → sandbox-only Order/Payment mutation, all behind a NEW env flag distinct from the Phase 6M handler flag).
-4. Acceptance criteria + rollback procedure + the exact diff scope.
+1. Introduce a synthetic-order resolver that refuses any non-synthetic Razorpay reference (only `phase6j_internal_test_plan_*` and `phase6n_sandbox_synthetic_*` prefixes accepted).
+2. Add the new env flag (default off) + new safety booleans on `RazorpayWebhookEvent` + new audit kinds (`razorpay.sandbox.mutation.applied / blocked / rolled_back`).
+3. Stage the rehearsal exactly as the Phase 6N rollback plan describes — audit-only first, then sandbox-only Order/Payment status flip on a synthetic row.
+4. Emit a Director-sign-off `AuditEvent` BEFORE any sandbox mutation lands.
+5. Provide a CLI rollback command that restores synthetic Order/Payment to pre-mutation state and writes a `razorpay.sandbox_readiness.inspected` audit row.
 
-The plan ships as a doc commit only. **No code changes. No env changes. No provider calls.**
+Acceptance criteria for the Phase 6O implementation: every Phase 6N safety invariant remains true on real production rows; the new sandbox flag stays off in `.env.production`; `business_mutation_was_made` / `customer_notification_sent` stay false on every real (non-synthetic) RazorpayWebhookEvent.
 
 ### Do not do next
 
 - Do **not** flip `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED` to `true` on production.
-- Do **not** flip `RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED` (it does not have an implementation behind it yet).
+- Do **not** flip `RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED` (Phase 6M handler flag remains dormant — Phase 6N introduces a planning layer only; Phase 6O will introduce a SEPARATE sandbox flag).
 - Do **not** flip `WHATSAPP_AI_AUTO_REPLY_ENABLED` to `true` on production.
 - Do **not** flip any of the broad-automation flags (`call_handoff`, `lifecycle`, `rescue_discount`, `rto_rescue_discount`, `reorder_day20`).
 - Do **not** flip any `MCP_*` flag.
 - Do **not** disable the `RuntimeKillSwitch`.
-- Do **not** start writing Phase 6N code, migrations, or models. Phase 6N is **planning-only**.
+- Do **not** start writing Phase 6O code, migrations, or models without first running the Phase 6N readiness inspector and confirming `safeToStartPhase6O=true`.
 - Do **not** seed real doctor-approved Claim Vault rows without Director sign-off — Phase 5E demo-v2 stays in place until the doctor copy is committed.
 - Do **not** commit `.env.production`, `db.sqlite3`, or any provider secret. The `.gitignore` covers these — verify before staging.
 

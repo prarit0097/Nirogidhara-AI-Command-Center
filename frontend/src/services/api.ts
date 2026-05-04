@@ -155,6 +155,8 @@ import type {
   McpToolSimulationResult,
   McpToolsResponse,
   SaasRazorpayAuditReview,
+  SaasRazorpayBusinessMutationSandboxPlan,
+  SaasRazorpayBusinessMutationSandboxReadiness,
   SaasRazorpayWebhookEventsResponse,
   SaasRazorpayWebhookHandlerReadiness,
   SaasRazorpayWebhookPlan,
@@ -1457,6 +1459,21 @@ export const api = {
           warnings: [],
           nextAction: "ready_for_phase_6n_business_mutation_sandbox_plan",
         }) as SaasRazorpayWebhookSimulationResult,
+    ),
+
+  // ---------- Phase 6N - Razorpay Business-Mutation Sandbox Plan (planning) ----------
+
+  getSaasRazorpayBusinessMutationSandboxPlan: () =>
+    safeFetch<SaasRazorpayBusinessMutationSandboxPlan>(
+      "/v1/saas/razorpay/business-mutation-sandbox-plan/",
+      () =>
+        M.SAAS_RAZORPAY_BUSINESS_MUTATION_SANDBOX_PLAN as SaasRazorpayBusinessMutationSandboxPlan,
+    ),
+  getSaasRazorpayBusinessMutationSandboxReadiness: () =>
+    safeFetch<SaasRazorpayBusinessMutationSandboxReadiness>(
+      "/v1/saas/razorpay/business-mutation-sandbox-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_BUSINESS_MUTATION_SANDBOX_READINESS as SaasRazorpayBusinessMutationSandboxReadiness,
     ),
 
   // ---------- Phase 6M-0 - MCP Gateway Foundation (read-only) ----------

@@ -566,3 +566,92 @@ describe("Phase 6I - Single Internal Live Gate Simulation", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("Phase 6N - Razorpay Business Mutation Sandbox Plan", () => {
+  it("exposes the Phase 6N planning API methods on the api client", async () => {
+    expect(
+      typeof api.getSaasRazorpayBusinessMutationSandboxPlan,
+    ).toBe("function");
+    expect(
+      typeof api.getSaasRazorpayBusinessMutationSandboxReadiness,
+    ).toBe("function");
+
+    const plan = await api.getSaasRazorpayBusinessMutationSandboxPlan();
+    expect(plan.phase).toBe("6N");
+    expect(plan.status).toBe("planning_only");
+    expect(plan.businessMutationEnabled).toBe(false);
+    expect(plan.customerNotificationEnabled).toBe(false);
+    expect(plan.rawPayloadStorageEnabled).toBe(false);
+    expect(plan.eventMappings.length).toBe(9);
+    plan.eventMappings.forEach((row) => {
+      expect(row.mutationAllowedInPhase6N).toBe(false);
+      expect(row.customerNotificationAllowed).toBe(false);
+      expect(row.shipmentEffectAllowed).toBe(false);
+      expect(row.discountEffectAllowed).toBe(false);
+    });
+
+    const readiness =
+      await api.getSaasRazorpayBusinessMutationSandboxReadiness();
+    expect(readiness.phase).toBe("6N");
+    expect(readiness.businessMutationEnabled).toBe(false);
+    expect(readiness.customerNotificationEnabled).toBe(false);
+    expect(readiness.rawPayloadStorageEnabled).toBe(false);
+  });
+
+  it("renders the Phase 6N section with locked safety state and no forbidden buttons", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText("Razorpay Business Mutation Sandbox Plan"),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("phase6n-event-mapping-table"),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByTestId("phase6n-manual-review-list"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6n-rollback-list"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6n-forbidden-actions"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6n-safe-to-start-phase6o-badge"),
+    ).toBeInTheDocument();
+
+    // Mutation locks rendered as "Disabled" — multiple times across the
+    // metric grid + the per-event mapping rows.
+    expect(screen.getAllByText(/Disabled/i).length).toBeGreaterThan(5);
+
+    // No forbidden Phase 6N buttons exist anywhere on the page.
+    const forbiddenButtonPatterns = [
+      /mark paid/i,
+      /capture payment/i,
+      /refund/i,
+      /create payment link/i,
+      /mutate order/i,
+      /execute webhook/i,
+      /replay event/i,
+      /enable mutation/i,
+      /go live/i,
+      /run mcp tool/i,
+    ];
+    for (const pattern of forbiddenButtonPatterns) {
+      expect(
+        screen.queryByRole("button", { name: pattern }),
+      ).not.toBeInTheDocument();
+    }
+
+    // No raw secret values + no full Indian phone numbers leak through.
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_live_");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("RAZORPAY_WEBHOOK_SECRET=");
+    expect(body).not.toMatch(/\+91\d{10}/);
+  });
+});

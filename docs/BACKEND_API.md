@@ -7,9 +7,11 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 6M baseline:** documented through Phase 6M (Razorpay test-mode
-> webhook handler, dormant by default). Phase 6N is **planning-only** —
-> no endpoints will be added without an accompanying plan commit.
+> **Phase 6N baseline:** documented through Phase 6N (Razorpay
+> webhook business-mutation **sandbox plan**, planning-only /
+> readiness-only). Phase 6O is the next planned phase and will own
+> implementation behind a NEW env flag distinct from the Phase 6M
+> handler flag.
 
 ## Health
 
@@ -230,6 +232,25 @@ Every response preserves `business_mutation_was_made=false`,
 `customer_notification_sent=false`, `raw_secret_exposed=false`,
 `full_pii_exposed=false`. Production webhook secret is **never** consumed
 by this handler.
+
+## Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan (planning-only / readiness-only)
+
+Read-only planning + readiness layer. **Phase 6N never calls Razorpay,
+never creates a payment link, never captures a payment, never refunds,
+never sends a customer notification, never mutates any business
+record, and never flips an env flag.**
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/business-mutation-sandbox-plan/` | admin/staff | Returns the canonical Phase 6N planning JSON: 9-event mapping, synthetic-order eligibility policy, manual-review checklist, rollback plan, safety invariants, forbidden actions, required env defaults, audit plan. |
+| GET | `/api/v1/saas/razorpay/business-mutation-sandbox-readiness/` | admin/staff | Returns the Phase 6N readiness composition: `safeToStartPhase6O`, blockers, warnings, `nextAction`, Phase 6M safety-counter snapshot. |
+
+Every Phase 6N endpoint preserves `businessMutationEnabled=false`,
+`customerNotificationEnabled=false`, `rawPayloadStorageEnabled=false`,
+and every event-mapping row preserves `mutationAllowedInPhase6N=false`,
+`customerNotificationAllowed=false`, `shipmentEffectAllowed=false`,
+`discountEffectAllowed=false`, `idempotencyRequired=true`,
+`rollbackRequired=true`. POST/PATCH/DELETE return 405.
 
 ## Analytics
 

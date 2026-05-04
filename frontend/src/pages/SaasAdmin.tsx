@@ -20,6 +20,8 @@ import type {
   McpToolsResponse,
   SaasRazorpayAuditReview,
   SaasRazorpayWebhookEventDto,
+  SaasRazorpayBusinessMutationSandboxPlan,
+  SaasRazorpayBusinessMutationSandboxReadiness,
   SaasRazorpayWebhookEventsResponse,
   SaasRazorpayWebhookHandlerReadiness,
   SaasRazorpayWebhookPlan,
@@ -94,6 +96,14 @@ export default function SaasAdminPage() {
     useState<SaasRazorpayWebhookHandlerReadiness | null>(null);
   const [razorpayWebhookEvents, setRazorpayWebhookEvents] =
     useState<SaasRazorpayWebhookEventsResponse | null>(null);
+  const [
+    razorpayBusinessMutationSandboxPlan,
+    setRazorpayBusinessMutationSandboxPlan,
+  ] = useState<SaasRazorpayBusinessMutationSandboxPlan | null>(null);
+  const [
+    razorpayBusinessMutationSandboxReadiness,
+    setRazorpayBusinessMutationSandboxReadiness,
+  ] = useState<SaasRazorpayBusinessMutationSandboxReadiness | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -115,9 +125,30 @@ export default function SaasAdminPage() {
       api.getMcpInvocations(25),
       api.getSaasRazorpayWebhookHandlerReadiness(),
       api.getSaasRazorpayWebhookEvents(25),
+      api.getSaasRazorpayBusinessMutationSandboxPlan(),
+      api.getSaasRazorpayBusinessMutationSandboxReadiness(),
     ])
       .then(
-        ([ov, rt, dr, ai, gate, sims, ptp, exec, wbr, wbp, mcpR, mcpSp, mcpT, mcpInv, hr, wbe]) => {
+        ([
+          ov,
+          rt,
+          dr,
+          ai,
+          gate,
+          sims,
+          ptp,
+          exec,
+          wbr,
+          wbp,
+          mcpR,
+          mcpSp,
+          mcpT,
+          mcpInv,
+          hr,
+          wbe,
+          bmPlan,
+          bmRead,
+        ]) => {
           setOverview(ov);
           setRouting(rt);
           setDryRun(dr);
@@ -134,6 +165,8 @@ export default function SaasAdminPage() {
           setMcpInvocations(mcpInv);
           setRazorpayWebhookHandlerReadiness(hr);
           setRazorpayWebhookEvents(wbe);
+          setRazorpayBusinessMutationSandboxPlan(bmPlan);
+          setRazorpayBusinessMutationSandboxReadiness(bmRead);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -1042,6 +1075,265 @@ export default function SaasAdminPage() {
             exist on this page. Even the simulator runs through the
             same Phase 6M handler — synthetic payload only, no
             external Razorpay call.
+          </div>
+        </section>
+      )}
+
+      {(razorpayBusinessMutationSandboxPlan ||
+        razorpayBusinessMutationSandboxReadiness) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-business-mutation-sandbox-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Webhook className="h-5 w-5 text-primary" />
+                Razorpay Business Mutation Sandbox Plan
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6N — planning + readiness layer only.{" "}
+                <strong>No business mutation</strong>, no customer
+                notification, no Razorpay API call, no env-flag flip.
+                Phase 6O will own any sandbox-only mutation against
+                synthetic test orders, behind a new env flag, gated by
+                Director sign-off.
+              </p>
+            </div>
+            {razorpayBusinessMutationSandboxReadiness && (
+              <div data-testid="phase6n-safe-to-start-phase6o-badge">
+                <StatusPill
+                  tone={
+                    razorpayBusinessMutationSandboxReadiness.safeToStartPhase6O
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayBusinessMutationSandboxReadiness.safeToStartPhase6O
+                    ? "Ready for Phase 6O planning"
+                    : "Blocked — fix Phase 6M state first"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayBusinessMutationSandboxReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayBusinessMutationSandboxReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpayBusinessMutationSandboxReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={
+                  razorpayBusinessMutationSandboxReadiness.latestCompletedPhase
+                }
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpayBusinessMutationSandboxReadiness.nextPhase}
+              />
+              <KeyValue label="Business mutation" value="Disabled" />
+              <KeyValue label="Customer notification" value="Disabled" />
+              <KeyValue label="Raw payload storage" value="Disabled" />
+              <KeyValue
+                label="Phase 6M flags locked off"
+                value={
+                  razorpayBusinessMutationSandboxReadiness.phase6MFlagsLockedOff
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Safety counters zero"
+                value={
+                  razorpayBusinessMutationSandboxReadiness.safetyCountersZero
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Plan complete"
+                value={
+                  razorpayBusinessMutationSandboxReadiness.planComplete
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Event mappings"
+                value={String(
+                  razorpayBusinessMutationSandboxReadiness.eventMappingCount,
+                )}
+              />
+              <KeyValue
+                label="Manual review items"
+                value={String(
+                  razorpayBusinessMutationSandboxReadiness.manualReviewChecklistSize,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayBusinessMutationSandboxReadiness && (
+            <div className="px-6 pb-3 text-xs text-muted-foreground">
+              <strong>Next action:</strong>{" "}
+              {razorpayBusinessMutationSandboxReadiness.nextAction}
+            </div>
+          )}
+
+          {razorpayBusinessMutationSandboxPlan && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Event-to-status mapping (Phase 6O target)
+              </h4>
+              <div className="overflow-x-auto">
+                <table
+                  className="w-full text-xs"
+                  data-testid="phase6n-event-mapping-table"
+                >
+                  <thead className="text-muted-foreground">
+                    <tr className="text-left">
+                      <th className="py-1 pr-3">Event</th>
+                      <th className="py-1 pr-3">Future sandbox payment</th>
+                      <th className="py-1 pr-3">Future order effect</th>
+                      <th className="py-1 pr-3">Mutation in 6N</th>
+                      <th className="py-1 pr-3">Manual review</th>
+                      <th className="py-1 pr-3">Notify</th>
+                      <th className="py-1 pr-3">Shipment</th>
+                      <th className="py-1 pr-3">Discount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {razorpayBusinessMutationSandboxPlan.eventMappings.map(
+                      (row) => (
+                        <tr
+                          key={row.razorpayEventName}
+                          className="border-t border-border"
+                        >
+                          <td className="py-1 pr-3 font-mono">
+                            {row.razorpayEventName}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.futureSandboxPaymentStatus}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.futureSandboxOrderEffect}
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600 font-medium">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.manualReviewRequired ? "Required" : "—"}
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {razorpayBusinessMutationSandboxPlan && (
+            <div className="px-6 pb-4 grid gap-4 lg:grid-cols-3">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Synthetic-order eligibility
+                </h4>
+                <ul className="text-xs space-y-1 list-disc pl-5">
+                  {Object.entries(
+                    razorpayBusinessMutationSandboxPlan.syntheticEligibilityPolicy,
+                  )
+                    .filter(([, value]) => value === true)
+                    .slice(0, 12)
+                    .map(([key]) => (
+                      <li key={key} className="text-muted-foreground">
+                        {key}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Manual review checklist
+                </h4>
+                <ul
+                  className="text-xs space-y-1 list-disc pl-5"
+                  data-testid="phase6n-manual-review-list"
+                >
+                  {razorpayBusinessMutationSandboxPlan.manualReviewChecklist.map(
+                    (entry) => (
+                      <li key={entry.key} className="text-muted-foreground">
+                        <strong>{entry.key}</strong> — {entry.description}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Rollback plan</h4>
+                <ol
+                  className="text-xs space-y-1 list-decimal pl-5"
+                  data-testid="phase6n-rollback-list"
+                >
+                  {razorpayBusinessMutationSandboxPlan.rollbackPlan.rollbackSteps.map(
+                    (step) => (
+                      <li key={step.order} className="text-muted-foreground">
+                        {step.action}
+                      </li>
+                    ),
+                  )}
+                </ol>
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Rollback owned by operator; Phase 6N never executes
+                  rollback automatically.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {razorpayBusinessMutationSandboxPlan && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">Forbidden actions</h4>
+              <div
+                className="flex flex-wrap gap-1 text-[11px]"
+                data-testid="phase6n-forbidden-actions"
+              >
+                {razorpayBusinessMutationSandboxPlan.forbiddenActions.map(
+                  (action) => (
+                    <span
+                      key={action}
+                      className="rounded border border-border bg-muted/30 px-2 py-0.5 font-mono"
+                    >
+                      {action}
+                    </span>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Read-only.</strong> No "Mark Paid" / "Capture
+            Payment" / "Refund" / "Send WhatsApp" / "Create Payment
+            Link" / "Mutate Order" / "Execute Webhook" / "Replay
+            Event" / "Enable Mutation" / "Go Live" / "Run MCP Tool"
+            buttons exist on this page. Phase 6N is planning only;
+            Phase 6O remains future.
           </div>
         </section>
       )}

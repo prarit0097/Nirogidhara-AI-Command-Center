@@ -1110,6 +1110,29 @@ Expected: `mcp_enabled=false`, `mcp_read_only_mode=true`,
 Re-run after every Docker recreate so the env is read fresh from
 `.env.production`.
 
+## 8.85 Phase 6N production posture — Razorpay business-mutation sandbox plan (planning-only)
+
+Phase 6N is **planning + readiness only**. Verify the read-only
+inspectors after every deploy; they never call Razorpay, never mutate
+business records, never send a customer notification, and never flip
+an env flag.
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_business_mutation_sandbox_plan --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_business_mutation_sandbox_readiness --json
+```
+
+Expected: `phase=6N`, `status=planning_only`,
+`businessMutationEnabled=false`, `customerNotificationEnabled=false`,
+`rawPayloadStorageEnabled=false`. The readiness command additionally
+reports `safeToStartPhase6O=true` only when the Phase 6M handler flags
+stay locked off and every safety counter on `RazorpayWebhookEvent` is
+zero. **No Phase 6N env flag changes are required on the VPS** — Phase 6N
+shares the Phase 6M env defaults; Phase 6O will introduce its own NEW
+env flag.
+
 ## 8.9 Reminder — recreate containers after env changes
 
 Whenever you edit `.env.production` (e.g., adding a real Vapi
@@ -1147,9 +1170,9 @@ verification commands above to confirm posture stayed locked.
 
 ## 10. What's intentionally NOT here
 
-This deployment scaffold ships through Phase 6M. The following stay
-locked out at the application layer regardless of how the container is
-configured:
+This deployment scaffold ships through Phase 6N (planning-only). The
+following stay locked out at the application layer regardless of how
+the container is configured:
 
 - WhatsApp inbound auto-reply (Phase 5C — gated by `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`)
 - Chat-to-call handoff (Phase 5D — gated by `WHATSAPP_CALL_HANDOFF_ENABLED=false`)
@@ -1161,6 +1184,7 @@ configured:
 - CAIO-originated customer messages (LOCKED — CAIO is monitor / audit only)
 - Phase 6K-style real Razorpay test execution (gated by `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false`; one-shot only)
 - Phase 6M Razorpay webhook handler (dormant by default — all four `RAZORPAY_WEBHOOK_*` env flags stay false)
+- Phase 6N Razorpay webhook business-mutation sandbox path (planning-only — Phase 6N has no execution path; Phase 6O will own implementation behind a NEW env flag)
 - MCP Gateway tools / provider tools (gated by `MCP_ENABLED=false` and `MCP_*` flag siblings)
 - Per-org runtime provider routing (Phase 6F preview only — `runtimeSource=env_config`, `perOrgRuntimeEnabled=false`)
 - Live execution through the Runtime Live Audit Gate (Phase 6H — `RuntimeKillSwitch.enabled=true`, every operation `allowedInPhase6H=false`)

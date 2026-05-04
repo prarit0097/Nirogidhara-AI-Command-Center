@@ -59,6 +59,10 @@ from .razorpay_audit_review import (
     plan_razorpay_webhook_readiness,
     review_razorpay_test_execution_audit,
 )
+from .razorpay_business_mutation_plan import (
+    get_razorpay_business_mutation_sandbox_plan,
+    inspect_razorpay_business_mutation_sandbox_readiness,
+)
 from apps.payments.razorpay_webhook_readiness import (
     get_razorpay_webhook_handler_readiness,
 )
@@ -1250,6 +1254,36 @@ class RazorpayWebhookSimulateView(APIView):
         return Response(result)
 
 
+class RazorpayBusinessMutationSandboxPlanView(APIView):
+    """``GET /api/v1/saas/razorpay/business-mutation-sandbox-plan/`` — Phase 6N.
+
+    Returns the canonical Phase 6N planning JSON. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER calls Razorpay; NEVER returns
+    raw secrets or PII.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(get_razorpay_business_mutation_sandbox_plan())
+
+
+class RazorpayBusinessMutationSandboxReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/business-mutation-sandbox-readiness/`` — Phase 6N.
+
+    Returns the Phase 6N readiness composition (blockers / warnings /
+    safeToStartPhase6O). Auth + admin only; POST/PATCH/DELETE return
+    405. NEVER calls Razorpay; NEVER mutates anything.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(
+            inspect_razorpay_business_mutation_sandbox_readiness()
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -1301,4 +1335,6 @@ __all__ = (
     "RazorpayWebhookEventsListView",
     "RazorpayWebhookEventDetailView",
     "RazorpayWebhookSimulateView",
+    "RazorpayBusinessMutationSandboxPlanView",
+    "RazorpayBusinessMutationSandboxReadinessView",
 )

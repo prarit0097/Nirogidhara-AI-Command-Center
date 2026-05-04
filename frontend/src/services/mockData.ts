@@ -2914,3 +2914,252 @@ export const SAAS_RAZORPAY_WEBHOOK_EVENTS: Record<string, unknown> = {
   customerNotificationSent: false,
   providerCallAttempted: false,
 };
+
+// ---------- Phase 6N — Razorpay Business-Mutation Sandbox Plan ----------
+
+const PHASE_6N_EVENT_NAMES = [
+  "payment_link.paid",
+  "payment.captured",
+  "payment.failed",
+  "payment.authorized",
+  "order.paid",
+  "payment_link.cancelled",
+  "payment_link.expired",
+  "refund.created",
+  "refund.processed",
+];
+
+const PHASE_6N_FORBIDDEN_ACTIONS = [
+  "call_razorpay_api",
+  "create_razorpay_payment_link",
+  "capture_razorpay_payment",
+  "refund_razorpay_payment",
+  "mutate_order_status",
+  "mutate_payment_status",
+  "create_or_update_shipment",
+  "create_or_update_discount_offer",
+  "send_whatsapp_template",
+  "send_freeform_whatsapp",
+  "place_vapi_call",
+  "enable_business_mutation_env_flag",
+  "enable_customer_notification_env_flag",
+  "enable_raw_payload_storage_env_flag",
+];
+
+export const SAAS_RAZORPAY_BUSINESS_MUTATION_SANDBOX_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "6N",
+  status: "planning_only",
+  latestCompletedPhase: "6M",
+  nextPhase: "6O",
+  businessMutationEnabled: false,
+  customerNotificationEnabled: false,
+  rawPayloadStorageEnabled: false,
+  phase6MWebhookTestModeEnabled: false,
+  phase6MVerifiedEventCount: 0,
+  phase6MBusinessMutationCount: 0,
+  phase6MCustomerNotificationCount: 0,
+  phase6MRawSecretExposureCount: 0,
+  phase6MFullPiiExposureCount: 0,
+  planComplete: true,
+  eventMappingCount: 9,
+  manualReviewChecklistSize: 8,
+  rollbackStepCount: 7,
+  safetyCountersZero: true,
+  phase6MFlagsLockedOff: true,
+  safeToStartPhase6O: true,
+  blockers: [],
+  warnings: [
+    "Phase 6N is planning-only. NEVER calls Razorpay, NEVER mutates Order / Payment / Shipment / DiscountOfferLog, NEVER notifies a customer, NEVER changes env flags.",
+  ],
+  nextAction:
+    "ready_for_phase_6o_sandbox_payment_status_mapping_and_manual_review",
+  requiredEnvDefaults: {
+    RAZORPAY_WEBHOOK_TEST_MODE_ENABLED: false,
+    RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED: false,
+    RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED: false,
+    RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD: false,
+  },
+  forbiddenActions: PHASE_6N_FORBIDDEN_ACTIONS,
+};
+
+export const SAAS_RAZORPAY_BUSINESS_MUTATION_SANDBOX_PLAN: Record<
+  string,
+  unknown
+> = {
+  phase: "6N",
+  policyVersion: "phase6n.v1",
+  status: "planning_only",
+  latestCompletedPhase: "6M",
+  nextPhase: "6O",
+  businessMutationEnabled: false,
+  customerNotificationEnabled: false,
+  rawPayloadStorageEnabled: false,
+  safeToStartPhase6O: true,
+  blockers: [],
+  warnings: [
+    "Phase 6N is planning-only. NEVER calls Razorpay, NEVER mutates Order / Payment / Shipment / DiscountOfferLog, NEVER notifies a customer, NEVER changes env flags.",
+  ],
+  nextAction:
+    "ready_for_phase_6o_sandbox_payment_status_mapping_and_manual_review",
+  summary:
+    "Phase 6N is the planning + readiness layer for a future Phase 6O sandbox-only mutation path against synthetic test orders.",
+  eventMappings: PHASE_6N_EVENT_NAMES.map((name) => ({
+    razorpayEventName: name,
+    futureSandboxPaymentStatus: "pending",
+    futureSandboxOrderEffect: "no_change",
+    mutationAllowedInPhase6N: false,
+    mutationAllowedInFuturePhase6O: "only_if_synthetic_and_approved",
+    manualReviewRequired: true,
+    customerNotificationAllowed: false,
+    shipmentEffectAllowed: false,
+    discountEffectAllowed: false,
+    idempotencyRequired: true,
+    rollbackRequired: true,
+    blockers: ["phase_6n_planning_only_no_mutation_path"],
+    notes: "Sandbox-only acknowledgement; production rows stay untouched.",
+  })),
+  syntheticEligibilityPolicy: {
+    providerEnvironmentMustBeTest: true,
+    razorpayKeyModeMustBeTest: true,
+    eventMustComeFromPhase6MVerifiedHandler: true,
+    sourceEventIdRequired: true,
+    signatureValidRequired: true,
+    replayWindowValidRequired: true,
+    idempotencyFirstSeenRequired: true,
+    eventMustBeAllowlisted: true,
+    eventMustNotBeDenylisted: true,
+    orderPaymentPaymentLinkReferenceMustBeSynthetic: true,
+    noRealCustomerData: true,
+    noFullPhoneEmailAddressInPayload: true,
+    noCustomerNotification: true,
+    noShipmentCreation: true,
+    noDiscountMutation: true,
+    manualReviewBeforeMutation: true,
+    rollbackPathDefined: true,
+    auditRequiredBeforeAndAfterFutureMutation: true,
+  },
+  manualReviewChecklist: [
+    {
+      key: "verifyPhase6MHandlerSafetyCountersZero",
+      description:
+        "Confirm business_mutation_count and customer_notification_count are 0 across every RazorpayWebhookEvent.",
+      automated: true,
+    },
+    {
+      key: "verifyEnvFlagsLockedOff",
+      description:
+        "Confirm RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED, RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED, RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD are all false.",
+      automated: true,
+    },
+    {
+      key: "verifyTestKeyMode",
+      description:
+        "Razorpay key id must start with rzp_test. Live credentials disqualify Phase 6N and Phase 6O.",
+      automated: true,
+    },
+    {
+      key: "verifySyntheticReferenceOnly",
+      description:
+        "Every webhook event reviewed must reference a synthetic order id; real production order ids must be refused.",
+      automated: false,
+    },
+    {
+      key: "verifyDirectorSignOff",
+      description:
+        "Written Director sign-off recorded in the Master Event Ledger before any Phase 6O sandbox mutation.",
+      automated: false,
+    },
+  ],
+  rollbackPlan: {
+    phase: "6N",
+    rollbackTriggers: [
+      "any_real_order_payment_shipment_or_discount_mutation_observed",
+      "any_customer_notification_observed",
+      "raw_secret_or_full_pii_exposure_observed",
+    ],
+    rollbackSteps: [
+      {
+        order: 1,
+        action: "set_RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED_to_false",
+        owner: "operator",
+        phase6NEnforced: true,
+      },
+      {
+        order: 2,
+        action: "set_RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED_to_false",
+        owner: "operator",
+        phase6NEnforced: true,
+      },
+      {
+        order: 3,
+        action: "recreate_backend_worker_beat_containers_to_pickup_envs",
+        owner: "operator",
+        phase6NEnforced: false,
+      },
+    ],
+    rollbackVerification: [
+      "RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED == false",
+      "RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED == false",
+      "RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD == false",
+    ],
+    phase6NCanExecuteRollback: false,
+    rollbackOwnedByOperatorOnly: true,
+    rollbackNeverInvokesProviderApi: true,
+  },
+  safetyInvariants: {
+    businessMutationEnabled: false,
+    customerNotificationEnabled: false,
+    rawPayloadStorageEnabled: false,
+    providerCallAllowed: false,
+    razorpayApiInvocationAllowed: false,
+    whatsappSendAllowed: false,
+    vapiCallAllowed: false,
+    envFlagFlipAllowed: false,
+    phase6NPathCanMutateProductionRecord: false,
+    phase6NPathCanCreateShipment: false,
+    phase6NPathCanCreateDiscountOffer: false,
+    phase6NPathCanSendCustomerNotification: false,
+    phase6NPathCanCallRazorpay: false,
+    phase6NPathCanFlipEnvFlag: false,
+    phase6NPathRespectsKillSwitch: true,
+  },
+  forbiddenActions: PHASE_6N_FORBIDDEN_ACTIONS,
+  requiredEnvDefaults: {
+    RAZORPAY_WEBHOOK_TEST_MODE_ENABLED: false,
+    RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED: false,
+    RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED: false,
+    RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD: false,
+  },
+  auditPlan: [
+    {
+      kind: "razorpay.sandbox_plan.inspected",
+      tone: "info",
+      emittedBy: "manage.py inspect_razorpay_business_mutation_sandbox_plan",
+      payloadKeys: [
+        "phase",
+        "status",
+        "eventMappingCount",
+        "manualReviewChecklistSize",
+        "businessMutationEnabled",
+      ],
+      neverIncludes: [
+        "razorpayKeySecret",
+        "razorpayWebhookSecret",
+        "rawWebhookPayload",
+        "customerEmail",
+        "customerPhone",
+      ],
+    },
+    {
+      kind: "razorpay.sandbox_readiness.inspected",
+      tone: "info",
+      emittedBy:
+        "manage.py inspect_razorpay_business_mutation_sandbox_readiness",
+      payloadKeys: ["phase", "safeToStartPhase6O", "nextAction"],
+      neverIncludes: ["razorpayKeySecret", "razorpayWebhookSecret"],
+    },
+  ],
+};

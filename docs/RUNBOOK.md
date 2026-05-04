@@ -77,13 +77,13 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6M inclusive (1283 tests)
+python -m pytest -q                     # Phase 1 -> 6N inclusive (1318 tests)
 python manage.py makemigrations --check --dry-run    # must report "No changes detected"
 python manage.py check                  # must report "0 issues"
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6M vitest tests (48 tests)
+npm test                                # Phase 1 -> 6N vitest tests (50 tests)
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
@@ -291,6 +291,38 @@ by Phase 6M code paths.
 `/saas-admin` shows **Razorpay Webhook Handler (Test Mode)** with the
 event list (masked summary only) and the readiness card. **No "Replay"
 / "Apply mutation" / "Go Live" buttons on the UI.**
+
+## Phase 6N Razorpay business-mutation sandbox plan diagnostics
+
+Phase 6N is **planning-only**. It defines the policy, eligibility,
+manual-review checklist, rollback plan, safety invariants, and audit
+plan for a future Phase 6O sandbox-only mutation path against synthetic
+test orders. **It never calls Razorpay, never mutates any business
+record, never sends a customer notification, and never flips an env
+flag.**
+
+```bash
+cd backend
+python manage.py inspect_razorpay_business_mutation_sandbox_plan --json
+python manage.py inspect_razorpay_business_mutation_sandbox_readiness --json
+```
+
+Expected posture for both commands:
+`businessMutationEnabled=false`, `customerNotificationEnabled=false`,
+`rawPayloadStorageEnabled=false`. The readiness command returns
+`safeToStartPhase6O=true` only when the Phase 6M handler flags stay
+locked off, every safety counter on `RazorpayWebhookEvent` is zero
+(`businessMutationCount`, `customerNotificationCount`,
+`rawSecretExposureCount`, `fullPiiExposureCount`), and the plan is
+complete (9-event mapping + 8-item manual review + 7-step rollback).
+
+`/saas-admin` shows **Razorpay Business Mutation Sandbox Plan** with the
+readiness grid + event-to-status mapping table + synthetic eligibility
+list + manual review checklist + rollback step list + forbidden-action
+chips. **No "Mark Paid" / "Capture Payment" / "Refund" / "Send WhatsApp"
+/ "Mutate Order" / "Execute Webhook" / "Replay Event" / "Enable
+Mutation" / "Go Live" / "Run MCP Tool" buttons exist anywhere on the
+page.**
 
 ## Phase 6E SaaS admin diagnostics
 
