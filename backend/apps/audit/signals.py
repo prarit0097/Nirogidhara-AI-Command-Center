@@ -264,6 +264,14 @@ ICON_BY_KIND: dict[str, str] = {
     "runtime.provider_test_plan.archived": "archive",
     "runtime.provider_test_plan.blocked": "ban",
     "runtime.provider_test_plan.invariant_violation_blocked": "shield-off",
+    # Phase 6M-0 MCP Gateway Foundation.
+    "mcp.tool.call_attempted": "send",
+    "mcp.tool.call_blocked": "ban",
+    "mcp.tool.call_denied": "ban",
+    "mcp.tool.call_succeeded": "check-circle",
+    "mcp.tool.call_failed": "shield-off",
+    "mcp.tool.forbidden_tool_blocked": "shield-off",
+    "mcp.registry.seeded": "file-plus",
     # Phase 6K Single Internal Razorpay Test-Mode Execution Gate.
     "runtime.provider_execution.prepared": "file-plus",
     "runtime.provider_execution.blocked": "ban",

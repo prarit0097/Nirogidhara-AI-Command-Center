@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     "apps.catalog",
     "apps.whatsapp",
     "apps.saas",
+    "apps.mcp_gateway",
 ]
 
 MIDDLEWARE = [
@@ -189,6 +190,43 @@ RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 RAZORPAY_CALLBACK_URL = os.environ.get("RAZORPAY_CALLBACK_URL", "")
+
+
+# ----- Phase 6M-0 — MCP Gateway Foundation -----
+# Safe defaults: no external client, no write tool, no provider tool.
+# Missing token / signing key never crashes the app — readiness simply
+# reports the gap.
+def _mcp_bool(env_key: str, default: str = "false") -> bool:
+    return (os.environ.get(env_key) or default).strip().lower() == "true"
+
+
+MCP_ENABLED = _mcp_bool("MCP_ENABLED")
+MCP_TRANSPORT = (os.environ.get("MCP_TRANSPORT") or "streamable_http").strip()
+MCP_PUBLIC_BASE_URL = os.environ.get("MCP_PUBLIC_BASE_URL", "").strip()
+MCP_REQUIRE_AUTH = _mcp_bool("MCP_REQUIRE_AUTH", default="true")
+MCP_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in (os.environ.get("MCP_ALLOWED_ORIGINS") or "").split(",")
+    if origin.strip()
+]
+MCP_SERVICE_TOKEN = os.environ.get("MCP_SERVICE_TOKEN", "")
+MCP_JWT_SIGNING_KEY = os.environ.get("MCP_JWT_SIGNING_KEY", "")
+MCP_TOKEN_TTL_SECONDS = _safe_int(
+    os.environ.get("MCP_TOKEN_TTL_SECONDS"), default=3600
+)
+MCP_READ_ONLY_MODE = _mcp_bool("MCP_READ_ONLY_MODE", default="true")
+MCP_WRITE_TOOLS_ENABLED = _mcp_bool("MCP_WRITE_TOOLS_ENABLED")
+MCP_PROVIDER_TOOLS_ENABLED = _mcp_bool("MCP_PROVIDER_TOOLS_ENABLED")
+MCP_AUDIT_ENABLED = _mcp_bool("MCP_AUDIT_ENABLED", default="true")
+MCP_MASK_PII = _mcp_bool("MCP_MASK_PII", default="true")
+MCP_MAX_TOOL_CALLS_PER_MINUTE = _safe_int(
+    os.environ.get("MCP_MAX_TOOL_CALLS_PER_MINUTE"), default=30
+)
+MCP_MAX_OUTPUT_CHARS = _safe_int(
+    os.environ.get("MCP_MAX_OUTPUT_CHARS"), default=12000
+)
+MCP_EXPOSE_RESOURCES = _mcp_bool("MCP_EXPOSE_RESOURCES")
+MCP_EXPOSE_PROMPTS = _mcp_bool("MCP_EXPOSE_PROMPTS")
 
 
 # ----- Delhivery (Phase 2C) -----

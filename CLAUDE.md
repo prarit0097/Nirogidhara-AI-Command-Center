@@ -244,6 +244,34 @@ business records. Raw secrets NEVER appear in any output.
 **34 new backend tests + 2 new frontend tests; 1165 backend +
 42 frontend, all green.**
 
+**Phase 6M-0 note:** **Phase 6M-0 MCP Gateway Foundation +
+AI Connector Readiness shipped.** New `apps.mcp_gateway` Django
+app ships six models (`McpClientApp`, `McpAccessPolicy`,
+`McpToolDefinition`, `McpResourceDefinition`,
+`McpPromptDefinition`, `McpToolInvocationLog`), services layer
+(masking / schemas / default tools+resources+prompts / registry /
+audit / auth / tool_executor / tool_handlers / readiness), 5
+read-only / planning-only management commands
+(`ensure_mcp_defaults`, `inspect_mcp_gateway_readiness`,
+`list_mcp_tools`, `simulate_mcp_tool_call`,
+`inspect_mcp_security_posture`), 7 admin/auth-protected DRF
+endpoints under `/api/v1/mcp/`, and a `/saas-admin` "MCP Gateway
+Readiness" section. **Defaults LOCKED**: `MCP_ENABLED=false`,
+`MCP_READ_ONLY_MODE=true`, `MCP_WRITE_TOOLS_ENABLED=false`,
+`MCP_PROVIDER_TOOLS_ENABLED=false`, `MCP_REQUIRE_AUTH=true`,
+`MCP_AUDIT_ENABLED=true`, `MCP_MASK_PII=true`. The executor
+refuses any tool from the 13-name forbidden list (razorpay /
+whatsapp / vapi / delhivery / shell / sql / http_fetch / etc) and
+any tool whose `provider_call_allowed` or
+`business_mutation_allowed` field is True while the matching
+global env flag is False. No "Run Tool" / "Execute MCP" / "Send"
+buttons exist on the UI. The 10 default tools are read-only
+wrappers around existing safe selectors (Phase 6L razorpay
+audit + webhook readiness, Phase 5F WhatsApp gate, Phase 6E
+saas org context, masked audit search, etc) — none call external
+providers, none mutate business records. **43 new backend tests +
+2 new frontend tests; 1241 backend + 46 frontend, all green.**
+
 **Phase 6L note:** **Phase 6L Razorpay Test Execution Audit
 Review + Webhook Readiness Plan shipped.** Phase 6K-B execution
 on the VPS is **FULL PASS** (`pex_8f309650e9644cfaae4418f9` →
@@ -381,13 +409,13 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 1198 tests today
+python -m pytest -q                    # 1241 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                            # http://localhost:8080
-npm test                               # 44 tests today
+npm test                               # 46 tests today
 npm run lint                           # 0 errors expected
 npm run build                          # production build
 

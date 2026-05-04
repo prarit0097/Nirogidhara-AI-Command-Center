@@ -2752,3 +2752,187 @@ export interface SaasRazorpayWebhookPlan {
   nextAction: string;
   nextPhase: string;
 }
+
+// ---------- Phase 6M-0 - MCP Gateway Foundation ----------
+
+export interface McpGatewayReadiness {
+  mcpEnabled: boolean;
+  transport: string;
+  publicBaseUrlConfigured: boolean;
+  requireAuth: boolean;
+  readOnlyMode: boolean;
+  writeToolsEnabled: boolean;
+  providerToolsEnabled: boolean;
+  auditEnabled: boolean;
+  maskPii: boolean;
+  tokenTtlSeconds: number;
+  maxToolCallsPerMinute: number;
+  maxOutputChars: number;
+  exposeResources: boolean;
+  exposePrompts: boolean;
+  toolCount: number;
+  enabledToolCount: number;
+  writeToolEnabledCount: number;
+  providerToolEnabledCount: number;
+  forbiddenToolsRegisteredCount: number;
+  resourceCount: number;
+  promptCount: number;
+  activeClientCount: number;
+  registeredClientCount: number;
+  recentInvocationCount: number;
+  rawSecretExposureCount: number;
+  fullPiiExposureCount: number;
+  providerCallAttemptedCount: number;
+  businessMutationAttemptedCount: number;
+  enabledScopes: string[];
+  futureDisabledScopes: string[];
+  forbiddenTools: string[];
+  blockers: string[];
+  warnings: string[];
+  safeToEnableReadOnlyMcp: boolean;
+  safeToStartPhase6M: boolean;
+  nextAction: string;
+}
+
+export interface McpSecurityPosture {
+  forbiddenToolsRegistered: boolean;
+  writeToolsEnabled: boolean;
+  providerToolsEnabled: boolean;
+  writeToolEnabledCount: number;
+  providerToolEnabledCount: number;
+  authRequired: boolean;
+  rawSecretExposureCount: number;
+  piiExposureCount: number;
+  providerCallAttemptedCount: number;
+  businessMutationAttemptedCount: number;
+  blockers: string[];
+  warnings: string[];
+  safe: boolean;
+  nextAction: string;
+}
+
+export interface McpToolDefinitionDto {
+  id: number;
+  name: string;
+  title: string;
+  description: string;
+  category: string;
+  handlerKey: string;
+  enabled: boolean;
+  readOnly: boolean;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  requiresAuth: boolean;
+  requiresOrgContext: boolean;
+  requiresHumanApproval: boolean;
+  providerCallAllowed: boolean;
+  businessMutationAllowed: boolean;
+  piiExposureLevel: "none" | "masked" | "sensitive_blocked";
+  requiredScopes: string[];
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface McpToolsResponse {
+  count: number;
+  tools: McpToolDefinitionDto[];
+  readOnlyMode: true;
+  writeToolsEnabled: false;
+  providerToolsEnabled: false;
+}
+
+export interface McpResourceDefinitionDto {
+  id: number;
+  uri: string;
+  name: string;
+  title: string;
+  description: string;
+  mimeType: string;
+  enabled: boolean;
+  readOnly: boolean;
+  requiresAuth: boolean;
+  requiredScopes: string[];
+  piiExposureLevel: string;
+  handlerKey: string;
+}
+
+export interface McpResourcesResponse {
+  count: number;
+  resources: McpResourceDefinitionDto[];
+}
+
+export interface McpPromptDefinitionDto {
+  id: number;
+  name: string;
+  title: string;
+  description: string;
+  templatePreview: string;
+  variablesSchema: Record<string, unknown>;
+  enabled: boolean;
+  requiresAuth: boolean;
+  requiredScopes: string[];
+  riskLevel: string;
+}
+
+export interface McpPromptsResponse {
+  count: number;
+  prompts: McpPromptDefinitionDto[];
+}
+
+export interface McpToolInvocationDto {
+  id: number;
+  invocationId: string;
+  toolName: string;
+  toolCategory: string;
+  status:
+    | "allowed"
+    | "denied"
+    | "blocked"
+    | "succeeded"
+    | "failed";
+  deniedReason: string;
+  riskLevel: string;
+  readOnly: boolean;
+  providerCallAllowed: boolean;
+  businessMutationAllowed: boolean;
+  providerCallAttempted: boolean;
+  businessMutationAttempted: boolean;
+  rawSecretExposed: boolean;
+  fullPiiExposed: boolean;
+  outputTruncated: boolean;
+  durationMs: number | null;
+  errorSummary: string;
+  createdAt: string;
+}
+
+export interface McpInvocationsResponse {
+  count: number;
+  limit: number;
+  invocations: McpToolInvocationDto[];
+  providerCallAttempted: false;
+  businessMutationAttempted: false;
+}
+
+export interface McpToolSimulationResult {
+  passed: boolean;
+  status:
+    | "succeeded"
+    | "failed"
+    | "blocked"
+    | "denied"
+    | "allowed";
+  toolName: string;
+  invocationId: string;
+  readOnly?: boolean;
+  blockedReason?: string;
+  providerCallAttempted: boolean;
+  businessMutationAttempted: boolean;
+  rawSecretExposed?: boolean;
+  fullPiiExposed?: boolean;
+  outputTruncated?: boolean;
+  durationMs?: number;
+  result: Record<string, unknown> | null;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}

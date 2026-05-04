@@ -40,5 +40,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/whatsapp/", include("apps.whatsapp.v1_urls")),
     path("api/v1/saas/", include("apps.saas.urls")),
+    path("api/v1/mcp/", include("apps.mcp_gateway.urls")),
     path("api/", include(api_patterns)),
 ]

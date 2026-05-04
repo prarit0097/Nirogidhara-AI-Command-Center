@@ -47,6 +47,76 @@ describe("Phase 6E - SaaS Admin Panel", () => {
   });
 });
 
+describe("Phase 6M-0 - MCP Gateway Foundation", () => {
+  it("exposes MCP api methods that return safe-default shapes", async () => {
+    expect(typeof api.getMcpReadiness).toBe("function");
+    expect(typeof api.getMcpSecurityPosture).toBe("function");
+    expect(typeof api.getMcpTools).toBe("function");
+    expect(typeof api.getMcpResources).toBe("function");
+    expect(typeof api.getMcpPrompts).toBe("function");
+    expect(typeof api.getMcpInvocations).toBe("function");
+    expect(typeof api.simulateMcpToolCall).toBe("function");
+
+    const readiness = await api.getMcpReadiness();
+    expect(readiness.mcpEnabled).toBe(false);
+    expect(readiness.readOnlyMode).toBe(true);
+    expect(readiness.writeToolsEnabled).toBe(false);
+    expect(readiness.providerToolsEnabled).toBe(false);
+    expect(readiness.providerCallAttemptedCount).toBe(0);
+    expect(readiness.businessMutationAttemptedCount).toBe(0);
+
+    const posture = await api.getMcpSecurityPosture();
+    expect(posture.safe).toBe(true);
+    expect(posture.forbiddenToolsRegistered).toBe(false);
+    expect(posture.writeToolsEnabled).toBe(false);
+    expect(posture.providerToolsEnabled).toBe(false);
+
+    const tools = await api.getMcpTools();
+    expect(tools.readOnlyMode).toBe(true);
+    expect(tools.writeToolsEnabled).toBe(false);
+    expect(tools.providerToolsEnabled).toBe(false);
+    for (const tool of tools.tools) {
+      expect(tool.readOnly).toBe(true);
+      expect(tool.providerCallAllowed).toBe(false);
+      expect(tool.businessMutationAllowed).toBe(false);
+    }
+
+    const sim = await api.simulateMcpToolCall("system.get_phase_status");
+    expect(sim.providerCallAttempted).toBe(false);
+    expect(sim.businessMutationAttempted).toBe(false);
+  });
+
+  it("renders the MCP Gateway Readiness section without execute buttons", async () => {
+    render(<SaasAdminPage />);
+    expect(
+      await screen.findByText("MCP Gateway Readiness"),
+    ).toBeInTheDocument();
+    const section = await screen.findByTestId("mcp-gateway-section");
+    expect(section).toBeInTheDocument();
+    expect(section.textContent).toContain("Security posture");
+
+    const toolRows = await screen.findAllByTestId("mcp-tool-row");
+    expect(toolRows.length).toBeGreaterThan(0);
+
+    // No execute / send / run-live buttons.
+    expect(
+      screen.queryByRole("button", { name: /run tool live/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /execute mcp/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /send/i }),
+    ).not.toBeInTheDocument();
+
+    // Document body must not carry sample raw secrets.
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_test_FAKE");
+    expect(body).not.toContain("sk_test_");
+    expect(body).not.toContain("sk-ant-");
+  });
+});
+
 describe("Phase 6L - Razorpay Audit Review + Webhook Readiness", () => {
   it("exposes Phase 6L API methods returning safe shapes", async () => {
     expect(typeof api.getSaasRazorpayExecutionAudit).toBe("function");

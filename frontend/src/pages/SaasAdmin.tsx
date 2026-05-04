@@ -12,6 +12,12 @@ import type {
   SaasProviderExecutionReadiness,
   SaasProviderTestPlan,
   SaasProviderTestPlanReadiness,
+  McpGatewayReadiness,
+  McpInvocationsResponse,
+  McpSecurityPosture,
+  McpToolDefinitionDto,
+  McpToolInvocationDto,
+  McpToolsResponse,
   SaasRazorpayAuditReview,
   SaasRazorpayWebhookPlan,
   SaasRazorpayWebhookReadiness,
@@ -29,10 +35,12 @@ import {
   CheckCircle2,
   Cpu,
   AlertTriangle,
+  Bot,
   ClipboardList,
   CreditCard,
   FileSearch,
   KeyRound,
+  Network,
   Webhook,
   LockKeyhole,
   PlayCircle,
@@ -72,6 +80,13 @@ export default function SaasAdminPage() {
     useState<SaasRazorpayWebhookPlan | null>(null);
   const [razorpayAuditReview, setRazorpayAuditReview] =
     useState<SaasRazorpayAuditReview | null>(null);
+  const [mcpReadiness, setMcpReadiness] =
+    useState<McpGatewayReadiness | null>(null);
+  const [mcpSecurityPosture, setMcpSecurityPosture] =
+    useState<McpSecurityPosture | null>(null);
+  const [mcpTools, setMcpTools] = useState<McpToolsResponse | null>(null);
+  const [mcpInvocations, setMcpInvocations] =
+    useState<McpInvocationsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -87,9 +102,13 @@ export default function SaasAdminPage() {
       api.getSaasProviderExecutionAttempts(),
       api.getSaasRazorpayWebhookReadiness(),
       api.getSaasRazorpayWebhookPlan(),
+      api.getMcpReadiness(),
+      api.getMcpSecurityPosture(),
+      api.getMcpTools(),
+      api.getMcpInvocations(25),
     ])
       .then(
-        ([ov, rt, dr, ai, gate, sims, ptp, exec, wbr, wbp]) => {
+        ([ov, rt, dr, ai, gate, sims, ptp, exec, wbr, wbp, mcpR, mcpSp, mcpT, mcpInv]) => {
           setOverview(ov);
           setRouting(rt);
           setDryRun(dr);
@@ -100,6 +119,10 @@ export default function SaasAdminPage() {
           setProviderExecutionGate(exec);
           setRazorpayWebhookReadiness(wbr);
           setRazorpayWebhookPlan(wbp);
+          setMcpReadiness(mcpR);
+          setMcpSecurityPosture(mcpSp);
+          setMcpTools(mcpT);
+          setMcpInvocations(mcpInv);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -957,6 +980,56 @@ export default function SaasAdminPage() {
             webhook receiver, never calls Razorpay, never mutates a
             business row, never exposes raw secrets. Webhook handler
             ships in Phase 6M.
+          </div>
+        </section>
+      )}
+
+      {(mcpReadiness || mcpSecurityPosture || mcpTools || mcpInvocations) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="mcp-gateway-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Network className="h-5 w-5 text-primary" />
+                MCP Gateway Readiness
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6M-0 — read-only foundation for the future
+                Claude / ChatGPT / Codex MCP connector. MCP defaults
+                are <strong>disabled / read-only</strong>; no write
+                tools, no provider tools, no public endpoint, no raw
+                secrets, no full PII.
+              </p>
+            </div>
+            {mcpReadiness && (
+              <StatusPill
+                tone={
+                  mcpReadiness.safeToStartPhase6M ? "success" : "warning"
+                }
+              >
+                {mcpReadiness.mcpEnabled
+                  ? "MCP enabled"
+                  : "MCP disabled (safe)"}
+              </StatusPill>
+            )}
+          </div>
+          {mcpReadiness && (
+            <McpReadinessCard readiness={mcpReadiness} />
+          )}
+          {mcpSecurityPosture && (
+            <McpSecurityPostureCard posture={mcpSecurityPosture} />
+          )}
+          {mcpTools && <McpToolsTable response={mcpTools} />}
+          {mcpInvocations && (
+            <McpInvocationsTable response={mcpInvocations} />
+          )}
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Read-only.</strong> No "Run Tool" / "Send" / "Execute"
+            buttons exist on this page. Even the simulator runs only
+            the registered read-only tools through the Phase 6M-0
+            executor (no provider call, no business mutation).
           </div>
         </section>
       )}
@@ -1906,5 +1979,272 @@ function RazorpayWebhookPlanCard({
         phase: {plan.nextPhase}
       </div>
     </div>
+  );
+}
+
+
+function McpReadinessCard({
+  readiness,
+}: {
+  readiness: McpGatewayReadiness;
+}) {
+  return (
+    <div className="border-t border-border px-6 py-4">
+      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Bot className="h-4 w-4 text-primary" />
+        MCP mode
+      </h4>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <KeyValue label="MCP_ENABLED" value={String(readiness.mcpEnabled)} />
+        <KeyValue label="Read-only mode" value={String(readiness.readOnlyMode)} />
+        <KeyValue label="Write tools" value={String(readiness.writeToolsEnabled)} />
+        <KeyValue
+          label="Provider tools"
+          value={String(readiness.providerToolsEnabled)}
+        />
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-4 text-xs">
+        <KeyValue label="Tools" value={String(readiness.toolCount)} />
+        <KeyValue label="Resources" value={String(readiness.resourceCount)} />
+        <KeyValue label="Prompts" value={String(readiness.promptCount)} />
+        <KeyValue
+          label="Active clients"
+          value={String(readiness.activeClientCount)}
+        />
+      </div>
+      <div className="mt-3 text-[11px] text-muted-foreground">
+        Next action:{" "}
+        <span className="font-medium">{readiness.nextAction}</span>
+      </div>
+    </div>
+  );
+}
+
+function McpSecurityPostureCard({
+  posture,
+}: {
+  posture: McpSecurityPosture;
+}) {
+  const rows: Array<{ label: string; value: boolean; safeWhenFalse?: boolean }> = [
+    { label: "authRequired", value: posture.authRequired },
+    {
+      label: "writeToolsEnabled",
+      value: posture.writeToolsEnabled,
+      safeWhenFalse: true,
+    },
+    {
+      label: "providerToolsEnabled",
+      value: posture.providerToolsEnabled,
+      safeWhenFalse: true,
+    },
+    {
+      label: "forbiddenToolsRegistered",
+      value: posture.forbiddenToolsRegistered,
+      safeWhenFalse: true,
+    },
+  ];
+  const numericRows: Array<{ label: string; value: number }> = [
+    { label: "rawSecretExposureCount", value: posture.rawSecretExposureCount },
+    { label: "piiExposureCount", value: posture.piiExposureCount },
+    {
+      label: "providerCallAttemptedCount",
+      value: posture.providerCallAttemptedCount,
+    },
+    {
+      label: "businessMutationAttemptedCount",
+      value: posture.businessMutationAttemptedCount,
+    },
+  ];
+  return (
+    <div className="border-t border-border px-6 py-4">
+      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <ShieldCheck className="h-4 w-4 text-primary" />
+        Security posture
+      </h4>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="rounded-md border border-border bg-muted/20 p-3">
+          <div className="mb-1 text-xs font-semibold text-muted-foreground">
+            Boolean invariants
+          </div>
+          <div className="space-y-1.5">
+            {rows.map((row) => {
+              const safe =
+                row.safeWhenFalse === true ? row.value === false : row.value;
+              return (
+                <div
+                  key={row.label}
+                  className="flex items-center justify-between text-xs"
+                >
+                  <span className="font-mono text-muted-foreground">
+                    {row.label}
+                  </span>
+                  <StatusPill tone={safe ? "success" : "danger"}>
+                    {String(row.value)}
+                  </StatusPill>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="rounded-md border border-border bg-muted/20 p-3">
+          <div className="mb-1 text-xs font-semibold text-muted-foreground">
+            Counters (must stay 0)
+          </div>
+          <div className="space-y-1.5">
+            {numericRows.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-center justify-between text-xs"
+              >
+                <span className="font-mono text-muted-foreground">
+                  {row.label}
+                </span>
+                <StatusPill tone={row.value === 0 ? "success" : "danger"}>
+                  {row.value}
+                </StatusPill>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function McpToolsTable({ response }: { response: McpToolsResponse }) {
+  if (!response.tools.length) {
+    return (
+      <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+        No MCP tools registered. Run{" "}
+        <code>manage.py ensure_mcp_defaults</code>.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto border-t border-border">
+      <table className="w-full min-w-[920px] text-sm">
+        <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+          <tr>
+            <th className="px-6 py-3 text-left font-medium">Name</th>
+            <th className="py-3 text-left font-medium">Category</th>
+            <th className="py-3 text-left font-medium">Risk</th>
+            <th className="py-3 text-left font-medium">Read-only</th>
+            <th className="py-3 text-left font-medium">Provider call</th>
+            <th className="py-3 text-left font-medium">Mutation</th>
+            <th className="px-6 py-3 text-left font-medium">Scopes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {response.tools.map((tool) => (
+            <McpToolRow key={tool.name} tool={tool} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function McpToolRow({ tool }: { tool: McpToolDefinitionDto }) {
+  const riskTone: "success" | "warning" | "danger" =
+    tool.riskLevel === "low"
+      ? "success"
+      : tool.riskLevel === "critical" || tool.riskLevel === "high"
+        ? "warning"
+        : "neutral";
+  return (
+    <tr className="border-t border-border/60" data-testid="mcp-tool-row">
+      <td className="px-6 py-3 font-mono text-xs">{tool.name}</td>
+      <td className="py-3 text-xs">{tool.category}</td>
+      <td className="py-3">
+        <StatusPill tone={riskTone}>{tool.riskLevel}</StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={tool.readOnly ? "success" : "danger"}>
+          {String(tool.readOnly)}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill
+          tone={tool.providerCallAllowed ? "danger" : "success"}
+        >
+          {String(tool.providerCallAllowed)}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill
+          tone={tool.businessMutationAllowed ? "danger" : "success"}
+        >
+          {String(tool.businessMutationAllowed)}
+        </StatusPill>
+      </td>
+      <td className="px-6 py-3 text-[11px] font-mono text-muted-foreground">
+        {tool.requiredScopes.join(", ")}
+      </td>
+    </tr>
+  );
+}
+
+function McpInvocationsTable({
+  response,
+}: {
+  response: McpInvocationsResponse;
+}) {
+  if (!response.invocations.length) {
+    return (
+      <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+        No MCP invocations recorded yet.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto border-t border-border">
+      <table className="w-full min-w-[860px] text-sm">
+        <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+          <tr>
+            <th className="px-6 py-3 text-left font-medium">Invocation</th>
+            <th className="py-3 text-left font-medium">Tool</th>
+            <th className="py-3 text-left font-medium">Status</th>
+            <th className="py-3 text-left font-medium">Provider call</th>
+            <th className="py-3 text-left font-medium">Mutation</th>
+            <th className="px-6 py-3 text-left font-medium">Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {response.invocations.map((row) => (
+            <McpInvocationRow key={row.invocationId} row={row} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function McpInvocationRow({ row }: { row: McpToolInvocationDto }) {
+  return (
+    <tr
+      className="border-t border-border/60"
+      data-testid="mcp-invocation-row"
+    >
+      <td className="px-6 py-3 font-mono text-xs">{row.invocationId}</td>
+      <td className="py-3 text-xs">{row.toolName}</td>
+      <td className="py-3">
+        <StatusPill tone={toneForStatus(row.status)}>{row.status}</StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill tone={row.providerCallAttempted ? "danger" : "success"}>
+          {String(row.providerCallAttempted)}
+        </StatusPill>
+      </td>
+      <td className="py-3">
+        <StatusPill
+          tone={row.businessMutationAttempted ? "danger" : "success"}
+        >
+          {String(row.businessMutationAttempted)}
+        </StatusPill>
+      </td>
+      <td className="px-6 py-3 text-[11px] text-muted-foreground">
+        {row.createdAt}
+      </td>
+    </tr>
   );
 }

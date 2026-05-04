@@ -147,6 +147,13 @@ import type {
   SaasProviderExecutionReadiness,
   SaasProviderTestPlan,
   SaasProviderTestPlanReadiness,
+  McpGatewayReadiness,
+  McpInvocationsResponse,
+  McpPromptsResponse,
+  McpResourcesResponse,
+  McpSecurityPosture,
+  McpToolSimulationResult,
+  McpToolsResponse,
   SaasRazorpayAuditReview,
   SaasRazorpayWebhookPlan,
   SaasRazorpayWebhookReadiness,
@@ -1409,6 +1416,49 @@ export const api = {
     safeFetch<SaasRazorpayWebhookPlan>(
       "/v1/saas/razorpay/webhook-plan/",
       () => M.SAAS_RAZORPAY_WEBHOOK_PLAN as SaasRazorpayWebhookPlan,
+    ),
+
+  // ---------- Phase 6M-0 - MCP Gateway Foundation (read-only) ----------
+
+  getMcpReadiness: () =>
+    safeFetch<McpGatewayReadiness>(
+      "/v1/mcp/readiness/",
+      () => M.MCP_GATEWAY_READINESS as McpGatewayReadiness,
+    ),
+  getMcpSecurityPosture: () =>
+    safeFetch<McpSecurityPosture>(
+      "/v1/mcp/security-posture/",
+      () => M.MCP_SECURITY_POSTURE as McpSecurityPosture,
+    ),
+  getMcpTools: () =>
+    safeFetch<McpToolsResponse>(
+      "/v1/mcp/tools/",
+      () => M.MCP_TOOLS as McpToolsResponse,
+    ),
+  getMcpResources: () =>
+    safeFetch<McpResourcesResponse>(
+      "/v1/mcp/resources/",
+      () => M.MCP_RESOURCES as McpResourcesResponse,
+    ),
+  getMcpPrompts: () =>
+    safeFetch<McpPromptsResponse>(
+      "/v1/mcp/prompts/",
+      () => M.MCP_PROMPTS as McpPromptsResponse,
+    ),
+  getMcpInvocations: (limit: number = 25) =>
+    safeFetch<McpInvocationsResponse>(
+      `/v1/mcp/invocations/?limit=${limit}`,
+      () => M.MCP_INVOCATIONS as McpInvocationsResponse,
+    ),
+  simulateMcpToolCall: (
+    toolName: string,
+    input: Record<string, unknown> = {},
+  ) =>
+    safeMutate<McpToolSimulationResult>(
+      "/v1/mcp/tools/simulate/",
+      "POST",
+      { toolName, input },
+      () => M.MCP_SIMULATION_RESULT as McpToolSimulationResult,
     ),
 };
 
