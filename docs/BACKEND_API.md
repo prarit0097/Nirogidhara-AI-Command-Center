@@ -7,6 +7,10 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
+> **Phase 6M baseline:** documented through Phase 6M (Razorpay test-mode
+> webhook handler, dormant by default). Phase 6N is **planning-only** —
+> no endpoints will be added without an accompanying plan commit.
+
 ## Health
 
 | Method | Path | Purpose |
@@ -128,6 +132,104 @@ Protected Phase 6I simulation operations: `razorpay.create_order`
 response preserves `dryRun=true`, `liveExecutionAllowed=false`,
 `externalCallWillBeMade=false`, `externalCallWasMade=false`, and
 `providerCallAttempted=false`.
+
+## Phase 6J — Single Internal Provider Test Plan (planning-only)
+
+Plan-only paper trail for a future Razorpay test-mode call. **No provider
+call is ever made from these endpoints.** Synthetic payload is locked:
+`{amount: 100, currency: "INR", receipt: "phase6j_internal_test_plan_<plan_id>"}`.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/provider-test-plans/` | admin/staff | List sanitized plans (status / provider / operation / approver / safety invariants). |
+| GET | `/api/v1/saas/provider-test-plans/{id}/` | admin/staff | Detail. Includes locked safety booleans and the synthetic-payload preview. |
+| POST | `/api/v1/saas/provider-test-plans/prepare/` | admin/staff | Prepare a draft plan. No provider call. |
+| POST | `/api/v1/saas/provider-test-plans/{id}/validate/` | admin/staff | Validate the snapshot recorded at prepare time (env presence, amount lock, payload lock). |
+| POST | `/api/v1/saas/provider-test-plans/{id}/approve/` | admin/staff | Approve **for future Phase 6K execution only**. Never authorises a provider call in Phase 6J. |
+| POST | `/api/v1/saas/provider-test-plans/{id}/reject/` | admin/staff | Reject. Audit-only. |
+| POST | `/api/v1/saas/provider-test-plans/{id}/archive/` | admin/staff | Archive. Audit-only. |
+
+Every plan response keeps `dry_run=true`, `provider_call_allowed=false`,
+`external_call_will_be_made=false`, `external_call_was_made=false`,
+`provider_call_attempted=false`, `real_money=false`,
+`real_customer_data_allowed=false`. Asserted by
+`assert_provider_test_plan_has_no_side_effects`.
+
+## Phase 6K — Single Internal Razorpay Test-Mode Execution Gate
+
+Read-only gate readiness + sanitized attempt records. **Execution itself
+is exclusively CLI** (`python manage.py execute_single_razorpay_test_order`)
+behind `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=true` +
+`--confirm-test-execution` + `RAZORPAY_KEY_ID` starts with `rzp_test`.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/provider-execution-attempts/` | admin/staff | List sanitized `RuntimeProviderExecutionAttempt` rows. Status / rollback_status / locked safety booleans / masked env_readiness / safe_request_summary / safe_response_summary. |
+| GET | `/api/v1/saas/provider-execution-attempts/{id}/` | admin/staff | Detail. Includes `provider_object_id` once execution succeeds (Phase 6K-B artefact: `pex_8f309650e9644cfaae4418f9` → `order_Sks3KPf0vntKhf`). |
+| POST | `/api/v1/saas/provider-execution-attempts/prepare/` | admin/staff | Prepare an attempt against an approved Phase 6J plan. No provider call. |
+| POST | `/api/v1/saas/provider-execution-attempts/{id}/rollback/` | admin/staff | Mark attempt rolled back. No business-state rollback is required because no business state was mutated. |
+| POST | `/api/v1/saas/provider-execution-attempts/{id}/archive/` | admin/staff | Archive. Audit-only. |
+
+There is intentionally **no `POST execute` endpoint**. Every attempt
+preserves `business_mutation_was_made=false`, `payment_link_created=false`,
+`payment_captured=false`, `customer_notification_sent=false` regardless
+of execution status.
+
+## Phase 6L — Razorpay Test Execution Audit Review + Webhook Readiness Plan (read-only / planning-only)
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/execution-audit/?execution_id=<id>` | authenticated | Replay the 10 Phase 6K invariants for the given execution; scan every linked AuditEvent for raw-key leak. FAILs on flipped safety booleans / missing rollback / missing provider object id / leaked secret. |
+| GET | `/api/v1/saas/razorpay/webhook-readiness/` | authenticated | Env presence-only readiness check (masked Razorpay key id + webhook secret presence boolean — never raw values). |
+| GET | `/api/v1/saas/razorpay/webhook-plan/` | authenticated | Canonical webhook handler policy doc — endpoint design (`POST /api/webhooks/razorpay/test/`), HMAC-SHA256 signature, constant-time compare, idempotency on `x_razorpay_event_id`, 300-second replay window, 9-event allowlist + 9-event denylist, 8 future audit kinds, 13-key sensitive-payload scrub list, `businessMutationPolicy` all-False. |
+
+POST/PATCH/DELETE return 405 on every Phase 6L endpoint. Phase 6L never
+calls Razorpay, never creates a payment link, never captures, never sends
+a customer notification, never mutates business records, and never
+returns the raw Razorpay response (whitelisted summary only).
+
+## Phase 6M-0 — MCP Gateway Foundation (dormant)
+
+Admin-only readiness APIs for the dormant MCP scaffolding. **Do not flip
+any `MCP_*` env flag.** Defaults: `MCP_ENABLED=false`,
+`MCP_READ_ONLY_MODE=true`, `MCP_WRITE_TOOLS_ENABLED=false`,
+`MCP_PROVIDER_TOOLS_ENABLED=false`.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/mcp/readiness/` | admin/staff | Gateway readiness summary — feature flags, registry counts, forbidden-tool list size (13), sensitive-key scrub state. |
+| GET | `/api/v1/mcp/client-apps/` | admin/staff | List `McpClientApp` rows (no secrets). |
+| GET | `/api/v1/mcp/access-policies/` | admin/staff | List `McpAccessPolicy` rows. |
+| GET | `/api/v1/mcp/tool-definitions/` | admin/staff | List `McpToolDefinition` rows. |
+| GET | `/api/v1/mcp/resource-definitions/` | admin/staff | List `McpResourceDefinition` rows. |
+| GET | `/api/v1/mcp/prompt-definitions/` | admin/staff | List `McpPromptDefinition` rows. |
+| GET | `/api/v1/mcp/invocations/` | admin/staff | Recent `McpToolInvocationLog` rows (expect zero in Phase 6M-0). |
+
+Detection helpers (`detect_raw_secret`, `detect_full_pii`) use a
+`\b\d{10,}\b` word-boundary digit match so ISO timestamps like
+`2026-05-04T10:00:00.000000` are not flagged as PII.
+
+## Phase 6M — Razorpay Webhook Handler (test-mode, dormant by default)
+
+Admin-only readiness / event-list / simulate / readiness APIs for the
+test-mode webhook handler. The handler endpoint itself is public (signed
+HMAC) and lives at `POST /api/webhooks/razorpay/test/` (see Webhooks
+section). Defaults: `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`,
+`RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED=false`,
+`RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false`,
+`RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false`.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/webhook-handler-readiness/` | authenticated | Returns dormant flag, allowlist + denylist, scrub-key count, idempotency / replay-window settings, locked safety summary. |
+| GET | `/api/v1/saas/razorpay/webhook-events/` | authenticated | List sanitized `RazorpayWebhookEvent` rows (safe summary only — never the raw payload). |
+| GET | `/api/v1/saas/razorpay/webhook-events/{id}/` | authenticated | Detail (sanitized). |
+| POST | `/api/v1/saas/razorpay/webhook-events/simulate/` | admin/staff | Synthetic event simulation. Builds a fake payload through the same scrub + classify pipeline. Never delivers to Razorpay. |
+
+Every response preserves `business_mutation_was_made=false`,
+`customer_notification_sent=false`, `raw_secret_exposed=false`,
+`full_pii_exposed=false`. Production webhook secret is **never** consumed
+by this handler.
 
 ## Analytics
 
@@ -438,7 +540,8 @@ These shape behaviour but expose no new HTTP endpoints. They are imported by ser
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/webhooks/razorpay/` | Razorpay payment events (Phase 2B). HMAC-verified via `RAZORPAY_WEBHOOK_SECRET`; idempotent on `event.id`. |
+| POST | `/api/webhooks/razorpay/` | Razorpay payment events (Phase 2B production). HMAC-verified via `RAZORPAY_WEBHOOK_SECRET`; idempotent on `event.id`. |
+| POST | `/api/webhooks/razorpay/test/` | Razorpay test-mode webhook (Phase 6M, dormant by default). Refuses every inbound when `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`. When enabled, verifies HMAC-SHA256 over the raw body in constant time using a separate `RAZORPAY_WEBHOOK_TEST_SECRET` (production webhook secret is **never** consumed here), validates a 300-second replay window (`x_razorpay_signature_age`), dedupes on `X-Razorpay-Event-Id`, masks payloads against a 13-key scrub list, classifies via 9-event allowlist + 9-event denylist, and persists only a safe summary on `RazorpayWebhookEvent`. **Never** mutates Order / Payment / Shipment / DiscountOfferLog / Customer (`assert_no_business_mutation` invariant). **Never** sends a customer notification. |
 | POST | `/api/webhooks/delhivery/` | Delhivery tracking events (Phase 2C). HMAC-verified via `DELHIVERY_WEBHOOK_SECRET` (`X-Delhivery-Signature`); idempotent on `event.id`. Status mapping: `pickup_scheduled` / `picked_up` / `in_transit` / `out_for_delivery` / `delivered` / `ndr` / `rto_initiated` / `rto_delivered`. NDR + RTO events bump parent order's `rto_risk` and write danger-tone `AuditEvent` rows. |
 | POST | `/api/webhooks/vapi/` | Vapi voice events (Phase 2D). HMAC-verified via `VAPI_WEBHOOK_SECRET` (`X-Vapi-Signature`) when configured; signature is skipped when the secret is empty so dev/test fixtures stay simple. Idempotent on `event.id` via `calls.WebhookEvent`. Event types handled: `call.started` / `call.ended` / `transcript.updated` / `transcript.final` / `analysis.completed` / `call.failed`. `analysis.completed` records `handoff_flags` (medical_emergency, side_effect_complaint, very_angry_customer, human_requested, low_confidence, legal_or_refund_threat); the service falls back to keyword matching on the transcript when Vapi omits the explicit flags. |
 | GET | `/api/webhooks/meta/leads/` | Meta Lead Ads subscription handshake (Phase 2E). Echoes `hub.challenge` only when `hub.mode == "subscribe"` and `hub.verify_token == META_VERIFY_TOKEN`; otherwise 403. |

@@ -5,16 +5,36 @@ direction.
 
 ## Status (current)
 
-Phase 6I SaaS admin update: Phase 6H Controlled Runtime Live Audit Gate is
-**FULL PASS**. `/saas-admin` now includes "Single Internal Live Gate
-Simulation" backed by `/api/v1/saas/runtime-live-gate/simulations/`.
-It shows the default operation (`razorpay.create_order`), allowed
-operations (`razorpay.create_order`, `whatsapp.send_text`, `ai.smoke_test`),
-global kill-switch state, simulation rows, and locked safety flags. Runtime
-providers still use env/config, default dry-run remains true, live execution
-remains blocked, and approving/running a Phase 6I simulation does not execute
-external calls. No raw secrets, raw payloads, full phone numbers, or real
-customer data are rendered.
+**Phase 6M baseline.** `/saas-admin` now renders every Phase 6 read-only
+section through Phase 6M:
+
+- **Phase 6E** — SaaS overview + integration settings metadata (read-only).
+- **Phase 6F** — Runtime Integration Routing Preview (`runtimeSource=env_config`, `perOrgRuntimeEnabled=false`).
+- **Phase 6G** — Controlled Runtime Routing Dry Run (14-row operation table) + AI Provider Routing Preview (NVIDIA primary / OpenAI + Anthropic fallback).
+- **Phase 6H** — Controlled Runtime Live Audit Gate (kill-switch state, approval queue, recent audit events).
+- **Phase 6I** — Single Internal Live Gate Simulation.
+- **Phase 6J** — Single Internal Provider Test Plan (safety-invariant + Razorpay env-readiness sub-cards).
+- **Phase 6K-A / 6K-B** — Single Internal Razorpay Test-Mode Execution Gate + attempts table (immutable Phase 6K-B artefact `pex_8f309650e9644cfaae4418f9` → `order_Sks3KPf0vntKhf` rendered as historical).
+- **Phase 6L** — Razorpay Test Execution Audit Review + Webhook Readiness Plan (audit invariants / readiness / webhook plan with allowlist + denylist tables).
+- **Phase 6M-0** — MCP Gateway Readiness (dormant: `MCP_ENABLED=false`).
+- **Phase 6M** — Razorpay Webhook Handler (Test Mode) — readiness card + sanitized event list.
+
+**Forbidden UI buttons (asserted in `frontend/src/test/saas-admin.test.tsx`):**
+no "Execute Razorpay" / "Create Order" / "Create Payment Link" / "Capture"
+/ "Send WhatsApp" / "Place Call" / "Create Shipment" / "Replay Webhook" /
+"Apply Mutation" / "Go Live" / "Activate Provider" / "Run Live" /
+"Disable Kill Switch" buttons exist on any Phase 6 page. Raw env-var
+names like `RAZORPAY_KEY_SECRET` are never rendered (label is "Razorpay
+key secret" / "Razorpay key id" — the test asserts on the absence of the
+literal env-var name).
+
+Phase 5F-Gate pilot readiness update: `/whatsapp-monitoring` now includes
+a read-only "Approved Customer Pilot Readiness" section backed by
+`/api/v1/whatsapp/monitoring/pilot/`. Phones are masked, blockers and
+daily caps render from the backend, and there are no send / enable /
+approve / pause buttons. Auto-reply remains OFF, campaigns/broadcast stay
+locked, and the customer pilot requires explicit consent + approval. The
+earlier 4-hour soak was accelerated, not full-duration.
 
 Phase 5F-Gate pilot readiness update: `/whatsapp-monitoring` now includes
 a read-only "Approved Customer Pilot Readiness" section backed by
@@ -26,7 +46,11 @@ earlier 4-hour soak was accelerated, not full-duration.
 
 Item | Status
 --- | ---
-Phase 6I `/saas-admin` | done - SaaS admin panel now includes Single Internal Live Gate Simulation with default operation, allowed operations, kill-switch state, simulation table, and explicit `externalCallWasMade=false` / `providerCallAttempted=false`; no provider execution, WhatsApp send/enable, payment/shipment/call, campaign, or org-switch mutation controls.
+Phase 6M `/saas-admin` | done — adds read-only "Razorpay Webhook Handler (Test Mode)" + "MCP Gateway Readiness" sections on top of the Phase 6E → Phase 6L stack. All sections strictly read-only; no Replay / Apply mutation / Go Live / Activate connector controls. `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false` and `MCP_ENABLED=false` rendered as locked states.
+Phase 6L `/saas-admin` | done — Razorpay Test Execution Audit Review + Webhook Readiness Plan section; audit-invariant / readiness / webhook-plan cards (allowlist + denylist tables); no Execute / Register Webhook / Capture / Send WhatsApp buttons.
+Phase 6K `/saas-admin` | done — Single Internal Razorpay Test-Mode Execution Gate; readiness + invariants + attempts table (renders Phase 6K-B immutable artefact). No Execute / Capture / Go Live buttons; execution is CLI-only.
+Phase 6J `/saas-admin` | done — Single Internal Provider Test Plan; safety-invariant + Razorpay env-readiness sub-cards. No Execute Razorpay / Create Order / Create Payment Link buttons.
+Phase 6I `/saas-admin` | done — SaaS admin panel includes Single Internal Live Gate Simulation with default operation, allowed operations, kill-switch state, simulation table, and explicit `externalCallWasMade=false` / `providerCallAttempted=false`; no provider execution, WhatsApp send/enable, payment/shipment/call, campaign, or org-switch mutation controls.
 All 21 pages exist | done — Phase 3C added Scheduler page; Phase 3D added Governance page; Phase 4B enhanced the Rewards page; Phase 4C added an Approval queue table on Governance; Phase 4D added an Execute button on approved rows; Phase 4A added a `services/realtime.ts` WebSocket client wired into the Dashboard "Live Activity" feed and the Governance "Approval queue"; Phase 4E is backend-only; Phase 5A added a read-only `/whatsapp-templates` page + Settings → WABA section + new "Messaging" sidebar group; Phase 5B added a three-pane `/whatsapp-inbox` page + Customer 360 WhatsApp tab; Phase 5C replaces the Phase 5B "AI suggestions disabled" placeholder with a live `AiAgentPanel`; Phase 5D adds a "Call customer" button on the `AiAgentPanel` + handoff and lifecycle event endpoints; **Phase 5E** adds a Rescue Discount cap card to the `AiAgentPanel` (current cumulative %, cap remaining out of 50%, customer ask count) plus six new TS types (`DiscountOffer`, `DiscountOfferListResponse`, `CreateRescueOfferPayload`, `DiscountOfferCap`, `ReorderDay20StatusResponse`, `ReorderDay20RunResponse`) and six new `api` methods (`getOrderDiscountOffers`, `createRescueDiscountOffer`, `acceptRescueDiscountOffer`, `rejectRescueDiscountOffer`, `getReorderDay20Status`, `runReorderDay20Sweep`). All cap math and CEO escalation logic lives in the backend (`apps.orders.rescue_discount`); the frontend renders cap state and dispatches API calls only.
 Pages go through `src/services/api.ts` only | done — no page imports `mockData.ts` directly
 TypeScript shared types in `src/types/domain.ts` | done
@@ -34,7 +58,7 @@ Sidebar collapse layout | done — shared collapsed state
 Mobile responsiveness | baseline done — KPI stack, sidebar drawer, tables horizontal-scroll on small screens; per-page tuning continues
 Dashboard polish | baseline done — premium spacing, hierarchy, executive feel; iterate as needed
 Workflow visuals | UI-component diagrams in `WorkflowMap`
-Vitest tests | Phase 6I SaaS admin tests cover simulation render, allowed operations, kill switch, no raw secrets/full phones, and no provider execution buttons.
+Vitest tests | 48 tests today. Phase 6J/6K/6L/6M-0/6M assertions in `frontend/src/test/saas-admin.test.tsx` cover render of every new section, absence of forbidden buttons (Execute / Capture / Go Live / Activate / Replay / Disable Kill Switch / Apply Mutation), no raw env-var names like `RAZORPAY_KEY_SECRET` in body text, no full phone numbers, and no raw secrets in any rendered preview.
 ESLint warnings | 8 pre-existing shadcn warnings (`react-refresh/only-export-components`); 0 errors
 Mock fallback in `api.ts` | done — pages never break when backend is offline
 
@@ -86,8 +110,11 @@ cd ../frontend && npm run dev
 | `/whatsapp-inbox` | `WhatsAppInbox.tsx` | 5B | Three-pane manual-only WhatsApp inbox + internal notes + manual template send + AI-suggestions-disabled placeholder |
 | `/whatsapp-templates` | `WhatsAppTemplates.tsx` | 5A | Meta-mirrored WhatsApp templates (read-only) + Sync from Meta button |
 | `/whatsapp-monitoring` | `WhatsAppMonitoring.tsx` | 5F-Gate | Read-only auto-reply safety dashboard + Approved Customer Pilot Readiness; masked phones only; no send/enable controls |
-| `/saas-admin` | `SaasAdmin.tsx` | 6E-6I | SaaS admin panel: organization overview, org/write readiness, integration readiness, safety locks, runtime routing preview, AI provider routing preview, Controlled Runtime Live Audit Gate, Single Internal Live Gate Simulation; no activation/send/provider-execution controls |
+| `/saas-admin` | `SaasAdmin.tsx` | 6E-6M | SaaS admin panel: organization overview, org/write readiness, integration readiness, safety locks, runtime routing preview (6F), Controlled Runtime Routing Dry Run + AI Provider Routing Preview (6G), Controlled Runtime Live Audit Gate (6H), Single Internal Live Gate Simulation (6I), Single Internal Provider Test Plan (6J), Single Internal Razorpay Test-Mode Execution Gate (6K), Razorpay Test Execution Audit + Webhook Readiness (6L), MCP Gateway Readiness (6M-0), Razorpay Webhook Handler Test Mode (6M); no activation / send / provider-execution / replay / apply-mutation / go-live / disable-kill-switch controls anywhere. |
 | `/settings` | `Settings.tsx` | 1 / 5A | Settings & Control + WABA section |
 
-Phase 6I note: `/saas-admin` includes simulation visibility only. It does not render send, create-payment, create-shipment, place-call, run-live, or provider-execution controls.
+Phase 6M note: `/saas-admin` is the central read-only command-center for
+every Phase 6 surface. It does not render send, create-payment,
+create-shipment, place-call, run-live, replay-webhook, apply-mutation,
+or activate-connector controls.
 Current total: 23 pages. Sidebar groups include Overview, Sales, Operations, AI Layer, Governance, Insights, Messaging, and System.

@@ -3,20 +3,30 @@
 ## Current SaaS runtime gate status
 
 Phase 6G Controlled Runtime Routing Dry Run + AI Provider Routing is
-**FULL PASS**. Phase 6H ships the Controlled Runtime Routing Live Audit
-Gate, and Phase 6I ships the Single Internal Live Gate Simulation layer.
-The simulation supports only `razorpay.create_order` (default),
-`whatsapp.send_text`, and `ai.smoke_test`; it creates audit/simulation
-records and may request/approve/reject/run/rollback the internal rehearsal,
-but it never calls external providers. Default live execution remains blocked
+**FULL PASS**. Phase 6H Live Audit Gate, Phase 6I Single Internal Live
+Gate Simulation, Phase 6J Single Internal Provider Test Plan, Phase 6K-A
+Single Internal Razorpay Test-Mode Execution Gate, Phase 6K-B (one-shot
+real Razorpay test-mode execution on the VPS — `pex_8f309650e9644cfaae4418f9`
+→ `order_Sks3KPf0vntKhf`, ₹1.00, rolled back), Phase 6L Razorpay Test
+Execution Audit Review + Webhook Readiness Plan, Phase 6M-0 MCP Gateway
+Foundation (dormant), and Phase 6M Razorpay Webhook Handler (test-mode,
+dormant by default) all ✅ shipped. Default live execution remains blocked
 (`dryRun=true`, `liveExecutionAllowed=false`,
 `externalCallWillBeMade=false`, `externalCallWasMade=false`,
-`providerCallAttempted=false`), runtime providers still use env/config, and
-the global kill switch remains active.
+`providerCallAttempted=false` everywhere except the recorded Phase 6K-B
+artefact), runtime providers still use env/config, the global kill switch
+remains active, `MCP_ENABLED=false`, and
+`RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`.
 
-Next backend phase: controlled live readiness review after explicit operator
-approval. Do not enable real WhatsApp/payment/shipment/call/provider side
-effects until the next phase defines and verifies that live path.
+**Next backend phase: Phase 6N — Razorpay Webhook Business-Mutation
+Sandbox Plan (planning-only).** Doc-only deliverable describing how a
+future sandbox-only webhook handler would react to `payment.captured` /
+`payment.failed` / `refund.processed`, what new safety booleans /
+matrix rows / audit kinds it needs, the staged rehearsal procedure, the
+acceptance criteria, the rollback procedure, and the exact diff scope —
+without enabling any live execution. Do **not** enable real provider
+side effects until Phase 6O+ implements that plan inside its own sandbox
+env flag.
 
 Phase 1 + 2A + 2B + 2C + 2D + 2E + 3A + 3B + 3C + 3D + 3E + 4A + 4B + 4C + 4D + 4E are shipped (see `nd.md` §8 for the full checkpoint trail).
 Phase 3 env scaffolding is in place. Real AI-agent reasoning, the remaining
@@ -993,6 +1003,82 @@ Hard rules preserved:
 - No external provider calls; no live runtime switch.
 - WhatsApp env flags untouched; broad-automation flags remain
   LOCKED OFF; campaigns / broadcast remain LOCKED.
+
+## Phase 6G — Controlled Runtime Routing Dry Run + AI Provider Routing ✅ shipped
+
+What landed: 14-operation `apps.saas.runtime_operations` taxonomy, NVIDIA-primary AI routing table (with OpenAI + Anthropic Claude fallbacks), `apps.saas.runtime_dry_run` composer, three read-only management commands + one operator-only `smoke_test_ai_provider_routes` (the only path that may issue a tiny live AI request), three admin-only DRF endpoints, and `/saas-admin` "Controlled Runtime Routing Dry Run" + "AI Provider Routing Preview" sections. Hard invariant `validate_dry_run_has_no_side_effects` asserts every dry-run output keeps `dryRun=true`, `externalCallWillBeMade=false`. Raw NVIDIA / OpenAI / Anthropic / Razorpay / Meta / Vapi keys never appear in any output.
+
+## Phase 6H — Controlled Runtime Routing Live Audit Gate ✅ shipped
+
+What landed: `apps.saas.live_gate_policy` (every operation `allowedInPhase6H=false`), `RuntimeLiveGatePolicySnapshot` / `RuntimeLiveExecutionRequest` / `RuntimeKillSwitch` models (default global kill switch enabled), `apps.saas.live_gate` audit-only decision recorder, `/api/v1/saas/runtime-live-gate/...` admin APIs, and `/saas-admin` "Controlled Runtime Live Audit Gate" section. Approval in Phase 6H is audit-only — never executes a provider call.
+
+## Phase 6I — Single Internal Live Gate Simulation ✅ shipped
+
+What landed: `RuntimeLiveGateSimulation` model, simulation-only service, six management commands (prepare / request-approval / approve / reject / run / rollback), `/api/v1/saas/runtime-live-gate/simulations/` admin APIs, and `/saas-admin` "Single Internal Live Gate Simulation" section. Hard invariant: every simulation response keeps `dryRun=true`, `externalCallWillBeMade=false`, `externalCallWasMade=false`, `providerCallAttempted=false`.
+
+## Phase 6J — Single Internal Provider Test Plan ✅ shipped
+
+What landed: `apps.saas.provider_test_plan_policy` (seven plan policies registered; only **target** is `razorpay.create_order`), `RuntimeProviderTestPlan` model, six strictly-read-only / plan-only management commands, seven admin-only DRF endpoints under `/api/v1/saas/provider-test-plans/`, and `/saas-admin` "Single Internal Provider Test Plan" section. Razorpay synthetic payload locked: `{amount: 100, currency: "INR", receipt: "phase6j_internal_test_plan_<plan_id>"}`. Asserted by `assert_provider_test_plan_has_no_side_effects`. Approval ONLY unlocks a future Phase 6K execution gate; never enables a provider call in Phase 6J.
+
+## Phase 6K-A — Single Internal Razorpay Test-Mode Execution Gate ✅ shipped (code/gate/readiness only)
+
+What landed: `apps.saas.provider_execution_policy` (one Phase 6K target — `razorpay.create_order` against a Razorpay TEST key — with `amount_paise=100`, `real_money=False`, `api_execution_allowed=False` (CLI-only), `frontend_execution_allowed=False`, `max_executions_per_approved_plan=1`), `RuntimeProviderExecutionAttempt` model, Phase-6K-only `apps.saas.razorpay_test_execution` adapter (separate from the Phase 2B production payment-link client), five management commands (`execute_single_razorpay_test_order` is the ONLY one that may dispatch — refuses unless approved Phase 6J plan + `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=true` + `--confirm-test-execution` + `RAZORPAY_KEY_ID` starts with `rzp_test` + no prior successful execution), and five admin-only DRF endpoints (intentionally **no** `POST execute` endpoint).
+
+## Phase 6K-B — Manual VPS one-shot real Razorpay test-mode execution ✅ shipped
+
+Immutable artefact: `execution_id=pex_8f309650e9644cfaae4418f9` → `provider_object_id=order_Sks3KPf0vntKhf`, `amount_paise=100`, `currency=INR`. **No payment link, no capture, no notification, no business mutation.** `rollback_status=completed`. `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED` flipped back to `false` immediately after the run. The only real provider-side write the platform has ever made.
+
+## Phase 6L — Razorpay Test Execution Audit Review + Webhook Readiness Plan ✅ shipped
+
+What landed: `apps.saas.razorpay_audit_review` ships `review_razorpay_test_execution_audit(execution_id)` (replays the 10 Phase 6K invariants + scans every linked AuditEvent for raw-key leak), `inspect_razorpay_webhook_readiness()` (env presence-only — masked Razorpay key id + webhook secret presence boolean), `plan_razorpay_webhook_readiness()` (canonical webhook policy doc with HMAC-SHA256 + 300-second replay window + 9-event allowlist + 9-event denylist + 13-key sensitive-payload scrub list + `businessMutationPolicy` all-False). Three read-only management commands + three auth-required DRF endpoints under `/api/v1/saas/razorpay/`. Phase 6L never calls Razorpay, never returns the raw provider response (whitelisted summary only).
+
+## Phase 6M-0 — MCP Gateway Foundation + AI Connector Readiness ✅ shipped (dormant)
+
+What landed: `apps.mcp_gateway` Django app with six models (`McpClientApp`, `McpAccessPolicy`, `McpToolDefinition`, `McpResourceDefinition`, `McpPromptDefinition`, `McpToolInvocationLog`), 13-name forbidden-tool list, `MCP_ENABLED=false` / `MCP_READ_ONLY_MODE=true` / `MCP_WRITE_TOOLS_ENABLED=false` / `MCP_PROVIDER_TOOLS_ENABLED=false` defaults, admin-only readiness APIs under `/api/v1/mcp/`, idempotent registry seed command, PII / raw-secret detection helpers (`detect_raw_secret`, `detect_full_pii` with `\b\d{10,}\b` word-boundary digit match to avoid timestamp false positives), and `/saas-admin` "MCP Gateway Readiness" dormant section.
+
+## Phase 6M — Razorpay Webhook Handler Implementation (test-mode, dormant by default) ✅ shipped
+
+What landed: `apps.payments.razorpay_webhooks.process_razorpay_webhook` ships HMAC-SHA256 signature verification over the raw body in constant time, 300-second replay window validation, idempotency on `X-Razorpay-Event-Id`, 9-event allowlist + 9-event denylist, 13-key sensitive-payload scrub list, `assert_no_business_mutation` invariant, and a safe-summary persistence path on `RazorpayWebhookEvent`. New `POST /api/webhooks/razorpay/test/` endpoint (separate from the Phase 2B production `/api/webhooks/razorpay/`). Four read-only / planning management commands. Four auth-required DRF readiness/list/detail/simulate APIs under `/api/v1/saas/razorpay/webhook-...`. `/saas-admin` adds "Razorpay Webhook Handler (Test Mode)" section. 9 new audit kinds (`razorpay.webhook.*`).
+
+Hard rules preserved:
+
+- Dormant by default — `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`,
+  `RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED=false`,
+  `RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false`,
+  `RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false`.
+- Order / Payment / Shipment / DiscountOfferLog / Customer never
+  mutated (asserted in tests via `assert_no_business_mutation`).
+- No customer notification ever sent.
+- Production webhook secret is **never** consumed by this handler.
+
+## Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan (Planned · Not started · Planning-only)
+
+This phase is **doc-only**. It must produce a written plan that — without
+flipping any env flag, without changing any code, without making any
+provider call — describes:
+
+1. Exactly which event types (`payment.captured`, `payment.failed`,
+   `refund.processed`) the future sandbox handler will react to, and what
+   the sandbox-only mutation envelope looks like.
+2. What new safety booleans, approval-matrix rows, and audit kinds the
+   implementation will require.
+3. A Phase 6K-style staged rehearsal procedure (synthetic webhook →
+   audit-only → sandbox-only Order/Payment mutation), all behind a NEW
+   env flag distinct from the Phase 6M handler flag.
+4. Acceptance criteria + rollback procedure + the exact diff scope.
+
+**Acceptance criteria (for the plan itself):**
+
+- The plan ships as a doc commit only. No code, env, migration, or
+  provider call.
+- Phase 6M runtime invariants stay intact:
+  `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`, no business mutation, no
+  customer notification, no production webhook secret consumed.
+- The plan calls out every Phase 6M-handler-locked safety boolean it
+  intends to flip in the eventual implementation phase, and the new env
+  flag name that gates the future implementation.
+- The plan documents how the eventual Phase 6O+ implementation rolls
+  back without leaving sandbox Order/Payment rows behind.
 
 ## Recommended future phases
 

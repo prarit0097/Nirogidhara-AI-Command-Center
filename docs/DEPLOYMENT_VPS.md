@@ -1030,6 +1030,101 @@ must show masked phones only and no send/enable controls. The prior
 4-hour soak was accelerated, not full-duration, so this customer pilot
 still needs conservative monitoring before any flag flip.
 
+## 8.6 Phase 6K-B verification — Razorpay test-mode execution artefact
+
+Phase 6K-B is the only real Razorpay write the platform has ever made:
+`execution_id=pex_8f309650e9644cfaae4418f9` →
+`provider_object_id=order_Sks3KPf0vntKhf`, `amount=100 paise INR`, no
+payment link, no capture, no notification, no business mutation,
+`rollback_status=completed`. After every deploy, re-verify the artefact
+without touching Razorpay:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_test_execution_audit \
+    --execution-id pex_8f309650e9644cfaae4418f9 --json
+```
+
+Expected: `passed=true`, every Phase 6K invariant green,
+`business_mutation_was_made=false`, `rollback_status=completed`, no leaked
+secret in any linked AuditEvent. **`PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED`
+must remain `false` on the VPS.** Do not re-run a Phase 6K execution
+without explicit Director sign-off + a fresh approved Phase 6J plan.
+
+## 8.7 Phase 6M production posture — Razorpay webhook handler dormant
+
+Phase 6M ships `POST /api/webhooks/razorpay/test/` but keeps it
+**dormant by default** in production. The production webhook secret
+(`RAZORPAY_WEBHOOK_SECRET`) is consumed only by the Phase 2B
+`/api/webhooks/razorpay/` endpoint. The Phase 6M test-mode handler uses
+a SEPARATE `RAZORPAY_WEBHOOK_TEST_SECRET` env value that is itself
+empty / undefined in `.env.production`.
+
+Required posture in `.env.production`:
+
+```dotenv
+# Phase 6M Razorpay webhook handler — keep all four FALSE on production
+RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false
+RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED=false
+RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false
+RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false
+```
+
+Verify dormant state after every deploy:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_webhook_handler_readiness --json
+```
+
+Expected: `razorpay_webhook_handler_dormant=true`,
+`business_mutation_was_made=false`, `customer_notification_sent=false`,
+`raw_secret_exposed=false`, `full_pii_exposed=false`. Do not flip any
+of the four `RAZORPAY_WEBHOOK_*` env flags without a written Phase 6N
+sandbox plan signed off by the Director.
+
+## 8.8 Phase 6M-0 production posture — MCP Gateway dormant
+
+Phase 6M-0 ships the dormant MCP Gateway scaffolding. Required posture in
+`.env.production`:
+
+```dotenv
+# Phase 6M-0 MCP Gateway — keep all four FALSE on production
+MCP_ENABLED=false
+MCP_READ_ONLY_MODE=true
+MCP_WRITE_TOOLS_ENABLED=false
+MCP_PROVIDER_TOOLS_ENABLED=false
+```
+
+Verify dormant state after every deploy:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_mcp_gateway_readiness --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_mcp_tool_invocations --hours 24 --json
+```
+
+Expected: `mcp_enabled=false`, `mcp_read_only_mode=true`,
+`forbidden_tool_count=13`, **zero** invocations in the last 24 hours.
+Re-run after every Docker recreate so the env is read fresh from
+`.env.production`.
+
+## 8.9 Reminder — recreate containers after env changes
+
+Whenever you edit `.env.production` (e.g., adding a real Vapi
+`phone_number_id` + `webhook_secret`, or rotating a key), **recreate**
+the backend / worker / beat containers; a `restart` alone will not pick
+up new env values:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    up -d --force-recreate backend worker beat
+```
+
+After recreate, immediately re-run the Phase 6M / 6M-0 / 6K-B
+verification commands above to confirm posture stayed locked.
+
 ## 9. Security checklist before customers go live
 
 - [ ] `DJANGO_SECRET_KEY` and `JWT_SIGNING_KEY` are unique, long, and never committed.
@@ -1042,24 +1137,34 @@ still needs conservative monitoring before any flag flip.
 - [ ] Postgres `pg_dump` backup taken before the first real customer payment / order.
 - [ ] Host Nginx (or Traefik) terminates TLS; HTTP 80 either redirects to HTTPS or is closed at the firewall.
 - [ ] `docker stats` confirms the new stack is leaving headroom for Postzyo + OpenClaw.
-- [ ] **Phase 5C — WhatsApp AI Chat Sales Agent.** `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` until: (a) `AI_PROVIDER=openai` + `OPENAI_API_KEY` set, (b) the locked greeting template (`whatsapp.greeting`) is synced and approved, (c) `Claim` rows exist for every product the agent must explain, (d) a controlled run on test numbers passes. Flip the env to `true` and restart the backend / worker / beat containers to enable auto-mode.
+- [ ] **Phase 5C — WhatsApp AI Chat Sales Agent.** `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` until: (a) `AI_PROVIDER=openai` + `OPENAI_API_KEY` set, (b) the locked greeting template (`whatsapp.greeting`) is synced and approved, (c) `Claim` rows exist for every product the agent must explain, (d) a controlled run on test numbers passes. Flip the env to `true` and recreate the backend / worker / beat containers (see §8.9) to enable auto-mode.
+- [ ] **Phase 6K — Razorpay test-mode execution gate.** `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false` is the steady-state value. The Phase 6K-B artefact (`pex_8f309650e9644cfaae4418f9` → `order_Sks3KPf0vntKhf`) must keep `business_mutation_was_made=false` + `rollback_status=completed` on every audit replay (§8.6).
+- [ ] **Phase 6M — Razorpay webhook handler.** All four `RAZORPAY_WEBHOOK_*` env flags stay `false`; production webhook secret (`RAZORPAY_WEBHOOK_SECRET`) is consumed only by the Phase 2B `/api/webhooks/razorpay/` endpoint, never by the Phase 6M test-mode handler (§8.7).
+- [ ] **Phase 6M-0 — MCP Gateway.** All four `MCP_*` env flags stay locked (`MCP_ENABLED=false`, `MCP_READ_ONLY_MODE=true`, `MCP_WRITE_TOOLS_ENABLED=false`, `MCP_PROVIDER_TOOLS_ENABLED=false`). Tool invocation count in the last 24 h must be zero (§8.8).
+- [ ] **Runtime kill switch.** The global `RuntimeKillSwitch` row must be `enabled=true`. `/api/v1/saas/runtime-live-gate/kill-switch/` must report `enabled=true` after every deploy.
 
 ---
 
 ## 10. What's intentionally NOT here
 
-This deployment scaffold ships **only** Phase 1 → 5B. The following stay
+This deployment scaffold ships through Phase 6M. The following stay
 locked out at the application layer regardless of how the container is
 configured:
 
-- AI Chat Sales Agent (Phase 5C)
-- WhatsApp inbound auto-reply
-- Chat-to-call handoff
-- Order booking from WhatsApp chat
-- Discount automation / rescue-discount flow
-- Campaign / broadcast WhatsApp sends
-- Freeform outbound WhatsApp text
-- CAIO-originated customer messages
+- WhatsApp inbound auto-reply (Phase 5C — gated by `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`)
+- Chat-to-call handoff (Phase 5D — gated by `WHATSAPP_CALL_HANDOFF_ENABLED=false`)
+- Order booking from WhatsApp chat (Phase 5C — guarded by limited test mode)
+- Discount automation / rescue-discount flow (Phase 5E — gated by `WHATSAPP_RESCUE_DISCOUNT_ENABLED=false` and `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`)
+- Day-20 reorder cadence (Phase 5E — gated by `WHATSAPP_REORDER_DAY20_ENABLED=false`)
+- Campaign / broadcast WhatsApp sends (Phase 5F — LOCKED)
+- Freeform outbound WhatsApp text (LOCKED — only approved templates allowed)
+- CAIO-originated customer messages (LOCKED — CAIO is monitor / audit only)
+- Phase 6K-style real Razorpay test execution (gated by `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false`; one-shot only)
+- Phase 6M Razorpay webhook handler (dormant by default — all four `RAZORPAY_WEBHOOK_*` env flags stay false)
+- MCP Gateway tools / provider tools (gated by `MCP_ENABLED=false` and `MCP_*` flag siblings)
+- Per-org runtime provider routing (Phase 6F preview only — `runtimeSource=env_config`, `perOrgRuntimeEnabled=false`)
+- Live execution through the Runtime Live Audit Gate (Phase 6H — `RuntimeKillSwitch.enabled=true`, every operation `allowedInPhase6H=false`)
 
-If the deploy somehow turns those on, **stop the rollout** and re-read
-`docs/WHATSAPP_INTEGRATION_PLAN.md` and `nd.md` §2 hard stops.
+If the deploy somehow turns any of those on, **stop the rollout** and
+re-read `docs/WHATSAPP_INTEGRATION_PLAN.md`, `nd.md` §2 hard stops, and
+the Current Working Memory block at the top of `nd.md`.

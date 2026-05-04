@@ -54,6 +54,78 @@
 
 ---
 
+## Current Working Memory — Phase 6M Baseline
+
+> Single point of truth for "where are we right now". Re-read this block at the start of every new session before touching anything.
+
+- **Project:** Nirogidhara AI Command Center (multi-tenant SaaS scaffold over a single-tenant Ayurvedic D2C operations stack).
+- **Production URL:** <https://ai.nirogidhara.com>
+- **VPS path:** `/opt/nirogidhara-command` (Hostinger VPS; six namespaced containers; host port `18020 → 80`; host Ubuntu Nginx + Certbot terminate TLS).
+- **Latest completed phase:** **Phase 6M — Razorpay Webhook Handler Implementation (test-mode, dormant by default).**
+- **Latest pushed commit:** `bd38bee` `feat: add razorpay webhook handler test mode` on `origin/main`.
+- **Test baseline (green):** 1283 backend tests + 48 frontend tests. `python manage.py makemigrations --check --dry-run` → `No changes detected`. `python manage.py check` → 0 issues. `npm run lint` → 0 errors (8 pre-existing shadcn warnings). `npm test` → 48 passed. `npm run build` → OK.
+- **Next planned phase:** **Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan.** **Planning-only.** Not started. No code, env, migration, or provider call yet.
+- **Main safety flags (all stay in current state until Director explicitly flips them):**
+  - `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`
+  - `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`
+  - `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS=` (small internal cohort, masked in audits)
+  - `WHATSAPP_CALL_HANDOFF_ENABLED=false`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false`, `WHATSAPP_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_REORDER_DAY20_ENABLED=false`
+  - `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`, `RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED=false`, `RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false`, `RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false`
+  - `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false` (rolled back after the Phase 6K-B one-shot pass)
+  - `MCP_ENABLED=false`, `MCP_READ_ONLY_MODE=true`, `MCP_WRITE_TOOLS_ENABLED=false`, `MCP_PROVIDER_TOOLS_ENABLED=false`
+  - `RuntimeKillSwitch` global → **enabled** (live gate refuses provider-side execution)
+  - Campaigns / broadcast / lifecycle automation / RTO rescue / reorder cadence → **LOCKED**
+- **Phase 6K-B real artefact (immutable record):** `execution_id=pex_8f309650e9644cfaae4418f9` → `provider_object_id=order_Sks3KPf0vntKhf`, amount = `100 paise INR` (₹1.00), Razorpay TEST key, **no payment link, no capture, no customer notification, no business mutation**, `rollback_status=completed`, `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED` flipped back to `false` immediately after the run. This is the only real provider-side write the platform has ever made.
+- **Phase 6M handler safety summary:** `POST /api/webhooks/razorpay/test/` is wired but stays dormant — refuses every inbound when `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`. When enabled (test only, never on production webhook secret), it verifies HMAC-SHA256 over the raw body in constant time, validates a 300-second replay window, dedupes on `X-Razorpay-Event-Id`, masks every payload (13-key scrub list), persists only a safe summary on `RazorpayWebhookEvent`, and **never** mutates Order / Payment / Shipment / DiscountOfferLog / Customer or sends a customer notification (asserted by `assert_no_business_mutation` in tests).
+- **Supporting docs sync status:** all docs aligned with Phase 6M as of this commit (see "Docs Sync Status" below). The next code-touching change must update this section before merging.
+- **Outstanding live-readiness gaps (not blockers for Phase 6N planning, but required before any live launch):**
+  - Vapi: `phone_number_id` and `webhook_secret` still missing in `.env.production`; runtime-routing readiness flags Vapi as "warning, not ready for live".
+  - PayU: integration deferred — Razorpay remains the only payment provider rehearsed end-to-end.
+  - Delhivery: integration deferred — no live AWB has been created from the platform.
+  - Claim Vault: `version="demo-v2"` rows are seeded for the eight categories; **doctor-approved final claims are NOT yet committed**. Lifecycle messages requiring Claim coverage still fail closed for any category whose final approved claims are missing.
+  - WhatsApp customer pilot soak was an accelerated rehearsal, not a full multi-day soak — the dashboard remains the source of truth before any flag flip.
+
+### Docs Sync Status (commit `bd38bee` — Phase 6M baseline)
+
+| Doc | Status | Notes |
+| --- | --- | --- |
+| `nd.md` | ✅ synced | This block + §8 + §11 + §17 reflect Phase 6M. |
+| `CLAUDE.md` | ✅ synced | Line-12 status string lists every phase through Phase 6M. |
+| `AGENTS.md` | ✅ synced | Test counts + hard-stop list current. |
+| `README.md` | ✅ synced | Phase summary + test counts current. |
+| `docs/MASTER_BLUEPRINT_V2.md` | ✅ synced | Document Control table + Completed Build Timeline + Current Production Reality reflect Phase 6M; Phase 6N marked as planning-only / not started. |
+| `docs/RUNBOOK.md` | ✅ synced | Adds Phase 6J/6K/6K-B/6L/6M-0/6M diagnostic sections; baseline `1283/48`. |
+| `docs/BACKEND_API.md` | ✅ synced | Documents `/api/v1/saas/provider-test-plans/`, `/api/v1/saas/provider-execution-attempts/`, `/api/v1/saas/razorpay/...`, `/api/v1/mcp/`, `POST /api/webhooks/razorpay/test/`. |
+| `docs/FRONTEND_AUDIT.md` | ✅ synced | Header bumped from Phase 6I → Phase 6M; lists every `/saas-admin` section currently rendered. |
+| `docs/FUTURE_BACKEND_PLAN.md` | ✅ synced | Phases 6G/6H/6I/6J/6K-A/6K-B/6L/6M-0/6M marked ✅; Phase 6N section added (Planned, planning-only). |
+| `docs/DEPLOYMENT_VPS.md` | ✅ synced | Phase 6M production posture + Phase 6K-B verification command + MCP production posture documented. |
+| `docs/WHATSAPP_INTEGRATION_PLAN.md` | ✅ synced | Top-of-file status note reflects accelerated-soak status + locked flags. |
+
+### Recommended next action
+
+**Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan (planning-only, not implementation).** Produce a written plan that — without flipping any env flag, without changing any code, without making any provider call — describes:
+
+1. Exactly which event types (`payment.captured`, `payment.failed`, `refund.processed`) the future handler will react to, and what the sandbox-only mutation envelope looks like.
+2. What new safety booleans / approval matrix rows / audit kinds the implementation will require.
+3. A Phase 6K-style staged rehearsal (synthetic webhook → audit-only → sandbox-only Order/Payment mutation, all behind a NEW env flag distinct from the Phase 6M handler flag).
+4. Acceptance criteria + rollback procedure + the exact diff scope.
+
+The plan ships as a doc commit only. **No code changes. No env changes. No provider calls.**
+
+### Do not do next
+
+- Do **not** flip `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED` to `true` on production.
+- Do **not** flip `RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED` (it does not have an implementation behind it yet).
+- Do **not** flip `WHATSAPP_AI_AUTO_REPLY_ENABLED` to `true` on production.
+- Do **not** flip any of the broad-automation flags (`call_handoff`, `lifecycle`, `rescue_discount`, `rto_rescue_discount`, `reorder_day20`).
+- Do **not** flip any `MCP_*` flag.
+- Do **not** disable the `RuntimeKillSwitch`.
+- Do **not** start writing Phase 6N code, migrations, or models. Phase 6N is **planning-only**.
+- Do **not** seed real doctor-approved Claim Vault rows without Director sign-off — Phase 5E demo-v2 stays in place until the doctor copy is committed.
+- Do **not** commit `.env.production`, `db.sqlite3`, or any provider secret. The `.gitignore` covers these — verify before staging.
+
+---
+
 ## 0.5 Working agreement (binding rule for all contributors / agents)
 
 **Every meaningful change to this project MUST be followed by:**

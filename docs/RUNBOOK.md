@@ -77,14 +77,21 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6I inclusive
+python -m pytest -q                     # Phase 1 -> 6M inclusive (1283 tests)
+python manage.py makemigrations --check --dry-run    # must report "No changes detected"
+python manage.py check                  # must report "0 issues"
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6I vitest tests
+npm test                                # Phase 1 -> 6M vitest tests (48 tests)
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
+
+> Working agreement: every meaningful change must keep the full
+> verification suite green. `makemigrations --check --dry-run` MUST be
+> clean — Phase 5E-Hotfix added `RenameIndex` migrations specifically
+> because index-name drift was caught only at deploy time.
 
 ## Phase 6H runtime live audit gate diagnostics
 
@@ -143,6 +150,147 @@ Expected Phase 6I posture in every CLI/API/UI response:
 no full phone numbers, and no real customer data. `/saas-admin` should show
 **Single Internal Live Gate Simulation** with no send/payment/shipment/call
 or provider-execution controls.
+
+## Phase 6J single internal provider test plan diagnostics
+
+Phase 6J is **plan-only**. It records a paper trail for a future Razorpay
+test-mode call without ever calling Razorpay. The synthetic payload is
+locked: `{amount: 100, currency: "INR", receipt: "phase6j_internal_test_plan_<plan_id>"}`.
+
+```bash
+cd backend
+python manage.py inspect_single_provider_test_plan --json
+python manage.py prepare_single_provider_test_plan --provider razorpay --operation create_order --json
+python manage.py validate_single_provider_test_plan --plan-id <id> --json
+python manage.py approve_single_provider_test_plan --plan-id <id> --reason "internal rehearsal" --json
+python manage.py reject_single_provider_test_plan --plan-id <id> --reason "blocker" --json
+python manage.py archive_single_provider_test_plan --plan-id <id> --reason "close" --json
+```
+
+Expected posture: every plan response keeps `dry_run=true`,
+`provider_call_allowed=false`, `external_call_will_be_made=false`,
+`external_call_was_made=false`, `provider_call_attempted=false`,
+`real_money=false`, `real_customer_data_allowed=false`. Approval ONLY
+unlocks a future Phase 6K execution gate; it never authorises a provider
+call in Phase 6J. `/saas-admin` shows **Single Internal Provider Test
+Plan** with safety-invariant + Razorpay env-readiness sub-cards. **No
+"Execute Razorpay" / "Create Order" / "Create Payment Link" buttons exist
+on the UI.**
+
+## Phase 6K-A single internal Razorpay test-mode execution gate (code/gate/readiness only)
+
+Phase 6K-A ships the gate. It does **not** execute against Razorpay until
+a separate, explicit one-shot CLI run with the env flag flipped. The
+defaults stay safe: `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false`,
+amount locked to 100 paise, real-money locked false, real-customer-data
+locked false, max one execution per approved plan.
+
+```bash
+cd backend
+python manage.py inspect_single_provider_execution_gate --json
+python manage.py prepare_single_provider_execution_attempt --plan-id <approved-plan-id> --json
+# the next two commands DO touch Razorpay test infra — see Phase 6K-B
+# python manage.py execute_single_razorpay_test_order --attempt-id <id> --confirm-test-execution --json
+# python manage.py rollback_single_provider_execution_attempt --attempt-id <id> --json
+python manage.py archive_single_provider_execution_attempt --attempt-id <id> --reason "close" --json
+```
+
+Expected posture for read-only diagnostics: `business_mutation_was_made=false`,
+`payment_link_created=false`, `payment_captured=false`,
+`customer_notification_sent=false`, no raw secrets in any output,
+`provider_object_id=""` until execution. `/saas-admin` shows **Single
+Internal Razorpay Test-Mode Execution Gate** with readiness +
+invariants sub-cards + attempts table. **No "Execute Razorpay" / "Capture"
+/ "Go Live" / "Send" buttons on the UI** — execution is exclusively CLI.
+
+## Phase 6K-B verification of the immutable artefact
+
+Phase 6K-B is the one-shot real Razorpay test-mode execution that already
+ran on the VPS. The artefact is `pex_8f309650e9644cfaae4418f9` →
+`order_Sks3KPf0vntKhf`, ₹1.00, rolled back. Re-verify any time without
+calling Razorpay:
+
+```bash
+cd backend
+python manage.py inspect_single_provider_execution_gate --json
+python manage.py inspect_razorpay_webhook_handler_readiness --json
+```
+
+Or audit-replay the artefact end-to-end:
+
+```bash
+python manage.py inspect_razorpay_test_execution_audit --execution-id pex_8f309650e9644cfaae4418f9 --json
+```
+
+Expected: `passed=true`, every Phase 6K invariant green, no leaked secret
+in any linked AuditEvent, `rollback_status=completed`, `business_mutation_was_made=false`.
+
+## Phase 6L Razorpay audit review + webhook readiness diagnostics
+
+Phase 6L is read-only / planning-only. It never calls Razorpay, never
+creates a payment link, never captures, and never returns the raw Razorpay
+response (whitelisted summary only).
+
+```bash
+cd backend
+python manage.py inspect_razorpay_test_execution_audit --execution-id <execution_id> --json
+python manage.py inspect_razorpay_webhook_readiness --json
+python manage.py plan_razorpay_webhook_readiness --json
+```
+
+`/saas-admin` shows **Razorpay Test Execution Audit + Webhook Readiness**
+with audit-invariants / readiness / webhook-plan cards (allowlist +
+denylist tables). Webhook plan output documents the future
+`POST /api/webhooks/razorpay/test/` design (HMAC-SHA256, constant-time
+compare, `x_razorpay_event_id` idempotency, 300-second replay window).
+
+## Phase 6M-0 MCP Gateway readiness diagnostics
+
+Phase 6M-0 is the dormant MCP scaffolding. **Do not flip any `MCP_*` env
+flag** — `MCP_ENABLED=false`, `MCP_READ_ONLY_MODE=true`,
+`MCP_WRITE_TOOLS_ENABLED=false`, `MCP_PROVIDER_TOOLS_ENABLED=false` are
+the locked defaults.
+
+```bash
+cd backend
+python manage.py inspect_mcp_gateway_readiness --json
+python manage.py seed_mcp_gateway_registry --json   # idempotent; emits mcp.registry.seeded
+python manage.py inspect_mcp_tool_invocations --hours 24 --json   # expect zero invocations
+```
+
+`/saas-admin` shows **MCP Gateway Readiness** as dormant. The 13-name
+forbidden-tool list is asserted by tests; PII / raw-secret detectors
+(`detect_raw_secret`, `detect_full_pii` with `\b\d{10,}\b` word-boundary
+match) keep ISO timestamps from being mis-flagged.
+
+## Phase 6M Razorpay webhook handler diagnostics (test-mode, dormant)
+
+Phase 6M wires `POST /api/webhooks/razorpay/test/` but keeps it dormant by
+default (`RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`). Production webhook
+secret is **never** consumed by this handler. **Do not** flip
+`RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED` or
+`RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED` — Phase 6M ships the handler
+alone; business mutation is Phase 6N planning territory.
+
+```bash
+cd backend
+python manage.py inspect_razorpay_webhook_handler_readiness --json
+python manage.py simulate_razorpay_webhook_event --event-type payment.captured --dry-run --json
+python manage.py inspect_razorpay_webhook_events --hours 24 --json
+python manage.py purge_razorpay_webhook_test_events --older-than-days 30 --dry-run --json
+```
+
+Expected posture in every response:
+`razorpay_webhook_handler_dormant=true` (when the env flag is off),
+`business_mutation_was_made=false`, `customer_notification_sent=false`,
+`raw_secret_exposed=false`, `full_pii_exposed=false`. The webhook
+handler asserts `assert_no_business_mutation` in tests — Order /
+Payment / Shipment / DiscountOfferLog / Customer rows are never touched
+by Phase 6M code paths.
+
+`/saas-admin` shows **Razorpay Webhook Handler (Test Mode)** with the
+event list (masked summary only) and the readiness card. **No "Replay"
+/ "Apply mutation" / "Go Live" buttons on the UI.**
 
 ## Phase 6E SaaS admin diagnostics
 

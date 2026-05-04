@@ -6,6 +6,25 @@
 
 ---
 
+## Current status (2026-05-04, Phase 6M baseline)
+
+The full Phase 5A → 5F-Gate WhatsApp stack is shipped and dormant. The
+recent live tests (Phase 5F-Gate Real Inbound Deterministic Fallback Fix)
+verified end-to-end on the VPS allow-list cohort, but that **soak was
+accelerated, not full-duration**. After the soak the Director rolled back
+to the safe-OFF posture below; **do not flip any of these flags without
+explicit Director sign-off**:
+
+- `WHATSAPP_AI_AUTO_REPLY_ENABLED=false` (auto-reply OFF — gate inspector reports `nextAction=ready_to_enable_limited_auto_reply_flag`).
+- `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` (final-send guard refuses any number not on `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`).
+- `WHATSAPP_CALL_HANDOFF_ENABLED=false`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false`, `WHATSAPP_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_REORDER_DAY20_ENABLED=false`.
+- Campaigns / broadcast / Phase 5F MARKETING-tier sends remain **LOCKED**.
+- Customer pilot (`WhatsAppPilotCohortMember`) is read-only readiness — no member is auto-promoted from `pending`.
+
+Readiness signals to track before any flag flip: `inspect_whatsapp_auto_reply_gate --json` → `readyForLimitedAutoReply=true`; `inspect_recent_whatsapp_auto_reply_activity --hours 24 --json` → zero `unexpectedNonAllowedSendsCount` and zero Order/Payment/Shipment/DiscountOfferLog mutations across at least one full multi-day soak window. Until both are clean, the global flag stays false.
+
+---
+
 ## Phase 6E SaaS integration-settings note
 
 Phase 6I live-gate note: Phase 6H Controlled Runtime Live Audit Gate is
