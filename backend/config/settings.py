@@ -192,6 +192,55 @@ RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 RAZORPAY_CALLBACK_URL = os.environ.get("RAZORPAY_CALLBACK_URL", "")
 
 
+# ----- Phase 6M — Razorpay Webhook Handler (test-mode) -----
+# Safe defaults: handler off, no business mutation, no customer
+# notification, raw payload not stored. Missing webhook secret never
+# crashes startup — readiness simply reports the gap.
+def _razorpay_webhook_bool(env_key: str, default: str = "false") -> bool:
+    return (os.environ.get(env_key) or default).strip().lower() == "true"
+
+
+RAZORPAY_WEBHOOK_TEST_MODE_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_WEBHOOK_TEST_MODE_ENABLED"
+)
+RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED"
+)
+RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED"
+)
+RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD = _razorpay_webhook_bool(
+    "RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD"
+)
+RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
+    "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
+)
+RAZORPAY_WEBHOOK_REPLAY_WINDOW_SECONDS = _safe_int(
+    os.environ.get("RAZORPAY_WEBHOOK_REPLAY_WINDOW_SECONDS"),
+    default=300,
+)
+RAZORPAY_WEBHOOK_ALLOWED_EVENTS = [
+    name.strip()
+    for name in (
+        os.environ.get("RAZORPAY_WEBHOOK_ALLOWED_EVENTS")
+        or "payment.authorized,payment.captured,payment.failed,"
+        "order.paid,refund.created,refund.processed,"
+        "payment_link.paid,payment_link.cancelled,payment_link.expired"
+    ).split(",")
+    if name.strip()
+]
+RAZORPAY_WEBHOOK_DENIED_EVENTS = [
+    name.strip()
+    for name in (
+        os.environ.get("RAZORPAY_WEBHOOK_DENIED_EVENTS")
+        or "payment.dispute.created,payment.dispute.won,payment.dispute.lost,"
+        "transfer.processed,payout.processed,subscription.charged,"
+        "invoice.paid,virtual_account.credited,qr_code.closed"
+    ).split(",")
+    if name.strip()
+]
+
+
 # ----- Phase 6M-0 — MCP Gateway Foundation -----
 # Safe defaults: no external client, no write tool, no provider tool.
 # Missing token / signing key never crashes the app — readiness simply

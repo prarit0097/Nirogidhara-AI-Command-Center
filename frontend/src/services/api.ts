@@ -155,8 +155,11 @@ import type {
   McpToolSimulationResult,
   McpToolsResponse,
   SaasRazorpayAuditReview,
+  SaasRazorpayWebhookEventsResponse,
+  SaasRazorpayWebhookHandlerReadiness,
   SaasRazorpayWebhookPlan,
   SaasRazorpayWebhookReadiness,
+  SaasRazorpayWebhookSimulationResult,
   SaasRuntimeDryRunReport,
   SaasLiveGateRequest,
   SaasRuntimeLiveGateKillSwitch,
@@ -1416,6 +1419,44 @@ export const api = {
     safeFetch<SaasRazorpayWebhookPlan>(
       "/v1/saas/razorpay/webhook-plan/",
       () => M.SAAS_RAZORPAY_WEBHOOK_PLAN as SaasRazorpayWebhookPlan,
+    ),
+
+  // ---------- Phase 6M - Razorpay Webhook Handler (test-mode) ----------
+
+  getSaasRazorpayWebhookHandlerReadiness: () =>
+    safeFetch<SaasRazorpayWebhookHandlerReadiness>(
+      "/v1/saas/razorpay/webhook-handler-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_WEBHOOK_HANDLER_READINESS as SaasRazorpayWebhookHandlerReadiness,
+    ),
+  getSaasRazorpayWebhookEvents: (limit: number = 25) =>
+    safeFetch<SaasRazorpayWebhookEventsResponse>(
+      `/v1/saas/razorpay/webhook-events/?limit=${limit}`,
+      () => M.SAAS_RAZORPAY_WEBHOOK_EVENTS as SaasRazorpayWebhookEventsResponse,
+    ),
+  simulateSaasRazorpayWebhookEvent: (
+    eventName: string,
+    body: Record<string, unknown> = {},
+  ) =>
+    safeMutate<SaasRazorpayWebhookSimulationResult>(
+      "/v1/saas/razorpay/webhook-events/simulate/",
+      "POST",
+      { eventName, ...body },
+      () =>
+        ({
+          passed: true,
+          eventName,
+          sourceEventId: "evt_test_demo",
+          signatureValid: true,
+          idempotencyStatus: "first_seen",
+          processingStatus: "stored",
+          businessMutationWasMade: false,
+          customerNotificationSent: false,
+          providerCallAttempted: false,
+          blockers: [],
+          warnings: [],
+          nextAction: "ready_for_phase_6n_business_mutation_sandbox_plan",
+        }) as SaasRazorpayWebhookSimulationResult,
     ),
 
   // ---------- Phase 6M-0 - MCP Gateway Foundation (read-only) ----------

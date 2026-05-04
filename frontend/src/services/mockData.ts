@@ -2857,3 +2857,60 @@ export const MCP_SIMULATION_RESULT: Record<string, unknown> = {
   warnings: ["Phase 6M-0 read-only foundation."],
   nextAction: "ready_for_phase_6m_1_external_client_auth",
 };
+
+// ---------- Phase 6M - Razorpay Webhook Handler (test-mode) ----------
+
+export const SAAS_RAZORPAY_WEBHOOK_HANDLER_READINESS: Record<string, unknown> = {
+  phase: "6M",
+  webhookTestModeEnabled: false,
+  webhookSecretPresent: true,
+  businessMutationEnabled: false,
+  customerNotificationEnabled: false,
+  storeRawPayload: false,
+  allowTestEventsOnly: true,
+  replayWindowSeconds: 300,
+  allowedEvents: [
+    "payment.authorized",
+    "payment.captured",
+    "payment.failed",
+    "order.paid",
+    "refund.created",
+    "refund.processed",
+    "payment_link.paid",
+    "payment_link.cancelled",
+    "payment_link.expired",
+  ],
+  deniedEvents: [
+    "payment.dispute.created",
+    "payment.dispute.won",
+    "payment.dispute.lost",
+    "transfer.processed",
+    "payout.processed",
+    "subscription.charged",
+    "invoice.paid",
+    "virtual_account.credited",
+    "qr_code.closed",
+  ],
+  eventCount: 0,
+  verifiedEventCount: 0,
+  duplicateEventCount: 0,
+  blockedEventCount: 0,
+  businessMutationCount: 0,
+  customerNotificationCount: 0,
+  rawSecretExposureCount: 0,
+  fullPiiExposureCount: 0,
+  safeToReceiveTestWebhooks: false,
+  safeToStartPhase6N: false,
+  blockers: ["razorpay_webhook_test_mode_disabled"],
+  warnings: [],
+  nextAction: "fix_razorpay_webhook_handler_blockers",
+};
+
+export const SAAS_RAZORPAY_WEBHOOK_EVENTS: Record<string, unknown> = {
+  count: 0,
+  limit: 25,
+  events: [],
+  businessMutationWasMade: false,
+  customerNotificationSent: false,
+  providerCallAttempted: false,
+};

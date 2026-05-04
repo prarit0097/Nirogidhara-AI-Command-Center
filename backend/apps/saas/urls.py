@@ -23,8 +23,12 @@ from .views import (
     ProviderTestPlanValidateView,
     ProviderTestPlansListView,
     RazorpayExecutionAuditReviewView,
+    RazorpayWebhookEventDetailView,
+    RazorpayWebhookEventsListView,
+    RazorpayWebhookHandlerReadinessView,
     RazorpayWebhookPlanView,
     RazorpayWebhookReadinessView,
+    RazorpayWebhookSimulateView,
     RuntimeDryRunView,
     RuntimeLiveGateApproveView,
     RuntimeLiveGateKillSwitchView,
@@ -285,5 +289,26 @@ urlpatterns = [
         "razorpay/webhook-plan/",
         RazorpayWebhookPlanView.as_view(),
         name="saas-razorpay-webhook-plan",
+    ),
+    # Phase 6M — test-mode handler readiness + event browser + simulator.
+    path(
+        "razorpay/webhook-handler-readiness/",
+        RazorpayWebhookHandlerReadinessView.as_view(),
+        name="saas-razorpay-webhook-handler-readiness",
+    ),
+    path(
+        "razorpay/webhook-events/",
+        RazorpayWebhookEventsListView.as_view(),
+        name="saas-razorpay-webhook-events",
+    ),
+    path(
+        "razorpay/webhook-events/simulate/",
+        RazorpayWebhookSimulateView.as_view(),
+        name="saas-razorpay-webhook-events-simulate",
+    ),
+    path(
+        "razorpay/webhook-events/<int:event_id>/",
+        RazorpayWebhookEventDetailView.as_view(),
+        name="saas-razorpay-webhook-event-detail",
     ),
 ]

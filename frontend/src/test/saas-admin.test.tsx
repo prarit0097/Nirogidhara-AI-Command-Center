@@ -47,6 +47,57 @@ describe("Phase 6E - SaaS Admin Panel", () => {
   });
 });
 
+describe("Phase 6M - Razorpay Webhook Handler (test-mode)", () => {
+  it("exposes Phase 6M api methods returning safe shapes", async () => {
+    expect(typeof api.getSaasRazorpayWebhookHandlerReadiness).toBe("function");
+    expect(typeof api.getSaasRazorpayWebhookEvents).toBe("function");
+    expect(typeof api.simulateSaasRazorpayWebhookEvent).toBe("function");
+
+    const readiness = await api.getSaasRazorpayWebhookHandlerReadiness();
+    expect(readiness.businessMutationEnabled).toBe(false);
+    expect(readiness.customerNotificationEnabled).toBe(false);
+    expect(readiness.businessMutationCount).toBe(0);
+    expect(readiness.customerNotificationCount).toBe(0);
+    expect(readiness.rawSecretExposureCount).toBe(0);
+    expect(readiness.fullPiiExposureCount).toBe(0);
+
+    const events = await api.getSaasRazorpayWebhookEvents();
+    expect(events.businessMutationWasMade).toBe(false);
+    expect(events.customerNotificationSent).toBe(false);
+    expect(events.providerCallAttempted).toBe(false);
+  });
+
+  it("renders the Razorpay Webhook Handler section without payment buttons", async () => {
+    render(<SaasAdminPage />);
+    expect(
+      await screen.findByText("Razorpay Webhook Handler (Test Mode)"),
+    ).toBeInTheDocument();
+    const section = await screen.findByTestId(
+      "razorpay-webhook-handler-section",
+    );
+    expect(section).toBeInTheDocument();
+    expect(section.textContent).toContain("Handler readiness");
+    expect(section.textContent).toContain("Counters (must stay 0)");
+
+    // No live payment / capture / notify buttons.
+    expect(
+      screen.queryByRole("button", { name: /capture payment/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /mark order paid/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /replay event/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /send whatsapp/i }),
+    ).not.toBeInTheDocument();
+
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("phase6m_FAKEsecret");
+  });
+});
+
 describe("Phase 6M-0 - MCP Gateway Foundation", () => {
   it("exposes MCP api methods that return safe-default shapes", async () => {
     expect(typeof api.getMcpReadiness).toBe("function");

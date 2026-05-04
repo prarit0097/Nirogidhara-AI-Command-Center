@@ -191,6 +191,13 @@ backend/apps/saas/razorpay_audit_review.py ← Phase 6L — read-only audit-revi
 backend/apps/saas/management/commands/inspect_razorpay_test_execution_audit.py ← Phase 6L — read-only review of one Phase 6K execution attempt
 backend/apps/saas/management/commands/inspect_razorpay_webhook_readiness.py ← Phase 6L — env presence + Phase 6K artefact sanity check
 backend/apps/saas/management/commands/plan_razorpay_webhook_readiness.py ← Phase 6L — emits canonical webhook-readiness plan (allowlist + denylist + signature design + idempotency + replay window + audit logging + sensitive-keys-to-scrub); Phase 6L never registers a webhook receiver
+backend/apps/payments/razorpay_webhooks.py    ← Phase 6M — test-mode Razorpay webhook service. Verifies HMAC-SHA256 over RAW body; uses x-razorpay-event-id for idempotency; allowlist+denylist; replay window; safe summary only. NEVER calls Razorpay, NEVER mutates Order/Payment/Shipment.
+backend/apps/payments/razorpay_webhook_readiness.py ← Phase 6M — handler readiness selector with safety counters
+backend/apps/payments/management/commands/inspect_razorpay_webhook_handler_readiness.py ← Phase 6M — read-only readiness command
+backend/apps/payments/management/commands/simulate_razorpay_webhook_event.py ← Phase 6M — synthetic webhook simulator (signs body with RAZORPAY_WEBHOOK_SECRET; dispatches via the same service the public endpoint uses; never calls Razorpay)
+backend/apps/payments/management/commands/inspect_razorpay_webhook_events.py ← Phase 6M — safe event browser
+backend/apps/payments/management/commands/purge_razorpay_webhook_test_events.py ← Phase 6M — refuses to delete rows that declare a business mutation or customer notification
+backend/apps/payments/webhooks.py:RazorpayTestWebhookView ← Phase 6M — public endpoint at /api/webhooks/razorpay/test/; isolated from the Phase 2B RazorpayWebhookView
 backend/apps/mcp_gateway/                ← Phase 6M-0 — MCP Gateway Foundation Django app. Six models (McpClientApp / McpAccessPolicy / McpToolDefinition / McpResourceDefinition / McpPromptDefinition / McpToolInvocationLog), services layer (masking / schemas / default_tools / default_resources / default_prompts / registry / audit / auth / tool_executor / tool_handlers / readiness), 5 management commands (ensure_mcp_defaults / inspect_mcp_gateway_readiness / list_mcp_tools / simulate_mcp_tool_call / inspect_mcp_security_posture), 7 admin/auth-protected DRF endpoints under /api/v1/mcp/. Defaults LOCKED: MCP_ENABLED=false, MCP_READ_ONLY_MODE=true, MCP_WRITE_TOOLS_ENABLED=false, MCP_PROVIDER_TOOLS_ENABLED=false. 13-tool forbidden-tool list refused at the executor level (razorpay.create_order / capture_payment / payment_link / whatsapp.send_message / delhivery.create_shipment / vapi.place_call / campaign.start / payment.execute / order.create_live / crm.bulk_update / system.shell / system.sql / system.http_fetch). No public unauthenticated endpoint, no tool-execute endpoint that bypasses the policy gate.
 backend/apps/whatsapp/language.py        ← Phase 5C deterministic Hindi/Hinglish/English detection (devanagari ratio + Hinglish marker word list)
 backend/apps/whatsapp/ai_schema.py        ← Phase 5C strict JSON schema + ChatAgentDecision dataclass + BLOCKED_CLAIM_PHRASES list + reply_contains_blocked_phrase()
@@ -264,13 +271,13 @@ python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
 python manage.py makemigrations --check --dry-run  # MUST report "No changes detected"
-python -m pytest -q                 # 1241 tests today
+python -m pytest -q                 # 1283 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                         # http://localhost:8080
-npm test                            # 46 tests today
+npm test                            # 48 tests today
 npm run lint                        # 0 errors expected
 npm run build                       # production build
 ```

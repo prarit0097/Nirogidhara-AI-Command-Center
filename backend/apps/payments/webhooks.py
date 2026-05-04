@@ -1,5 +1,10 @@
 """Razorpay webhook receiver.
 
+Phase 6M ships a SECOND, isolated test-mode webhook receiver at
+``/api/webhooks/razorpay/test/`` (see :class:`RazorpayTestWebhookView`).
+The original :class:`RazorpayWebhookView` here remains the production
+payment-link webhook path and is unchanged in Phase 6M.
+
 Razorpay POSTs JSON events with an ``X-Razorpay-Signature`` header containing
 ``HMAC_SHA256(webhook_secret, raw_body)``. We:
 
@@ -215,3 +220,54 @@ _HANDLERS: dict[str, EventHandler] = {
     "payment.failed": _handle_failed,
     "refund.processed": _handle_refunded,
 }
+
+
+# ---------------------------------------------------------------------------
+# Phase 6M — RazorpayTestWebhookView (test-mode handler)
+# ---------------------------------------------------------------------------
+
+
+class RazorpayTestWebhookView(APIView):
+    """``POST /api/webhooks/razorpay/test/`` — Phase 6M test-mode handler.
+
+    Public endpoint. Razorpay authenticates by HMAC-SHA256 over the
+    raw request body. Phase 6M:
+
+    - NEVER calls Razorpay.
+    - NEVER mutates ``Order`` / ``Payment`` / ``Shipment`` /
+      ``DiscountOfferLog``.
+    - NEVER sends a customer notification.
+    - NEVER returns the raw webhook secret / raw signature / raw payload.
+
+    Idempotency uses ``X-Razorpay-Event-Id``; the service refuses any
+    event not on the Phase 6M allowlist.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []  # public — auth comes from HMAC signature
+
+    def post(self, request):
+        from .razorpay_webhooks import process_razorpay_webhook
+
+        body = request.body or b""
+        headers = {
+            "x-razorpay-signature": request.META.get(
+                "HTTP_X_RAZORPAY_SIGNATURE", ""
+            )
+            or "",
+            "x-razorpay-event-id": request.META.get(
+                "HTTP_X_RAZORPAY_EVENT_ID", ""
+            )
+            or "",
+            "content-type": request.META.get("CONTENT_TYPE", "")
+            or "application/json",
+            "user-agent": request.META.get("HTTP_USER_AGENT", "") or "",
+        }
+        result = process_razorpay_webhook(
+            raw_body=body,
+            headers=headers,
+            request_meta={"path": request.path},
+        )
+        # Strip the safe-only ``statusCode`` before returning the body.
+        status_code = int(result.pop("statusCode", 200))
+        return Response(result, status=status_code)

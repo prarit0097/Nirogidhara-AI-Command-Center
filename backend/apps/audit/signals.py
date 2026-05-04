@@ -264,6 +264,16 @@ ICON_BY_KIND: dict[str, str] = {
     "runtime.provider_test_plan.archived": "archive",
     "runtime.provider_test_plan.blocked": "ban",
     "runtime.provider_test_plan.invariant_violation_blocked": "shield-off",
+    # Phase 6M Razorpay Webhook Handler (test-mode).
+    "razorpay.webhook.received": "send",
+    "razorpay.webhook.blocked": "ban",
+    "razorpay.webhook.signature_verified": "shield",
+    "razorpay.webhook.signature_failed": "shield-off",
+    "razorpay.webhook.duplicate_ignored": "rotate-ccw",
+    "razorpay.webhook.stored": "check-circle",
+    "razorpay.webhook.event_denied": "ban",
+    "razorpay.webhook.replay_blocked": "ban",
+    "razorpay.webhook.business_mutation_blocked": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

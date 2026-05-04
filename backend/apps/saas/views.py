@@ -59,6 +59,13 @@ from .razorpay_audit_review import (
     plan_razorpay_webhook_readiness,
     review_razorpay_test_execution_audit,
 )
+from apps.payments.razorpay_webhook_readiness import (
+    get_razorpay_webhook_handler_readiness,
+)
+from apps.payments.models import RazorpayWebhookEvent
+from apps.payments.management.commands.inspect_razorpay_webhook_events import (
+    _serialize as _serialize_razorpay_webhook_event,
+)
 from .provider_test_plan import (
     approve_single_provider_test_plan,
     archive_single_provider_test_plan,
@@ -1097,6 +1104,152 @@ class RazorpayWebhookPlanView(APIView):
         return Response(plan_razorpay_webhook_readiness())
 
 
+class RazorpayWebhookHandlerReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/webhook-handler-readiness/`` — Phase 6M.
+
+    Read-only Phase 6M handler readiness report. Auth + admin only.
+    POST/PATCH/DELETE return 405. NEVER returns the raw webhook
+    secret.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(get_razorpay_webhook_handler_readiness())
+
+
+class RazorpayWebhookEventsListView(APIView):
+    """``GET /api/v1/saas/razorpay/webhook-events/`` — Phase 6M."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        qs = RazorpayWebhookEvent.objects.all().order_by("-received_at")
+        event_name = (request.query_params.get("event_name") or "").strip()
+        if event_name:
+            qs = qs.filter(event_name=event_name)
+        status_filter = (request.query_params.get("status") or "").strip()
+        if status_filter:
+            qs = qs.filter(processing_status=status_filter)
+        rows = list(qs[:limit])
+        return Response(
+            {
+                "limit": limit,
+                "count": len(rows),
+                "events": [_serialize_razorpay_webhook_event(row) for row in rows],
+                "businessMutationWasMade": False,
+                "customerNotificationSent": False,
+                "providerCallAttempted": False,
+            }
+        )
+
+
+class RazorpayWebhookEventDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/webhook-events/<id>/`` — Phase 6M."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, event_id):
+        row = RazorpayWebhookEvent.objects.filter(id=event_id).first()
+        if row is None:
+            return Response(
+                {"detail": "Razorpay webhook event not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_razorpay_webhook_event(row))
+
+
+class RazorpayWebhookSimulateView(APIView):
+    """``POST /api/v1/saas/razorpay/webhook-events/simulate/`` — Phase 6M.
+
+    Admin-only. Test-mode-only. Mirrors the
+    ``simulate_razorpay_webhook_event`` management command via the
+    same service path. NEVER calls Razorpay; NEVER mutates business
+    records.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def post(self, request):
+        from django.conf import settings as _settings
+
+        secret = getattr(_settings, "RAZORPAY_WEBHOOK_SECRET", "") or ""
+        if not secret:
+            return Response(
+                {
+                    "detail": "RAZORPAY_WEBHOOK_SECRET is not set; cannot sign synthetic event.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        event_name = (
+            request.data.get("eventName")
+            or request.data.get("event")
+            or ""
+        ).strip()
+        if not event_name:
+            return Response(
+                {"detail": "eventName required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            amount_paise = int(request.data.get("amountPaise") or 100)
+        except (TypeError, ValueError):
+            amount_paise = 100
+
+        # Build + sign + dispatch. We import the helpers locally so the
+        # admin call goes through the same code path as the CLI.
+        import json as _json
+        from datetime import datetime, timezone
+        from uuid import uuid4
+        from apps.payments.management.commands.simulate_razorpay_webhook_event import (
+            _build_payload,
+        )
+        from apps.payments.razorpay_webhooks import (
+            compute_razorpay_signature,
+            process_razorpay_webhook,
+        )
+
+        order_id = (
+            request.data.get("orderId") or "order_Sks3KPf0vntKhf"
+        )
+        payment_id = request.data.get("paymentId") or "pay_test_phase6m"
+        refund_id = request.data.get("refundId") or "rfnd_test_phase6m"
+        payment_link_id = (
+            request.data.get("paymentLinkId") or "plink_test_phase6m"
+        )
+        event_id = (
+            request.data.get("eventId") or f"evt_test_{uuid4().hex[:16]}"
+        )
+        created_at_epoch = int(datetime.now(tz=timezone.utc).timestamp())
+        payload = _build_payload(
+            event_name=event_name,
+            amount_paise=amount_paise,
+            order_id=order_id,
+            payment_id=payment_id,
+            refund_id=refund_id,
+            payment_link_id=payment_link_id,
+            created_at_epoch=created_at_epoch,
+        )
+        body = _json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        signature = compute_razorpay_signature(body, secret)
+        result = process_razorpay_webhook(
+            raw_body=body,
+            headers={
+                "x-razorpay-signature": signature,
+                "x-razorpay-event-id": event_id,
+                "content-type": "application/json",
+                "user-agent": "razorpay-simulator/phase6m-admin",
+            },
+            request_meta={"source": "saas-admin-simulator"},
+        )
+        return Response(result)
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -1144,4 +1297,8 @@ __all__ = (
     "RazorpayExecutionAuditReviewView",
     "RazorpayWebhookReadinessView",
     "RazorpayWebhookPlanView",
+    "RazorpayWebhookHandlerReadinessView",
+    "RazorpayWebhookEventsListView",
+    "RazorpayWebhookEventDetailView",
+    "RazorpayWebhookSimulateView",
 )

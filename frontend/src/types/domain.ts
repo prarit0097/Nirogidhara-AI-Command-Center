@@ -2936,3 +2936,88 @@ export interface McpToolSimulationResult {
   warnings: string[];
   nextAction: string;
 }
+
+// ---------- Phase 6M - Razorpay Webhook Handler (test-mode) ----------
+
+export interface SaasRazorpayWebhookHandlerReadiness {
+  phase: "6M";
+  webhookTestModeEnabled: boolean;
+  webhookSecretPresent: boolean;
+  businessMutationEnabled: boolean;
+  customerNotificationEnabled: boolean;
+  storeRawPayload: boolean;
+  allowTestEventsOnly: boolean;
+  replayWindowSeconds: number;
+  allowedEvents: string[];
+  deniedEvents: string[];
+  eventCount: number;
+  verifiedEventCount: number;
+  duplicateEventCount: number;
+  blockedEventCount: number;
+  businessMutationCount: number;
+  customerNotificationCount: number;
+  rawSecretExposureCount: number;
+  fullPiiExposureCount: number;
+  safeToReceiveTestWebhooks: boolean;
+  safeToStartPhase6N: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface SaasRazorpayWebhookEventDto {
+  id: number;
+  sourceEventId: string;
+  eventId: string;
+  eventName: string;
+  environment: string;
+  signaturePresent: boolean;
+  signatureValid: boolean;
+  replayWindowValid: boolean;
+  idempotencyStatus: string;
+  processingStatus: string;
+  processingMode: string;
+  providerOrderId: string;
+  providerPaymentId: string;
+  providerRefundId: string;
+  amountPaise: number | null;
+  currency: string;
+  paymentStatus: string;
+  orderStatus: string;
+  businessMutationAttempted: boolean;
+  businessMutationWasMade: boolean;
+  customerNotificationAttempted: boolean;
+  customerNotificationSent: boolean;
+  rawSecretExposed: boolean;
+  fullPiiExposed: boolean;
+  duplicateCount: number;
+  deniedReason: string;
+  blockers: string[];
+  warnings: string[];
+  scrubbedKeys: string[];
+  receivedAt: string;
+}
+
+export interface SaasRazorpayWebhookEventsResponse {
+  count: number;
+  limit: number;
+  events: SaasRazorpayWebhookEventDto[];
+  businessMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+}
+
+export interface SaasRazorpayWebhookSimulationResult {
+  passed: boolean;
+  eventName: string;
+  sourceEventId: string;
+  signatureValid: boolean;
+  idempotencyStatus: string;
+  processingStatus: string;
+  businessMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}

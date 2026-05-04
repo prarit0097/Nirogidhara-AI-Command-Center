@@ -19,6 +19,9 @@ import type {
   McpToolInvocationDto,
   McpToolsResponse,
   SaasRazorpayAuditReview,
+  SaasRazorpayWebhookEventDto,
+  SaasRazorpayWebhookEventsResponse,
+  SaasRazorpayWebhookHandlerReadiness,
   SaasRazorpayWebhookPlan,
   SaasRazorpayWebhookReadiness,
   SaasRuntimeLiveGateSummary,
@@ -87,6 +90,10 @@ export default function SaasAdminPage() {
   const [mcpTools, setMcpTools] = useState<McpToolsResponse | null>(null);
   const [mcpInvocations, setMcpInvocations] =
     useState<McpInvocationsResponse | null>(null);
+  const [razorpayWebhookHandlerReadiness, setRazorpayWebhookHandlerReadiness] =
+    useState<SaasRazorpayWebhookHandlerReadiness | null>(null);
+  const [razorpayWebhookEvents, setRazorpayWebhookEvents] =
+    useState<SaasRazorpayWebhookEventsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -106,9 +113,11 @@ export default function SaasAdminPage() {
       api.getMcpSecurityPosture(),
       api.getMcpTools(),
       api.getMcpInvocations(25),
+      api.getSaasRazorpayWebhookHandlerReadiness(),
+      api.getSaasRazorpayWebhookEvents(25),
     ])
       .then(
-        ([ov, rt, dr, ai, gate, sims, ptp, exec, wbr, wbp, mcpR, mcpSp, mcpT, mcpInv]) => {
+        ([ov, rt, dr, ai, gate, sims, ptp, exec, wbr, wbp, mcpR, mcpSp, mcpT, mcpInv, hr, wbe]) => {
           setOverview(ov);
           setRouting(rt);
           setDryRun(dr);
@@ -123,6 +132,8 @@ export default function SaasAdminPage() {
           setMcpSecurityPosture(mcpSp);
           setMcpTools(mcpT);
           setMcpInvocations(mcpInv);
+          setRazorpayWebhookHandlerReadiness(hr);
+          setRazorpayWebhookEvents(wbe);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -980,6 +991,57 @@ export default function SaasAdminPage() {
             webhook receiver, never calls Razorpay, never mutates a
             business row, never exposes raw secrets. Webhook handler
             ships in Phase 6M.
+          </div>
+        </section>
+      )}
+
+      {(razorpayWebhookHandlerReadiness || razorpayWebhookEvents) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-webhook-handler-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Webhook className="h-5 w-5 text-primary" />
+                Razorpay Webhook Handler (Test Mode)
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6M — receives, verifies, dedupes, and audits
+                Razorpay test-mode webhook events. <strong>No business
+                mutation</strong> in this phase. No customer
+                notification. No raw payload / signature / secret in the
+                UI. Phase 6N will own business-mutation sandbox.
+              </p>
+            </div>
+            {razorpayWebhookHandlerReadiness && (
+              <StatusPill
+                tone={
+                  razorpayWebhookHandlerReadiness.safeToReceiveTestWebhooks
+                    ? "success"
+                    : "warning"
+                }
+              >
+                {razorpayWebhookHandlerReadiness.webhookTestModeEnabled
+                  ? "Receiver enabled"
+                  : "Receiver disabled (safe)"}
+              </StatusPill>
+            )}
+          </div>
+          {razorpayWebhookHandlerReadiness && (
+            <RazorpayWebhookHandlerReadinessCard
+              readiness={razorpayWebhookHandlerReadiness}
+            />
+          )}
+          {razorpayWebhookEvents && (
+            <RazorpayWebhookEventsTable response={razorpayWebhookEvents} />
+          )}
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Read-only.</strong> No "Capture Payment" / "Send
+            WhatsApp" / "Mark Order Paid" / "Replay Event" buttons
+            exist on this page. Even the simulator runs through the
+            same Phase 6M handler — synthetic payload only, no
+            external Razorpay call.
           </div>
         </section>
       )}
@@ -2244,6 +2306,259 @@ function McpInvocationRow({ row }: { row: McpToolInvocationDto }) {
       </td>
       <td className="px-6 py-3 text-[11px] text-muted-foreground">
         {row.createdAt}
+      </td>
+    </tr>
+  );
+}
+
+
+function RazorpayWebhookHandlerReadinessCard({
+  readiness,
+}: {
+  readiness: SaasRazorpayWebhookHandlerReadiness;
+}) {
+  return (
+    <div className="border-t border-border px-6 py-4">
+      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Webhook className="h-4 w-4 text-primary" />
+        Handler readiness
+      </h4>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <KeyValue
+          label="Test mode enabled"
+          value={String(readiness.webhookTestModeEnabled)}
+        />
+        <KeyValue
+          label="Webhook secret"
+          value={
+            readiness.webhookSecretPresent ? "present" : "missing"
+          }
+        />
+        <KeyValue
+          label="Replay window"
+          value={`${readiness.replayWindowSeconds}s`}
+        />
+        <KeyValue
+          label="Allowed events"
+          value={String(readiness.allowedEvents.length)}
+        />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-md border border-border bg-muted/20 p-3 text-xs">
+          <div className="mb-2 font-semibold text-muted-foreground">
+            Safety invariants
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-muted-foreground">
+                businessMutationEnabled
+              </span>
+              <StatusPill
+                tone={
+                  readiness.businessMutationEnabled
+                    ? "danger"
+                    : "success"
+                }
+              >
+                {String(readiness.businessMutationEnabled)}
+              </StatusPill>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-muted-foreground">
+                customerNotificationEnabled
+              </span>
+              <StatusPill
+                tone={
+                  readiness.customerNotificationEnabled
+                    ? "danger"
+                    : "success"
+                }
+              >
+                {String(readiness.customerNotificationEnabled)}
+              </StatusPill>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-muted-foreground">
+                storeRawPayload
+              </span>
+              <StatusPill
+                tone={readiness.storeRawPayload ? "warning" : "success"}
+              >
+                {String(readiness.storeRawPayload)}
+              </StatusPill>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-md border border-border bg-muted/20 p-3 text-xs">
+          <div className="mb-2 font-semibold text-muted-foreground">
+            Counters (must stay 0)
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-muted-foreground">
+                businessMutationCount
+              </span>
+              <StatusPill
+                tone={
+                  readiness.businessMutationCount === 0
+                    ? "success"
+                    : "danger"
+                }
+              >
+                {readiness.businessMutationCount}
+              </StatusPill>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-muted-foreground">
+                customerNotificationCount
+              </span>
+              <StatusPill
+                tone={
+                  readiness.customerNotificationCount === 0
+                    ? "success"
+                    : "danger"
+                }
+              >
+                {readiness.customerNotificationCount}
+              </StatusPill>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-muted-foreground">
+                rawSecretExposureCount
+              </span>
+              <StatusPill
+                tone={
+                  readiness.rawSecretExposureCount === 0
+                    ? "success"
+                    : "danger"
+                }
+              >
+                {readiness.rawSecretExposureCount}
+              </StatusPill>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-muted-foreground">
+                fullPiiExposureCount
+              </span>
+              <StatusPill
+                tone={
+                  readiness.fullPiiExposureCount === 0
+                    ? "success"
+                    : "danger"
+                }
+              >
+                {readiness.fullPiiExposureCount}
+              </StatusPill>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-4 text-xs">
+        <KeyValue label="Events seen" value={String(readiness.eventCount)} />
+        <KeyValue
+          label="Verified"
+          value={String(readiness.verifiedEventCount)}
+        />
+        <KeyValue
+          label="Duplicates"
+          value={String(readiness.duplicateEventCount)}
+        />
+        <KeyValue
+          label="Blocked / ignored"
+          value={String(readiness.blockedEventCount)}
+        />
+      </div>
+      {readiness.blockers.length > 0 && (
+        <IssueList items={readiness.blockers} empty="No blockers" />
+      )}
+      <div className="mt-3 text-[11px] text-muted-foreground">
+        Next action:{" "}
+        <span className="font-medium">{readiness.nextAction}</span>
+      </div>
+    </div>
+  );
+}
+
+function RazorpayWebhookEventsTable({
+  response,
+}: {
+  response: SaasRazorpayWebhookEventsResponse;
+}) {
+  if (!response.events.length) {
+    return (
+      <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+        No Razorpay webhook events recorded yet. Send a synthetic
+        event via{" "}
+        <code>manage.py simulate_razorpay_webhook_event --event payment.captured</code>.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto border-t border-border">
+      <table className="w-full min-w-[920px] text-sm">
+        <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+          <tr>
+            <th className="px-6 py-3 text-left font-medium">Event id</th>
+            <th className="py-3 text-left font-medium">Event</th>
+            <th className="py-3 text-left font-medium">Signature</th>
+            <th className="py-3 text-left font-medium">Idempotency</th>
+            <th className="py-3 text-left font-medium">Status</th>
+            <th className="py-3 text-left font-medium">Order id</th>
+            <th className="py-3 text-left font-medium">Payment id</th>
+            <th className="py-3 text-left font-medium">Amount</th>
+            <th className="px-6 py-3 text-left font-medium">Received</th>
+          </tr>
+        </thead>
+        <tbody>
+          {response.events.map((row) => (
+            <RazorpayWebhookEventRow key={row.id} row={row} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RazorpayWebhookEventRow({
+  row,
+}: {
+  row: SaasRazorpayWebhookEventDto;
+}) {
+  return (
+    <tr
+      className="border-t border-border/60"
+      data-testid="razorpay-webhook-event-row"
+    >
+      <td className="px-6 py-3 font-mono text-xs">
+        {row.sourceEventId || "—"}
+      </td>
+      <td className="py-3 text-xs">{row.eventName}</td>
+      <td className="py-3">
+        <StatusPill tone={row.signatureValid ? "success" : "danger"}>
+          {row.signatureValid ? "valid" : "invalid"}
+        </StatusPill>
+      </td>
+      <td className="py-3 text-xs">
+        {row.idempotencyStatus} ({row.duplicateCount}x)
+      </td>
+      <td className="py-3">
+        <StatusPill tone={toneForStatus(row.processingStatus)}>
+          {row.processingStatus}
+        </StatusPill>
+      </td>
+      <td className="py-3 text-[11px] font-mono">
+        {row.providerOrderId || "—"}
+      </td>
+      <td className="py-3 text-[11px] font-mono">
+        {row.providerPaymentId || "—"}
+      </td>
+      <td className="py-3 text-xs">
+        {row.amountPaise === null
+          ? "—"
+          : `${row.amountPaise} ${row.currency || ""}`}
+      </td>
+      <td className="px-6 py-3 text-[11px] text-muted-foreground">
+        {row.receivedAt}
       </td>
     </tr>
   );

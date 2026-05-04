@@ -244,6 +244,39 @@ business records. Raw secrets NEVER appear in any output.
 **34 new backend tests + 2 new frontend tests; 1165 backend +
 42 frontend, all green.**
 
+**Phase 6M note:** **Phase 6M Razorpay Webhook Handler (test-mode)
+shipped.** Implements the canonical receiver designed in the
+Phase 6L plan. New `apps.payments.razorpay_webhooks.process_razorpay_webhook`
+verifies `X-Razorpay-Signature` (HMAC-SHA256 over RAW body, constant-time
+compare), parses JSON, classifies the event, runs the 300-second
+replay window check, dedupes on `X-Razorpay-Event-Id`, and persists a
+safe summary on `RazorpayWebhookEvent` (migration `payments.0004`).
+Allowlist: 9 events (payment.* / order.paid / refund.* / payment_link.*).
+Denylist: 9 events (subscription / dispute / transfer / payout /
+virtual_account / qr_code / invoice). New `RazorpayTestWebhookView` at
+`POST /api/webhooks/razorpay/test/` (the production
+`RazorpayWebhookView` at `/api/webhooks/razorpay/` is untouched). Nine
+new audit kinds (`razorpay.webhook.*`). Four management commands
+(`inspect_razorpay_webhook_handler_readiness`,
+`simulate_razorpay_webhook_event`, `inspect_razorpay_webhook_events`,
+`purge_razorpay_webhook_test_events`). Four admin/auth-protected DRF
+endpoints under `/api/v1/saas/razorpay/` (handler-readiness, events
+list, event detail, simulator). Frontend `/saas-admin` gains
+"Razorpay Webhook Handler (Test Mode)" section with handler-readiness
+card + safety-invariants sub-card + counters sub-card + events table.
+**No "Capture Payment" / "Mark Order Paid" / "Replay Event" / "Send
+WhatsApp" / "Refund" buttons exist anywhere on the UI.** Phase 6M
+NEVER calls Razorpay, NEVER mutates Order / Payment / Shipment /
+DiscountOfferLog, NEVER sends a customer notification, NEVER returns
+the raw webhook secret / raw signature / raw payload (asserted with
+fake env values + planted card / email / phone payloads in tests).
+Defaults LOCKED: `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`,
+`RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED=false`,
+`RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false`,
+`RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false`,
+`RAZORPAY_WEBHOOK_REPLAY_WINDOW_SECONDS=300`. **42 new backend tests +
+2 new frontend tests; 1283 backend + 48 frontend, all green.**
+
 **Phase 6M-0 note:** **Phase 6M-0 MCP Gateway Foundation +
 AI Connector Readiness shipped.** New `apps.mcp_gateway` Django
 app ships six models (`McpClientApp`, `McpAccessPolicy`,
@@ -409,13 +442,13 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 1241 tests today
+python -m pytest -q                    # 1283 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                            # http://localhost:8080
-npm test                               # 46 tests today
+npm test                               # 48 tests today
 npm run lint                           # 0 errors expected
 npm run build                          # production build
 
