@@ -73,7 +73,16 @@ from apps.payments.razorpay_sandbox_status_mapping import (
     summarize_phase6o_reviews,
     _serialize_review as _serialize_phase6o_review,
 )
-from apps.payments.models import RazorpaySandboxStatusReview
+from apps.payments.razorpay_sandbox_paid_status_mutation import (
+    inspect_phase6p_paid_status_mutation_readiness,
+    preview_phase6p_paid_status_mutation,
+    summarize_phase6p_paid_status_mutation_attempts,
+    _serialize_attempt as _serialize_phase6p_attempt,
+)
+from apps.payments.models import (
+    RazorpaySandboxPaidStatusMutationAttempt,
+    RazorpaySandboxStatusReview,
+)
 from apps.payments.razorpay_webhook_readiness import (
     get_razorpay_webhook_handler_readiness,
 )
@@ -1395,6 +1404,91 @@ class RazorpaySandboxStatusReviewArchiveView(APIView):
         return Response(report)
 
 
+class RazorpaySandboxPaidStatusMutationReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/sandbox-paid-status-mutation-readiness/`` — Phase 6P.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER mutates anything; NEVER calls
+    Razorpay; execution is exclusively via CLI.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(inspect_phase6p_paid_status_mutation_readiness())
+
+
+class RazorpaySandboxPaidStatusMutationAttemptsListView(APIView):
+    """``GET /api/v1/saas/razorpay/sandbox-paid-status-mutation-attempts/`` — Phase 6P list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase6p_paid_status_mutation_attempts(limit=limit)
+        return Response(
+            {
+                "phase": "6P",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "ledgerCounts": report["ledgerCounts"],
+                "ledgerItems": report["ledgerItems"],
+                "executionPath": "cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "businessMutationWasMade": False,
+                "realOrderMutationWasMade": False,
+                "realPaymentMutationWasMade": False,
+                "customerNotificationSent": False,
+                "providerCallAttempted": False,
+            }
+        )
+
+
+class RazorpaySandboxPaidStatusMutationAttemptDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/sandbox-paid-status-mutation-attempts/<id>/`` — Phase 6P."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpaySandboxPaidStatusMutationAttempt.objects.filter(pk=pk)
+            .first()
+        )
+        if row is None:
+            return Response(
+                {"detail": "Phase 6P sandbox mutation attempt not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase6p_attempt(row))
+
+
+class RazorpaySandboxPaidStatusMutationPreviewView(APIView):
+    """``GET /api/v1/saas/razorpay/sandbox-paid-status-mutation-preview/?review_id=<ID>`` — Phase 6P.
+
+    Read-only preview only. Never creates rows.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            review_id = int(request.query_params.get("review_id") or 0)
+        except (TypeError, ValueError):
+            review_id = 0
+        if review_id <= 0:
+            return Response(
+                {"detail": "review_id query param must be a positive integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(preview_phase6p_paid_status_mutation(review_id))
+
+
 class RazorpayBusinessMutationSandboxPlanView(APIView):
     """``GET /api/v1/saas/razorpay/business-mutation-sandbox-plan/`` — Phase 6N.
 
@@ -1485,4 +1579,8 @@ __all__ = (
     "RazorpaySandboxStatusReviewApproveView",
     "RazorpaySandboxStatusReviewRejectView",
     "RazorpaySandboxStatusReviewArchiveView",
+    "RazorpaySandboxPaidStatusMutationReadinessView",
+    "RazorpaySandboxPaidStatusMutationAttemptsListView",
+    "RazorpaySandboxPaidStatusMutationAttemptDetailView",
+    "RazorpaySandboxPaidStatusMutationPreviewView",
 )

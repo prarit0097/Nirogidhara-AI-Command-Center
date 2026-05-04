@@ -24,6 +24,10 @@ from .views import (
     ProviderTestPlansListView,
     RazorpayBusinessMutationSandboxPlanView,
     RazorpayBusinessMutationSandboxReadinessView,
+    RazorpaySandboxPaidStatusMutationAttemptDetailView,
+    RazorpaySandboxPaidStatusMutationAttemptsListView,
+    RazorpaySandboxPaidStatusMutationPreviewView,
+    RazorpaySandboxPaidStatusMutationReadinessView,
     RazorpaySandboxStatusMappingReadinessView,
     RazorpaySandboxStatusReviewApproveView,
     RazorpaySandboxStatusReviewArchiveView,
@@ -366,5 +370,26 @@ urlpatterns = [
         "razorpay/sandbox-status-reviews/<int:pk>/archive/",
         RazorpaySandboxStatusReviewArchiveView.as_view(),
         name="saas-razorpay-sandbox-status-review-archive",
+    ),
+    # Phase 6P — Razorpay Sandbox Paid-Status Mutation Test (read-only API; CLI-only execution).
+    path(
+        "razorpay/sandbox-paid-status-mutation-readiness/",
+        RazorpaySandboxPaidStatusMutationReadinessView.as_view(),
+        name="saas-razorpay-sandbox-paid-status-mutation-readiness",
+    ),
+    path(
+        "razorpay/sandbox-paid-status-mutation-attempts/",
+        RazorpaySandboxPaidStatusMutationAttemptsListView.as_view(),
+        name="saas-razorpay-sandbox-paid-status-mutation-attempts",
+    ),
+    path(
+        "razorpay/sandbox-paid-status-mutation-attempts/<int:pk>/",
+        RazorpaySandboxPaidStatusMutationAttemptDetailView.as_view(),
+        name="saas-razorpay-sandbox-paid-status-mutation-attempt-detail",
+    ),
+    path(
+        "razorpay/sandbox-paid-status-mutation-preview/",
+        RazorpaySandboxPaidStatusMutationPreviewView.as_view(),
+        name="saas-razorpay-sandbox-paid-status-mutation-preview",
     ),
 ]

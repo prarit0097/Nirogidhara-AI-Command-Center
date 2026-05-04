@@ -762,3 +762,108 @@ describe("Phase 6O - Razorpay Sandbox Status Mapping + Manual Review", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("Phase 6P - Razorpay Sandbox Paid-Status Mutation Test", () => {
+  it("exposes the Phase 6P API methods on the api client", async () => {
+    expect(
+      typeof api.getSaasRazorpaySandboxPaidStatusMutationReadiness,
+    ).toBe("function");
+    expect(
+      typeof api.getSaasRazorpaySandboxPaidStatusMutationAttempts,
+    ).toBe("function");
+
+    const readiness =
+      await api.getSaasRazorpaySandboxPaidStatusMutationReadiness();
+    expect(readiness.phase).toBe("6P");
+    expect(readiness.status).toBe("sandbox_ledger_only");
+    expect(readiness.razorpaySandboxPaidStatusMutationEnabled).toBe(false);
+    expect(readiness.frontendCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanExecute).toBe(false);
+    expect(readiness.executionPath).toBe("cli_only");
+    expect(readiness.eventMappings.length).toBe(9);
+    readiness.eventMappings.forEach((row) => {
+      expect(row.realOrderMutationAllowedInPhase6P).toBe(false);
+      expect(row.realPaymentMutationAllowedInPhase6P).toBe(false);
+      expect(row.customerNotificationAllowed).toBe(false);
+      expect(row.providerCallAllowed).toBe(false);
+      expect(row.shipmentEffectAllowed).toBe(false);
+      expect(row.discountEffectAllowed).toBe(false);
+    });
+
+    const attempts =
+      await api.getSaasRazorpaySandboxPaidStatusMutationAttempts();
+    expect(attempts.phase).toBe("6P");
+    expect(attempts.frontendCanExecute).toBe(false);
+    expect(attempts.apiEndpointCanExecute).toBe(false);
+    expect(attempts.realOrderMutationWasMade).toBe(false);
+    expect(attempts.realPaymentMutationWasMade).toBe(false);
+  });
+
+  it("renders the Phase 6P section with locked safety state and CLI-only reminder", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText("Razorpay Sandbox Paid-Status Mutation Test"),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("phase6p-event-mapping-table"),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByTestId("phase6p-cli-list"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6p-forbidden-actions"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6p-safe-to-start-phase6q-badge"),
+    ).toBeInTheDocument();
+
+    // Locks rendered as "Disabled" multiple times across the metric
+    // grid + per-event mapping rows.
+    expect(screen.getAllByText(/Disabled/i).length).toBeGreaterThan(8);
+
+    // Forbidden Phase 6P / 6Q buttons are absent.
+    const forbiddenButtonPatterns = [
+      /^mark paid$/i,
+      /^capture payment$/i,
+      /^refund$/i,
+      /^create payment link$/i,
+      /^mutate order$/i,
+      /^execute webhook$/i,
+      /^replay event$/i,
+      /^enable mutation$/i,
+      /^go live$/i,
+      /^run mcp tool$/i,
+      /^apply mutation$/i,
+      /^apply payment$/i,
+      /^execute payment$/i,
+      // Phase 6P specifically rules out frontend execute / rollback.
+      /^execute sandbox/i,
+      /^rollback sandbox/i,
+    ];
+    for (const pattern of forbiddenButtonPatterns) {
+      expect(
+        screen.queryByRole("button", { name: pattern }),
+      ).not.toBeInTheDocument();
+    }
+
+    // No raw secret / env-var names / full phone leak.
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_live_");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("RAZORPAY_WEBHOOK_SECRET=");
+    expect(body).not.toMatch(/\+91\d{10}/);
+
+    // CLI-only reminder is present.
+    expect(
+      screen.getAllByText(/CLI-only/i).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Sandbox ledger only/i).length,
+    ).toBeGreaterThan(0);
+  });
+});

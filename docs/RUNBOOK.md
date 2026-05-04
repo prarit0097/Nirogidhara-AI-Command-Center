@@ -77,13 +77,13 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6O inclusive (1347 tests)
+python -m pytest -q                     # Phase 1 -> 6P inclusive (1378 tests)
 python manage.py makemigrations --check --dry-run    # must report "No changes detected"
 python manage.py check                  # must report "0 issues"
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6O vitest tests (52 tests)
+npm test                                # Phase 1 -> 6P vitest tests (54 tests)
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
@@ -291,6 +291,56 @@ by Phase 6M code paths.
 `/saas-admin` shows **Razorpay Webhook Handler (Test Mode)** with the
 event list (masked summary only) and the readiness card. **No "Replay"
 / "Apply mutation" / "Go Live" buttons on the UI.**
+
+## Phase 6P Razorpay sandbox paid-status mutation test diagnostics
+
+Phase 6P is **sandbox-ledger-only, CLI-only execution**. Mutation
+paths write to `RazorpaySandboxPaidStatusLedger` +
+`RazorpaySandboxPaidStatusMutationAttempt` only — they NEVER touch
+real `Order` / `Payment` / `Shipment` / `DiscountOfferLog` /
+`Customer` / `Lead` rows. **There is no API endpoint or frontend
+button that dispatches Phase 6P mutation.**
+
+```bash
+cd backend
+# Read-only diagnostics first.
+python manage.py inspect_razorpay_sandbox_paid_status_mutation_readiness --json
+python manage.py inspect_razorpay_sandbox_paid_status_mutation_attempts --json
+# Per-review preview (no rows created).
+python manage.py preview_razorpay_sandbox_paid_status_mutation --review-id <APPROVED_PHASE_6O_REVIEW_ID> --json
+
+# CLI-only mutation lifecycle. ``prepare`` is safe; ``execute`` and
+# ``rollback`` write to the Phase 6P sandbox ledger only.
+python manage.py prepare_razorpay_sandbox_paid_status_mutation --review-id <APPROVED_PHASE_6O_REVIEW_ID> --json
+python manage.py execute_razorpay_sandbox_paid_status_mutation \
+    --review-id <APPROVED_PHASE_6O_REVIEW_ID> \
+    --confirm-sandbox-paid-status-mutation \
+    --director-signoff "Director PS - sandbox rehearsal" --json
+python manage.py rollback_razorpay_sandbox_paid_status_mutation \
+    --attempt-id <ATTEMPT_ID> \
+    --confirm-sandbox-rollback \
+    --reason "rehearsal complete" --json
+python manage.py archive_razorpay_sandbox_paid_status_mutation_attempt \
+    --attempt-id <ATTEMPT_ID> --reason "close rehearsal" --json
+```
+
+Expected posture for the readiness command (default state on a clean
+VPS): `phase=6P`, `status=sandbox_ledger_only`,
+`razorpaySandboxPaidStatusMutationEnabled=false`,
+`businessMutationEnabled=false`, `customerNotificationEnabled=false`,
+`providerCallAttempted=false`, `frontendCanExecute=false`,
+`apiEndpointCanExecute=false`, `executionPath="cli_only"`,
+`mutationAllowedInPhase6O=false` propagated through the mapping rows.
+`safeToStartPhase6Q=true` only after at least one Phase 6P attempt
+has been executed AND rolled back via the CLIs above.
+
+`/saas-admin` shows **Razorpay Sandbox Paid-Status Mutation Test**
+with the readiness grid, 9-row event-to-ledger mapping table,
+attempts table, CLI-only reminder, and forbidden-action chips. **No
+"Mark Paid" / "Capture Payment" / "Refund" / "Apply Payment" /
+"Apply Mutation" / "Mutate Order" / "Send WhatsApp" / "Create
+Payment Link" / "Execute Webhook" / "Replay Event" / "Enable
+Mutation" / "Go Live" / "Run MCP Tool" buttons exist anywhere.**
 
 ## Phase 6O Razorpay sandbox status mapping + manual review diagnostics
 

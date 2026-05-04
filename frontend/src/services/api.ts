@@ -157,6 +157,8 @@ import type {
   SaasRazorpayAuditReview,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
+  SaasRazorpaySandboxPaidStatusMutationReadiness,
   SaasRazorpaySandboxStatusMappingReadiness,
   SaasRazorpaySandboxStatusReviewActionResult,
   SaasRazorpaySandboxStatusReviewsResponse,
@@ -1462,6 +1464,21 @@ export const api = {
           warnings: [],
           nextAction: "ready_for_phase_6n_business_mutation_sandbox_plan",
         }) as SaasRazorpayWebhookSimulationResult,
+    ),
+
+  // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------
+
+  getSaasRazorpaySandboxPaidStatusMutationReadiness: () =>
+    safeFetch<SaasRazorpaySandboxPaidStatusMutationReadiness>(
+      "/v1/saas/razorpay/sandbox-paid-status-mutation-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_READINESS as SaasRazorpaySandboxPaidStatusMutationReadiness,
+    ),
+  getSaasRazorpaySandboxPaidStatusMutationAttempts: (limit: number = 25) =>
+    safeFetch<SaasRazorpaySandboxPaidStatusMutationAttemptsResponse>(
+      `/v1/saas/razorpay/sandbox-paid-status-mutation-attempts/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ATTEMPTS as SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
     ),
 
   // ---------- Phase 6O - Razorpay Sandbox Status Mapping + Manual Review ----------

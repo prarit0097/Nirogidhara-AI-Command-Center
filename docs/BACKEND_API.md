@@ -7,10 +7,11 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 6O baseline:** documented through Phase 6O (Razorpay
-> sandbox status mapping + manual review, sandbox-review-only).
-> Phase 6P is the next planned phase and will own implementation
-> behind a NEW env flag distinct from `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED`.
+> **Phase 6P baseline:** documented through Phase 6P (Controlled
+> Internal Paid-Status Mutation Test, sandbox-ledger-only, CLI-only
+> execution). Phase 6Q is the next planned phase (audit-only workflow
+> safety gate) and will sit behind a NEW env flag distinct from
+> `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED`.
 
 ## Health
 
@@ -231,6 +232,29 @@ Every response preserves `business_mutation_was_made=false`,
 `customer_notification_sent=false`, `raw_secret_exposed=false`,
 `full_pii_exposed=false`. Production webhook secret is **never** consumed
 by this handler.
+
+## Phase 6P — Controlled Internal Paid-Status Mutation Test (sandbox-ledger-only, CLI-only execution)
+
+Read-only / preview-only HTTP layer over the Phase 6P sandbox ledger
++ attempt rows. **There is no POST execute / rollback / prepare
+endpoint** — Phase 6P mutation is exclusively dispatched via the CLI.
+**Phase 6P never mutates real ``Order`` / ``Payment`` / ``Shipment``
+/ ``DiscountOfferLog`` / ``Customer`` / ``Lead`` / ``WhatsAppMessage``
+/ ``WhatsAppConversation`` rows.** It never calls Razorpay, never
+sends a customer notification, never flips an env flag.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/sandbox-paid-status-mutation-readiness/` | admin/staff | Phase 6P readiness composition: locked-False safety state, env flag state, attempt counters (`prepared` / `executed` / `rolledBack` / `archived` / `everExecuted` / `everRolledBack`), ledger counters, 9-event mapping plan, forbidden-action list, blockers, warnings, `safeToStartPhase6Q`, `nextAction`. |
+| GET | `/api/v1/saas/razorpay/sandbox-paid-status-mutation-attempts/?limit=N` | admin/staff | List recent `RazorpaySandboxPaidStatusMutationAttempt` rows + `RazorpaySandboxPaidStatusLedger` rows (sanitized — no raw payload, no PII) + counts + locked safety booleans. Response carries `frontendCanExecute=false` and `apiEndpointCanExecute=false` so the frontend can render a clear CLI-only banner. |
+| GET | `/api/v1/saas/razorpay/sandbox-paid-status-mutation-attempts/<id>/` | admin/staff | Detail (sanitized). |
+| GET | `/api/v1/saas/razorpay/sandbox-paid-status-mutation-preview/?review_id=<ID>` | admin/staff | Read-only preview of how a Phase 6P attempt would map. Never creates rows. |
+
+Every response preserves `realOrderMutationWasMade=false`,
+`realPaymentMutationWasMade=false`, `businessMutationWasMade=false`,
+`customerNotificationSent=false`, `providerCallAttempted=false`.
+POST/PATCH/DELETE on every Phase 6P endpoint return 405.
+Admin/director/superuser auth required for every endpoint.
 
 ## Phase 6O — Razorpay Sandbox Status Mapping + Manual Review (sandbox-review-only)
 

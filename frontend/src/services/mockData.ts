@@ -2915,6 +2915,150 @@ export const SAAS_RAZORPAY_WEBHOOK_EVENTS: Record<string, unknown> = {
   providerCallAttempted: false,
 };
 
+// ---------- Phase 6P — Controlled Internal Paid-Status Mutation Test ----------
+
+const PHASE_6P_EVENT_MAPPING_FIXTURES: Record<string, [string, string]> = {
+  "payment_link.paid": ["paid", "advance_paid_candidate"],
+  "payment.captured": ["captured", "payment_verified_candidate"],
+  "payment.failed": ["failed", "payment_failed_candidate"],
+  "payment.authorized": ["authorized", "payment_authorized_candidate"],
+  "order.paid": ["paid", "paid_candidate"],
+  "payment_link.cancelled": ["cancelled", "payment_link_cancelled_candidate"],
+  "payment_link.expired": ["expired", "payment_link_expired_candidate"],
+  "refund.created": ["refund_pending", "refund_review_candidate"],
+  "refund.processed": ["refunded", "refund_processed_candidate"],
+};
+
+const PHASE_6P_FORBIDDEN_ACTIONS = [
+  "mutate_real_order_status",
+  "mutate_real_payment_status",
+  "create_or_update_real_shipment",
+  "create_or_update_real_discount_offer",
+  "mutate_real_customer",
+  "mutate_real_lead",
+  "send_whatsapp_template",
+  "send_freeform_whatsapp",
+  "place_vapi_call",
+  "call_razorpay_api",
+  "create_payment_link",
+  "capture_razorpay_payment",
+  "refund_razorpay_payment",
+  "execute_webhook_replay",
+  "enable_business_mutation_env_flag",
+  "execute_phase_6p_via_frontend",
+  "execute_phase_6p_via_api_endpoint",
+];
+
+const PHASE_6P_ATTEMPT_COUNTS = {
+  prepared: 0,
+  blocked: 0,
+  executed: 0,
+  rolledBack: 0,
+  failed: 0,
+  archived: 0,
+  everExecuted: 0,
+  everRolledBack: 0,
+  businessMutationWasMade: 0,
+  realOrderMutationWasMade: 0,
+  realPaymentMutationWasMade: 0,
+  customerNotificationSent: 0,
+  providerCallAttempted: 0,
+};
+
+const PHASE_6P_LEDGER_COUNTS = {
+  totalLedgers: 0,
+  rolledBackLedgers: 0,
+  businessMutationWasMade: 0,
+  realOrderMutationWasMade: 0,
+  realPaymentMutationWasMade: 0,
+  customerNotificationSent: 0,
+  providerCallAttempted: 0,
+};
+
+export const SAAS_RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "6P",
+  status: "sandbox_ledger_only",
+  latestCompletedPhase: "6O",
+  nextPhase: "6Q",
+  razorpaySandboxPaidStatusMutationEnabled: false,
+  businessMutationEnabled: false,
+  customerNotificationEnabled: false,
+  providerCallAttempted: false,
+  rawPayloadStorageEnabled: false,
+  approvedPhase6OReviewCount: 0,
+  attemptCounts: PHASE_6P_ATTEMPT_COUNTS,
+  ledgerCounts: PHASE_6P_LEDGER_COUNTS,
+  eventMappings: Object.entries(PHASE_6P_EVENT_MAPPING_FIXTURES).map(
+    ([eventName, [paymentStatus, orderEffect]]) => ({
+      razorpayEventName: eventName,
+      sandboxPaymentStatus: paymentStatus,
+      sandboxOrderEffect: orderEffect,
+      realOrderMutationAllowedInPhase6P: false,
+      realPaymentMutationAllowedInPhase6P: false,
+      customerNotificationAllowed: false,
+      providerCallAllowed: false,
+      shipmentEffectAllowed: false,
+      discountEffectAllowed: false,
+      idempotencyRequired: true,
+      rollbackRequired: true,
+      executionPath: "cli_only",
+      blockers: ["phase_6p_sandbox_ledger_only"],
+    }),
+  ),
+  safetyInvariants: {
+    realOrderMutationAllowed: false,
+    realPaymentMutationAllowed: false,
+    shipmentMutationAllowed: false,
+    discountOfferMutationAllowed: false,
+    customerMutationAllowed: false,
+    leadMutationAllowed: false,
+    whatsappSendAllowed: false,
+    vapiCallAllowed: false,
+    razorpayApiInvocationAllowed: false,
+    envFlagFlipAllowed: false,
+    frontendCanExecutePhase6P: false,
+    apiEndpointCanExecutePhase6P: false,
+    phase6PRespectsKillSwitch: true,
+    phase6PApprovalApplyRealMutation: false,
+  },
+  forbiddenActions: PHASE_6P_FORBIDDEN_ACTIONS,
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  maxSafeAmountPaise: 100,
+  safeToStartPhase6Q: false,
+  blockers: [],
+  warnings: [
+    "Phase 6P is a controlled, sandbox-only paid-status mutation test. It NEVER mutates real Order / Payment / Shipment / DiscountOfferLog / Customer / Lead / WhatsAppMessage rows. It NEVER calls Razorpay, NEVER sends a customer notification, NEVER flips an env flag. Execution is CLI-only — no frontend or API endpoint can dispatch a Phase 6P mutation.",
+  ],
+  nextAction: "approve_at_least_one_phase6o_review_before_running_phase_6p",
+  recentAttempts: [],
+  recentLedgers: [],
+};
+
+export const SAAS_RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ATTEMPTS: Record<
+  string,
+  unknown
+> = {
+  phase: "6P",
+  limit: 25,
+  counts: PHASE_6P_ATTEMPT_COUNTS,
+  items: [],
+  ledgerCounts: PHASE_6P_LEDGER_COUNTS,
+  ledgerItems: [],
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  businessMutationWasMade: false,
+  realOrderMutationWasMade: false,
+  realPaymentMutationWasMade: false,
+  customerNotificationSent: false,
+  providerCallAttempted: false,
+};
+
 // ---------- Phase 6O — Razorpay Sandbox Status Mapping + Manual Review ----------
 
 const PHASE_6O_EVENT_NAMES = [

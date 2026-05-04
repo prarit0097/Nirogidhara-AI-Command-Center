@@ -223,6 +223,21 @@ RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD = _razorpay_webhook_bool(
 RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED = _razorpay_webhook_bool(
     "RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED"
 )
+# ----- Phase 6P — Controlled Internal Paid-Status Mutation Test -----
+# Default off. When true (and only when true) the Phase 6P CLI may
+# execute a sandbox-only mutation attempt against
+# ``RazorpaySandboxPaidStatusLedger`` rows derived from an approved
+# Phase 6O review. The flag NEVER unlocks any mutation of real
+# ``Order`` / ``Payment`` / ``Shipment`` / ``DiscountOfferLog`` /
+# ``Customer`` / ``Lead`` rows; even when enabled, the service refuses
+# without explicit CLI confirmation + a non-empty Director sign-off
+# text. There is intentionally NO API endpoint that executes Phase 6P
+# mutation — execution is exclusively CLI. Production
+# ``.env.production`` is not edited — this default IS the production
+# posture.
+RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

@@ -3022,6 +3022,168 @@ export interface SaasRazorpayWebhookSimulationResult {
   nextAction: string;
 }
 
+// ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------
+
+export interface SaasRazorpaySandboxPaidStatusEventMapping {
+  razorpayEventName: string;
+  sandboxPaymentStatus: string;
+  sandboxOrderEffect: string;
+  realOrderMutationAllowedInPhase6P: false;
+  realPaymentMutationAllowedInPhase6P: false;
+  customerNotificationAllowed: false;
+  providerCallAllowed: false;
+  shipmentEffectAllowed: false;
+  discountEffectAllowed: false;
+  idempotencyRequired: true;
+  rollbackRequired: true;
+  executionPath: "cli_only";
+  blockers: string[];
+}
+
+export type SaasRazorpaySandboxPaidStatusAttemptStatus =
+  | "prepared"
+  | "blocked"
+  | "executed"
+  | "rolled_back"
+  | "failed"
+  | "archived";
+
+export interface SaasRazorpaySandboxPaidStatusAttemptDto {
+  id: number;
+  reviewId: number;
+  ledgerId: number | null;
+  razorpayWebhookEventId: number;
+  sourceEventId: string;
+  eventName: string;
+  status: SaasRazorpaySandboxPaidStatusAttemptStatus;
+  requestedAction: "apply_sandbox_status" | "rollback_sandbox_status";
+  proposedPaymentStatus: string;
+  proposedOrderEffect: string;
+  beforeState: Record<string, unknown>;
+  afterState: Record<string, unknown>;
+  blockers: string[];
+  warnings: string[];
+  confirmationProvided: boolean;
+  directorSignoffText: string;
+  executedByUsername: string;
+  executedAt: string | null;
+  rolledBackByUsername: string;
+  rolledBackAt: string | null;
+  archivedByUsername: string;
+  archivedAt: string | null;
+  idempotencyKey: string;
+  businessMutationWasMade: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasRazorpaySandboxPaidStatusLedgerDto {
+  id: number;
+  reviewId: number;
+  razorpayWebhookEventId: number;
+  sourceEventId: string;
+  eventName: string;
+  providerEnvironment: string;
+  providerOrderId: string;
+  providerPaymentId: string;
+  providerPaymentLinkId: string;
+  providerRefundId: string;
+  amountPaise: number | null;
+  currency: string;
+  sandboxPaymentStatus: string;
+  sandboxOrderEffect: string;
+  currentState: string;
+  previousState: string;
+  mutationCount: number;
+  lastAttemptId: number | null;
+  syntheticEligible: boolean;
+  businessMutationWasMade: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+  rollbackRequired: boolean;
+  rolledBack: boolean;
+  rolledBackAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasRazorpaySandboxPaidStatusAttemptCounts {
+  prepared: number;
+  blocked: number;
+  executed: number;
+  rolledBack: number;
+  failed: number;
+  archived: number;
+  everExecuted: number;
+  everRolledBack: number;
+  businessMutationWasMade: number;
+  realOrderMutationWasMade: number;
+  realPaymentMutationWasMade: number;
+  customerNotificationSent: number;
+  providerCallAttempted: number;
+}
+
+export interface SaasRazorpaySandboxPaidStatusLedgerCounts {
+  totalLedgers: number;
+  rolledBackLedgers: number;
+  businessMutationWasMade: number;
+  realOrderMutationWasMade: number;
+  realPaymentMutationWasMade: number;
+  customerNotificationSent: number;
+  providerCallAttempted: number;
+}
+
+export interface SaasRazorpaySandboxPaidStatusMutationReadiness {
+  phase: "6P";
+  status: "sandbox_ledger_only";
+  latestCompletedPhase: "6O";
+  nextPhase: "6Q";
+  razorpaySandboxPaidStatusMutationEnabled: boolean;
+  businessMutationEnabled: false;
+  customerNotificationEnabled: false;
+  providerCallAttempted: false;
+  rawPayloadStorageEnabled: false;
+  approvedPhase6OReviewCount: number;
+  attemptCounts: SaasRazorpaySandboxPaidStatusAttemptCounts;
+  ledgerCounts: SaasRazorpaySandboxPaidStatusLedgerCounts;
+  eventMappings: SaasRazorpaySandboxPaidStatusEventMapping[];
+  safetyInvariants: Record<string, boolean>;
+  forbiddenActions: string[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  maxSafeAmountPaise: number;
+  safeToStartPhase6Q: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  recentAttempts: SaasRazorpaySandboxPaidStatusAttemptDto[];
+  recentLedgers: SaasRazorpaySandboxPaidStatusLedgerDto[];
+}
+
+export interface SaasRazorpaySandboxPaidStatusMutationAttemptsResponse {
+  phase: "6P";
+  limit: number;
+  counts: SaasRazorpaySandboxPaidStatusAttemptCounts;
+  items: SaasRazorpaySandboxPaidStatusAttemptDto[];
+  ledgerCounts: SaasRazorpaySandboxPaidStatusLedgerCounts;
+  ledgerItems: SaasRazorpaySandboxPaidStatusLedgerDto[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  businessMutationWasMade: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+}
+
 // ---------- Phase 6N - Razorpay Business-Mutation Sandbox Plan ----------
 
 export interface SaasRazorpayBusinessMutationEventMapping {

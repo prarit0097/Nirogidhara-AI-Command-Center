@@ -283,6 +283,15 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.sandbox_status_review.rejected": "x-circle",
     "razorpay.sandbox_status_review.archived": "archive",
     "razorpay.sandbox_status_review.invariant_violation_blocked": "shield-off",
+    # Phase 6P Razorpay Sandbox Paid-Status Mutation Test (CLI-only execution).
+    "razorpay.sandbox_paid_status.readiness_inspected": "eye",
+    "razorpay.sandbox_paid_status.previewed": "eye",
+    "razorpay.sandbox_paid_status.attempt_prepared": "file-plus",
+    "razorpay.sandbox_paid_status.execution_blocked": "ban",
+    "razorpay.sandbox_paid_status.executed": "check-circle",
+    "razorpay.sandbox_paid_status.rolled_back": "rotate-ccw",
+    "razorpay.sandbox_paid_status.archived": "archive",
+    "razorpay.sandbox_paid_status.invariant_violation_blocked": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

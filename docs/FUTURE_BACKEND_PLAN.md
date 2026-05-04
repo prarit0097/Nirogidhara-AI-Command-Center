@@ -18,6 +18,25 @@ artefact), runtime providers still use env/config, the global kill switch
 remains active, `MCP_ENABLED=false`, and
 `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`.
 
+**Phase 6P Controlled Internal Paid-Status Mutation Test is FULL
+PASS (sandbox-ledger-only, CLI-only execution).** New
+`RazorpaySandboxPaidStatusLedger` + `RazorpaySandboxPaidStatusMutationAttempt`
+models + migration `payments.0006_phase6p_sandbox_paid_status_models`,
+service module + 7 management commands + 4 read-only admin/auth-protected
+DRF endpoints + `/saas-admin` section + 8 audit kinds + new env flag
+`RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED` (default `False`).
+Execute requires the env flag + `--confirm-sandbox-paid-status-mutation`
++ non-empty `--director-signoff`. **There is no POST execute / rollback
+/ prepare API endpoint** — execution is exclusively CLI. Phase 6P
+ledger transitions never touch real `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` /
+`WhatsAppConversation` rows. **Next backend phase: Phase 6Q —
+Payment → order workflow safety gate** (audit-only contract that
+wraps the Phase 6P sandbox ledger, behind a NEW env flag distinct
+from `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED`). Do **not**
+enable any sandbox env flag in production until Phase 6Q implementation
+lands and passes its own acceptance criteria.
+
 **Phase 6O Razorpay Sandbox Status Mapping + Manual Review is FULL
 PASS (sandbox-review-only).** New `RazorpaySandboxStatusReview` model
 + migration `payments.0005_phase6o_razorpay_sandbox_status_review`,
@@ -1135,33 +1154,64 @@ Hard rules preserved (asserted in 29 new pytest cases):
   return 405.
 - Production `.env.production` is not edited.
 
-## Phase 6P — Controlled internal paid-status mutation test (Planned · Not started)
+## Phase 6P — Controlled Internal Paid-Status Mutation Test ✅ shipped (sandbox-ledger-only, CLI-only execution)
 
-Implementation-only synthetic `Order.status` / `Payment.status` flip,
-behind a NEW env flag distinct from
-`RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED`. Phase 6P must:
+What landed: new `apps.payments.RazorpaySandboxPaidStatusLedger` +
+`RazorpaySandboxPaidStatusMutationAttempt` models + migration
+`payments.0006_phase6p_sandbox_paid_status_models`. New
+`apps.payments.razorpay_sandbox_paid_status_mutation` service ships
+10 functions (mapping + readiness + eligibility + preview + prepare
++ execute + rollback + archive + summary + invariant assertion).
+Seven CLI commands. Four **read-only** admin/auth-protected DRF
+endpoints under `/api/v1/saas/razorpay/sandbox-paid-status-...`.
+Eight new audit kinds. New env flag
+`RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED` (default `False`)
+gates execute. Even when `True`, execute also requires
+`--confirm-sandbox-paid-status-mutation` + non-empty
+`--director-signoff`.
 
-1. Introduce the new env flag (default off) — suggested name
-   `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED`.
-2. Refuse to mutate unless: (a) source `RazorpaySandboxStatusReview.status
-   == approved_for_future_phase6p`, (b) the linked
-   `RazorpayWebhookEvent` is synthetic-eligible per Phase 6O policy,
-   (c) the new env flag is `True`, (d) a Director sign-off
-   `AuditEvent` exists for the review id, (e) the synthetic-order
-   resolver accepts only `phase6j_internal_test_plan_*` /
-   `phase6n_sandbox_synthetic_*` prefixes.
-3. Add audit kinds `razorpay.sandbox_paid_status.{applied,blocked,rolled_back}`.
-4. Provide a CLI rollback command that restores the synthetic row to
-   pre-mutation state.
+Hard rules preserved (asserted in 31 new pytest cases):
 
-Acceptance criteria for the Phase 6P implementation:
+- Phase 6P NEVER mutates real `Order` / `Payment` / `Shipment` /
+  `DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` /
+  `WhatsAppConversation` rows (asserted with before/after counts).
+- No Razorpay client / WhatsApp send / Vapi trigger invocation
+  (asserted with mock spies across the full lifecycle).
+- `realOrderMutationWasMade=False`, `realPaymentMutationWasMade=False`,
+  `businessMutationWasMade=False`, `customerNotificationSent=False`,
+  `providerCallAttempted=False` on every persisted ledger + attempt
+  row.
+- No POST execute/rollback/prepare API endpoint — execution is
+  exclusively CLI.
+- Endpoints admin/auth gated; POST/PATCH/DELETE return 405.
+- Production `.env.production` is not edited.
 
-- Every Phase 6N + 6O safety invariant stays true on real (non-synthetic)
-  rows;
-- The new sandbox env flag stays `False` in `.env.production`;
+## Phase 6Q — Payment → order workflow safety gate (Planned · Not started)
+
+Audit-only workflow safety contract that wraps the Phase 6P sandbox
+ledger. Behind a NEW env flag distinct from
+`RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED` — suggested name
+`RAZORPAY_PAYMENT_TO_ORDER_WORKFLOW_GATE_ENABLED`. Phase 6Q must:
+
+1. Define and audit (no execution) the canonical workflow that a
+   future production phase would queue for each Phase 6P ledger
+   transition — what matrix entries, Director sign-offs, cohort
+   allowlists, and downstream actions would fire.
+2. Provide a CLI inspector that compares the sandbox ledger state
+   against the workflow contract and reports a `safeToStartPhase6R`
+   readiness signal.
+3. Phase 6Q must NOT mutate real `Order` / `Payment` rows in its own
+   scope.
+
+Acceptance criteria:
+
+- Every Phase 6N + 6O + 6P safety invariant stays true on real
+  (non-synthetic) rows;
+- The new env flag stays `False` in `.env.production`;
 - `business_mutation_was_made` / `customer_notification_sent` stay
-  `False` on every real `RazorpayWebhookEvent` and every
-  `RazorpaySandboxStatusReview` row.
+  `False` on every real `RazorpayWebhookEvent`,
+  `RazorpaySandboxStatusReview`, `RazorpaySandboxPaidStatusLedger`,
+  and `RazorpaySandboxPaidStatusMutationAttempt` row.
 
 ## Recommended future phases
 

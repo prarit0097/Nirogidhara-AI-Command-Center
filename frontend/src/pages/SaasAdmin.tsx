@@ -22,6 +22,8 @@ import type {
   SaasRazorpayWebhookEventDto,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
+  SaasRazorpaySandboxPaidStatusMutationReadiness,
   SaasRazorpaySandboxStatusMappingReadiness,
   SaasRazorpaySandboxStatusReviewDto,
   SaasRazorpaySandboxStatusReviewsResponse,
@@ -119,6 +121,16 @@ export default function SaasAdminPage() {
     null,
   );
   const [phase6oActionMessage, setPhase6oActionMessage] = useState<string>("");
+  const [
+    razorpaySandboxPaidStatusReadiness,
+    setRazorpaySandboxPaidStatusReadiness,
+  ] = useState<SaasRazorpaySandboxPaidStatusMutationReadiness | null>(null);
+  const [
+    razorpaySandboxPaidStatusAttempts,
+    setRazorpaySandboxPaidStatusAttempts,
+  ] = useState<SaasRazorpaySandboxPaidStatusMutationAttemptsResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -144,6 +156,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayBusinessMutationSandboxReadiness(),
       api.getSaasRazorpaySandboxStatusMappingReadiness(),
       api.getSaasRazorpaySandboxStatusReviews(25),
+      api.getSaasRazorpaySandboxPaidStatusMutationReadiness(),
+      api.getSaasRazorpaySandboxPaidStatusMutationAttempts(25),
     ])
       .then(
         ([
@@ -167,6 +181,8 @@ export default function SaasAdminPage() {
           bmRead,
           smRead,
           smReviews,
+          spsRead,
+          spsAttempts,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -188,6 +204,8 @@ export default function SaasAdminPage() {
           setRazorpayBusinessMutationSandboxReadiness(bmRead);
           setRazorpaySandboxStatusMappingReadiness(smRead);
           setRazorpaySandboxStatusReviews(smReviews);
+          setRazorpaySandboxPaidStatusReadiness(spsRead);
+          setRazorpaySandboxPaidStatusAttempts(spsAttempts);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -1651,6 +1669,336 @@ export default function SaasAdminPage() {
             on this page. Phase 6P will own any sandbox-only mutation
             against synthetic test orders, behind a NEW env flag
             distinct from <code>RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED</code>.
+          </div>
+        </section>
+      )}
+
+      {(razorpaySandboxPaidStatusReadiness || razorpaySandboxPaidStatusAttempts) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-sandbox-paid-status-mutation-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Webhook className="h-5 w-5 text-primary" />
+                Razorpay Sandbox Paid-Status Mutation Test
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6P — sandbox-ledger-only.{" "}
+                <strong>No real Order / Payment / Shipment / DiscountOfferLog mutation</strong>,
+                no customer notification, no Razorpay API call.
+                Execution is exclusively via CLI — no API endpoint and
+                no frontend button can dispatch a Phase 6P mutation.
+              </p>
+            </div>
+            {razorpaySandboxPaidStatusReadiness && (
+              <div data-testid="phase6p-safe-to-start-phase6q-badge">
+                <StatusPill
+                  tone={
+                    razorpaySandboxPaidStatusReadiness.safeToStartPhase6Q
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpaySandboxPaidStatusReadiness.safeToStartPhase6Q
+                    ? "Ready for Phase 6Q planning"
+                    : "Blocked — run a CLI execute + rollback first"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpaySandboxPaidStatusReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpaySandboxPaidStatusReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpaySandboxPaidStatusReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={razorpaySandboxPaidStatusReadiness.latestCompletedPhase}
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpaySandboxPaidStatusReadiness.nextPhase}
+              />
+              <KeyValue
+                label="Sandbox flag"
+                value={
+                  razorpaySandboxPaidStatusReadiness.razorpaySandboxPaidStatusMutationEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue label="Real Order mutation" value="Disabled" />
+              <KeyValue label="Real Payment mutation" value="Disabled" />
+              <KeyValue label="Customer notification" value="Disabled" />
+              <KeyValue label="Provider call" value="Disabled" />
+              <KeyValue
+                label="Frontend can execute"
+                value={
+                  razorpaySandboxPaidStatusReadiness.frontendCanExecute
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="API endpoint can execute"
+                value={
+                  razorpaySandboxPaidStatusReadiness.apiEndpointCanExecute
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Execution path"
+                value={razorpaySandboxPaidStatusReadiness.executionPath}
+              />
+              <KeyValue
+                label="Approved Phase 6O reviews"
+                value={String(
+                  razorpaySandboxPaidStatusReadiness.approvedPhase6OReviewCount,
+                )}
+              />
+              <KeyValue
+                label="Attempts ever executed"
+                value={String(
+                  razorpaySandboxPaidStatusReadiness.attemptCounts.everExecuted,
+                )}
+              />
+              <KeyValue
+                label="Attempts ever rolled back"
+                value={String(
+                  razorpaySandboxPaidStatusReadiness.attemptCounts.everRolledBack,
+                )}
+              />
+              <KeyValue
+                label="Ledger rows"
+                value={String(
+                  razorpaySandboxPaidStatusReadiness.ledgerCounts.totalLedgers,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpaySandboxPaidStatusReadiness && (
+            <div className="px-6 pb-2 text-xs text-muted-foreground">
+              <strong>Next action:</strong>{" "}
+              {razorpaySandboxPaidStatusReadiness.nextAction}
+            </div>
+          )}
+
+          {razorpaySandboxPaidStatusReadiness && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Sandbox event-to-ledger mapping
+              </h4>
+              <div className="overflow-x-auto">
+                <table
+                  className="w-full text-xs"
+                  data-testid="phase6p-event-mapping-table"
+                >
+                  <thead className="text-muted-foreground">
+                    <tr className="text-left">
+                      <th className="py-1 pr-3">Event</th>
+                      <th className="py-1 pr-3">Sandbox payment status</th>
+                      <th className="py-1 pr-3">Sandbox order effect</th>
+                      <th className="py-1 pr-3">Real Order mutation</th>
+                      <th className="py-1 pr-3">Real Payment mutation</th>
+                      <th className="py-1 pr-3">Notify</th>
+                      <th className="py-1 pr-3">Provider</th>
+                      <th className="py-1 pr-3">Path</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {razorpaySandboxPaidStatusReadiness.eventMappings.map(
+                      (row) => (
+                        <tr
+                          key={row.razorpayEventName}
+                          className="border-t border-border"
+                        >
+                          <td className="py-1 pr-3 font-mono">
+                            {row.razorpayEventName}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.sandboxPaymentStatus}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.sandboxOrderEffect}
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600 font-medium">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600 font-medium">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 font-mono text-[11px]">
+                            {row.executionPath}
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {razorpaySandboxPaidStatusAttempts && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Sandbox mutation attempts
+                ({razorpaySandboxPaidStatusAttempts.items.length})
+              </h4>
+              {razorpaySandboxPaidStatusAttempts.items.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No attempts yet. Attempts are created and executed
+                  exclusively via the Phase 6P CLI commands —{" "}
+                  <code>prepare_razorpay_sandbox_paid_status_mutation</code>,{" "}
+                  <code>execute_razorpay_sandbox_paid_status_mutation</code>,{" "}
+                  <code>rollback_razorpay_sandbox_paid_status_mutation</code>.
+                  This page renders read-only status only.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table
+                    className="w-full text-xs"
+                    data-testid="phase6p-attempts-table"
+                  >
+                    <thead className="text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="py-1 pr-3">ID</th>
+                        <th className="py-1 pr-3">Event</th>
+                        <th className="py-1 pr-3">Source event id</th>
+                        <th className="py-1 pr-3">Status</th>
+                        <th className="py-1 pr-3">Action</th>
+                        <th className="py-1 pr-3">Real mutation</th>
+                        <th className="py-1 pr-3">Notification</th>
+                        <th className="py-1 pr-3">Executed at</th>
+                        <th className="py-1 pr-3">Rolled back at</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {razorpaySandboxPaidStatusAttempts.items.map((row) => (
+                        <tr
+                          key={row.id}
+                          className="border-t border-border"
+                        >
+                          <td className="py-1 pr-3">{row.id}</td>
+                          <td className="py-1 pr-3 font-mono">
+                            {row.eventName}
+                          </td>
+                          <td className="py-1 pr-3 font-mono">
+                            {row.sourceEventId}
+                          </td>
+                          <td className="py-1 pr-3">
+                            <StatusPill
+                              tone={
+                                row.status === "executed"
+                                  ? "success"
+                                  : row.status === "rolled_back"
+                                  ? "info"
+                                  : row.status === "failed" ||
+                                    row.status === "blocked"
+                                  ? "danger"
+                                  : row.status === "archived"
+                                  ? "neutral"
+                                  : "warning"
+                              }
+                            >
+                              {row.status}
+                            </StatusPill>
+                          </td>
+                          <td className="py-1 pr-3 font-mono text-[11px]">
+                            {row.requestedAction}
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600 font-medium">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3">{row.executedAt ?? "—"}</td>
+                          <td className="py-1 pr-3">
+                            {row.rolledBackAt ?? "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {razorpaySandboxPaidStatusReadiness && (
+            <div className="px-6 pb-4 grid gap-4 lg:grid-cols-2">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">CLI-only execution</h4>
+                <p className="text-xs text-muted-foreground">
+                  Phase 6P mutation paths are intentionally CLI-only.
+                  Approving / rejecting in this UI never touches a real
+                  business row. Use the operator runbook for the four
+                  Phase 6P CLIs:
+                </p>
+                <ul
+                  className="mt-2 text-[11px] font-mono space-y-1 list-disc pl-5"
+                  data-testid="phase6p-cli-list"
+                >
+                  <li>preview_razorpay_sandbox_paid_status_mutation</li>
+                  <li>prepare_razorpay_sandbox_paid_status_mutation</li>
+                  <li>
+                    execute_razorpay_sandbox_paid_status_mutation
+                    --confirm-sandbox-paid-status-mutation --director-signoff
+                    "..."
+                  </li>
+                  <li>
+                    rollback_razorpay_sandbox_paid_status_mutation
+                    --confirm-sandbox-rollback --reason "..."
+                  </li>
+                  <li>archive_razorpay_sandbox_paid_status_mutation_attempt</li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Forbidden actions</h4>
+                <div
+                  className="flex flex-wrap gap-1 text-[11px]"
+                  data-testid="phase6p-forbidden-actions"
+                >
+                  {razorpaySandboxPaidStatusReadiness.forbiddenActions.map(
+                    (action) => (
+                      <span
+                        key={action}
+                        className="rounded border border-border bg-muted/30 px-2 py-0.5 font-mono"
+                      >
+                        {action}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Sandbox ledger only.</strong> No "Mark Paid" /
+            "Capture Payment" / "Refund" / "Apply Payment" / "Apply
+            Mutation" / "Mutate Order" / "Send WhatsApp" / "Create
+            Payment Link" / "Execute Webhook" / "Replay Event" /
+            "Enable Mutation" / "Go Live" / "Run MCP Tool" buttons exist
+            on this page. Execution is exclusively via the Phase 6P CLI
+            commands above; this page renders status only.
           </div>
         </section>
       )}

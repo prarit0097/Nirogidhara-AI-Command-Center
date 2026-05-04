@@ -362,3 +362,230 @@ class RazorpaySandboxStatusReview(models.Model):
             f"Phase6O[{self.status}] {self.event_name} "
             f"({self.source_event_id or 'no-id'})"
         )
+
+
+class RazorpaySandboxPaidStatusLedger(models.Model):
+    """Phase 6P — sandbox-only paid-status ledger row.
+
+    This is the **only** model Phase 6P is allowed to mutate. It is
+    NOT ``apps.payments.Payment`` and NOT ``apps.orders.Order``.
+
+    The ledger is a 1:1 derivation of an approved Phase 6O
+    :class:`RazorpaySandboxStatusReview`. Phase 6P CLI may transition
+    its ``current_state`` between sandbox values. Phase 6P NEVER
+    writes to real business tables, NEVER calls Razorpay, NEVER sends
+    a customer notification.
+    """
+
+    review = models.OneToOneField(
+        RazorpaySandboxStatusReview,
+        on_delete=models.PROTECT,
+        related_name="sandbox_paid_status_ledger",
+    )
+    razorpay_webhook_event = models.ForeignKey(
+        RazorpayWebhookEvent,
+        on_delete=models.PROTECT,
+        related_name="sandbox_paid_status_ledger_rows",
+    )
+    source_event_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    event_name = models.CharField(max_length=128, db_index=True)
+    provider_environment = models.CharField(max_length=16, default="test")
+    provider_order_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_link_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    provider_refund_id = models.CharField(max_length=64, blank=True, default="")
+    amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    currency = models.CharField(max_length=8, blank=True, default="")
+
+    sandbox_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    sandbox_order_effect = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    current_state = models.CharField(
+        max_length=64, blank=True, default="initial", db_index=True
+    )
+    previous_state = models.CharField(max_length=64, blank=True, default="")
+    mutation_count = models.PositiveIntegerField(default=0)
+    last_attempt = models.ForeignKey(
+        "RazorpaySandboxPaidStatusMutationAttempt",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ledger_last_attempt_for",
+    )
+
+    synthetic_eligible = models.BooleanField(default=True)
+    # Locked-False — Phase 6P never flips any of these to True.
+    business_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_order_mutation_was_made = models.BooleanField(default=False)
+    real_payment_mutation_was_made = models.BooleanField(default=False)
+    customer_notification_sent = models.BooleanField(
+        default=False, db_index=True
+    )
+    provider_call_attempted = models.BooleanField(default=False)
+
+    rollback_required = models.BooleanField(default=True)
+    rolled_back = models.BooleanField(default=False, db_index=True)
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("event_name", "current_state")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase6P-Ledger[{self.current_state}] {self.event_name} "
+            f"(review={self.review_id})"
+        )
+
+
+class RazorpaySandboxPaidStatusMutationAttempt(models.Model):
+    """Phase 6P — one CLI-triggered sandbox mutation attempt.
+
+    Each attempt records the request to apply (or roll back) the
+    sandbox status mapping into the ledger. Phase 6P NEVER mutates
+    ``Order`` / ``Payment`` / ``Shipment`` / ``DiscountOfferLog`` /
+    ``Customer`` / ``Lead`` from this row. Locked safety booleans
+    below stay ``False`` for every Phase 6P-created row.
+    """
+
+    class Status(models.TextChoices):
+        PREPARED = "prepared", "Prepared"
+        BLOCKED = "blocked", "Blocked"
+        EXECUTED = "executed", "Executed"
+        ROLLED_BACK = "rolled_back", "Rolled back"
+        FAILED = "failed", "Failed"
+        ARCHIVED = "archived", "Archived"
+
+    class RequestedAction(models.TextChoices):
+        APPLY_SANDBOX_STATUS = (
+            "apply_sandbox_status",
+            "Apply sandbox status",
+        )
+        ROLLBACK_SANDBOX_STATUS = (
+            "rollback_sandbox_status",
+            "Rollback sandbox status",
+        )
+
+    review = models.ForeignKey(
+        RazorpaySandboxStatusReview,
+        on_delete=models.PROTECT,
+        related_name="sandbox_paid_status_mutation_attempts",
+    )
+    ledger = models.ForeignKey(
+        RazorpaySandboxPaidStatusLedger,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="mutation_attempts",
+    )
+    razorpay_webhook_event = models.ForeignKey(
+        RazorpayWebhookEvent,
+        on_delete=models.PROTECT,
+        related_name="sandbox_paid_status_mutation_attempts",
+    )
+    source_event_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    event_name = models.CharField(max_length=128, db_index=True)
+
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PREPARED,
+        db_index=True,
+    )
+    requested_action = models.CharField(
+        max_length=32,
+        choices=RequestedAction.choices,
+        default=RequestedAction.APPLY_SANDBOX_STATUS,
+    )
+    proposed_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_order_effect = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+
+    before_state = models.JSONField(default=dict, blank=True)
+    after_state = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    safety_invariants = models.JSONField(default=dict, blank=True)
+    confirmation_provided = models.BooleanField(default=False)
+    director_signoff_text = models.CharField(max_length=200, blank=True, default="")
+
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6p_attempt_requests",
+    )
+    executed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6p_attempts_executed",
+    )
+    executed_at = models.DateTimeField(null=True, blank=True)
+    rolled_back_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6p_attempts_rolled_back",
+    )
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6p_attempts_archived",
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    idempotency_key = models.CharField(
+        max_length=160, unique=True, db_index=True
+    )
+
+    # Locked-False safety booleans. Phase 6P never flips any of these
+    # to True. Asserted by ``assert_phase6p_no_real_business_mutation``.
+    business_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_order_mutation_was_made = models.BooleanField(default=False)
+    real_payment_mutation_was_made = models.BooleanField(default=False)
+    customer_notification_sent = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "event_name")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase6P-Attempt[{self.status}] {self.requested_action} "
+            f"review={self.review_id}"
+        )

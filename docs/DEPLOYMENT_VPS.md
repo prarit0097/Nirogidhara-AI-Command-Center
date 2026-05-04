@@ -1156,6 +1156,47 @@ Expected: `mcp_enabled=false`, `mcp_read_only_mode=true`,
 Re-run after every Docker recreate so the env is read fresh from
 `.env.production`.
 
+## 8.83 Phase 6P production posture — Razorpay sandbox paid-status mutation test (sandbox-ledger-only, CLI-only)
+
+Phase 6P is **sandbox-ledger-only and CLI-only**. There is no API
+endpoint or frontend button that dispatches Phase 6P mutation. The
+service writes to `RazorpaySandboxPaidStatusLedger` +
+`RazorpaySandboxPaidStatusMutationAttempt` only — it NEVER mutates
+real `Order` / `Payment` / `Shipment` / `DiscountOfferLog` /
+`Customer` / `Lead` / `WhatsAppMessage` rows.
+
+Required posture in `.env.production`:
+
+```dotenv
+# Phase 6P Razorpay Sandbox Paid-Status Mutation Test — keep false on production.
+RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED=false
+```
+
+Verify dormant state after every deploy:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_sandbox_paid_status_mutation_readiness --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_sandbox_paid_status_mutation_attempts --json
+```
+
+Expected: `phase=6P`, `status=sandbox_ledger_only`,
+`razorpaySandboxPaidStatusMutationEnabled=false`,
+`businessMutationEnabled=false`,
+`customerNotificationEnabled=false`,
+`providerCallAttempted=false`, `frontendCanExecute=false`,
+`apiEndpointCanExecute=false`, `executionPath="cli_only"`. Counters
+(`businessMutationWasMade`, `realOrderMutationWasMade`,
+`realPaymentMutationWasMade`, `customerNotificationSent`,
+`providerCallAttempted`) all zero on both attempts and ledger
+summaries. Do **not** flip
+`RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED` to `true` on
+production without a written Director sign-off — and even then,
+execute additionally requires `--confirm-sandbox-paid-status-mutation`
++ non-empty `--director-signoff`, and only mutates the Phase 6P
+ledger.
+
 ## 8.84 Phase 6O production posture — Razorpay sandbox status mapping + manual review (sandbox-review-only)
 
 Phase 6O is **sandbox-review-only**. It maps verified Phase 6M
@@ -1252,6 +1293,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec backen
     RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false \
     RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false \
     RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false \
+    RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED=false \
     python -m pytest -q
 ```
 
@@ -1321,7 +1363,8 @@ the container is configured:
 - Phase 6K-style real Razorpay test execution (gated by `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false`; one-shot only)
 - Phase 6M Razorpay webhook handler (dormant by default — all four `RAZORPAY_WEBHOOK_*` env flags stay false)
 - Phase 6N Razorpay webhook business-mutation sandbox path (planning-only — Phase 6N has no execution path)
-- Phase 6O Razorpay sandbox status mapping (review-only — `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false` default; even when `true`, only review preparation is unlocked, never any Order/Payment/Shipment/DiscountOfferLog mutation; Phase 6P will own synthetic-only mutation behind a SEPARATE env flag)
+- Phase 6O Razorpay sandbox status mapping (review-only — `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false` default; even when `true`, only review preparation is unlocked, never any Order/Payment/Shipment/DiscountOfferLog mutation)
+- Phase 6P Razorpay sandbox paid-status mutation test (sandbox-ledger-only, CLI-only — `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED=false` default; even when `true`, execute requires `--confirm-sandbox-paid-status-mutation` + non-empty `--director-signoff` and mutates only the Phase 6P ledger; no API endpoint or frontend button dispatches mutation; Phase 6Q will own the workflow safety gate behind a SEPARATE env flag)
 - MCP Gateway tools / provider tools (gated by `MCP_ENABLED=false` and `MCP_*` flag siblings)
 - Per-org runtime provider routing (Phase 6F preview only — `runtimeSource=env_config`, `perOrgRuntimeEnabled=false`)
 - Live execution through the Runtime Live Audit Gate (Phase 6H — `RuntimeKillSwitch.enabled=true`, every operation `allowedInPhase6H=false`)
