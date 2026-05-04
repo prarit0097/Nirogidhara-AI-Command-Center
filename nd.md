@@ -62,7 +62,8 @@
 - **Production URL:** <https://ai.nirogidhara.com>
 - **VPS path:** `/opt/nirogidhara-command` (Hostinger VPS; six namespaced containers; host port `18020 → 80`; host Ubuntu Nginx + Certbot terminate TLS).
 - **Latest completed phase:** **Phase 6N — Razorpay Webhook Business-Mutation Sandbox Plan (planning-only / readiness-only).**
-- **Latest pushed commit:** see `git log -1` (Phase 6N commit on `origin/main`).
+- **Latest hotfix (2026-05-04):** `calls/migrations/0002_phase2d_vapi_fields.py` patched in-tree to fix a fresh-Postgres `migrate` failure (`relation "calls_calltranscriptline_call_id_5bc33dc3" already exists`). A Postgres-only, idempotent `RunPython` step now drops the legacy auto-named FK index after `RenameField call → active_call` so the subsequent `AddField call → Call` can create its own auto-named index without colliding. Migration-chain hotfix only — no business logic, no env, no provider call, no Phase 6O code. See `docs/DEPLOYMENT_VPS.md §8.5`.
+- **Latest pushed commit:** see `git log -1` (Phase 6N commit + calls index hotfix on `origin/main`).
 - **Test baseline (green):** **1318 backend tests + 50 frontend tests.** `python manage.py makemigrations --check --dry-run` → `No changes detected` (no Phase 6N migration required). `python manage.py check` → 0 issues. `npm run lint` → 0 errors (8 pre-existing shadcn warnings). `npm test` → 50 passed. `npm run build` → OK.
 - **Next planned phase:** **Phase 6O — Sandbox payment status mapping + manual review.** Not started. Will introduce sandbox-only mutation against synthetic test orders behind a NEW env flag distinct from the Phase 6M handler flag — guarded by Director sign-off and the Phase 6N rollback plan.
 - **Main safety flags (all stay in current state until Director explicitly flips them):**

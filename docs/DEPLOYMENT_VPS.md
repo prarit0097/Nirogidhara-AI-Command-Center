@@ -924,21 +924,72 @@ a day:
 
 ## 8.5 Troubleshooting — duplicate Postgres index on first migrate
 
-If the **first** `migrate` against a fresh Postgres errors out with one
-or more of:
+> **Status (2026-05-04):** the underlying drift is now fixed in-tree by
+> a hotfix to `apps/calls/migrations/0002_phase2d_vapi_fields.py`. The
+> manual recovery procedure below is preserved for older deploys that
+> applied 0002 before the hotfix landed and still carry the legacy
+> index name.
+
+### 8.5.1 Root cause
+
+`apps/calls/migrations/0001_initial.py` creates `CallTranscriptLine`
+with FK `call → ActiveCall` and Django auto-names its FK index
+`calls_calltranscriptline_call_id_5bc33dc3` (the hash is derived from
+`(table, column="call_id")`). `0002_phase2d_vapi_fields.py` then runs
+`RenameField call → active_call`. Depending on Django version + Postgres
+backend behaviour, the **column** is renamed but the auto-named
+**index** is left in place attached to the new `active_call_id` column.
+The very next `AddField call → Call` then asks Django to create the FK
+index for the new `call_id` column — same column name, same hash, same
+auto-name — and Postgres rejects with:
 
 ```
-django.db.utils.ProgrammingError: relation "calls_calltranscriptline_call_id_5bc33dc3" already exists
-django.db.utils.ProgrammingError: relation "calls_calltranscriptline_call_id_5bc33dc3_like" already exists
+django.db.utils.ProgrammingError:
+    relation "calls_calltranscriptline_call_id_5bc33dc3" already exists
+django.db.utils.ProgrammingError:
+    relation "calls_calltranscriptline_call_id_5bc33dc3_like" already exists
 ```
 
-…you have hit a known production-only data race in
-`apps/calls/migrations/0002_phase2d_vapi_fields.py`. Django creates the
-support indexes for the FK in two passes; under Postgres 16 + Daphne
-+ Celery worker / beat all booting at once, a stale index from a prior
-half-applied migration can survive into the next attempt.
+### 8.5.2 In-tree fix (current)
 
-**Fix without dropping the database:**
+`0002_phase2d_vapi_fields.py` now contains an idempotent Postgres-only
+`RunPython` step inserted between `RenameField call → active_call`
+(plus the matching `AlterField active_call`) and `AddField call → Call`.
+The step issues:
+
+```sql
+DROP INDEX IF EXISTS "calls_calltranscriptline_call_id_5bc33dc3";
+DROP INDEX IF EXISTS "calls_calltranscriptline_call_id_5bc33dc3_like";
+```
+
+Properties of this fix:
+
+- **Postgres-only** — `vendor != "postgresql"` short-circuits the step,
+  so SQLite-based local tests stay green.
+- **Idempotent on a fresh Postgres DB** — `IF EXISTS` makes the drop a
+  no-op when the legacy index has already been removed by an earlier
+  rename. After the drop, `AddField call → Call` is free to create its
+  own `calls_calltranscriptline_call_id_5bc33dc3` index without
+  collision.
+- **No-op on production where 0002 has already been applied** — Django
+  never re-runs an applied migration. The patch only changes how the
+  migration behaves on first apply; existing deploys are not touched.
+- **Reverse intentionally noop** — the surrounding `AddField` /
+  `RenameField` reverse paths already restore the original index, so
+  re-creating it inside the hotfix step would conflict.
+
+> Verification: `python manage.py makemigrations --check --dry-run`
+> reports `No changes detected`, and `python manage.py showmigrations
+> calls` keeps the existing applied state on already-deployed
+> production DBs.
+
+### 8.5.3 Manual recovery — only for older deploys still hitting the duplicate-index error
+
+This block is the **legacy** workaround for VPS instances that applied
+0002 before the in-tree hotfix and now have a half-applied schema
+(e.g. on a fresh test DB, after a partial migration retry). After
+pulling the hotfix, a fresh Postgres should not need this block — but
+keep it for emergency recovery.
 
 ```bash
 cd /opt/nirogidhara-command
@@ -973,11 +1024,6 @@ sweep all of them in one shot:
 docker compose -f docker-compose.prod.yml --env-file .env.production exec postgres \
     psql -U nirogidhara -d nirogidhara -c "DO \$\$ DECLARE r RECORD; BEGIN FOR r IN SELECT indexname FROM pg_indexes WHERE schemaname='public' AND indexname LIKE 'calls_calltranscriptline_call_id_%' LOOP EXECUTE format('DROP INDEX IF EXISTS %I', r.indexname); END LOOP; END \$\$;"
 ```
-
-> **Do not** edit `apps/calls/migrations/0002_phase2d_vapi_fields.py` to
-> "fix" this in the repo. Migration files are append-only history; a
-> patch that works for one customer's DB will silently desync from
-> another. Keep the workaround in this runbook.
 
 After the sweep:
 
