@@ -388,6 +388,14 @@ def test_management_command_supports_order_id() -> None:
 def test_celery_task_runs_in_eager_mode() -> None:
     from apps.rewards.tasks import run_reward_penalty_sweep_task
 
+    # Clear pre-existing Order rows so the eager-mode sweep evaluates
+    # exactly the one order this test creates. Without this guard the
+    # assertion is brittle on any environment where another test (or a
+    # previously seeded test DB) leaves DELIVERED rows behind. The
+    # delete runs inside the pytest-django transaction and is rolled
+    # back at test teardown, so other tests see no side effect.
+    Order.objects.all().delete()
+
     _make_order(order_id="NRG-91600", stage=Order.Stage.DELIVERED)
     summary = run_reward_penalty_sweep_task.delay(triggered_by="celery-test").get()
     assert summary["evaluatedOrders"] == 1

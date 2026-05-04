@@ -79,9 +79,16 @@ def config_for_provider(provider: str) -> AIConfig:
     if provider == "openai":
         api_key = settings.OPENAI_API_KEY
         base_url = settings.OPENAI_BASE_URL
+        # Precedence (most specific wins):
+        #   1) explicit ``settings.AI_MODEL`` (env or test override) — already in ``model``
+        #   2) ``settings.OPENAI_FALLBACK_MODEL`` (per-provider secondary)
+        #   3) sane default ``gpt-5.1``
+        # Older code accidentally inverted (1) and (2), letting the
+        # secondary fallback override an explicit ``AI_MODEL`` set by
+        # ``override_settings`` in tests / by operators in env.
         model = (
-            getattr(settings, "OPENAI_FALLBACK_MODEL", "")
-            or model
+            model
+            or getattr(settings, "OPENAI_FALLBACK_MODEL", "")
             or "gpt-5.1"
         )
         if settings.OPENAI_ORG_ID:
@@ -89,15 +96,17 @@ def config_for_provider(provider: str) -> AIConfig:
     elif provider == "anthropic":
         api_key = settings.ANTHROPIC_API_KEY
         base_url = settings.ANTHROPIC_BASE_URL
+        # Same precedence: explicit AI_MODEL > ANTHROPIC_MODEL > default.
         model = (
-            getattr(settings, "ANTHROPIC_MODEL", "")
-            or model
+            model
+            or getattr(settings, "ANTHROPIC_MODEL", "")
             or "claude-sonnet-4-6"
         )
     elif provider == "grok":
         api_key = settings.GROK_API_KEY
         base_url = settings.GROK_BASE_URL
-        model = getattr(settings, "GROK_MODEL", "") or model or "grok-2-latest"
+        # Same precedence: explicit AI_MODEL > GROK_MODEL > default.
+        model = model or getattr(settings, "GROK_MODEL", "") or "grok-2-latest"
 
     return AIConfig(
         provider=provider,

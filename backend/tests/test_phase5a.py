@@ -522,6 +522,11 @@ def test_webhook_post_accepts_valid_signature_in_meta_cloud_mode(
     with override_settings(
         WHATSAPP_PROVIDER="meta_cloud",
         META_WA_APP_SECRET=secret,
+        # Force the provider's fallback path: the production env may set
+        # WHATSAPP_WEBHOOK_SECRET to a different real value, which would
+        # otherwise win over META_WA_APP_SECRET inside MetaCloudProvider
+        # and cause the test signature to fail verification.
+        WHATSAPP_WEBHOOK_SECRET="",
         META_WA_PHONE_NUMBER_ID="PNID",
         META_WA_ACCESS_TOKEN="token",
     ):

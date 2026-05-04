@@ -14,3 +14,9 @@ DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 testpaths = ["tests", "apps"]
 addopts = "-q"
+# Phase 4A async Channels consumer tests use ``@pytest.mark.asyncio``.
+# ``strict`` mode means non-async tests stay synchronous (default pytest
+# behaviour) and only tests with the explicit decorator are driven by
+# pytest-asyncio. This keeps every existing sync test unaffected while
+# making the async tests run cleanly on VPS.
+asyncio_mode = "strict"

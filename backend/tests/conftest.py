@@ -1,6 +1,31 @@
 from __future__ import annotations
 
 import pytest
+from django.test.utils import override_settings
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _force_eager_celery():
+    """Pin Celery to eager mode for the whole test session.
+
+    Production VPS ``.env.production`` sets ``CELERY_TASK_ALWAYS_EAGER=false``
+    so the real Celery worker + Redis broker pick up tasks. When VPS
+    pytest is run in the same container, that env value flows into
+    Django settings and ``.delay()`` no longer runs synchronously —
+    which silently breaks any test that asserts on audit kinds the
+    queued task is supposed to emit (Phase 5B sent / Phase 5C
+    AI-trigger / Phase 4B sweep, etc.).
+
+    Forcing eager mode here keeps ``.delay()`` synchronous in tests
+    without changing production runtime. Eager-propagates is enabled
+    so any task exception surfaces directly in the test assertion
+    instead of being swallowed by Celery.
+    """
+    with override_settings(
+        CELERY_TASK_ALWAYS_EAGER=True,
+        CELERY_TASK_EAGER_PROPAGATES=True,
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)

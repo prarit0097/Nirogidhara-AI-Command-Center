@@ -1179,6 +1179,59 @@ zero. **No Phase 6N env flag changes are required on the VPS** — Phase 6N
 shares the Phase 6M env defaults; Phase 6O will introduce its own NEW
 env flag.
 
+## 8.86 Running the backend pytest suite safely on the VPS
+
+`.env.production` is tuned for live operation, not for tests. Several
+test fixtures assert on values that drift when production env wins
+(model name, webhook secret, eager Celery, broad-automation flags).
+Run the suite inside the backend container with the env overrides
+below — this matches what the in-tree fixes (conftest eager-mode pin,
+`AI_MODEL` precedence, `override_settings` of `WHATSAPP_WEBHOOK_SECRET`,
+etc.) expect:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production exec backend \
+    env \
+    AI_PROVIDER=disabled \
+    AI_MODEL=gpt-4o-mini \
+    OPENAI_API_KEY= \
+    ANTHROPIC_API_KEY= \
+    GROK_API_KEY= \
+    WHATSAPP_PROVIDER=mock \
+    WHATSAPP_LIVE_META_LIMITED_TEST_MODE=false \
+    WHATSAPP_AI_AUTO_REPLY_ENABLED=false \
+    WHATSAPP_CALL_HANDOFF_ENABLED=false \
+    WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false \
+    WHATSAPP_RESCUE_DISCOUNT_ENABLED=false \
+    WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false \
+    WHATSAPP_REORDER_DAY20_ENABLED=false \
+    META_WA_APP_SECRET= \
+    META_WA_ACCESS_TOKEN= \
+    META_WA_PHONE_NUMBER_ID= \
+    RAZORPAY_MODE=mock \
+    RAZORPAY_KEY_ID= \
+    RAZORPAY_KEY_SECRET= \
+    RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false \
+    RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED=false \
+    RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false \
+    RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false \
+    python -m pytest -q
+```
+
+Notes:
+
+- The conftest already pins `CELERY_TASK_ALWAYS_EAGER=True` for the
+  test session, so `.delay()` is synchronous regardless of the
+  production env value. The override above is therefore not required
+  for that flag — but the rest **are** required to keep tests
+  deterministic on a real VPS.
+- The override does **not** touch the running stack — `docker compose
+  exec backend` runs the command in a one-shot subprocess inside the
+  already-running container. No env file is rewritten.
+- After the run completes, the existing backend / worker / beat
+  containers continue running with the unmodified `.env.production`
+  values.
+
 ## 8.9 Reminder — recreate containers after env changes
 
 Whenever you edit `.env.production` (e.g., adding a real Vapi
