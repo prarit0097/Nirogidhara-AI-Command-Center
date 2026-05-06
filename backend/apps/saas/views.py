@@ -97,10 +97,17 @@ from apps.payments.razorpay_payment_dispatch_pilot_plan import (
     summarize_phase6s_payment_dispatch_pilot_plans,
     _serialize_pilot_plan as _serialize_phase6s_pilot_plan,
 )
+from apps.payments.razorpay_phase6_final_audit_lock import (
+    inspect_phase6t_final_audit_lock_readiness,
+    preview_phase6t_final_audit_lock,
+    summarize_phase6t_final_audit_locks,
+    _serialize_audit_lock as _serialize_phase6t_audit_lock,
+)
 from apps.payments.models import (
     RazorpayPaymentDispatchPilotPlan,
     RazorpayPaymentDispatchReadinessGate,
     RazorpayPaymentOrderWorkflowGate,
+    RazorpayPhase6FinalAuditLock,
     RazorpaySandboxPaidStatusMutationAttempt,
     RazorpaySandboxStatusReview,
 )
@@ -1738,6 +1745,95 @@ class RazorpayPaymentDispatchPilotPlanPreviewView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 6T - Final Phase 6 Audit + Lock / Decision Gate (read-only API)
+# ---------------------------------------------------------------------------
+
+
+class RazorpayPhase6FinalAuditLockReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/phase6-final-audit-lock-readiness/``.
+
+    Phase 6T is final-audit-lock only. Auth + admin only; POST/PATCH/
+    DELETE return 405. Review state changes stay CLI-only.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(inspect_phase6t_final_audit_lock_readiness())
+
+
+class RazorpayPhase6FinalAuditLocksListView(APIView):
+    """``GET /api/v1/saas/razorpay/phase6-final-audit-locks/``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase6t_final_audit_locks(limit=limit)
+        return Response(
+            {
+                "phase": "6T",
+                "status": "final_audit_lock_only",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only_review",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "futureControlledPilotAllowedByPhase6T": False,
+                "controlledPilotExecutionAllowedInPhase6T": False,
+                "pilotExecutionAllowed": False,
+                "realOrderMutationWasMade": False,
+                "realPaymentMutationWasMade": False,
+                "shipmentMutationWasMade": False,
+                "shipmentCreated": False,
+                "awbCreated": False,
+                "whatsAppMessageCreated": False,
+                "whatsAppMessageQueued": False,
+                "customerNotificationSent": False,
+                "metaCloudCallAttempted": False,
+                "delhiveryCallAttempted": False,
+                "razorpayCallAttempted": False,
+                "providerCallAttempted": False,
+            }
+        )
+
+
+class RazorpayPhase6FinalAuditLockDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/phase6-final-audit-locks/<id>/``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = RazorpayPhase6FinalAuditLock.objects.filter(pk=pk).first()
+        if row is None:
+            return Response(
+                {"detail": "Phase 6T final audit lock not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase6t_audit_lock(row))
+
+
+class RazorpayPhase6FinalAuditLockPreviewView(APIView):
+    """Read-only Phase 6T final audit-lock preview."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            plan_id = int(request.query_params.get("plan_id") or 0)
+        except (TypeError, ValueError):
+            plan_id = 0
+        return Response(
+            preview_phase6t_final_audit_lock(plan_id if plan_id > 0 else None)
+        )
+
+
 class RazorpaySandboxPaidStatusMutationReadinessView(APIView):
     """``GET /api/v1/saas/razorpay/sandbox-paid-status-mutation-readiness/`` — Phase 6P.
 
@@ -1929,4 +2025,8 @@ __all__ = (
     "RazorpayPaymentDispatchPilotPlansListView",
     "RazorpayPaymentDispatchPilotPlanDetailView",
     "RazorpayPaymentDispatchPilotPlanPreviewView",
+    "RazorpayPhase6FinalAuditLockReadinessView",
+    "RazorpayPhase6FinalAuditLocksListView",
+    "RazorpayPhase6FinalAuditLockDetailView",
+    "RazorpayPhase6FinalAuditLockPreviewView",
 )

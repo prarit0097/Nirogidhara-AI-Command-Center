@@ -273,6 +273,17 @@ RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED = _razorpay_webhook_bool(
 RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED = _razorpay_webhook_bool(
     "RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED"
 )
+# ----- Phase 6T - Final Phase 6 Audit + Lock / Decision Gate -----
+# Default off. When true, the Phase 6T service may prepare and lock
+# `RazorpayPhase6FinalAuditLock` rows derived from approved Phase 6S
+# pilot plans. The flag NEVER unlocks pilot execution, WhatsApp send,
+# Meta Cloud / Delhivery / Razorpay provider calls, shipment / AWB
+# creation, customer notification, or real business-row mutation.
+# Production `.env.production` is not edited - this default IS the
+# production posture.
+RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

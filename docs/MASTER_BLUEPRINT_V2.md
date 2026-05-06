@@ -26,6 +26,8 @@
 
 ---
 
+**Phase 6T update (2026-05-06):** Completed phase range is now Phase 1 -> **Phase 6T - Final Phase 6 Audit + Lock**. Phase 6T is audit-lock-only and CLI-only for review state changes, with `RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED=false` by default. The Phase 6 series is audit-locked; no live pilot, WhatsApp send/queue, Meta Cloud / Delhivery / Razorpay call, shipment / AWB creation, customer notification, or real business mutation happened. Last verified baseline: **1495 backend tests + 62 frontend tests**, `makemigrations --check` clean, `manage.py check` clean, frontend lint 0 errors, frontend build OK. Next planned phase is **Phase 7A future controlled internal pilot execution design, only after explicit Director approval**.
+
 ## 1. Vision & Purpose
 
 Nirogidhara Private Limited sells Ayurvedic medicines across eight wellness categories (Weight Management, Blood Purification, Men Wellness, Women Wellness, Immunity, Lungs Detox, Body Detox, Joint Care) at a standard price of **₹3000 per 30 capsules** with a **₹499 fixed advance** payment.

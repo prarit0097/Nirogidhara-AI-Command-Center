@@ -1163,3 +1163,189 @@ class RazorpayPaymentDispatchPilotPlan(models.Model):
             f"Phase6S-PilotPlan[{self.status}] {self.event_name} "
             f"(readiness={self.source_readiness_gate_id})"
         )
+
+
+class RazorpayPhase6FinalAuditLock(models.Model):
+    """Phase 6T - final Phase 6 audit-lock / decision-gate record.
+
+    This row composes the Phase 6N -> Phase 6S safety chain and records
+    whether a future controlled pilot execution phase may be considered.
+    Phase 6T never executes a pilot, never calls providers, never sends
+    WhatsApp, and never mutates real business rows.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        BLOCKED = "blocked", "Blocked"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        LOCKED_FOR_FUTURE_CONTROLLED_PILOT_REVIEW = (
+            "locked_for_future_controlled_pilot_review",
+            "Locked for future controlled pilot review",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+
+    source_pilot_plan = models.ForeignKey(
+        RazorpayPaymentDispatchPilotPlan,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase6_final_audit_locks",
+    )
+    source_readiness_gate = models.ForeignKey(
+        RazorpayPaymentDispatchReadinessGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase6_final_audit_locks",
+    )
+    source_workflow_gate = models.ForeignKey(
+        RazorpayPaymentOrderWorkflowGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase6_final_audit_locks",
+    )
+    source_attempt = models.ForeignKey(
+        RazorpaySandboxPaidStatusMutationAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase6_final_audit_locks",
+    )
+    source_ledger = models.ForeignKey(
+        RazorpaySandboxPaidStatusLedger,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase6_final_audit_locks",
+    )
+    source_review = models.ForeignKey(
+        RazorpaySandboxStatusReview,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase6_final_audit_locks",
+    )
+    source_event_record = models.ForeignKey(
+        RazorpayWebhookEvent,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase6_final_audit_locks",
+    )
+    source_event_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    event_name = models.CharField(max_length=128, db_index=True)
+    provider_environment = models.CharField(max_length=16, default="test")
+    amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    currency = models.CharField(max_length=8, blank=True, default="")
+
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    phase6n_verified = models.BooleanField(default=False)
+    phase6o_verified = models.BooleanField(default=False)
+    phase6p_verified = models.BooleanField(default=False)
+    phase6q_verified = models.BooleanField(default=False)
+    phase6r_verified = models.BooleanField(default=False)
+    phase6s_verified = models.BooleanField(default=False)
+    full_chain_verified = models.BooleanField(default=False)
+    final_audit_passed = models.BooleanField(default=False)
+
+    director_signoff_required = models.BooleanField(default=True)
+    kill_switch_required = models.BooleanField(default=True)
+    rollback_required = models.BooleanField(default=True)
+    future_execution_allowed_by_phase6t = models.BooleanField(default=False)
+    controlled_pilot_execution_allowed_in_phase6t = models.BooleanField(
+        default=False
+    )
+    manual_review_required = models.BooleanField(default=True)
+    internal_only = models.BooleanField(default=True)
+    max_pilot_orders = models.PositiveIntegerField(default=1)
+    max_amount_paise = models.PositiveIntegerField(default=100)
+
+    real_order_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_payment_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    shipment_mutation_was_made = models.BooleanField(default=False)
+    shipment_created = models.BooleanField(default=False, db_index=True)
+    awb_created = models.BooleanField(default=False, db_index=True)
+    whatsapp_message_created = models.BooleanField(
+        default=False, db_index=True
+    )
+    whatsapp_message_queued = models.BooleanField(
+        default=False, db_index=True
+    )
+    customer_notification_sent = models.BooleanField(default=False)
+    meta_cloud_call_attempted = models.BooleanField(default=False)
+    delhivery_call_attempted = models.BooleanField(default=False)
+    razorpay_call_attempted = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    env_flag_flip_detected = models.BooleanField(default=False)
+    raw_secret_exposed = models.BooleanField(default=False)
+    full_pii_exposed = models.BooleanField(default=False)
+
+    phase6n_snapshot = models.JSONField(default=dict, blank=True)
+    phase6o_snapshot = models.JSONField(default=dict, blank=True)
+    phase6p_snapshot = models.JSONField(default=dict, blank=True)
+    phase6q_snapshot = models.JSONField(default=dict, blank=True)
+    phase6r_snapshot = models.JSONField(default=dict, blank=True)
+    phase6s_snapshot = models.JSONField(default=dict, blank=True)
+    final_attestation = models.JSONField(default=dict, blank=True)
+    director_signoff_contract = models.JSONField(default=dict, blank=True)
+    kill_switch_contract = models.JSONField(default=dict, blank=True)
+    rollback_contract = models.JSONField(default=dict, blank=True)
+    abort_criteria = models.JSONField(default=list, blank=True)
+    operator_checklist = models.JSONField(default=list, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    safety_invariants = models.JSONField(default=dict, blank=True)
+
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6t_final_audit_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=200, blank=True, default="")
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6t_final_audit_archives",
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(max_length=200, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "event_name")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase6T-FinalAudit[{self.status}] {self.event_name} "
+            f"(plan={self.source_pilot_plan_id})"
+        )

@@ -3449,6 +3449,29 @@ export const SAAS_RAZORPAY_PAYMENT_DISPATCH_READINESS_GATES: Record<
   providerCallAttempted: false,
 };
 
+const PHASE_6T_FINAL_AUDIT_LOCK_COUNTS = {
+  draft: 0,
+  pendingManualReview: 0,
+  lockedForFutureControlledPilotReview: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+  futureExecutionAllowedByPhase6T: 0,
+  controlledPilotExecutionAllowedInPhase6T: 0,
+  realOrderMutationWasMade: 0,
+  realPaymentMutationWasMade: 0,
+  shipmentMutationWasMade: 0,
+  shipmentCreated: 0,
+  awbCreated: 0,
+  whatsAppMessageCreated: 0,
+  whatsAppMessageQueued: 0,
+  customerNotificationSent: 0,
+  metaCloudCallAttempted: 0,
+  delhiveryCallAttempted: 0,
+  razorpayCallAttempted: 0,
+  providerCallAttempted: 0,
+};
+
 // ---------- Phase 6S — Limited Internal Dispatch Pilot Plan ----------
 
 const PHASE_6S_CONTRACT_FIXTURES: Record<
@@ -3875,6 +3898,160 @@ export const SAAS_RAZORPAY_PAYMENT_DISPATCH_PILOT_PLANS: Record<
 };
 
 // ---------- Phase 6P — Controlled Internal Paid-Status Mutation Test ----------
+
+const PHASE_6T_AUDIT_CHAIN = ["6N", "6O", "6P", "6Q", "6R", "6S"].map(
+  (phase) => ({
+    phase,
+    label: `Phase ${phase}`,
+    requiredStatus:
+      phase === "6S" ? "approved_for_future_phase6t" : "approved_chain_proof",
+    actualStatus: "unknown_until_source_plan_selected",
+    verified: false,
+    mutationAllowedInPhase: false,
+    providerCallAllowedInPhase: false,
+    customerNotificationAllowedInPhase: false,
+    frontendExecutionAllowed: false,
+    apiExecutionAllowed: false,
+    cliOnlyReview: true,
+    requiredEvidence: [],
+    blockers: [],
+    warnings: [],
+    notes: ["Phase 6T final audit lock only"],
+  }),
+);
+
+const PHASE_6T_FINAL_ATTESTATION = {
+  phase: "6T",
+  status: "final_audit_lock_only",
+  futureControlledPilotAllowedByPhase6T: false,
+  futureControlledPilotMayBeConsideredOnlyIf: [
+    "phase6t_lock_status_locked_for_future_controlled_pilot_review",
+    "director_signoff_present",
+    "global_kill_switch_policy_reviewed",
+    "rollback_plan_approved",
+    "internal_staff_cohort_only",
+    "max_pilot_orders_1",
+    "max_amount_paise_100",
+    "all_provider_flags_remain_false_until_future_phase",
+  ],
+  absoluteBlocksStillInForce: [
+    "no_live_execution_in_phase6t",
+    "no_provider_call_in_phase6t",
+    "no_business_mutation_in_phase6t",
+  ],
+};
+
+export const SAAS_RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "6T",
+  status: "final_audit_lock_only",
+  latestCompletedPreviousPhase: "6S",
+  nextPhase:
+    "Phase 7A or future controlled-pilot execution decision after explicit Director approval",
+  razorpayPhase6FinalAuditLockEnabled: false,
+  futureControlledPilotAllowedByPhase6T: false,
+  controlledPilotExecutionAllowedInPhase6T: false,
+  pilotExecutionAllowed: false,
+  realBusinessMutation: false,
+  realOrderMutation: false,
+  realPaymentMutation: false,
+  whatsAppSend: false,
+  whatsAppQueued: false,
+  metaCloudCall: false,
+  delhiveryCall: false,
+  razorpayCall: false,
+  shipmentCreated: false,
+  awbCreated: false,
+  customerNotification: false,
+  providerCall: false,
+  approvedPhase6SPilotPlanCount: 0,
+  finalAuditLockCounts: PHASE_6T_FINAL_AUDIT_LOCK_COUNTS,
+  auditChain: PHASE_6T_AUDIT_CHAIN,
+  finalAttestation: PHASE_6T_FINAL_ATTESTATION,
+  directorSignoffContract: {
+    required: true,
+    phase7AOnly: true,
+    requirements: [
+      "explicit_director_written_signoff",
+      "internal_staff_cohort_only",
+      "max_pilot_orders_1",
+      "max_amount_paise_100",
+    ],
+  },
+  killSwitchContract: {
+    required: true,
+    requirements: [
+      "global_ai_kill_switch_reviewed",
+      "whatsapp_automation_flags_remain_false",
+      "provider_mutation_flags_remain_false",
+    ],
+  },
+  rollbackContract: {
+    required: true,
+    phase6TRollbackScope: "RazorpayPhase6FinalAuditLock_only",
+  },
+  abortCriteria: [
+    { if: "any_provider_call_attempted", then: "abort_and_audit" },
+    { if: "any_business_mutation_detected", then: "abort_and_audit" },
+    { if: "any_whatsapp_send_or_queue_detected", then: "abort_and_audit" },
+  ],
+  operatorChecklist: [
+    { step: "inspect_final_audit_readiness", surface: "read_only" },
+    { step: "preview_final_audit_lock", surface: "read_only" },
+    { step: "prepare_final_audit_lock", surface: "cli_only" },
+    { step: "lock_or_reject_final_audit", surface: "cli_only" },
+  ],
+  safetyInvariants: {
+    finalAuditOnly: true,
+    businessMutationAllowed: false,
+    providerCallAllowed: false,
+    whatsAppSendAllowed: false,
+    shipmentCreationAllowed: false,
+    awbCreationAllowed: false,
+    frontendExecutionAllowed: false,
+    apiExecutionAllowed: false,
+  },
+  safeToStartFutureControlledPilot: false,
+  safeToStartPhase7A: false,
+  executionPath: "cli_only_review",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  blockers: [],
+  warnings: ["Phase 6T is final-audit-lock only and cannot run a live pilot."],
+  nextAction: "missing_approved_phase6s_pilot_plan_for_final_audit_lock",
+  recentFinalAuditLocks: [],
+};
+
+export const SAAS_RAZORPAY_PHASE6_FINAL_AUDIT_LOCKS: Record<
+  string,
+  unknown
+> = {
+  phase: "6T",
+  status: "final_audit_lock_only",
+  limit: 25,
+  counts: PHASE_6T_FINAL_AUDIT_LOCK_COUNTS,
+  items: [],
+  executionPath: "cli_only_review",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  futureControlledPilotAllowedByPhase6T: false,
+  controlledPilotExecutionAllowedInPhase6T: false,
+  pilotExecutionAllowed: false,
+  realOrderMutationWasMade: false,
+  realPaymentMutationWasMade: false,
+  shipmentMutationWasMade: false,
+  shipmentCreated: false,
+  awbCreated: false,
+  whatsAppMessageCreated: false,
+  whatsAppMessageQueued: false,
+  customerNotificationSent: false,
+  metaCloudCallAttempted: false,
+  delhiveryCallAttempted: false,
+  razorpayCallAttempted: false,
+  providerCallAttempted: false,
+};
 
 const PHASE_6P_EVENT_MAPPING_FIXTURES: Record<string, [string, string]> = {
   "payment_link.paid": ["paid", "advance_paid_candidate"],

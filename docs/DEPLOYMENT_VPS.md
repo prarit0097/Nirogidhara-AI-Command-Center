@@ -1156,6 +1156,33 @@ Expected: `mcp_enabled=false`, `mcp_read_only_mode=true`,
 Re-run after every Docker recreate so the env is read fresh from
 `.env.production`.
 
+## 8.85 Phase 6T production posture - Razorpay final Phase 6 audit lock (audit-lock-only, CLI-only review state changes)
+
+Phase 6T is **audit-lock-only** and does not approve live execution.
+Keep the safe default off unless Prarit explicitly authorizes a CLI
+review window:
+
+```bash
+RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED=false
+```
+
+Production-safe verification:
+
+```bash
+cd /opt/nirogidhara-command
+docker compose -f docker-compose.prod.yml exec backend python manage.py inspect_razorpay_phase6_final_audit_lock_readiness --json
+docker compose -f docker-compose.prod.yml exec backend python manage.py inspect_razorpay_phase6_final_audit_locks --json
+docker compose -f docker-compose.prod.yml exec backend python manage.py check
+```
+
+Expected: `phase=6T`, `status=final_audit_lock_only`,
+`futureControlledPilotAllowedByPhase6T=false`,
+`controlledPilotExecutionAllowedInPhase6T=false`,
+`safeToStartPhase7A=false`, no provider call counters, no WhatsApp
+send/queue counters, no shipment/AWB counters, no real business
+mutation counters. Phase 6T never calls Meta Cloud / Delhivery /
+Razorpay and never creates live pilot execution controls.
+
 ## 8.84 Phase 6S production posture — Razorpay limited internal dispatch pilot plan (planning-only, CLI-only review state changes)
 
 Phase 6S is **planning-only** with CLI-only review state changes.

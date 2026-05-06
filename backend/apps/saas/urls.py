@@ -28,6 +28,10 @@ from .views import (
     RazorpayPaymentDispatchPilotPlanPreviewView,
     RazorpayPaymentDispatchPilotPlanReadinessView,
     RazorpayPaymentDispatchPilotPlansListView,
+    RazorpayPhase6FinalAuditLockDetailView,
+    RazorpayPhase6FinalAuditLockPreviewView,
+    RazorpayPhase6FinalAuditLockReadinessView,
+    RazorpayPhase6FinalAuditLocksListView,
     RazorpayPaymentDispatchReadinessGateDetailView,
     RazorpayPaymentDispatchReadinessGatesListView,
     RazorpayPaymentDispatchReadinessPreviewView,
@@ -466,5 +470,26 @@ urlpatterns = [
         "razorpay/payment-dispatch-pilot-plan-preview/",
         RazorpayPaymentDispatchPilotPlanPreviewView.as_view(),
         name="saas-razorpay-payment-dispatch-pilot-plan-preview",
+    ),
+    # Phase 6T - final Phase 6 audit-lock / decision gate (read-only API).
+    path(
+        "razorpay/phase6-final-audit-lock-readiness/",
+        RazorpayPhase6FinalAuditLockReadinessView.as_view(),
+        name="saas-razorpay-phase6-final-audit-lock-readiness",
+    ),
+    path(
+        "razorpay/phase6-final-audit-locks/",
+        RazorpayPhase6FinalAuditLocksListView.as_view(),
+        name="saas-razorpay-phase6-final-audit-locks",
+    ),
+    path(
+        "razorpay/phase6-final-audit-locks/<int:pk>/",
+        RazorpayPhase6FinalAuditLockDetailView.as_view(),
+        name="saas-razorpay-phase6-final-audit-lock-detail",
+    ),
+    path(
+        "razorpay/phase6-final-audit-lock-preview/",
+        RazorpayPhase6FinalAuditLockPreviewView.as_view(),
+        name="saas-razorpay-phase6-final-audit-lock-preview",
     ),
 ]

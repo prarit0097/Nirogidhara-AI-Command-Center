@@ -42,6 +42,21 @@ controlled pilot execution would need). Do **not** enable any
 sandbox or readiness or pilot-plan env flag in production until
 Phase 6T implementation lands and passes its own acceptance criteria.
 
+**Phase 6T Final Phase 6 Audit + Lock is FULL PASS
+(audit-lock-only, CLI-only review state changes).** New
+`RazorpayPhase6FinalAuditLock` model + migration
+`payments.0010_razorpayphase6finalauditlock`, service module + 7
+management commands + 4 read-only admin/auth-protected DRF endpoints
++ `/saas-admin` section + safe-default env flag
+`RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED=false`. Phase 6T composes
+Phase 6N -> 6S into one final audit-chain attestation and future
+controlled pilot contract. It never executes a pilot, never sends or
+queues WhatsApp, never calls Meta Cloud / Delhivery / Razorpay, never
+creates shipment / AWB rows, never sends customer notifications, and
+never mutates real business rows. **Next backend phase: Phase 7A -
+future controlled internal pilot execution design, only after explicit
+Director approval.** Phase 7A is not started.
+
 **Phase 6R Payment → WhatsApp / Courier Dispatch Readiness is FULL
 PASS (audit-only readiness contract, CLI-only review state changes).**
 New `RazorpayPaymentDispatchReadinessGate` model + migration

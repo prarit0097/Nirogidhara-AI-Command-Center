@@ -161,6 +161,8 @@ import type {
   SaasRazorpayPaymentDispatchPilotPlansResponse,
   SaasRazorpayPaymentDispatchReadiness,
   SaasRazorpayPaymentDispatchReadinessGatesResponse,
+  SaasRazorpayPhase6FinalAuditLockReadiness,
+  SaasRazorpayPhase6FinalAuditLocksResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
   SaasRazorpayPaymentOrderWorkflowGatesResponse,
   SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
@@ -1515,6 +1517,29 @@ export const api = {
       `/v1/saas/razorpay/payment-dispatch-pilot-plans/?limit=${limit}`,
       () =>
         M.SAAS_RAZORPAY_PAYMENT_DISPATCH_PILOT_PLANS as SaasRazorpayPaymentDispatchPilotPlansResponse,
+    ),
+
+  // ---------- Phase 6T - Final Phase 6 Audit + Lock ----------
+
+  getSaasRazorpayPhase6FinalAuditLockReadiness: () =>
+    safeFetch<SaasRazorpayPhase6FinalAuditLockReadiness>(
+      "/v1/saas/razorpay/phase6-final-audit-lock-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_READINESS as SaasRazorpayPhase6FinalAuditLockReadiness,
+    ),
+  getSaasRazorpayPhase6FinalAuditLocks: (limit: number = 25) =>
+    safeFetch<SaasRazorpayPhase6FinalAuditLocksResponse>(
+      `/v1/saas/razorpay/phase6-final-audit-locks/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_PHASE6_FINAL_AUDIT_LOCKS as SaasRazorpayPhase6FinalAuditLocksResponse,
+    ),
+  getSaasRazorpayPhase6FinalAuditLockPreview: (planId?: number) =>
+    safeFetch<SaasRazorpayPhase6FinalAuditLockReadiness>(
+      `/v1/saas/razorpay/phase6-final-audit-lock-preview/${
+        planId ? `?plan_id=${planId}` : ""
+      }`,
+      () =>
+        M.SAAS_RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_READINESS as SaasRazorpayPhase6FinalAuditLockReadiness,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

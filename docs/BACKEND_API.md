@@ -7,7 +7,11 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 6S baseline:** documented through Phase 6S (Limited Internal
+> **Phase 6T baseline:** documented through Phase 6T (Final Phase 6
+> Audit + Lock). Phase 6T is read-only over HTTP and CLI-only for review
+> state changes; it never executes a pilot or calls providers.
+>
+> Historical Phase 6S baseline: documented through Phase 6S (Limited Internal
 > Dispatch Pilot Plan, planning-only, CLI-only review state changes).
 > Phase 6T is the next planned phase (final Phase 6 audit + lock /
 > controlled pilot execution decision gate).
@@ -231,6 +235,24 @@ Every response preserves `business_mutation_was_made=false`,
 `customer_notification_sent=false`, `raw_secret_exposed=false`,
 `full_pii_exposed=false`. Production webhook secret is **never** consumed
 by this handler.
+
+## Phase 6T - Final Phase 6 Audit + Lock (audit-lock-only, CLI-only review state changes)
+
+Read-only HTTP layer over the Phase 6T final audit-lock selector. Review
+state changes are deliberately CLI-only; there is no POST prepare/lock/
+reject/archive endpoint and no execution endpoint.
+
+| Method | Endpoint | Auth | Returns |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/phase6-final-audit-lock-readiness/` | admin/staff | Phase 6T readiness, flag state, final audit lock counters, Phase 6N -> 6S audit chain, Director signoff contract, kill-switch contract, rollback contract, abort criteria, operator checklist, safety invariants, blockers/warnings, `safeToStartFutureControlledPilot`, `safeToStartPhase7A=false`, and `nextAction`. |
+| GET | `/api/v1/saas/razorpay/phase6-final-audit-locks/?limit=N` | admin/staff | Sanitized recent `RazorpayPhase6FinalAuditLock` rows + counts + locked safety booleans. |
+| GET | `/api/v1/saas/razorpay/phase6-final-audit-locks/<id>/` | admin/staff | Sanitized detail for one final audit-lock row. No raw payload, raw signature, secrets, full PII, or provider response is returned. |
+| GET | `/api/v1/saas/razorpay/phase6-final-audit-lock-preview/?plan_id=<PHASE6S_PLAN_ID>` | admin/staff | Read-only preview of Phase 6T eligibility and final audit contract. Never creates rows. |
+
+POST/PATCH/DELETE on every Phase 6T endpoint return 405. Phase 6T never
+executes a pilot, never sends or queues WhatsApp, never calls Meta Cloud
+/ Delhivery / Razorpay, never creates shipment / AWB rows, never sends a
+customer notification, and never mutates real business tables.
 
 ## Phase 6S — Limited Internal Dispatch Pilot Plan (planning-only, CLI-only review state changes)
 

@@ -1234,3 +1234,148 @@ describe("Phase 6S - Razorpay Limited Internal Dispatch Pilot Plan", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("Phase 6T - Razorpay Final Audit + Lock", () => {
+  it("exposes the Phase 6T read-only API methods on the api client", async () => {
+    expect(
+      typeof api.getSaasRazorpayPhase6FinalAuditLockReadiness,
+    ).toBe("function");
+    expect(typeof api.getSaasRazorpayPhase6FinalAuditLocks).toBe(
+      "function",
+    );
+    expect(
+      typeof api.getSaasRazorpayPhase6FinalAuditLockPreview,
+    ).toBe("function");
+
+    const readiness =
+      await api.getSaasRazorpayPhase6FinalAuditLockReadiness();
+    expect(readiness.phase).toBe("6T");
+    expect(readiness.status).toBe("final_audit_lock_only");
+    expect(readiness.latestCompletedPreviousPhase).toBe("6S");
+    expect(readiness.razorpayPhase6FinalAuditLockEnabled).toBe(false);
+    expect(readiness.futureControlledPilotAllowedByPhase6T).toBe(false);
+    expect(readiness.controlledPilotExecutionAllowedInPhase6T).toBe(false);
+    expect(readiness.pilotExecutionAllowed).toBe(false);
+    expect(readiness.realOrderMutation).toBe(false);
+    expect(readiness.realPaymentMutation).toBe(false);
+    expect(readiness.whatsAppSend).toBe(false);
+    expect(readiness.whatsAppQueued).toBe(false);
+    expect(readiness.metaCloudCall).toBe(false);
+    expect(readiness.delhiveryCall).toBe(false);
+    expect(readiness.razorpayCall).toBe(false);
+    expect(readiness.shipmentCreated).toBe(false);
+    expect(readiness.awbCreated).toBe(false);
+    expect(readiness.customerNotification).toBe(false);
+    expect(readiness.providerCall).toBe(false);
+    expect(readiness.safeToStartPhase7A).toBe(false);
+    expect(readiness.auditChain.map((row) => row.phase)).toEqual([
+      "6N",
+      "6O",
+      "6P",
+      "6Q",
+      "6R",
+      "6S",
+    ]);
+    readiness.auditChain.forEach((row) => {
+      expect(row.mutationAllowedInPhase).toBe(false);
+      expect(row.providerCallAllowedInPhase).toBe(false);
+      expect(row.customerNotificationAllowedInPhase).toBe(false);
+      expect(row.frontendExecutionAllowed).toBe(false);
+      expect(row.apiExecutionAllowed).toBe(false);
+      expect(row.cliOnlyReview).toBe(true);
+    });
+
+    const locks = await api.getSaasRazorpayPhase6FinalAuditLocks();
+    expect(locks.phase).toBe("6T");
+    expect(locks.frontendCanExecute).toBe(false);
+    expect(locks.apiEndpointCanExecute).toBe(false);
+    expect(locks.futureControlledPilotAllowedByPhase6T).toBe(false);
+    expect(locks.controlledPilotExecutionAllowedInPhase6T).toBe(false);
+    expect(locks.realOrderMutationWasMade).toBe(false);
+    expect(locks.realPaymentMutationWasMade).toBe(false);
+    expect(locks.shipmentCreated).toBe(false);
+    expect(locks.awbCreated).toBe(false);
+    expect(locks.whatsAppMessageCreated).toBe(false);
+    expect(locks.whatsAppMessageQueued).toBe(false);
+    expect(locks.metaCloudCallAttempted).toBe(false);
+    expect(locks.delhiveryCallAttempted).toBe(false);
+    expect(locks.razorpayCallAttempted).toBe(false);
+    expect(locks.providerCallAttempted).toBe(false);
+  });
+
+  it("renders the Phase 6T audit section with contracts and locked invariants", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText("Razorpay Phase 6 Final Audit + Lock"),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByTestId("razorpay-phase6-final-audit-lock-section"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId(
+        "phase6t-safe-to-start-future-controlled-pilot-badge",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("phase6t-audit-chain-table")).toBeInTheDocument();
+    expect(screen.getByTestId("phase6t-lock-records-table")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6t-director-signoff-contract"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("phase6t-kill-switch-contract")).toBeInTheDocument();
+    expect(screen.getByTestId("phase6t-rollback-contract")).toBeInTheDocument();
+    expect(screen.getByTestId("phase6t-safety-invariants")).toBeInTheDocument();
+    expect(screen.getByTestId("phase6t-cli-only-reminder")).toBeInTheDocument();
+
+    expect(screen.getAllByText(/Phase 6N/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Phase 6S/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^No$/i).length).toBeGreaterThan(10);
+    expect(screen.getAllByText(/CLI-only review/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/No Live Execution/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/No Provider Call/i).length).toBeGreaterThan(0);
+
+    const forbiddenButtonPatterns = [
+      /^start pilot$/i,
+      /^run pilot$/i,
+      /^execute pilot$/i,
+      /^start live workflow$/i,
+      /^execute workflow$/i,
+      /^send whatsapp$/i,
+      /^queue whatsapp$/i,
+      /^notify customer$/i,
+      /^create shipment$/i,
+      /^create awb$/i,
+      /^book courier$/i,
+      /^dispatch order$/i,
+      /^call delhivery$/i,
+      /^call meta$/i,
+      /^call razorpay$/i,
+      /^mark paid$/i,
+      /^capture payment$/i,
+      /^refund$/i,
+      /^create payment link$/i,
+      /^mutate order$/i,
+      /^apply payment$/i,
+      /^apply mutation$/i,
+      /^replay event$/i,
+      /^enable mutation$/i,
+      /^go live$/i,
+      /^run mcp tool$/i,
+      /^execute decision$/i,
+      /^start controlled pilot$/i,
+    ];
+    for (const pattern of forbiddenButtonPatterns) {
+      expect(
+        screen.queryByRole("button", { name: pattern }),
+      ).not.toBeInTheDocument();
+    }
+
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED");
+    expect(body).not.toContain("rzp_live_");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("RAZORPAY_WEBHOOK_SECRET=");
+    expect(body).not.toMatch(/\+91\d{10}/);
+  });
+});

@@ -77,13 +77,13 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6S inclusive (1474 tests)
+python -m pytest -q                     # Phase 1 -> 6T inclusive (1495 tests)
 python manage.py makemigrations --check --dry-run    # must report "No changes detected"
 python manage.py check                  # must report "0 issues"
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6S vitest tests (60 tests)
+npm test                                # Phase 1 -> 6T vitest tests (62 tests)
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
@@ -342,6 +342,45 @@ Delhivery" / "Call Meta" / "Mark Paid" / "Capture Payment" / "Refund"
 "Run MCP Tool" / "Execute Workflow" / "Apply Order Update" / "Confirm
 Paid Order" / "Start Live Workflow" / "Approve Pilot Plan" / "Reject
 Pilot Plan" buttons exist anywhere.**
+
+## Phase 6T Razorpay final Phase 6 audit lock diagnostics
+
+Phase 6T is **final-audit-lock-only and CLI-only** for review state
+changes. It composes Phase 6N -> 6S into a final attestation record and
+does not approve or execute a live pilot.
+
+Safe default:
+
+```bash
+RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED=false
+```
+
+Read-only inspection:
+
+```bash
+cd backend
+python manage.py inspect_razorpay_phase6_final_audit_lock_readiness --json
+python manage.py preview_razorpay_phase6_final_audit_lock --plan-id <PHASE6S_PLAN_ID> --json
+python manage.py inspect_razorpay_phase6_final_audit_locks --json
+```
+
+CLI-only review state changes (only when the flag is explicitly enabled
+for the controlled review window):
+
+```bash
+python manage.py prepare_razorpay_phase6_final_audit_lock --plan-id <PHASE6S_PLAN_ID> --json
+python manage.py lock_razorpay_phase6_final_audit_lock --audit-lock-id <ID> --reason "Director reviewed Phase 6 final audit chain" --json
+python manage.py reject_razorpay_phase6_final_audit_lock --audit-lock-id <ID> --reason "..." --json
+python manage.py archive_razorpay_phase6_final_audit_lock --audit-lock-id <ID> --reason "..." --json
+```
+
+Expected posture: `phase=6T`, `status=final_audit_lock_only`,
+`futureControlledPilotAllowedByPhase6T=false`,
+`controlledPilotExecutionAllowedInPhase6T=false`,
+`safeToStartPhase7A=false`. No API endpoint or frontend button prepares,
+locks, rejects, archives, or executes anything. Phase 6T never sends or
+queues WhatsApp, never calls Meta Cloud / Delhivery / Razorpay, never
+creates shipment / AWB rows, and never mutates real business tables.
 
 ## Phase 6R Razorpay payment → WhatsApp / courier dispatch readiness diagnostics
 

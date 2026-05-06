@@ -26,6 +26,8 @@ import type {
   SaasRazorpayPaymentDispatchPilotPlansResponse,
   SaasRazorpayPaymentDispatchReadiness,
   SaasRazorpayPaymentDispatchReadinessGatesResponse,
+  SaasRazorpayPhase6FinalAuditLockReadiness,
+  SaasRazorpayPhase6FinalAuditLocksResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
   SaasRazorpayPaymentOrderWorkflowGatesResponse,
   SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
@@ -161,6 +163,14 @@ export default function SaasAdminPage() {
     razorpayPaymentDispatchPilotPlans,
     setRazorpayPaymentDispatchPilotPlans,
   ] = useState<SaasRazorpayPaymentDispatchPilotPlansResponse | null>(null);
+  const [
+    razorpayPhase6FinalAuditLockReadiness,
+    setRazorpayPhase6FinalAuditLockReadiness,
+  ] = useState<SaasRazorpayPhase6FinalAuditLockReadiness | null>(null);
+  const [
+    razorpayPhase6FinalAuditLocks,
+    setRazorpayPhase6FinalAuditLocks,
+  ] = useState<SaasRazorpayPhase6FinalAuditLocksResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -194,6 +204,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayPaymentDispatchReadinessGates(25),
       api.getSaasRazorpayPaymentDispatchPilotPlanReadiness(),
       api.getSaasRazorpayPaymentDispatchPilotPlans(25),
+      api.getSaasRazorpayPhase6FinalAuditLockReadiness(),
+      api.getSaasRazorpayPhase6FinalAuditLocks(25),
     ])
       .then(
         ([
@@ -225,6 +237,8 @@ export default function SaasAdminPage() {
           pdGates,
           ppRead,
           ppPlans,
+          p6tRead,
+          p6tLocks,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -254,6 +268,8 @@ export default function SaasAdminPage() {
           setRazorpayPaymentDispatchReadinessGates(pdGates);
           setRazorpayPaymentDispatchPilotPlanReadiness(ppRead);
           setRazorpayPaymentDispatchPilotPlans(ppPlans);
+          setRazorpayPhase6FinalAuditLockReadiness(p6tRead);
+          setRazorpayPhase6FinalAuditLocks(p6tLocks);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -3207,6 +3223,269 @@ export default function SaasAdminPage() {
         </section>
       )}
 
+      {(razorpayPhase6FinalAuditLockReadiness ||
+        razorpayPhase6FinalAuditLocks) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-phase6-final-audit-lock-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Razorpay Phase 6 Final Audit + Lock
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6T - <strong>Final Audit Only</strong>. The view
+                composes Phase 6N through Phase 6S into an audit-chain
+                attestation and future controlled pilot contract. Review
+                state changes are CLI-only; this page is read-only.
+              </p>
+            </div>
+            {razorpayPhase6FinalAuditLockReadiness && (
+              <div data-testid="phase6t-safe-to-start-future-controlled-pilot-badge">
+                <StatusPill
+                  tone={
+                    razorpayPhase6FinalAuditLockReadiness.safeToStartFutureControlledPilot
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayPhase6FinalAuditLockReadiness.safeToStartFutureControlledPilot
+                    ? "Decision gate reviewable"
+                    : "Decision gate blocked"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayPhase6FinalAuditLockReadiness && (
+            <>
+              <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <KeyValue
+                  label="Phase"
+                  value={razorpayPhase6FinalAuditLockReadiness.phase}
+                />
+                <KeyValue
+                  label="Status"
+                  value={razorpayPhase6FinalAuditLockReadiness.status}
+                />
+                <KeyValue
+                  label="Latest completed"
+                  value={
+                    razorpayPhase6FinalAuditLockReadiness.latestCompletedPreviousPhase
+                  }
+                />
+                <KeyValue
+                  label="Next phase"
+                  value={razorpayPhase6FinalAuditLockReadiness.nextPhase}
+                />
+                <KeyValue
+                  label="Audit-lock flag"
+                  value={
+                    razorpayPhase6FinalAuditLockReadiness.razorpayPhase6FinalAuditLockEnabled
+                      ? "Enabled"
+                      : "Disabled"
+                  }
+                />
+                <KeyValue label="Future controlled pilot by 6T" value="No" />
+                <KeyValue label="Pilot execution" value="No" />
+                <KeyValue label="Real business mutation" value="No" />
+                <KeyValue label="Real Order mutation" value="No" />
+                <KeyValue label="Real Payment mutation" value="No" />
+                <KeyValue label="WhatsApp send" value="No" />
+                <KeyValue label="WhatsApp queued" value="No" />
+                <KeyValue label="Meta Cloud call" value="No" />
+                <KeyValue label="Delhivery call" value="No" />
+                <KeyValue label="Razorpay call" value="No" />
+                <KeyValue label="Shipment created" value="No" />
+                <KeyValue label="AWB created" value="No" />
+                <KeyValue label="Customer notification" value="No" />
+                <KeyValue label="Provider call" value="No" />
+                <KeyValue
+                  label="Locked records"
+                  value={String(
+                    razorpayPhase6FinalAuditLockReadiness.finalAuditLockCounts
+                      .lockedForFutureControlledPilotReview,
+                  )}
+                />
+              </div>
+
+              <div className="px-6 pb-4 text-xs text-muted-foreground">
+                <strong>Next action:</strong>{" "}
+                {razorpayPhase6FinalAuditLockReadiness.nextAction}
+              </div>
+
+              <div
+                className="px-6 pb-4"
+                data-testid="phase6t-audit-chain-table"
+              >
+                <h4 className="text-sm font-semibold mb-2">
+                  Audit chain attestation
+                </h4>
+                <div className="overflow-x-auto rounded border border-border">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40">
+                      <tr className="text-left">
+                        <th className="px-3 py-2">Phase</th>
+                        <th className="px-3 py-2">Required status</th>
+                        <th className="px-3 py-2">Actual status</th>
+                        <th className="px-3 py-2">Verified</th>
+                        <th className="px-3 py-2">Mutation</th>
+                        <th className="px-3 py-2">Provider</th>
+                        <th className="px-3 py-2">Notification</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {razorpayPhase6FinalAuditLockReadiness.auditChain.map(
+                        (row) => (
+                          <tr key={row.phase} className="border-t border-border">
+                            <td className="px-3 py-2 font-mono">
+                              Phase {row.phase}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.requiredStatus}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.actualStatus}
+                            </td>
+                            <td className="px-3 py-2">
+                              {row.verified ? "Yes" : "No"}
+                            </td>
+                            <td className="px-3 py-2">No</td>
+                            <td className="px-3 py-2">No</td>
+                            <td className="px-3 py-2">No</td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="px-6 pb-4 grid gap-3 lg:grid-cols-2">
+                <ContractList
+                  title="Director signoff contract"
+                  data={razorpayPhase6FinalAuditLockReadiness.directorSignoffContract}
+                  testId="phase6t-director-signoff-contract"
+                />
+                <ContractList
+                  title="Kill-switch contract"
+                  data={razorpayPhase6FinalAuditLockReadiness.killSwitchContract}
+                  testId="phase6t-kill-switch-contract"
+                />
+                <ContractList
+                  title="Rollback contract"
+                  data={razorpayPhase6FinalAuditLockReadiness.rollbackContract}
+                  testId="phase6t-rollback-contract"
+                />
+                <ContractList
+                  title="Safety invariants"
+                  data={razorpayPhase6FinalAuditLockReadiness.safetyInvariants}
+                  testId="phase6t-safety-invariants"
+                />
+              </div>
+
+              <div className="px-6 pb-4 grid gap-3 lg:grid-cols-2">
+                <div data-testid="phase6t-abort-criteria">
+                  <h4 className="text-sm font-semibold mb-2">
+                    Abort criteria
+                  </h4>
+                  <ul className="space-y-1 text-xs">
+                    {razorpayPhase6FinalAuditLockReadiness.abortCriteria.map(
+                      (item) => (
+                        <li
+                          key={`${item.if}-${item.then}`}
+                          className="font-mono rounded border border-border bg-muted/20 px-2 py-1"
+                        >
+                          {item.if} - {item.then}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </div>
+                <div data-testid="phase6t-operator-checklist">
+                  <h4 className="text-sm font-semibold mb-2">
+                    Operator checklist
+                  </h4>
+                  <ul className="space-y-1 text-xs">
+                    {razorpayPhase6FinalAuditLockReadiness.operatorChecklist.map(
+                      (item) => (
+                        <li
+                          key={`${item.step}-${item.surface}`}
+                          className="font-mono rounded border border-border bg-muted/20 px-2 py-1"
+                        >
+                          {item.step} - {item.surface}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </>
+          )}
+
+          {razorpayPhase6FinalAuditLocks && (
+            <div
+              className="px-6 pb-4"
+              data-testid="phase6t-lock-records-table"
+            >
+              <h4 className="text-sm font-semibold mb-2">
+                Final audit lock records (
+                {razorpayPhase6FinalAuditLocks.items.length})
+              </h4>
+              {razorpayPhase6FinalAuditLocks.items.length === 0 ? (
+                <div className="rounded border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                  No final audit lock records yet. Use the Phase 6T CLI
+                  review commands after an eligible Phase 6S plan exists.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded border border-border">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40">
+                      <tr className="text-left">
+                        <th className="px-3 py-2">ID</th>
+                        <th className="px-3 py-2">Event</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Chain</th>
+                        <th className="px-3 py-2">Provider</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {razorpayPhase6FinalAuditLocks.items.map((row) => (
+                        <tr key={row.id} className="border-t border-border">
+                          <td className="px-3 py-2 font-mono">{row.id}</td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.eventName}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.status}
+                          </td>
+                          <td className="px-3 py-2">
+                            {row.fullChainVerified ? "Verified" : "Pending"}
+                          </td>
+                          <td className="px-3 py-2">No call</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase6t-cli-only-reminder"
+          >
+            <strong>CLI-only review.</strong> Inspect Final Audit, Lock
+            Audit Record Only, Decision Gate Only, Future Controlled
+            Pilot Contract, Audit Chain Attestation, No Live Execution,
+            No Provider Call.
+          </div>
+        </section>
+      )}
+
       {(mcpReadiness || mcpSecurityPosture || mcpTools || mcpInvocations) && (
         <section
           className="mt-6 surface-card overflow-hidden"
@@ -3412,6 +3691,38 @@ function KeyValue({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-4 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="text-right font-medium">{value}</span>
+    </div>
+  );
+}
+
+function ContractList({
+  title,
+  data,
+  testId,
+}: {
+  title: string;
+  data: Record<string, unknown>;
+  testId: string;
+}) {
+  return (
+    <div data-testid={testId}>
+      <h4 className="text-sm font-semibold mb-2">{title}</h4>
+      <div className="rounded border border-border bg-muted/20 p-3 text-xs">
+        {Object.entries(data).map(([key, value]) => (
+          <div key={key} className="mb-2 last:mb-0">
+            <div className="font-mono text-[11px] text-muted-foreground">
+              {key}
+            </div>
+            <div className="mt-0.5 break-words">
+              {Array.isArray(value)
+                ? value.join(", ")
+                : typeof value === "object" && value !== null
+                  ? JSON.stringify(value)
+                  : String(value)}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

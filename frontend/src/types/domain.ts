@@ -3529,6 +3529,172 @@ export interface SaasRazorpayPaymentDispatchPilotPlansResponse {
   providerCallAttempted: false;
 }
 
+// ---------- Phase 6T - Final Phase 6 Audit + Lock ----------
+
+export type SaasRazorpayPhase6FinalAuditLockStatus =
+  | "draft"
+  | "blocked"
+  | "pending_manual_review"
+  | "locked_for_future_controlled_pilot_review"
+  | "rejected"
+  | "archived";
+
+export interface SaasRazorpayPhase6FinalAuditContractRow {
+  phase: "6N" | "6O" | "6P" | "6Q" | "6R" | "6S";
+  label: string;
+  requiredStatus: string;
+  actualStatus: string;
+  verified: boolean;
+  mutationAllowedInPhase: false;
+  providerCallAllowedInPhase: false;
+  customerNotificationAllowedInPhase: false;
+  frontendExecutionAllowed: false;
+  apiExecutionAllowed: false;
+  cliOnlyReview: true;
+  requiredEvidence: string[];
+  blockers: string[];
+  warnings: string[];
+  notes: string[];
+}
+
+export interface SaasRazorpayPhase6FinalAuditLockDto {
+  id: number;
+  sourcePilotPlanId: number | null;
+  sourceReadinessGateId: number | null;
+  sourceWorkflowGateId: number | null;
+  sourceAttemptId: number | null;
+  sourceLedgerId: number | null;
+  sourceReviewId: number | null;
+  sourceEventId: string;
+  eventName: string;
+  providerEnvironment: string;
+  amountPaise: number | null;
+  currency: string;
+  status: SaasRazorpayPhase6FinalAuditLockStatus;
+  fullChainVerified: boolean;
+  finalAuditPassed: boolean;
+  futureExecutionAllowedByPhase6T: false;
+  controlledPilotExecutionAllowedInPhase6T: false;
+  manualReviewRequired: boolean;
+  internalOnly: boolean;
+  maxPilotOrders: number;
+  maxAmountPaise: number;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  shipmentMutationWasMade: false;
+  shipmentCreated: false;
+  awbCreated: false;
+  whatsAppMessageCreated: false;
+  whatsAppMessageQueued: false;
+  customerNotificationSent: false;
+  metaCloudCallAttempted: false;
+  delhiveryCallAttempted: false;
+  razorpayCallAttempted: false;
+  providerCallAttempted: false;
+  finalAttestation: Record<string, unknown>;
+  directorSignoffContract: Record<string, unknown>;
+  killSwitchContract: Record<string, unknown>;
+  rollbackContract: Record<string, unknown>;
+  abortCriteria: Array<Record<string, string>>;
+  operatorChecklist: Array<Record<string, string>>;
+  blockers: string[];
+  warnings: string[];
+  safetyInvariants: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasRazorpayPhase6FinalAuditLockCounts {
+  draft: number;
+  pendingManualReview: number;
+  lockedForFutureControlledPilotReview: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+  futureExecutionAllowedByPhase6T: number;
+  controlledPilotExecutionAllowedInPhase6T: number;
+  realOrderMutationWasMade: number;
+  realPaymentMutationWasMade: number;
+  shipmentMutationWasMade: number;
+  shipmentCreated: number;
+  awbCreated: number;
+  whatsAppMessageCreated: number;
+  whatsAppMessageQueued: number;
+  customerNotificationSent: number;
+  metaCloudCallAttempted: number;
+  delhiveryCallAttempted: number;
+  razorpayCallAttempted: number;
+  providerCallAttempted: number;
+}
+
+export interface SaasRazorpayPhase6FinalAuditLockReadiness {
+  phase: "6T";
+  status: "final_audit_lock_only";
+  latestCompletedPreviousPhase: "6S";
+  nextPhase: string;
+  razorpayPhase6FinalAuditLockEnabled: boolean;
+  futureControlledPilotAllowedByPhase6T: false;
+  controlledPilotExecutionAllowedInPhase6T: false;
+  pilotExecutionAllowed: false;
+  realBusinessMutation: false;
+  realOrderMutation: false;
+  realPaymentMutation: false;
+  whatsAppSend: false;
+  whatsAppQueued: false;
+  metaCloudCall: false;
+  delhiveryCall: false;
+  razorpayCall: false;
+  shipmentCreated: false;
+  awbCreated: false;
+  customerNotification: false;
+  providerCall: false;
+  approvedPhase6SPilotPlanCount: number;
+  finalAuditLockCounts: SaasRazorpayPhase6FinalAuditLockCounts;
+  auditChain: SaasRazorpayPhase6FinalAuditContractRow[];
+  finalAttestation: Record<string, unknown>;
+  directorSignoffContract: Record<string, unknown>;
+  killSwitchContract: Record<string, unknown>;
+  rollbackContract: Record<string, unknown>;
+  abortCriteria: Array<Record<string, string>>;
+  operatorChecklist: Array<Record<string, string>>;
+  safetyInvariants: Record<string, unknown>;
+  safeToStartFutureControlledPilot: boolean;
+  safeToStartPhase7A: false;
+  executionPath: "cli_only_review";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  recentFinalAuditLocks: SaasRazorpayPhase6FinalAuditLockDto[];
+}
+
+export interface SaasRazorpayPhase6FinalAuditLocksResponse {
+  phase: "6T";
+  status: "final_audit_lock_only";
+  limit: number;
+  counts: SaasRazorpayPhase6FinalAuditLockCounts;
+  items: SaasRazorpayPhase6FinalAuditLockDto[];
+  executionPath: "cli_only_review";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  futureControlledPilotAllowedByPhase6T: false;
+  controlledPilotExecutionAllowedInPhase6T: false;
+  pilotExecutionAllowed: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  shipmentMutationWasMade: false;
+  shipmentCreated: false;
+  awbCreated: false;
+  whatsAppMessageCreated: false;
+  whatsAppMessageQueued: false;
+  customerNotificationSent: false;
+  metaCloudCallAttempted: false;
+  delhiveryCallAttempted: false;
+  razorpayCallAttempted: false;
+  providerCallAttempted: false;
+}
+
 // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------
 
 export interface SaasRazorpaySandboxPaidStatusEventMapping {
