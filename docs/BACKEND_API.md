@@ -7,15 +7,11 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 6T baseline:** documented through Phase 6T (Final Phase 6
-> Audit + Lock). Phase 6T is read-only over HTTP and CLI-only for review
-> state changes; it never executes a pilot or calls providers.
+> **Phase 7B baseline:** documented through Phase 7B (Controlled Pilot
+> Execution Gate, gate-only, CLI-only review state changes).
+> Phase 7C is NOT approved and NOT designed; Phase 7B does not authorize
+> provider calls, WhatsApp sends, courier booking, or business mutation.
 >
-> Historical Phase 6S baseline: documented through Phase 6S (Limited Internal
-> Dispatch Pilot Plan, planning-only, CLI-only review state changes).
-> Phase 6T is the next planned phase (final Phase 6 audit + lock /
-> controlled pilot execution decision gate).
-
 ## Health
 
 | Method | Path | Purpose |
