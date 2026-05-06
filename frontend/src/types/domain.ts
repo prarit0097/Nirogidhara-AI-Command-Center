@@ -3022,6 +3022,145 @@ export interface SaasRazorpayWebhookSimulationResult {
   nextAction: string;
 }
 
+// ---------- Phase 6Q - Payment → Order Workflow Safety Gate ----------
+
+export type SaasRazorpayPaymentOrderWorkflowGateStatus =
+  | "draft"
+  | "blocked"
+  | "pending_manual_review"
+  | "approved_for_future_phase6r"
+  | "rejected"
+  | "archived";
+
+export interface SaasRazorpayPaymentOrderWorkflowContractRow {
+  razorpayEventName: string;
+  futurePaymentStatus: string;
+  futureOrderStatusCandidate: string;
+  futureOrderEffect: string;
+  workflowAction: string;
+  workflowMutationAllowedInPhase6Q: false;
+  mutationAllowedInFuturePhase6R: string;
+  manualReviewRequired: true;
+  customerNotificationAllowed: false;
+  shipmentEffectAllowed: false;
+  discountEffectAllowed: false;
+  providerCallAllowed: false;
+  idempotencyRequired: true;
+  rollbackRequired: true;
+  blockers: string[];
+  notes: string[];
+}
+
+export interface SaasRazorpayPaymentOrderWorkflowGateDto {
+  id: number;
+  sourceAttemptId: number | null;
+  sourceLedgerId: number | null;
+  sourceReviewId: number | null;
+  razorpayWebhookEventId: number | null;
+  sourceEventId: string;
+  eventName: string;
+  providerEnvironment: string;
+  providerOrderId: string;
+  providerPaymentId: string;
+  providerPaymentLinkId: string;
+  amountPaise: number | null;
+  currency: string;
+  proposedPaymentStatus: string;
+  proposedOrderStatus: string;
+  proposedOrderEffect: string;
+  proposedWorkflowAction: string;
+  status: SaasRazorpayPaymentOrderWorkflowGateStatus;
+  phase6PExecutionVerified: boolean;
+  phase6PRollbackVerified: boolean;
+  syntheticEligible: boolean;
+  manualReviewRequired: boolean;
+  workflowMutationAllowedInPhase6Q: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  shipmentMutationWasMade: false;
+  discountMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+  rollbackRequired: boolean;
+  idempotencyKey: string;
+  blockers: string[];
+  warnings: string[];
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReason: string;
+  archivedByUsername: string;
+  archivedAt: string | null;
+  archiveReason: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasRazorpayPaymentOrderWorkflowGateCounts {
+  draft: number;
+  pendingManualReview: number;
+  approvedForFuturePhase6R: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+  realOrderMutationWasMade: number;
+  realPaymentMutationWasMade: number;
+  shipmentMutationWasMade: number;
+  discountMutationWasMade: number;
+  customerNotificationSent: number;
+  providerCallAttempted: number;
+}
+
+export interface SaasRazorpayPaymentOrderWorkflowGateReadiness {
+  phase: "6Q";
+  status: "audit_gate_only";
+  latestCompletedPhase: "6P";
+  nextPhase: "6R";
+  razorpayPaymentOrderWorkflowGateEnabled: boolean;
+  businessMutationEnabled: false;
+  customerNotificationEnabled: false;
+  providerCallAttempted: false;
+  rawPayloadStorageEnabled: false;
+  phase6PExecutedCount: number;
+  phase6PRolledBackCount: number;
+  gateCounts: SaasRazorpayPaymentOrderWorkflowGateCounts;
+  workflowContract: SaasRazorpayPaymentOrderWorkflowContractRow[];
+  safetyInvariants: Record<string, boolean>;
+  manualReviewChecklist: Array<{
+    key: string;
+    description: string;
+    automated: boolean;
+  }>;
+  rollbackPlan: Record<string, unknown>;
+  forbiddenActions: string[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  maxSafeAmountPaise: number;
+  safeToStartPhase6R: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  recentGates: SaasRazorpayPaymentOrderWorkflowGateDto[];
+}
+
+export interface SaasRazorpayPaymentOrderWorkflowGatesResponse {
+  phase: "6Q";
+  limit: number;
+  counts: SaasRazorpayPaymentOrderWorkflowGateCounts;
+  items: SaasRazorpayPaymentOrderWorkflowGateDto[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  shipmentMutationWasMade: false;
+  discountMutationWasMade: false;
+  customerNotificationSent: false;
+  providerCallAttempted: false;
+}
+
 // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------
 
 export interface SaasRazorpaySandboxPaidStatusEventMapping {

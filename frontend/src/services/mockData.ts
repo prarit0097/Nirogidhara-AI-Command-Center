@@ -2915,6 +2915,229 @@ export const SAAS_RAZORPAY_WEBHOOK_EVENTS: Record<string, unknown> = {
   providerCallAttempted: false,
 };
 
+// ---------- Phase 6Q — Payment → Order Workflow Safety Gate ----------
+
+const PHASE_6Q_CONTRACT_FIXTURES: Record<string, [string, string, string, string]> = {
+  "payment_link.paid": [
+    "advance_paid_candidate",
+    "payment_reviewed",
+    "advance_received_candidate",
+    "gate_payment_link_paid_to_order_advance_review",
+  ],
+  "payment.captured": [
+    "captured_candidate",
+    "payment_verified",
+    "payment_verified_candidate",
+    "gate_payment_captured_to_order_payment_verified",
+  ],
+  "payment.failed": [
+    "failed_candidate",
+    "payment_failed",
+    "payment_failed_candidate",
+    "gate_payment_failed_to_order_followup_needed",
+  ],
+  "payment.authorized": [
+    "authorized_candidate",
+    "payment_authorized",
+    "payment_authorized_candidate",
+    "gate_payment_authorized_to_order_review",
+  ],
+  "order.paid": [
+    "paid_candidate",
+    "paid",
+    "paid_candidate",
+    "gate_order_paid_to_order_paid_candidate",
+  ],
+  "payment_link.cancelled": [
+    "cancelled_candidate",
+    "payment_link_cancelled",
+    "payment_link_cancelled_candidate",
+    "gate_payment_link_cancelled_to_order_followup_needed",
+  ],
+  "payment_link.expired": [
+    "expired_candidate",
+    "payment_link_expired",
+    "payment_link_expired_candidate",
+    "gate_payment_link_expired_to_order_followup_needed",
+  ],
+  "refund.created": [
+    "refund_pending_candidate",
+    "refund_review",
+    "refund_review_candidate",
+    "gate_refund_created_to_refund_review",
+  ],
+  "refund.processed": [
+    "refunded_candidate",
+    "refund_processed",
+    "refund_processed_candidate",
+    "gate_refund_processed_to_order_refunded_candidate",
+  ],
+};
+
+const PHASE_6Q_FORBIDDEN_ACTIONS = [
+  "mutate_real_order_status",
+  "mutate_real_payment_status",
+  "create_or_update_real_shipment",
+  "create_or_update_real_discount_offer",
+  "mutate_real_customer",
+  "mutate_real_lead",
+  "send_whatsapp_template",
+  "place_vapi_call",
+  "call_razorpay_api",
+  "create_payment_link",
+  "execute_workflow_via_frontend",
+  "execute_workflow_via_api_endpoint",
+  "approve_gate_via_api_endpoint",
+];
+
+const PHASE_6Q_GATE_COUNTS = {
+  draft: 0,
+  pendingManualReview: 0,
+  approvedForFuturePhase6R: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+  realOrderMutationWasMade: 0,
+  realPaymentMutationWasMade: 0,
+  shipmentMutationWasMade: 0,
+  discountMutationWasMade: 0,
+  customerNotificationSent: 0,
+  providerCallAttempted: 0,
+};
+
+export const SAAS_RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "6Q",
+  status: "audit_gate_only",
+  latestCompletedPhase: "6P",
+  nextPhase: "6R",
+  razorpayPaymentOrderWorkflowGateEnabled: false,
+  businessMutationEnabled: false,
+  customerNotificationEnabled: false,
+  providerCallAttempted: false,
+  rawPayloadStorageEnabled: false,
+  phase6PExecutedCount: 0,
+  phase6PRolledBackCount: 0,
+  gateCounts: PHASE_6Q_GATE_COUNTS,
+  workflowContract: Object.entries(PHASE_6Q_CONTRACT_FIXTURES).map(
+    ([eventName, [paymentStatus, orderStatus, orderEffect, action]]) => ({
+      razorpayEventName: eventName,
+      futurePaymentStatus: paymentStatus,
+      futureOrderStatusCandidate: orderStatus,
+      futureOrderEffect: orderEffect,
+      workflowAction: action,
+      workflowMutationAllowedInPhase6Q: false,
+      mutationAllowedInFuturePhase6R:
+        "only_if_gate_approved_director_signed_off_and_kill_switch_allows",
+      manualReviewRequired: true,
+      customerNotificationAllowed: false,
+      shipmentEffectAllowed: false,
+      discountEffectAllowed: false,
+      providerCallAllowed: false,
+      idempotencyRequired: true,
+      rollbackRequired: true,
+      blockers: ["phase_6q_audit_gate_only_no_real_business_mutation"],
+      notes: [
+        "Phase 6Q records the contract; no production-side action fires here.",
+      ],
+    }),
+  ),
+  safetyInvariants: {
+    realOrderMutationAllowed: false,
+    realPaymentMutationAllowed: false,
+    shipmentMutationAllowed: false,
+    discountOfferMutationAllowed: false,
+    customerMutationAllowed: false,
+    leadMutationAllowed: false,
+    whatsappSendAllowed: false,
+    vapiCallAllowed: false,
+    razorpayApiInvocationAllowed: false,
+    envFlagFlipAllowed: false,
+    frontendCanExecutePhase6Q: false,
+    apiEndpointCanExecutePhase6Q: false,
+    apiEndpointCanApprovePhase6Q: false,
+    phase6QRespectsKillSwitch: true,
+    phase6QApprovalApplyRealMutation: false,
+  },
+  manualReviewChecklist: [
+    {
+      key: "verifyPhase6PSandboxProof",
+      description:
+        "Phase 6P attempt has executed + rolled_back via CLI; ledger row exists and was restored.",
+      automated: true,
+    },
+    {
+      key: "verifyPhase6PSafetyCountersZero",
+      description:
+        "Phase 6P attempt has all safety counters False (real_order, real_payment, business, notification, provider).",
+      automated: true,
+    },
+    {
+      key: "verifyDirectorSignOff",
+      description:
+        "Manual reviewer sign-off (reason text) recorded on the gate row before approval.",
+      automated: false,
+    },
+  ],
+  rollbackPlan: {
+    phase: "6Q",
+    rollbackTriggers: [
+      "approval_observed_to_mutate_real_business_table",
+      "real_order_payment_shipment_or_discount_mutation_observed",
+    ],
+    rollbackSteps: [
+      {
+        order: 1,
+        action: "set_RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED_to_false",
+        owner: "operator",
+        phase6QEnforced: true,
+      },
+    ],
+    rollbackVerification: [
+      "RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED == false",
+    ],
+    phase6QCanExecuteRollback: false,
+    rollbackOwnedByOperatorOnly: true,
+    rollbackNeverInvokesProviderApi: true,
+  },
+  forbiddenActions: PHASE_6Q_FORBIDDEN_ACTIONS,
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  maxSafeAmountPaise: 100,
+  safeToStartPhase6R: false,
+  blockers: [],
+  warnings: [
+    "Phase 6Q is an audit-only Payment → Order workflow safety gate. It NEVER mutates real Order / Payment / Shipment / DiscountOfferLog / Customer / Lead / WhatsAppMessage rows. It NEVER calls Razorpay, NEVER sends a customer notification, NEVER flips an env flag.",
+  ],
+  nextAction:
+    "complete_at_least_one_phase_6p_execute_and_rollback_cycle",
+  recentGates: [],
+};
+
+export const SAAS_RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATES: Record<
+  string,
+  unknown
+> = {
+  phase: "6Q",
+  limit: 25,
+  counts: PHASE_6Q_GATE_COUNTS,
+  items: [],
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  realOrderMutationWasMade: false,
+  realPaymentMutationWasMade: false,
+  shipmentMutationWasMade: false,
+  discountMutationWasMade: false,
+  customerNotificationSent: false,
+  providerCallAttempted: false,
+};
+
 // ---------- Phase 6P — Controlled Internal Paid-Status Mutation Test ----------
 
 const PHASE_6P_EVENT_MAPPING_FIXTURES: Record<string, [string, string]> = {

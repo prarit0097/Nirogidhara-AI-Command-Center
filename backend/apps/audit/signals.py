@@ -292,6 +292,15 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.sandbox_paid_status.rolled_back": "rotate-ccw",
     "razorpay.sandbox_paid_status.archived": "archive",
     "razorpay.sandbox_paid_status.invariant_violation_blocked": "shield-off",
+    # Phase 6Q Payment → Order Workflow Safety Gate (audit-only).
+    "razorpay.payment_order_gate.readiness_inspected": "eye",
+    "razorpay.payment_order_gate.previewed": "eye",
+    "razorpay.payment_order_gate.prepared": "file-plus",
+    "razorpay.payment_order_gate.approved_for_future_phase6r": "check-circle",
+    "razorpay.payment_order_gate.rejected": "x-circle",
+    "razorpay.payment_order_gate.archived": "archive",
+    "razorpay.payment_order_gate.blocked": "ban",
+    "razorpay.payment_order_gate.invariant_violation_blocked": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

@@ -867,3 +867,110 @@ describe("Phase 6P - Razorpay Sandbox Paid-Status Mutation Test", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("Phase 6Q - Razorpay Payment → Order Workflow Safety Gate", () => {
+  it("exposes the Phase 6Q API methods on the api client", async () => {
+    expect(
+      typeof api.getSaasRazorpayPaymentOrderWorkflowGateReadiness,
+    ).toBe("function");
+    expect(
+      typeof api.getSaasRazorpayPaymentOrderWorkflowGates,
+    ).toBe("function");
+
+    const readiness =
+      await api.getSaasRazorpayPaymentOrderWorkflowGateReadiness();
+    expect(readiness.phase).toBe("6Q");
+    expect(readiness.status).toBe("audit_gate_only");
+    expect(readiness.razorpayPaymentOrderWorkflowGateEnabled).toBe(false);
+    expect(readiness.frontendCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanApprove).toBe(false);
+    expect(readiness.executionPath).toBe("cli_only");
+    expect(readiness.workflowContract.length).toBe(9);
+    readiness.workflowContract.forEach((row) => {
+      expect(row.workflowMutationAllowedInPhase6Q).toBe(false);
+      expect(row.customerNotificationAllowed).toBe(false);
+      expect(row.providerCallAllowed).toBe(false);
+      expect(row.shipmentEffectAllowed).toBe(false);
+      expect(row.discountEffectAllowed).toBe(false);
+    });
+
+    const gates = await api.getSaasRazorpayPaymentOrderWorkflowGates();
+    expect(gates.phase).toBe("6Q");
+    expect(gates.frontendCanExecute).toBe(false);
+    expect(gates.apiEndpointCanExecute).toBe(false);
+    expect(gates.apiEndpointCanApprove).toBe(false);
+    expect(gates.realOrderMutationWasMade).toBe(false);
+    expect(gates.realPaymentMutationWasMade).toBe(false);
+  });
+
+  it("renders the Phase 6Q section with locked safety state and CLI-only reminder", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText(
+        "Razorpay Payment → Order Workflow Safety Gate",
+      ),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("phase6q-contract-table"),
+      ).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("phase6q-cli-list")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6q-forbidden-actions"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6q-safe-to-start-phase6r-badge"),
+    ).toBeInTheDocument();
+
+    // Locks rendered as "Disabled" multiple times.
+    expect(screen.getAllByText(/Disabled/i).length).toBeGreaterThan(8);
+
+    // Forbidden Phase 6Q / 6R buttons absent.
+    const forbiddenButtonPatterns = [
+      /^mark paid$/i,
+      /^capture payment$/i,
+      /^refund$/i,
+      /^create payment link$/i,
+      /^mutate order$/i,
+      /^execute webhook$/i,
+      /^replay event$/i,
+      /^enable mutation$/i,
+      /^go live$/i,
+      /^run mcp tool$/i,
+      /^apply mutation$/i,
+      /^apply payment$/i,
+      /^execute payment$/i,
+      /^execute workflow$/i,
+      /^apply order update$/i,
+      /^confirm paid order$/i,
+      /^start live workflow$/i,
+      /^approve gate$/i,
+      /^reject gate$/i,
+    ];
+    for (const pattern of forbiddenButtonPatterns) {
+      expect(
+        screen.queryByRole("button", { name: pattern }),
+      ).not.toBeInTheDocument();
+    }
+
+    // No raw secret / env-var names / full phone leak.
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_live_");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("RAZORPAY_WEBHOOK_SECRET=");
+    expect(body).not.toMatch(/\+91\d{10}/);
+
+    // CLI-only + audit-gate-only banners present.
+    expect(
+      screen.getAllByText(/CLI-only/i).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Audit gate only/i).length,
+    ).toBeGreaterThan(0);
+  });
+});

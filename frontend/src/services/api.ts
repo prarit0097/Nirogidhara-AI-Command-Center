@@ -157,6 +157,8 @@ import type {
   SaasRazorpayAuditReview,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpayPaymentOrderWorkflowGateReadiness,
+  SaasRazorpayPaymentOrderWorkflowGatesResponse,
   SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
   SaasRazorpaySandboxPaidStatusMutationReadiness,
   SaasRazorpaySandboxStatusMappingReadiness,
@@ -1464,6 +1466,21 @@ export const api = {
           warnings: [],
           nextAction: "ready_for_phase_6n_business_mutation_sandbox_plan",
         }) as SaasRazorpayWebhookSimulationResult,
+    ),
+
+  // ---------- Phase 6Q - Payment → Order Workflow Safety Gate ----------
+
+  getSaasRazorpayPaymentOrderWorkflowGateReadiness: () =>
+    safeFetch<SaasRazorpayPaymentOrderWorkflowGateReadiness>(
+      "/v1/saas/razorpay/payment-order-workflow-gate-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_READINESS as SaasRazorpayPaymentOrderWorkflowGateReadiness,
+    ),
+  getSaasRazorpayPaymentOrderWorkflowGates: (limit: number = 25) =>
+    safeFetch<SaasRazorpayPaymentOrderWorkflowGatesResponse>(
+      `/v1/saas/razorpay/payment-order-workflow-gates/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATES as SaasRazorpayPaymentOrderWorkflowGatesResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

@@ -1156,6 +1156,47 @@ Expected: `mcp_enabled=false`, `mcp_read_only_mode=true`,
 Re-run after every Docker recreate so the env is read fresh from
 `.env.production`.
 
+## 8.82 Phase 6Q production posture — Razorpay payment → order workflow safety gate (audit-gate-only, CLI-only review state changes)
+
+Phase 6Q is **audit-gate-only** with CLI-only review state changes.
+The service writes to `RazorpayPaymentOrderWorkflowGate` only — it
+NEVER mutates real `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` rows.
+**There is no API endpoint or frontend button that dispatches Phase
+6Q gate state changes.**
+
+Required posture in `.env.production`:
+
+```dotenv
+# Phase 6Q Razorpay Payment → Order Workflow Safety Gate — keep false on production.
+RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED=false
+```
+
+Verify dormant state after every deploy:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_payment_order_workflow_gate_readiness --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_payment_order_workflow_gates --json
+```
+
+Expected: `phase=6Q`, `status=audit_gate_only`,
+`razorpayPaymentOrderWorkflowGateEnabled=false`,
+`businessMutationEnabled=false`,
+`customerNotificationEnabled=false`,
+`providerCallAttempted=false`, `frontendCanExecute=false`,
+`apiEndpointCanExecute=false`, `apiEndpointCanApprove=false`,
+`executionPath="cli_only"`. Counters
+(`realOrderMutationWasMade`, `realPaymentMutationWasMade`,
+`shipmentMutationWasMade`, `discountMutationWasMade`,
+`customerNotificationSent`, `providerCallAttempted`) all zero on
+gate summaries. Do **not** flip
+`RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED` to `true` on
+production without a written Director sign-off — and even then,
+gate state changes remain CLI-only and only mutate the Phase 6Q
+gate review table.
+
 ## 8.83 Phase 6P production posture — Razorpay sandbox paid-status mutation test (sandbox-ledger-only, CLI-only)
 
 Phase 6P is **sandbox-ledger-only and CLI-only**. There is no API
@@ -1294,6 +1335,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec backen
     RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false \
     RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false \
     RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED=false \
+    RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED=false \
     python -m pytest -q
 ```
 
@@ -1364,7 +1406,8 @@ the container is configured:
 - Phase 6M Razorpay webhook handler (dormant by default — all four `RAZORPAY_WEBHOOK_*` env flags stay false)
 - Phase 6N Razorpay webhook business-mutation sandbox path (planning-only — Phase 6N has no execution path)
 - Phase 6O Razorpay sandbox status mapping (review-only — `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false` default; even when `true`, only review preparation is unlocked, never any Order/Payment/Shipment/DiscountOfferLog mutation)
-- Phase 6P Razorpay sandbox paid-status mutation test (sandbox-ledger-only, CLI-only — `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED=false` default; even when `true`, execute requires `--confirm-sandbox-paid-status-mutation` + non-empty `--director-signoff` and mutates only the Phase 6P ledger; no API endpoint or frontend button dispatches mutation; Phase 6Q will own the workflow safety gate behind a SEPARATE env flag)
+- Phase 6P Razorpay sandbox paid-status mutation test (sandbox-ledger-only, CLI-only — `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED=false` default; even when `true`, execute requires `--confirm-sandbox-paid-status-mutation` + non-empty `--director-signoff` and mutates only the Phase 6P ledger; no API endpoint or frontend button dispatches mutation)
+- Phase 6Q Razorpay payment → order workflow safety gate (audit-gate-only, CLI-only review state changes — `RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED=false` default; even when `true`, prepare/approve/reject/archive are CLI-only and write only to the Phase 6Q gate review table; no API endpoint or frontend button dispatches gate state changes; Phase 6R will own the WhatsApp/courier readiness contract behind a SEPARATE env flag)
 - MCP Gateway tools / provider tools (gated by `MCP_ENABLED=false` and `MCP_*` flag siblings)
 - Per-org runtime provider routing (Phase 6F preview only — `runtimeSource=env_config`, `perOrgRuntimeEnabled=false`)
 - Live execution through the Runtime Live Audit Gate (Phase 6H — `RuntimeKillSwitch.enabled=true`, every operation `allowedInPhase6H=false`)

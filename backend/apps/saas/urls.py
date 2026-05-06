@@ -24,6 +24,10 @@ from .views import (
     ProviderTestPlansListView,
     RazorpayBusinessMutationSandboxPlanView,
     RazorpayBusinessMutationSandboxReadinessView,
+    RazorpayPaymentOrderWorkflowGateDetailView,
+    RazorpayPaymentOrderWorkflowGatePreviewView,
+    RazorpayPaymentOrderWorkflowGateReadinessView,
+    RazorpayPaymentOrderWorkflowGatesListView,
     RazorpaySandboxPaidStatusMutationAttemptDetailView,
     RazorpaySandboxPaidStatusMutationAttemptsListView,
     RazorpaySandboxPaidStatusMutationPreviewView,
@@ -391,5 +395,26 @@ urlpatterns = [
         "razorpay/sandbox-paid-status-mutation-preview/",
         RazorpaySandboxPaidStatusMutationPreviewView.as_view(),
         name="saas-razorpay-sandbox-paid-status-mutation-preview",
+    ),
+    # Phase 6Q — Razorpay Payment → Order Workflow Safety Gate (read-only API).
+    path(
+        "razorpay/payment-order-workflow-gate-readiness/",
+        RazorpayPaymentOrderWorkflowGateReadinessView.as_view(),
+        name="saas-razorpay-payment-order-workflow-gate-readiness",
+    ),
+    path(
+        "razorpay/payment-order-workflow-gates/",
+        RazorpayPaymentOrderWorkflowGatesListView.as_view(),
+        name="saas-razorpay-payment-order-workflow-gates",
+    ),
+    path(
+        "razorpay/payment-order-workflow-gates/<int:pk>/",
+        RazorpayPaymentOrderWorkflowGateDetailView.as_view(),
+        name="saas-razorpay-payment-order-workflow-gate-detail",
+    ),
+    path(
+        "razorpay/payment-order-workflow-gate-preview/",
+        RazorpayPaymentOrderWorkflowGatePreviewView.as_view(),
+        name="saas-razorpay-payment-order-workflow-gate-preview",
     ),
 ]

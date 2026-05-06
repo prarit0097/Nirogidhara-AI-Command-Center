@@ -238,6 +238,17 @@ RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED = _razorpay_webhook_bool(
 RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED = _razorpay_webhook_bool(
     "RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED"
 )
+# ----- Phase 6Q — Payment → Order Workflow Safety Gate -----
+# Default off. When true, the Phase 6Q service may prepare and
+# transition `RazorpayPaymentOrderWorkflowGate` review records derived
+# from approved Phase 6P sandbox attempts. The flag NEVER unlocks any
+# mutation of real `Order` / `Payment` / `Shipment` / `DiscountOfferLog`
+# / `Customer` / `Lead` rows; even when enabled, the service writes only
+# to its own gate model. Production `.env.production` is not edited —
+# this default IS the production posture.
+RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

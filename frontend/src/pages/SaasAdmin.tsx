@@ -22,6 +22,8 @@ import type {
   SaasRazorpayWebhookEventDto,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpayPaymentOrderWorkflowGateReadiness,
+  SaasRazorpayPaymentOrderWorkflowGatesResponse,
   SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
   SaasRazorpaySandboxPaidStatusMutationReadiness,
   SaasRazorpaySandboxStatusMappingReadiness,
@@ -131,6 +133,14 @@ export default function SaasAdminPage() {
   ] = useState<SaasRazorpaySandboxPaidStatusMutationAttemptsResponse | null>(
     null,
   );
+  const [
+    razorpayPaymentOrderWorkflowReadiness,
+    setRazorpayPaymentOrderWorkflowReadiness,
+  ] = useState<SaasRazorpayPaymentOrderWorkflowGateReadiness | null>(null);
+  const [
+    razorpayPaymentOrderWorkflowGates,
+    setRazorpayPaymentOrderWorkflowGates,
+  ] = useState<SaasRazorpayPaymentOrderWorkflowGatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -158,6 +168,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpaySandboxStatusReviews(25),
       api.getSaasRazorpaySandboxPaidStatusMutationReadiness(),
       api.getSaasRazorpaySandboxPaidStatusMutationAttempts(25),
+      api.getSaasRazorpayPaymentOrderWorkflowGateReadiness(),
+      api.getSaasRazorpayPaymentOrderWorkflowGates(25),
     ])
       .then(
         ([
@@ -183,6 +195,8 @@ export default function SaasAdminPage() {
           smReviews,
           spsRead,
           spsAttempts,
+          poRead,
+          poGates,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -206,6 +220,8 @@ export default function SaasAdminPage() {
           setRazorpaySandboxStatusReviews(smReviews);
           setRazorpaySandboxPaidStatusReadiness(spsRead);
           setRazorpaySandboxPaidStatusAttempts(spsAttempts);
+          setRazorpayPaymentOrderWorkflowReadiness(poRead);
+          setRazorpayPaymentOrderWorkflowGates(poGates);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -1999,6 +2015,339 @@ export default function SaasAdminPage() {
             "Enable Mutation" / "Go Live" / "Run MCP Tool" buttons exist
             on this page. Execution is exclusively via the Phase 6P CLI
             commands above; this page renders status only.
+          </div>
+        </section>
+      )}
+
+      {(razorpayPaymentOrderWorkflowReadiness || razorpayPaymentOrderWorkflowGates) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-payment-order-workflow-gate-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Webhook className="h-5 w-5 text-primary" />
+                Razorpay Payment → Order Workflow Safety Gate
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6Q — audit-only safety gate.{" "}
+                <strong>No real Order / Payment / Shipment / DiscountOfferLog mutation</strong>,
+                no customer notification, no Razorpay API call.
+                Approving a gate only marks it{" "}
+                <code>approved_for_future_phase6r</code> — gate state
+                changes are CLI-only; no API endpoint or frontend
+                button dispatches Phase 6Q approval.
+              </p>
+            </div>
+            {razorpayPaymentOrderWorkflowReadiness && (
+              <div data-testid="phase6q-safe-to-start-phase6r-badge">
+                <StatusPill
+                  tone={
+                    razorpayPaymentOrderWorkflowReadiness.safeToStartPhase6R
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayPaymentOrderWorkflowReadiness.safeToStartPhase6R
+                    ? "Ready for Phase 6R planning"
+                    : "Blocked — needs approved gate review for future Phase 6R"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayPaymentOrderWorkflowReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayPaymentOrderWorkflowReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpayPaymentOrderWorkflowReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={razorpayPaymentOrderWorkflowReadiness.latestCompletedPhase}
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpayPaymentOrderWorkflowReadiness.nextPhase}
+              />
+              <KeyValue
+                label="Gate flag"
+                value={
+                  razorpayPaymentOrderWorkflowReadiness.razorpayPaymentOrderWorkflowGateEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue label="Real Order mutation" value="Disabled" />
+              <KeyValue label="Real Payment mutation" value="Disabled" />
+              <KeyValue label="Customer notification" value="Disabled" />
+              <KeyValue label="Provider call" value="Disabled" />
+              <KeyValue
+                label="Frontend can execute"
+                value={
+                  razorpayPaymentOrderWorkflowReadiness.frontendCanExecute
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="API can approve"
+                value={
+                  razorpayPaymentOrderWorkflowReadiness.apiEndpointCanApprove
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Execution path"
+                value={razorpayPaymentOrderWorkflowReadiness.executionPath}
+              />
+              <KeyValue
+                label="Phase 6P executed"
+                value={String(
+                  razorpayPaymentOrderWorkflowReadiness.phase6PExecutedCount,
+                )}
+              />
+              <KeyValue
+                label="Phase 6P rolled back"
+                value={String(
+                  razorpayPaymentOrderWorkflowReadiness.phase6PRolledBackCount,
+                )}
+              />
+              <KeyValue
+                label="Gates pending"
+                value={String(
+                  razorpayPaymentOrderWorkflowReadiness.gateCounts
+                    .pendingManualReview,
+                )}
+              />
+              <KeyValue
+                label="Gates approved (for 6R)"
+                value={String(
+                  razorpayPaymentOrderWorkflowReadiness.gateCounts
+                    .approvedForFuturePhase6R,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayPaymentOrderWorkflowReadiness && (
+            <div className="px-6 pb-2 text-xs text-muted-foreground">
+              <strong>Next action:</strong>{" "}
+              {razorpayPaymentOrderWorkflowReadiness.nextAction}
+            </div>
+          )}
+
+          {razorpayPaymentOrderWorkflowReadiness && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Payment → Order workflow contract (Phase 6R target)
+              </h4>
+              <div className="overflow-x-auto">
+                <table
+                  className="w-full text-xs"
+                  data-testid="phase6q-contract-table"
+                >
+                  <thead className="text-muted-foreground">
+                    <tr className="text-left">
+                      <th className="py-1 pr-3">Event</th>
+                      <th className="py-1 pr-3">Future payment</th>
+                      <th className="py-1 pr-3">Future order status</th>
+                      <th className="py-1 pr-3">Workflow action</th>
+                      <th className="py-1 pr-3">Mutation in 6Q</th>
+                      <th className="py-1 pr-3">Notify</th>
+                      <th className="py-1 pr-3">Provider</th>
+                      <th className="py-1 pr-3">Shipment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {razorpayPaymentOrderWorkflowReadiness.workflowContract.map(
+                      (row) => (
+                        <tr
+                          key={row.razorpayEventName}
+                          className="border-t border-border"
+                        >
+                          <td className="py-1 pr-3 font-mono">
+                            {row.razorpayEventName}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.futurePaymentStatus}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.futureOrderStatusCandidate}
+                          </td>
+                          <td className="py-1 pr-3 font-mono text-[11px]">
+                            {row.workflowAction}
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600 font-medium">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {razorpayPaymentOrderWorkflowGates && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Workflow gate review records (
+                {razorpayPaymentOrderWorkflowGates.items.length})
+              </h4>
+              {razorpayPaymentOrderWorkflowGates.items.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No gate reviews yet. Gate reviews are prepared,
+                  approved, rejected, and archived exclusively via
+                  the Phase 6Q CLI commands —{" "}
+                  <code>prepare_razorpay_payment_order_workflow_gate</code>,{" "}
+                  <code>approve_razorpay_payment_order_workflow_gate</code>,{" "}
+                  <code>reject_razorpay_payment_order_workflow_gate</code>,{" "}
+                  <code>archive_razorpay_payment_order_workflow_gate</code>.
+                  This page renders read-only status only.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table
+                    className="w-full text-xs"
+                    data-testid="phase6q-gates-table"
+                  >
+                    <thead className="text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="py-1 pr-3">ID</th>
+                        <th className="py-1 pr-3">Event</th>
+                        <th className="py-1 pr-3">Source event id</th>
+                        <th className="py-1 pr-3">Status</th>
+                        <th className="py-1 pr-3">Real mutation</th>
+                        <th className="py-1 pr-3">Notification</th>
+                        <th className="py-1 pr-3">Reviewed at</th>
+                        <th className="py-1 pr-3">Archived at</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {razorpayPaymentOrderWorkflowGates.items.map((row) => (
+                        <tr
+                          key={row.id}
+                          className="border-t border-border"
+                        >
+                          <td className="py-1 pr-3">{row.id}</td>
+                          <td className="py-1 pr-3 font-mono">
+                            {row.eventName}
+                          </td>
+                          <td className="py-1 pr-3 font-mono">
+                            {row.sourceEventId}
+                          </td>
+                          <td className="py-1 pr-3">
+                            <StatusPill
+                              tone={
+                                row.status === "approved_for_future_phase6r"
+                                  ? "success"
+                                  : row.status === "rejected" ||
+                                    row.status === "blocked"
+                                  ? "danger"
+                                  : row.status === "archived"
+                                  ? "neutral"
+                                  : "warning"
+                              }
+                            >
+                              {row.status}
+                            </StatusPill>
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600 font-medium">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3 text-emerald-600">
+                            Disabled
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.reviewedAt ?? "—"}
+                          </td>
+                          <td className="py-1 pr-3">
+                            {row.archivedAt ?? "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {razorpayPaymentOrderWorkflowReadiness && (
+            <div className="px-6 pb-4 grid gap-4 lg:grid-cols-2">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">CLI-only review</h4>
+                <p className="text-xs text-muted-foreground">
+                  Phase 6Q gate state changes are intentionally
+                  CLI-only. Approving / rejecting / archiving in this
+                  UI is not exposed. Use the operator runbook for the
+                  Phase 6Q CLIs:
+                </p>
+                <ul
+                  className="mt-2 text-[11px] font-mono space-y-1 list-disc pl-5"
+                  data-testid="phase6q-cli-list"
+                >
+                  <li>preview_razorpay_payment_order_workflow_gate</li>
+                  <li>prepare_razorpay_payment_order_workflow_gate</li>
+                  <li>
+                    approve_razorpay_payment_order_workflow_gate --reason "..."
+                  </li>
+                  <li>
+                    reject_razorpay_payment_order_workflow_gate --reason "..."
+                  </li>
+                  <li>
+                    archive_razorpay_payment_order_workflow_gate --reason "..."
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Forbidden actions</h4>
+                <div
+                  className="flex flex-wrap gap-1 text-[11px]"
+                  data-testid="phase6q-forbidden-actions"
+                >
+                  {razorpayPaymentOrderWorkflowReadiness.forbiddenActions.map(
+                    (action) => (
+                      <span
+                        key={action}
+                        className="rounded border border-border bg-muted/30 px-2 py-0.5 font-mono"
+                      >
+                        {action}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Audit gate only.</strong> No "Mark Paid" /
+            "Capture Payment" / "Refund" / "Apply Payment" / "Apply
+            Mutation" / "Mutate Order" / "Send WhatsApp" / "Create
+            Payment Link" / "Execute Webhook" / "Replay Event" /
+            "Enable Mutation" / "Go Live" / "Run MCP Tool" / "Execute
+            Workflow" / "Apply Order Update" / "Confirm Paid Order" /
+            "Start Live Workflow" buttons exist on this page. Gate
+            review state changes are exclusively via the Phase 6Q CLI
+            commands above.
           </div>
         </section>
       )}

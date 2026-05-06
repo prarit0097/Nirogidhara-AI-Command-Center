@@ -77,13 +77,13 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6P inclusive (1378 tests)
+python -m pytest -q                     # Phase 1 -> 6Q inclusive (1409 tests)
 python manage.py makemigrations --check --dry-run    # must report "No changes detected"
 python manage.py check                  # must report "0 issues"
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6P vitest tests (54 tests)
+npm test                                # Phase 1 -> 6Q vitest tests (56 tests)
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
@@ -291,6 +291,50 @@ by Phase 6M code paths.
 `/saas-admin` shows **Razorpay Webhook Handler (Test Mode)** with the
 event list (masked summary only) and the readiness card. **No "Replay"
 / "Apply mutation" / "Go Live" buttons on the UI.**
+
+## Phase 6Q Razorpay payment → order workflow safety gate diagnostics
+
+Phase 6Q is **audit-gate-only and CLI-only** for review state
+changes. Gate state changes write to
+`RazorpayPaymentOrderWorkflowGate` only — they NEVER touch real
+`Order` / `Payment` / `Shipment` / `DiscountOfferLog` / `Customer` /
+`Lead` rows. **There is no API endpoint or frontend button that
+dispatches Phase 6Q approval.**
+
+```bash
+cd backend
+# Read-only diagnostics first.
+python manage.py inspect_razorpay_payment_order_workflow_gate_readiness --json
+python manage.py inspect_razorpay_payment_order_workflow_gates --json
+python manage.py preview_razorpay_payment_order_workflow_gate --attempt-id <PHASE_6P_ATTEMPT_ID> --json
+
+# CLI-only review lifecycle. ``prepare``/``approve``/``reject``/``archive`` write
+# to RazorpayPaymentOrderWorkflowGate only. Approve requires --reason.
+python manage.py prepare_razorpay_payment_order_workflow_gate --attempt-id <PHASE_6P_ATTEMPT_ID> --json
+python manage.py approve_razorpay_payment_order_workflow_gate --gate-id <GATE_ID> --reason "Director sign-off for sandbox proof" --json
+python manage.py reject_razorpay_payment_order_workflow_gate --gate-id <GATE_ID> --reason "Not yet" --json
+python manage.py archive_razorpay_payment_order_workflow_gate --gate-id <GATE_ID> --reason "Close" --json
+```
+
+Expected posture: `phase=6Q`, `status=audit_gate_only`,
+`razorpayPaymentOrderWorkflowGateEnabled=false`,
+`businessMutationEnabled=false`,
+`customerNotificationEnabled=false`, `providerCallAttempted=false`,
+`frontendCanExecute=false`, `apiEndpointCanExecute=false`,
+`apiEndpointCanApprove=false`, `executionPath="cli_only"`.
+`safeToStartPhase6R=true` only after at least one gate has been
+approved via the CLI.
+
+`/saas-admin` shows **Razorpay Payment → Order Workflow Safety
+Gate** with the readiness grid, 9-row Payment → Order workflow
+contract table (every cell "Disabled" for real mutation), gate
+review records table (read-only — no buttons), CLI-only reminder
+list, and forbidden-action chips. **No "Mark Paid" / "Capture
+Payment" / "Refund" / "Apply Payment" / "Apply Mutation" / "Mutate
+Order" / "Send WhatsApp" / "Create Payment Link" / "Execute
+Webhook" / "Replay Event" / "Enable Mutation" / "Go Live" / "Run
+MCP Tool" / "Execute Workflow" / "Apply Order Update" / "Confirm
+Paid Order" / "Start Live Workflow" buttons exist anywhere.**
 
 ## Phase 6P Razorpay sandbox paid-status mutation test diagnostics
 

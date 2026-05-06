@@ -18,6 +18,26 @@ artefact), runtime providers still use env/config, the global kill switch
 remains active, `MCP_ENABLED=false`, and
 `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`.
 
+**Phase 6Q Payment → Order Workflow Safety Gate is FULL PASS
+(audit-gate-only, CLI-only review state changes).** New
+`RazorpayPaymentOrderWorkflowGate` model + migration
+`payments.0007_phase6q_payment_order_workflow_gate`, service module +
+7 management commands + 4 read-only admin/auth-protected DRF
+endpoints + `/saas-admin` section + 8 audit kinds + new env flag
+`RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED` (default `False`).
+**There is no POST API endpoint that prepares, approves, rejects, or
+archives a gate** — gate state changes are exclusively CLI. Approve
+requires non-empty manual review reason. Phase 6Q gate transitions
+never touch real `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` /
+`WhatsAppConversation` rows. **Next backend phase: Phase 6R —
+Payment → WhatsApp/courier readiness, no live send yet** (audit-only
+readiness contract that maps an approved Phase 6Q gate into a future
+WhatsApp / courier dispatch readiness check, behind a NEW env flag
+distinct from `RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED`). Do
+**not** enable any sandbox env flag in production until Phase 6R
+implementation lands and passes its own acceptance criteria.
+
 **Phase 6P Controlled Internal Paid-Status Mutation Test is FULL
 PASS (sandbox-ledger-only, CLI-only execution).** New
 `RazorpaySandboxPaidStatusLedger` + `RazorpaySandboxPaidStatusMutationAttempt`
@@ -1186,32 +1206,68 @@ Hard rules preserved (asserted in 31 new pytest cases):
 - Endpoints admin/auth gated; POST/PATCH/DELETE return 405.
 - Production `.env.production` is not edited.
 
-## Phase 6Q — Payment → order workflow safety gate (Planned · Not started)
+## Phase 6Q — Payment → Order Workflow Safety Gate ✅ shipped (audit-gate-only, CLI-only review state changes)
 
-Audit-only workflow safety contract that wraps the Phase 6P sandbox
-ledger. Behind a NEW env flag distinct from
-`RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED` — suggested name
-`RAZORPAY_PAYMENT_TO_ORDER_WORKFLOW_GATE_ENABLED`. Phase 6Q must:
+What landed: new `apps.payments.RazorpayPaymentOrderWorkflowGate`
+model + migration `payments.0007_phase6q_payment_order_workflow_gate`.
+New `apps.payments.razorpay_payment_order_workflow_gate` service ships
+10 functions (contract + readiness + eligibility + preview + prepare
++ approve + reject + archive + summary + invariant assertion). Seven
+CLI commands. Four **read-only GET** admin/auth-protected DRF
+endpoints under `/api/v1/saas/razorpay/payment-order-workflow-...`.
+Eight new audit kinds. New env flag
+`RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED` (default `False`)
+gates `prepare`/`approve`/`reject`/`archive`. Approve also requires
+non-empty manual review reason. **There is no POST API endpoint that
+prepares / approves / rejects / archives a gate** — review state
+changes are exclusively CLI.
 
-1. Define and audit (no execution) the canonical workflow that a
-   future production phase would queue for each Phase 6P ledger
-   transition — what matrix entries, Director sign-offs, cohort
-   allowlists, and downstream actions would fire.
-2. Provide a CLI inspector that compares the sandbox ledger state
-   against the workflow contract and reports a `safeToStartPhase6R`
-   readiness signal.
-3. Phase 6Q must NOT mutate real `Order` / `Payment` rows in its own
-   scope.
+Hard rules preserved (asserted in 31 new pytest cases):
+
+- Phase 6Q NEVER mutates real `Order` / `Payment` / `Shipment` /
+  `DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` /
+  `WhatsAppConversation` rows (asserted with before/after counts).
+- No Razorpay client / WhatsApp send / Vapi trigger invocation
+  (asserted with mock spies across the full lifecycle).
+- `realOrderMutationWasMade=False`, `realPaymentMutationWasMade=False`,
+  `shipmentMutationWasMade=False`, `discountMutationWasMade=False`,
+  `customerNotificationSent=False`, `providerCallAttempted=False`,
+  `workflowMutationAllowedInPhase6Q=False` on every persisted gate
+  row.
+- No POST API endpoint — prepare/approve/reject/archive are
+  exclusively CLI.
+- Endpoints admin/auth gated; POST/PATCH/DELETE return 405.
+- Production `.env.production` is not edited.
+
+## Phase 6R — Payment → WhatsApp/courier readiness, no live send yet (Planned · Not started)
+
+Audit-only readiness contract that maps an approved Phase 6Q
+workflow gate into a future WhatsApp / courier dispatch readiness
+check. Behind a NEW env flag distinct from
+`RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED` — suggested name
+`RAZORPAY_PAYMENT_TO_WHATSAPP_COURIER_READINESS_ENABLED`. Phase 6R
+must:
+
+1. Define and audit (no execution) the canonical readiness signals
+   a future production phase would check before sending a WhatsApp
+   message or creating a courier shipment for a payment-confirmed
+   order — required Claim Vault coverage, consent state, allow-list
+   cohort membership, courier service-area, etc.
+2. Provide a CLI inspector that walks the chain (Phase 6Q gate →
+   readiness signals) and reports a `safeToStartPhase6S` readiness
+   signal.
+3. Phase 6R must NOT send a real WhatsApp message, NOT create a
+   real shipment, NOT call Razorpay, NOT mutate any real business
+   row.
 
 Acceptance criteria:
 
-- Every Phase 6N + 6O + 6P safety invariant stays true on real
-  (non-synthetic) rows;
+- Every Phase 6N + 6O + 6P + 6Q safety invariant stays true on real
+  rows;
 - The new env flag stays `False` in `.env.production`;
-- `business_mutation_was_made` / `customer_notification_sent` stay
-  `False` on every real `RazorpayWebhookEvent`,
-  `RazorpaySandboxStatusReview`, `RazorpaySandboxPaidStatusLedger`,
-  and `RazorpaySandboxPaidStatusMutationAttempt` row.
+- No real `Order` / `Payment` / `Shipment` / `DiscountOfferLog` /
+  `Customer` / `Lead` / `WhatsAppMessage` / `WhatsAppConversation`
+  mutation. No live WhatsApp send. No live courier API call.
 
 ## Recommended future phases
 

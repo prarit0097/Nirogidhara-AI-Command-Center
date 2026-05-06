@@ -7,11 +7,11 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 6P baseline:** documented through Phase 6P (Controlled
-> Internal Paid-Status Mutation Test, sandbox-ledger-only, CLI-only
-> execution). Phase 6Q is the next planned phase (audit-only workflow
-> safety gate) and will sit behind a NEW env flag distinct from
-> `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED`.
+> **Phase 6Q baseline:** documented through Phase 6Q (Payment →
+> Order Workflow Safety Gate, audit-gate-only, CLI-only review state
+> changes). Phase 6R is the next planned phase (Payment →
+> WhatsApp/courier readiness contract) and will sit behind a NEW env
+> flag distinct from `RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED`.
 
 ## Health
 
@@ -232,6 +232,31 @@ Every response preserves `business_mutation_was_made=false`,
 `customer_notification_sent=false`, `raw_secret_exposed=false`,
 `full_pii_exposed=false`. Production webhook secret is **never** consumed
 by this handler.
+
+## Phase 6Q — Payment → Order Workflow Safety Gate (audit-gate-only, CLI-only review state changes)
+
+Read-only HTTP layer over the Phase 6Q workflow gate review records.
+**There is no POST endpoint that prepares, approves, rejects, or
+archives a gate** — gate state changes are exclusively dispatched
+via CLI. **Phase 6Q never mutates real ``Order`` / ``Payment`` /
+``Shipment`` / ``DiscountOfferLog`` / ``Customer`` / ``Lead`` /
+``WhatsAppMessage`` / ``WhatsAppConversation`` rows.** It never calls
+Razorpay, never sends a customer notification, never flips an env
+flag.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/payment-order-workflow-gate-readiness/` | admin/staff | Phase 6Q readiness composition: locked-False safety state, env flag state, gate counters (`pendingManualReview` / `approvedForFuturePhase6R` / `rejected` / `archived` / `blocked`), Phase 6P proof counters (`phase6PExecutedCount` / `phase6PRolledBackCount`), 9-row Payment → Order workflow contract, manual review checklist, rollback plan, forbidden-action list, blockers, warnings, `safeToStartPhase6R`, `nextAction`. |
+| GET | `/api/v1/saas/razorpay/payment-order-workflow-gates/?limit=N` | admin/staff | List recent `RazorpayPaymentOrderWorkflowGate` rows (sanitized — no raw payload, no PII) + counts + locked safety booleans. Response carries `frontendCanExecute=false`, `apiEndpointCanExecute=false`, `apiEndpointCanApprove=false` so the frontend can render a clear CLI-only banner. |
+| GET | `/api/v1/saas/razorpay/payment-order-workflow-gates/<id>/` | admin/staff | Detail (sanitized). |
+| GET | `/api/v1/saas/razorpay/payment-order-workflow-gate-preview/?attempt_id=<ID>` | admin/staff | Read-only preview of how a Phase 6Q gate would map. Never creates rows. |
+
+Every response preserves `realOrderMutationWasMade=false`,
+`realPaymentMutationWasMade=false`, `shipmentMutationWasMade=false`,
+`discountMutationWasMade=false`, `customerNotificationSent=false`,
+`providerCallAttempted=false`, `workflowMutationAllowedInPhase6Q=false`.
+POST/PATCH/DELETE on every Phase 6Q endpoint return 405.
+Admin/director/superuser auth required for every endpoint.
 
 ## Phase 6P — Controlled Internal Paid-Status Mutation Test (sandbox-ledger-only, CLI-only execution)
 

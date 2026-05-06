@@ -589,3 +589,166 @@ class RazorpaySandboxPaidStatusMutationAttempt(models.Model):
             f"Phase6P-Attempt[{self.status}] {self.requested_action} "
             f"review={self.review_id}"
         )
+
+
+class RazorpayPaymentOrderWorkflowGate(models.Model):
+    """Phase 6Q — audit-only Payment → Order workflow safety gate.
+
+    Each gate row evaluates whether a future payment-to-order
+    workflow would be safe to start after a Phase 6P sandbox proof.
+    Phase 6Q **never** mutates real ``Order`` / ``Payment`` /
+    ``Shipment`` / ``DiscountOfferLog`` / ``Customer`` / ``Lead`` /
+    ``WhatsAppMessage`` / ``WhatsAppConversation`` rows. It NEVER
+    calls Razorpay, NEVER sends a customer notification, NEVER flips
+    an env flag. Approving a gate only flips ``status`` to
+    ``approved_for_future_phase6r``.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        BLOCKED = "blocked", "Blocked"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        APPROVED_FOR_FUTURE_PHASE6R = (
+            "approved_for_future_phase6r",
+            "Approved for future Phase 6R",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+
+    source_attempt = models.ForeignKey(
+        RazorpaySandboxPaidStatusMutationAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_order_workflow_gates",
+    )
+    source_ledger = models.ForeignKey(
+        RazorpaySandboxPaidStatusLedger,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_order_workflow_gates",
+    )
+    source_review = models.ForeignKey(
+        RazorpaySandboxStatusReview,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_order_workflow_gates",
+    )
+    razorpay_webhook_event = models.ForeignKey(
+        RazorpayWebhookEvent,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_order_workflow_gates",
+    )
+    source_event_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    event_name = models.CharField(max_length=128, db_index=True)
+    provider_environment = models.CharField(max_length=16, default="test")
+    provider_order_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_link_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    currency = models.CharField(max_length=8, blank=True, default="")
+
+    proposed_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_order_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_order_effect = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_workflow_action = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Phase 6P proof verification.
+    phase6p_execution_verified = models.BooleanField(default=False)
+    phase6p_rollback_verified = models.BooleanField(default=False)
+
+    synthetic_eligible = models.BooleanField(default=False)
+    manual_review_required = models.BooleanField(default=True)
+
+    # Locked-False safety booleans. Phase 6Q never flips any of these
+    # to True. Asserted by ``assert_phase6q_no_real_business_mutation``.
+    workflow_mutation_allowed_in_phase6q = models.BooleanField(default=False)
+    real_order_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_payment_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    shipment_mutation_was_made = models.BooleanField(default=False)
+    discount_mutation_was_made = models.BooleanField(default=False)
+    customer_notification_sent = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    rollback_required = models.BooleanField(default=True)
+
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    safety_invariants = models.JSONField(default=dict, blank=True)
+    manual_review_checklist = models.JSONField(default=list, blank=True)
+    rollback_plan = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6q_gate_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6q_gate_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=200, blank=True, default="")
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6q_gate_archives",
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(max_length=200, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "event_name")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase6Q-Gate[{self.status}] {self.event_name} "
+            f"(attempt={self.source_attempt_id})"
+        )
