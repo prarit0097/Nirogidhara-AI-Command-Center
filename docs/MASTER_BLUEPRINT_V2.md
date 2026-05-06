@@ -14,10 +14,10 @@
 | Author of record | Prarit Sidana (Director, Nirogidhara Private Limited) |
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
-| Completed phase range | Phase 1 → **Phase 6S — Limited Internal Dispatch Pilot Plan (planning-only; CLI-only review state changes)** |
-| Latest pushed commit | see `git log -1` (Phase 6S commit on `origin/main`) |
-| Last verified test baseline | **1474 backend tests · 60 frontend tests** · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
-| Next planned phase | **Phase 6T — Final Phase 6 audit + lock / controlled pilot execution decision gate (not started)** — composes Phase 6N → 6S into a single read-only attestation report and defines the Director-signoff + kill-switch + rollback contract for any future controlled pilot execution. |
+| Completed phase range | Phase 1 → **Phase 6T — Final Phase 6 Audit + Lock / Controlled Pilot Execution Decision Gate (audit-lock-only; CLI-only review state changes)** |
+| Latest pushed commit | see `git log -1` (Phase 6T commit on `origin/main`; HEAD `04f5032 — fix: shorten phase 6t audit event kind`) |
+| Last verified test baseline | **1495 backend tests · 62 frontend tests** · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK · VPS deploy + VPS pytest PASS |
+| Next planned phase | **Phase 7A — Future Controlled Internal Pilot Execution Design (planning-only, only after explicit Director approval)**. Phase 7A is documentation-only; it does not implement, execute, or enable anything. |
 | Smoke + provider state | All earlier 5E / 5F gates green. Phase 6A → 6M shipped on top: SaaS multi-tenant scaffold (Phase 6A), default-org backfill (6B), org-scoped read APIs (6C), org-aware write paths (6D), SaaS Admin foundation + integration settings metadata (6E), per-org runtime routing preview (6F), controlled runtime routing dry run + AI provider routing preview (6G), controlled runtime live audit gate (6H), single internal live gate simulation (6I), single internal provider test plan (6J), single internal Razorpay test-mode execution gate (6K-A) + manual VPS one-shot pass (6K-B → `pex_8f309650e9644cfaae4418f9` → `order_Sks3KPf0vntKhf`, ₹1.00, rolled back), Razorpay test execution audit review + webhook readiness plan (6L), MCP Gateway foundation (6M-0, dormant), and Razorpay test-mode webhook handler (6M, dormant). Runtime providers still use env/config; `RuntimeKillSwitch` enabled; no MCP tools active; no broad-automation flags flipped. |
 | Live deployment stack | Docker Compose (six containers) on Hostinger VPS, host port 18020 → host Nginx + Certbot SSL |
 | GitHub repo | https://github.com/prarit0097/Nirogidhara-AI-Command-Center |
