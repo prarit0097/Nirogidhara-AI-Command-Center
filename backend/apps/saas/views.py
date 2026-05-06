@@ -91,7 +91,14 @@ from apps.payments.razorpay_payment_dispatch_readiness import (
     summarize_phase6r_payment_dispatch_readiness_gates,
     _serialize_readiness as _serialize_phase6r_readiness,
 )
+from apps.payments.razorpay_payment_dispatch_pilot_plan import (
+    inspect_phase6s_payment_dispatch_pilot_plan_readiness,
+    preview_phase6s_payment_dispatch_pilot_plan,
+    summarize_phase6s_payment_dispatch_pilot_plans,
+    _serialize_pilot_plan as _serialize_phase6s_pilot_plan,
+)
 from apps.payments.models import (
+    RazorpayPaymentDispatchPilotPlan,
     RazorpayPaymentDispatchReadinessGate,
     RazorpayPaymentOrderWorkflowGate,
     RazorpaySandboxPaidStatusMutationAttempt,
@@ -1625,6 +1632,112 @@ class RazorpayPaymentDispatchReadinessPreviewView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 6S — Limited Internal Dispatch Pilot Plan (planning-only)
+# ---------------------------------------------------------------------------
+
+
+class RazorpayPaymentDispatchPilotPlanReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/payment-dispatch-pilot-plan-readiness/`` — Phase 6S.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER starts a pilot; NEVER sends
+    WhatsApp; NEVER calls Meta Cloud / Delhivery / Razorpay; review
+    state changes are CLI-only.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(
+            inspect_phase6s_payment_dispatch_pilot_plan_readiness()
+        )
+
+
+class RazorpayPaymentDispatchPilotPlansListView(APIView):
+    """``GET /api/v1/saas/razorpay/payment-dispatch-pilot-plans/`` — Phase 6S list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase6s_payment_dispatch_pilot_plans(limit=limit)
+        return Response(
+            {
+                "phase": "6S",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "pilotExecutionAllowedInPhase6S": False,
+                "realOrderMutationWasMade": False,
+                "realPaymentMutationWasMade": False,
+                "shipmentMutationWasMade": False,
+                "shipmentCreated": False,
+                "awbCreated": False,
+                "whatsAppMessageCreated": False,
+                "whatsAppMessageQueued": False,
+                "customerNotificationSent": False,
+                "metaCloudCallAttempted": False,
+                "delhiveryCallAttempted": False,
+                "providerCallAttempted": False,
+            }
+        )
+
+
+class RazorpayPaymentDispatchPilotPlanDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/payment-dispatch-pilot-plans/<id>/`` — Phase 6S."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayPaymentDispatchPilotPlan.objects.filter(pk=pk).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 6S payment dispatch pilot plan not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase6s_pilot_plan(row))
+
+
+class RazorpayPaymentDispatchPilotPlanPreviewView(APIView):
+    """``GET /api/v1/saas/razorpay/payment-dispatch-pilot-plan-preview/?readiness_id=<ID>`` — Phase 6S.
+
+    Read-only preview from an approved Phase 6R readiness gate; never
+    creates rows; never starts a pilot; never sends WhatsApp; never
+    calls Meta Cloud / Delhivery / Razorpay.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            readiness_id = int(request.query_params.get("readiness_id") or 0)
+        except (TypeError, ValueError):
+            readiness_id = 0
+        if readiness_id <= 0:
+            return Response(
+                {"detail": "readiness_id query param required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            preview_phase6s_payment_dispatch_pilot_plan(readiness_id)
+        )
+
+
 class RazorpaySandboxPaidStatusMutationReadinessView(APIView):
     """``GET /api/v1/saas/razorpay/sandbox-paid-status-mutation-readiness/`` — Phase 6P.
 
@@ -1812,4 +1925,8 @@ __all__ = (
     "RazorpayPaymentDispatchReadinessGatesListView",
     "RazorpayPaymentDispatchReadinessGateDetailView",
     "RazorpayPaymentDispatchReadinessPreviewView",
+    "RazorpayPaymentDispatchPilotPlanReadinessView",
+    "RazorpayPaymentDispatchPilotPlansListView",
+    "RazorpayPaymentDispatchPilotPlanDetailView",
+    "RazorpayPaymentDispatchPilotPlanPreviewView",
 )

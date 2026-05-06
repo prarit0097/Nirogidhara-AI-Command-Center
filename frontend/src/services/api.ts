@@ -157,6 +157,8 @@ import type {
   SaasRazorpayAuditReview,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpayPaymentDispatchPilotPlanReadiness,
+  SaasRazorpayPaymentDispatchPilotPlansResponse,
   SaasRazorpayPaymentDispatchReadiness,
   SaasRazorpayPaymentDispatchReadinessGatesResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
@@ -1498,6 +1500,21 @@ export const api = {
       `/v1/saas/razorpay/payment-dispatch-readiness-gates/?limit=${limit}`,
       () =>
         M.SAAS_RAZORPAY_PAYMENT_DISPATCH_READINESS_GATES as SaasRazorpayPaymentDispatchReadinessGatesResponse,
+    ),
+
+  // ---------- Phase 6S - Limited Internal Dispatch Pilot Plan ----------
+
+  getSaasRazorpayPaymentDispatchPilotPlanReadiness: () =>
+    safeFetch<SaasRazorpayPaymentDispatchPilotPlanReadiness>(
+      "/v1/saas/razorpay/payment-dispatch-pilot-plan-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_READINESS as SaasRazorpayPaymentDispatchPilotPlanReadiness,
+    ),
+  getSaasRazorpayPaymentDispatchPilotPlans: (limit: number = 25) =>
+    safeFetch<SaasRazorpayPaymentDispatchPilotPlansResponse>(
+      `/v1/saas/razorpay/payment-dispatch-pilot-plans/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_PAYMENT_DISPATCH_PILOT_PLANS as SaasRazorpayPaymentDispatchPilotPlansResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

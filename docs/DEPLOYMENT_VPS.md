@@ -1156,6 +1156,52 @@ Expected: `mcp_enabled=false`, `mcp_read_only_mode=true`,
 Re-run after every Docker recreate so the env is read fresh from
 `.env.production`.
 
+## 8.84 Phase 6S production posture — Razorpay limited internal dispatch pilot plan (planning-only, CLI-only review state changes)
+
+Phase 6S is **planning-only** with CLI-only review state changes.
+The service writes to `RazorpayPaymentDispatchPilotPlan` only — it
+NEVER executes a pilot, NEVER sends a WhatsApp message, NEVER calls
+Meta Cloud / Delhivery / Razorpay, NEVER creates a shipment / AWB,
+NEVER mutates real `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` rows.
+**There is no API endpoint or frontend button that dispatches Phase
+6S review state changes.**
+
+Required posture in `.env.production`:
+
+```dotenv
+# Phase 6S Razorpay Limited Internal Dispatch Pilot Plan — keep false on production.
+RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED=false
+```
+
+Verify dormant state after every deploy:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_payment_dispatch_pilot_plan_readiness --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_payment_dispatch_pilot_plans --json
+```
+
+Expected: `phase=6S`, `status=pilot_planning_only`,
+`razorpayPaymentDispatchPilotPlanEnabled=false`,
+`pilotExecutionEnabled=false`, `businessMutationEnabled=false`,
+`customerNotificationEnabled=false`,
+`providerCallAttempted=false`, `frontendCanExecute=false`,
+`apiEndpointCanExecute=false`, `apiEndpointCanApprove=false`,
+`executionPath="cli_only"`, `maxPilotOrders=1`,
+`maxSafeAmountPaise=100`. Counters
+(`pilotExecutionAllowedInPhase6S`, `realOrderMutationWasMade`,
+`realPaymentMutationWasMade`, `shipmentMutationWasMade`,
+`shipmentCreated`, `awbCreated`, `whatsAppMessageCreated`,
+`whatsAppMessageQueued`, `customerNotificationSent`,
+`metaCloudCallAttempted`, `delhiveryCallAttempted`,
+`providerCallAttempted`) all zero on plan summaries. Do **not** flip
+`RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED` to `true` on production
+without a written Director sign-off — and even then, review state
+changes remain CLI-only and only write to the Phase 6S pilot plan
+review table.
+
 ## 8.83 Phase 6R production posture — Razorpay payment → WhatsApp / courier dispatch readiness (audit-only readiness contract, CLI-only review state changes)
 
 Phase 6R is **audit-only readiness contract** with CLI-only review
@@ -1453,7 +1499,8 @@ the container is configured:
 - Phase 6O Razorpay sandbox status mapping (review-only — `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED=false` default; even when `true`, only review preparation is unlocked, never any Order/Payment/Shipment/DiscountOfferLog mutation)
 - Phase 6P Razorpay sandbox paid-status mutation test (sandbox-ledger-only, CLI-only — `RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED=false` default; even when `true`, execute requires `--confirm-sandbox-paid-status-mutation` + non-empty `--director-signoff` and mutates only the Phase 6P ledger; no API endpoint or frontend button dispatches mutation)
 - Phase 6Q Razorpay payment → order workflow safety gate (audit-gate-only, CLI-only review state changes — `RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED=false` default; even when `true`, prepare/approve/reject/archive are CLI-only and write only to the Phase 6Q gate review table; no API endpoint or frontend button dispatches gate state changes)
-- Phase 6R Razorpay payment → WhatsApp / courier dispatch readiness (audit-only readiness contract, CLI-only review state changes — `RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED=false` default; even when `true`, prepare/approve/reject/archive are CLI-only and write only to the Phase 6R readiness review table; no API endpoint or frontend button dispatches review state changes; never sends WhatsApp, never calls Meta Cloud / Delhivery, never creates a shipment / AWB, never calls Razorpay; Phase 6S will own the limited internal live pilot plan behind a SEPARATE env flag)
+- Phase 6R Razorpay payment → WhatsApp / courier dispatch readiness (audit-only readiness contract, CLI-only review state changes — `RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED=false` default; even when `true`, prepare/approve/reject/archive are CLI-only and write only to the Phase 6R readiness review table; no API endpoint or frontend button dispatches review state changes; never sends WhatsApp, never calls Meta Cloud / Delhivery, never creates a shipment / AWB, never calls Razorpay)
+- Phase 6S Razorpay limited internal dispatch pilot plan (planning-only, CLI-only review state changes — `RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED=false` default; even when `true`, prepare/approve/reject/archive are CLI-only and write only to the Phase 6S pilot plan review table; no API endpoint or frontend button dispatches review state changes; never executes a pilot, never sends WhatsApp, never calls Meta Cloud / Delhivery / Razorpay, never creates a shipment / AWB; internal cohort only with `max_pilot_orders=1` and `max_amount_paise=100`; Phase 6T will own the final Phase 6 audit + lock / controlled pilot execution decision gate behind a SEPARATE env flag)
 - MCP Gateway tools / provider tools (gated by `MCP_ENABLED=false` and `MCP_*` flag siblings)
 - Per-org runtime provider routing (Phase 6F preview only — `runtimeSource=env_config`, `perOrgRuntimeEnabled=false`)
 - Live execution through the Runtime Live Audit Gate (Phase 6H — `RuntimeKillSwitch.enabled=true`, every operation `allowedInPhase6H=false`)

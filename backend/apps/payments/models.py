@@ -941,3 +941,225 @@ class RazorpayPaymentDispatchReadinessGate(models.Model):
             f"Phase6R-Readiness[{self.status}] {self.event_name} "
             f"(workflow_gate={self.source_workflow_gate_id})"
         )
+
+
+class RazorpayPaymentDispatchPilotPlan(models.Model):
+    """Phase 6S — planning-only Limited Internal Dispatch Pilot Plan.
+
+    Each pilot plan evaluates whether a future limited internal live
+    payment → dispatch pilot could be safely designed after an approved
+    Phase 6R readiness gate. Phase 6S **never** executes a pilot,
+    **never** sends a WhatsApp message, **never** queues an outbound,
+    **never** calls Meta Cloud, **never** calls Delhivery, **never**
+    calls Razorpay, **never** creates a shipment / AWB, **never**
+    mutates real ``Order`` / ``Payment`` / ``Customer`` / ``Lead`` /
+    ``WhatsAppMessage`` / ``WhatsAppLifecycleEvent`` rows. Approving a
+    pilot plan only flips ``status`` to
+    ``approved_for_future_phase6t``.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        BLOCKED = "blocked", "Blocked"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        APPROVED_FOR_FUTURE_PHASE6T = (
+            "approved_for_future_phase6t",
+            "Approved for future Phase 6T",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+
+    class PilotMode(models.TextChoices):
+        PLANNING_ONLY = "planning_only", "Planning only"
+        INTERNAL_STAFF_ONLY = "internal_staff_only", "Internal staff only"
+
+    source_readiness_gate = models.ForeignKey(
+        RazorpayPaymentDispatchReadinessGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_pilot_plans",
+    )
+    source_workflow_gate = models.ForeignKey(
+        RazorpayPaymentOrderWorkflowGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_pilot_plans",
+    )
+    source_attempt = models.ForeignKey(
+        RazorpaySandboxPaidStatusMutationAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_pilot_plans",
+    )
+    source_ledger = models.ForeignKey(
+        RazorpaySandboxPaidStatusLedger,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_pilot_plans",
+    )
+    source_review = models.ForeignKey(
+        RazorpaySandboxStatusReview,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_pilot_plans",
+    )
+    razorpay_webhook_event = models.ForeignKey(
+        RazorpayWebhookEvent,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_pilot_plans",
+    )
+
+    source_event_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    event_name = models.CharField(max_length=128, db_index=True)
+    provider_environment = models.CharField(max_length=16, default="test")
+    provider_order_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_link_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    currency = models.CharField(max_length=8, blank=True, default="")
+
+    proposed_pilot_scope = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+    proposed_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_order_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_order_effect = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_whatsapp_action = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+    proposed_courier_action = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+    proposed_dispatch_action = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+
+    pilot_mode = models.CharField(
+        max_length=32,
+        choices=PilotMode.choices,
+        default=PilotMode.PLANNING_ONLY,
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    internal_only = models.BooleanField(default=True)
+    max_pilot_orders = models.PositiveIntegerField(default=1)
+    max_amount_paise = models.PositiveIntegerField(default=100)
+    allowed_customer_scope = models.CharField(
+        max_length=64, blank=True, default="internal_staff_only"
+    )
+    allowed_staff_cohort = models.JSONField(default=list, blank=True)
+    allowed_event_names = models.JSONField(default=list, blank=True)
+    whatsapp_template_candidates = models.JSONField(default=list, blank=True)
+    courier_precheck_candidates = models.JSONField(default=list, blank=True)
+    dispatch_precheck_candidates = models.JSONField(default=list, blank=True)
+    kill_switch_requirements = models.JSONField(default=dict, blank=True)
+    approval_requirements = models.JSONField(default=dict, blank=True)
+    rollback_plan = models.JSONField(default=dict, blank=True)
+    abort_criteria = models.JSONField(default=list, blank=True)
+    verification_checklist = models.JSONField(default=list, blank=True)
+
+    manual_review_required = models.BooleanField(default=True)
+
+    # Locked-False safety booleans. Phase 6S never flips any of these
+    # to True. Asserted by
+    # ``assert_phase6s_no_live_execution_or_provider_call``.
+    pilot_execution_allowed_in_phase6s = models.BooleanField(default=False)
+    live_send_allowed_in_phase6s = models.BooleanField(default=False)
+    courier_booking_allowed_in_phase6s = models.BooleanField(default=False)
+    provider_call_allowed_in_phase6s = models.BooleanField(default=False)
+    real_order_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_payment_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    shipment_mutation_was_made = models.BooleanField(default=False)
+    shipment_created = models.BooleanField(default=False, db_index=True)
+    awb_created = models.BooleanField(default=False, db_index=True)
+    whatsapp_message_created = models.BooleanField(
+        default=False, db_index=True
+    )
+    whatsapp_message_queued = models.BooleanField(
+        default=False, db_index=True
+    )
+    customer_notification_sent = models.BooleanField(default=False)
+    meta_cloud_call_attempted = models.BooleanField(default=False)
+    delhivery_call_attempted = models.BooleanField(default=False)
+    razorpay_call_attempted = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    rollback_required = models.BooleanField(default=True)
+
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    safety_invariants = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6s_pilot_plan_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6s_pilot_plan_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=200, blank=True, default="")
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6s_pilot_plan_archives",
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(max_length=200, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "event_name")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase6S-PilotPlan[{self.status}] {self.event_name} "
+            f"(readiness={self.source_readiness_gate_id})"
+        )

@@ -24,6 +24,10 @@ from .views import (
     ProviderTestPlansListView,
     RazorpayBusinessMutationSandboxPlanView,
     RazorpayBusinessMutationSandboxReadinessView,
+    RazorpayPaymentDispatchPilotPlanDetailView,
+    RazorpayPaymentDispatchPilotPlanPreviewView,
+    RazorpayPaymentDispatchPilotPlanReadinessView,
+    RazorpayPaymentDispatchPilotPlansListView,
     RazorpayPaymentDispatchReadinessGateDetailView,
     RazorpayPaymentDispatchReadinessGatesListView,
     RazorpayPaymentDispatchReadinessPreviewView,
@@ -441,5 +445,26 @@ urlpatterns = [
         "razorpay/payment-dispatch-readiness-preview/",
         RazorpayPaymentDispatchReadinessPreviewView.as_view(),
         name="saas-razorpay-payment-dispatch-readiness-preview",
+    ),
+    # Phase 6S — Razorpay Limited Internal Dispatch Pilot Plan (read-only API).
+    path(
+        "razorpay/payment-dispatch-pilot-plan-readiness/",
+        RazorpayPaymentDispatchPilotPlanReadinessView.as_view(),
+        name="saas-razorpay-payment-dispatch-pilot-plan-readiness",
+    ),
+    path(
+        "razorpay/payment-dispatch-pilot-plans/",
+        RazorpayPaymentDispatchPilotPlansListView.as_view(),
+        name="saas-razorpay-payment-dispatch-pilot-plans",
+    ),
+    path(
+        "razorpay/payment-dispatch-pilot-plans/<int:pk>/",
+        RazorpayPaymentDispatchPilotPlanDetailView.as_view(),
+        name="saas-razorpay-payment-dispatch-pilot-plan-detail",
+    ),
+    path(
+        "razorpay/payment-dispatch-pilot-plan-preview/",
+        RazorpayPaymentDispatchPilotPlanPreviewView.as_view(),
+        name="saas-razorpay-payment-dispatch-pilot-plan-preview",
     ),
 ]

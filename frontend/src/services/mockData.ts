@@ -3449,6 +3449,431 @@ export const SAAS_RAZORPAY_PAYMENT_DISPATCH_READINESS_GATES: Record<
   providerCallAttempted: false,
 };
 
+// ---------- Phase 6S — Limited Internal Dispatch Pilot Plan ----------
+
+const PHASE_6S_CONTRACT_FIXTURES: Record<
+  string,
+  [string, string, string, string]
+> = {
+  "payment_link.paid": [
+    "eligible_for_internal_advance_paid_pilot_candidate",
+    "internal_payment_received_template_candidate",
+    "internal_courier_precheck_candidate",
+    "internal_advance_paid_dispatch_precheck_candidate",
+  ],
+  "payment.captured": [
+    "eligible_for_internal_payment_captured_pilot_candidate",
+    "internal_payment_captured_confirmation_candidate",
+    "internal_courier_handoff_precheck_candidate",
+    "internal_payment_verified_dispatch_precheck_candidate",
+  ],
+  "payment.failed": [
+    "not_eligible_for_dispatch_pilot_payment_failed",
+    "internal_payment_failed_followup_candidate",
+    "courier_blocked_payment_failed",
+    "dispatch_blocked_payment_failed",
+  ],
+  "payment.authorized": [
+    "review_only_authorized_payment_candidate",
+    "internal_payment_authorized_review_candidate",
+    "courier_blocked_authorization_pending",
+    "dispatch_blocked_authorization_pending",
+  ],
+  "order.paid": [
+    "eligible_for_internal_paid_order_pilot_candidate",
+    "internal_paid_order_confirmation_candidate",
+    "internal_courier_ready_precheck_candidate",
+    "internal_paid_order_dispatch_precheck_candidate",
+  ],
+  "payment_link.cancelled": [
+    "not_eligible_for_dispatch_pilot_payment_link_cancelled",
+    "internal_payment_link_cancelled_followup_candidate",
+    "courier_blocked_payment_link_cancelled",
+    "dispatch_blocked_payment_link_cancelled",
+  ],
+  "payment_link.expired": [
+    "not_eligible_for_dispatch_pilot_payment_link_expired",
+    "internal_payment_link_expired_followup_candidate",
+    "courier_blocked_payment_link_expired",
+    "dispatch_blocked_payment_link_expired",
+  ],
+  "refund.created": [
+    "not_eligible_for_dispatch_pilot_refund_review",
+    "internal_refund_created_review_candidate",
+    "courier_blocked_refund_review",
+    "dispatch_blocked_refund_review",
+  ],
+  "refund.processed": [
+    "not_eligible_for_dispatch_pilot_refunded",
+    "internal_refund_processed_customer_info_candidate",
+    "courier_blocked_refunded",
+    "dispatch_blocked_refunded",
+  ],
+};
+
+const PHASE_6S_FORBIDDEN_ACTIONS = [
+  "execute_pilot",
+  "start_pilot",
+  "run_pilot",
+  "send_whatsapp_template",
+  "send_freeform_whatsapp",
+  "queue_whatsapp_outbound",
+  "create_whatsapp_message_outbound",
+  "create_whatsapp_lifecycle_event",
+  "create_whatsapp_handoff_to_call",
+  "call_meta_cloud_api",
+  "call_delhivery_api",
+  "create_shipment",
+  "create_awb",
+  "book_courier_pickup",
+  "place_vapi_call",
+  "call_razorpay_api",
+  "create_payment_link",
+  "capture_razorpay_payment",
+  "refund_razorpay_payment",
+  "mutate_real_order_status",
+  "mutate_real_payment_status",
+  "mutate_real_customer",
+  "mutate_real_lead",
+  "execute_pilot_via_frontend",
+  "execute_pilot_via_api_endpoint",
+  "approve_pilot_plan_via_api_endpoint",
+];
+
+const PHASE_6S_PILOT_PLAN_COUNTS = {
+  draft: 0,
+  pendingManualReview: 0,
+  approvedForFuturePhase6T: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+  pilotExecutionAllowedInPhase6S: 0,
+  realOrderMutationWasMade: 0,
+  realPaymentMutationWasMade: 0,
+  shipmentMutationWasMade: 0,
+  shipmentCreated: 0,
+  awbCreated: 0,
+  whatsAppMessageCreated: 0,
+  whatsAppMessageQueued: 0,
+  customerNotificationSent: 0,
+  metaCloudCallAttempted: 0,
+  delhiveryCallAttempted: 0,
+  providerCallAttempted: 0,
+};
+
+export const SAAS_RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "6S",
+  status: "pilot_planning_only",
+  latestCompletedPhase: "6R",
+  nextPhase: "6T",
+  razorpayPaymentDispatchPilotPlanEnabled: false,
+  pilotExecutionEnabled: false,
+  businessMutationEnabled: false,
+  customerNotificationEnabled: false,
+  providerCallAttempted: false,
+  rawPayloadStorageEnabled: false,
+  phase6RApprovedReadinessGateCount: 0,
+  pilotPlanCounts: PHASE_6S_PILOT_PLAN_COUNTS,
+  pilotContract: Object.entries(PHASE_6S_CONTRACT_FIXTURES).map(
+    ([eventName, [eligibility, whatsAppAction, courierAction, dispatchAction]]) => ({
+      razorpayEventName: eventName,
+      futurePilotEligibility: eligibility,
+      futureWhatsAppPilotAction: whatsAppAction,
+      futureCourierPilotAction: courierAction,
+      futureDispatchPilotAction: dispatchAction,
+      pilotExecutionAllowedInPhase6S: false,
+      whatsappSendAllowedInPhase6S: false,
+      courierBookingAllowedInPhase6S: false,
+      providerCallAllowedInPhase6S: false,
+      mutationAllowedInFuturePhase6T:
+        "only_if_pilot_plan_approved_director_signed_off_kill_switch_policy_allows_and_internal_cohort_only",
+      manualReviewRequired: true,
+      internalStaffOnly: true,
+      maxPilotOrders: 1,
+      maxAmountPaise: 100,
+      customerNotificationAllowed: false,
+      shipmentEffectAllowed: false,
+      discountEffectAllowed: false,
+      idempotencyRequired: true,
+      rollbackRequired: true,
+      abortCriteria: [
+        "any_real_order_or_payment_mutation_observed",
+        "any_whatsapp_send_or_queue_observed",
+        "any_meta_cloud_or_delhivery_call_observed",
+        "any_shipment_or_awb_creation_observed",
+        "kill_switch_disabled",
+      ],
+      blockers: [
+        "phase_6s_pilot_planning_only_no_execution",
+        "phase_6t_must_supply_director_signoff_kill_switch_check_and_internal_cohort",
+      ],
+      notes: [
+        "Phase 6S records the pilot planning contract; no production WhatsApp / courier / Razorpay / shipment / AWB action fires here.",
+      ],
+    }),
+  ),
+  safetyInvariants: {
+    pilotExecutionAllowed: false,
+    liveSendAllowed: false,
+    courierBookingAllowed: false,
+    providerCallAllowed: false,
+    realOrderMutationAllowed: false,
+    realPaymentMutationAllowed: false,
+    shipmentMutationAllowed: false,
+    shipmentCreationAllowed: false,
+    awbCreationAllowed: false,
+    discountOfferMutationAllowed: false,
+    customerMutationAllowed: false,
+    leadMutationAllowed: false,
+    whatsappMessageCreationAllowed: false,
+    whatsappQueueAllowed: false,
+    whatsappSendAllowed: false,
+    metaCloudCallAllowed: false,
+    delhiveryCallAllowed: false,
+    vapiCallAllowed: false,
+    razorpayApiInvocationAllowed: false,
+    envFlagFlipAllowed: false,
+    frontendCanExecutePhase6S: false,
+    apiEndpointCanExecutePhase6S: false,
+    apiEndpointCanApprovePhase6S: false,
+    phase6SRespectsKillSwitch: true,
+    phase6SApprovalApplyRealMutation: false,
+  },
+  internalStaffCohortChecklist: [
+    {
+      key: "verifyInternalStaffOnly",
+      description:
+        "Pilot cohort must be the WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS internal staff allow-list only — never a real customer phone.",
+      automated: true,
+    },
+    {
+      key: "verifyMaxPilotOrders",
+      description:
+        "Pilot is bounded to a single order maximum (max_pilot_orders=1) for Phase 6T.",
+      automated: true,
+    },
+    {
+      key: "verifyMaxAmountPaise",
+      description:
+        "Pilot order amount must be <= 100 paise (₹1.00) and use the existing Razorpay TEST key only.",
+      automated: true,
+    },
+    {
+      key: "verifyDirectorSignOff",
+      description:
+        "Manual reviewer sign-off (reason text) recorded on the pilot plan row before approval.",
+      automated: false,
+    },
+  ],
+  whatsAppPilotChecklist: [
+    {
+      key: "verifyApprovedClaimVaultCoverage",
+      description:
+        "Future WhatsApp template body must come only from approved Claim Vault rows.",
+      automated: true,
+    },
+    {
+      key: "verifyConsentGranted",
+      description:
+        "Internal staff WhatsAppConsent row must be in granted state with non-zero granted_at.",
+      automated: true,
+    },
+    {
+      key: "verifyApprovedTemplateActive",
+      description:
+        "Proposed template name must be APPROVED + active and within UTILITY/AUTHENTICATION tier.",
+      automated: true,
+    },
+    {
+      key: "verifyLimitedTestModeOn",
+      description:
+        "WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true and the final-send guard remains in force.",
+      automated: true,
+    },
+  ],
+  courierPilotChecklist: [
+    {
+      key: "verifyDelhiveryTestModeOrMock",
+      description:
+        "DELHIVERY_MODE must be 'mock' or 'test'; live courier calls forbidden in Phase 6S/6T pilot.",
+      automated: true,
+    },
+    {
+      key: "verifyCourierServiceabilityForPincode",
+      description:
+        "Internal staff pincode (when present) must be marked serviceable in the courier service-area table.",
+      automated: true,
+    },
+    {
+      key: "verifySyntheticOrderReference",
+      description:
+        "Order reference and AWB design remain synthetic for Phase 6S; no real Order row mutation, no real shipment row creation.",
+      automated: true,
+    },
+  ],
+  dispatchPilotChecklist: [
+    {
+      key: "verifyPhase6RReadinessApproved",
+      description:
+        "Source Phase 6R readiness gate is approved_for_future_phase6s with all safety booleans False.",
+      automated: true,
+    },
+    {
+      key: "verifyPhase6QGateApproved",
+      description:
+        "Linked Phase 6Q workflow gate is approved_for_future_phase6r with all safety booleans False.",
+      automated: true,
+    },
+    {
+      key: "verifyPhase6PSandboxProof",
+      description:
+        "Phase 6P attempt was executed + rolled back via CLI; ledger row exists and was restored.",
+      automated: true,
+    },
+    {
+      key: "verifyPhase6SEnvFlagsAllOff",
+      description:
+        "Every dependent automation flag and runtime / mutation env flag remain false.",
+      automated: true,
+    },
+    {
+      key: "verifyKillSwitchActive",
+      description:
+        "Phase 6H global kill switch remains enabled; no future runtime routing override is in effect.",
+      automated: true,
+    },
+  ],
+  killSwitchRequirements: {
+    phase: "6S",
+    globalKillSwitchMustBeEnabled: true,
+    providerKillSwitchHonored: true,
+    rollbackOwnedByOperatorOnly: true,
+    phase6SCanExecuteRollback: false,
+  },
+  approvalRequirements: {
+    phase: "6S",
+    manualReviewReasonRequired: true,
+    directorSignOffRequired: true,
+    envFlagRequiredToPrepare:
+      "RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED",
+    approvalOnlyMarksFutureCandidacy: true,
+    approvalDoesNotStartPilot: true,
+    approvalDoesNotSendWhatsApp: true,
+    approvalDoesNotCallProvider: true,
+    approvalDoesNotMutateRealBusinessRow: true,
+  },
+  rollbackPlan: {
+    phase: "6S",
+    rollbackTriggers: [
+      "approval_observed_to_start_real_pilot",
+      "approval_observed_to_send_real_whatsapp_message",
+      "approval_observed_to_call_meta_cloud",
+      "approval_observed_to_call_delhivery",
+      "approval_observed_to_create_shipment_or_awb",
+      "approval_observed_to_call_razorpay",
+      "approval_observed_to_mutate_real_business_table",
+    ],
+    rollbackSteps: [
+      {
+        order: 1,
+        action: "set_RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED_to_false",
+        owner: "operator",
+        phase6SEnforced: true,
+      },
+    ],
+    rollbackVerification: [
+      "RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED == false",
+    ],
+    phase6SCanExecuteRollback: false,
+    rollbackOwnedByOperatorOnly: true,
+    rollbackNeverInvokesProviderApi: true,
+  },
+  abortCriteria: [
+    "any_real_order_or_payment_mutation_observed",
+    "any_whatsapp_send_or_queue_observed",
+    "any_meta_cloud_or_delhivery_call_observed",
+    "any_shipment_or_awb_creation_observed",
+    "kill_switch_disabled",
+    "raw_secret_or_full_pii_observed_in_output",
+  ],
+  verificationChecklist: [
+    {
+      key: "noProviderCallObserved",
+      description:
+        "Phase 6S CLI/API path never calls Razorpay / Meta Cloud / Delhivery / Vapi (asserted with mock spies in tests).",
+      automated: true,
+    },
+    {
+      key: "noRealBusinessMutationObserved",
+      description:
+        "No Order / Payment / Shipment / DiscountOfferLog / Customer / Lead row created or updated by Phase 6S.",
+      automated: true,
+    },
+    {
+      key: "noOutboundWhatsAppRowCreated",
+      description:
+        "No WhatsAppMessage / WhatsAppLifecycleEvent / WhatsAppHandoffToCall row created by Phase 6S.",
+      automated: true,
+    },
+    {
+      key: "noRawSecretInOutput",
+      description:
+        "Command/API output never contains Razorpay key id, key secret, webhook secret, raw payload, or raw signature.",
+      automated: true,
+    },
+    {
+      key: "noPlantedPiiInOutput",
+      description:
+        "Command/API output never returns full phone, email, address, card, VPA, UPI, bank account, or wallet.",
+      automated: true,
+    },
+  ],
+  forbiddenActions: PHASE_6S_FORBIDDEN_ACTIONS,
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  maxSafeAmountPaise: 100,
+  maxPilotOrders: 1,
+  safeToStartPhase6T: false,
+  blockers: [],
+  warnings: [
+    "Phase 6S is a planning-only Limited Internal Dispatch Pilot Plan. It NEVER executes a pilot, NEVER sends a WhatsApp message, NEVER queues an outbound, NEVER calls Meta Cloud, NEVER calls Delhivery, NEVER calls Razorpay, NEVER creates a shipment / AWB, NEVER mutates real Order / Payment / Customer / Lead / WhatsAppMessage / WhatsAppLifecycleEvent rows.",
+  ],
+  nextAction:
+    "approve_at_least_one_phase_6r_readiness_gate_before_running_phase_6s",
+  recentPilotPlans: [],
+};
+
+export const SAAS_RAZORPAY_PAYMENT_DISPATCH_PILOT_PLANS: Record<
+  string,
+  unknown
+> = {
+  phase: "6S",
+  limit: 25,
+  counts: PHASE_6S_PILOT_PLAN_COUNTS,
+  items: [],
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  pilotExecutionAllowedInPhase6S: false,
+  realOrderMutationWasMade: false,
+  realPaymentMutationWasMade: false,
+  shipmentMutationWasMade: false,
+  shipmentCreated: false,
+  awbCreated: false,
+  whatsAppMessageCreated: false,
+  whatsAppMessageQueued: false,
+  customerNotificationSent: false,
+  metaCloudCallAttempted: false,
+  delhiveryCallAttempted: false,
+  providerCallAttempted: false,
+};
+
 // ---------- Phase 6P — Controlled Internal Paid-Status Mutation Test ----------
 
 const PHASE_6P_EVENT_MAPPING_FIXTURES: Record<string, [string, string]> = {

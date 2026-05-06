@@ -261,6 +261,18 @@ RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED = _razorpay_webhook_bool(
 RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED = _razorpay_webhook_bool(
     "RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED"
 )
+# ----- Phase 6S — Limited Internal Dispatch Pilot Plan (planning-only) -----
+# Default off. When true, the Phase 6S service may prepare and
+# transition `RazorpayPaymentDispatchPilotPlan` review records derived
+# from approved Phase 6R readiness gates. The flag NEVER unlocks any
+# pilot execution, WhatsApp send, Meta Cloud call, Delhivery call,
+# shipment / AWB creation, customer notification, or business-row
+# mutation; even when enabled, the service writes only to its own
+# pilot plan model. Production `.env.production` is not edited — this
+# default IS the production posture.
+RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

@@ -22,6 +22,8 @@ import type {
   SaasRazorpayWebhookEventDto,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpayPaymentDispatchPilotPlanReadiness,
+  SaasRazorpayPaymentDispatchPilotPlansResponse,
   SaasRazorpayPaymentDispatchReadiness,
   SaasRazorpayPaymentDispatchReadinessGatesResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
@@ -151,6 +153,14 @@ export default function SaasAdminPage() {
     razorpayPaymentDispatchReadinessGates,
     setRazorpayPaymentDispatchReadinessGates,
   ] = useState<SaasRazorpayPaymentDispatchReadinessGatesResponse | null>(null);
+  const [
+    razorpayPaymentDispatchPilotPlanReadiness,
+    setRazorpayPaymentDispatchPilotPlanReadiness,
+  ] = useState<SaasRazorpayPaymentDispatchPilotPlanReadiness | null>(null);
+  const [
+    razorpayPaymentDispatchPilotPlans,
+    setRazorpayPaymentDispatchPilotPlans,
+  ] = useState<SaasRazorpayPaymentDispatchPilotPlansResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -182,6 +192,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayPaymentOrderWorkflowGates(25),
       api.getSaasRazorpayPaymentDispatchReadiness(),
       api.getSaasRazorpayPaymentDispatchReadinessGates(25),
+      api.getSaasRazorpayPaymentDispatchPilotPlanReadiness(),
+      api.getSaasRazorpayPaymentDispatchPilotPlans(25),
     ])
       .then(
         ([
@@ -211,6 +223,8 @@ export default function SaasAdminPage() {
           poGates,
           pdRead,
           pdGates,
+          ppRead,
+          ppPlans,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -238,6 +252,8 @@ export default function SaasAdminPage() {
           setRazorpayPaymentOrderWorkflowGates(poGates);
           setRazorpayPaymentDispatchReadiness(pdRead);
           setRazorpayPaymentDispatchReadinessGates(pdGates);
+          setRazorpayPaymentDispatchPilotPlanReadiness(ppRead);
+          setRazorpayPaymentDispatchPilotPlans(ppPlans);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -2724,6 +2740,468 @@ export default function SaasAdminPage() {
             Order Update" / "Confirm Paid Order" / "Start Live
             Workflow" buttons exist on this page. Readiness review
             state changes are exclusively via the Phase 6R CLI commands
+            above.
+          </div>
+        </section>
+      )}
+
+      {(razorpayPaymentDispatchPilotPlanReadiness ||
+        razorpayPaymentDispatchPilotPlans) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-payment-dispatch-pilot-plan-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Webhook className="h-5 w-5 text-primary" />
+                Razorpay Limited Internal Dispatch Pilot Plan
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6S — pilot planning only.{" "}
+                <strong>
+                  No pilot execution, no WhatsApp send, no Meta Cloud
+                  call, no Delhivery call, no shipment / AWB creation,
+                  no real Order / Payment / Customer / Lead mutation,
+                  no Razorpay API call
+                </strong>
+                . Approving a pilot plan only marks it{" "}
+                <code>approved_for_future_phase6t</code> — review state
+                changes are CLI-only; no API endpoint or frontend button
+                dispatches Phase 6S approval.
+              </p>
+            </div>
+            {razorpayPaymentDispatchPilotPlanReadiness && (
+              <div data-testid="phase6s-safe-to-start-phase6t-badge">
+                <StatusPill
+                  tone={
+                    razorpayPaymentDispatchPilotPlanReadiness.safeToStartPhase6T
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayPaymentDispatchPilotPlanReadiness.safeToStartPhase6T
+                    ? "Ready for Phase 6T planning"
+                    : "Blocked — needs approved pilot plan for future Phase 6T"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayPaymentDispatchPilotPlanReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayPaymentDispatchPilotPlanReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpayPaymentDispatchPilotPlanReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={
+                  razorpayPaymentDispatchPilotPlanReadiness.latestCompletedPhase
+                }
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpayPaymentDispatchPilotPlanReadiness.nextPhase}
+              />
+              <KeyValue
+                label="Pilot plan flag"
+                value={
+                  razorpayPaymentDispatchPilotPlanReadiness.razorpayPaymentDispatchPilotPlanEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue label="Pilot execution" value="Disabled" />
+              <KeyValue label="WhatsApp send" value="Disabled" />
+              <KeyValue label="WhatsApp queue" value="Disabled" />
+              <KeyValue label="Meta Cloud call" value="Disabled" />
+              <KeyValue label="Delhivery call" value="Disabled" />
+              <KeyValue label="Shipment created" value="Disabled" />
+              <KeyValue label="AWB created" value="Disabled" />
+              <KeyValue label="Customer notification" value="Disabled" />
+              <KeyValue label="Provider call" value="Disabled" />
+              <KeyValue
+                label="Frontend can execute"
+                value={
+                  razorpayPaymentDispatchPilotPlanReadiness.frontendCanExecute
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="API can approve"
+                value={
+                  razorpayPaymentDispatchPilotPlanReadiness.apiEndpointCanApprove
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Execution path"
+                value={
+                  razorpayPaymentDispatchPilotPlanReadiness.executionPath
+                }
+              />
+              <KeyValue
+                label="Phase 6R approved gates"
+                value={String(
+                  razorpayPaymentDispatchPilotPlanReadiness.phase6RApprovedReadinessGateCount,
+                )}
+              />
+              <KeyValue
+                label="Pending pilot plans"
+                value={String(
+                  razorpayPaymentDispatchPilotPlanReadiness.pilotPlanCounts
+                    .pendingManualReview,
+                )}
+              />
+              <KeyValue
+                label="Approved for future 6T"
+                value={String(
+                  razorpayPaymentDispatchPilotPlanReadiness.pilotPlanCounts
+                    .approvedForFuturePhase6T,
+                )}
+              />
+              <KeyValue
+                label="Max pilot orders"
+                value={String(
+                  razorpayPaymentDispatchPilotPlanReadiness.maxPilotOrders,
+                )}
+              />
+              <KeyValue
+                label="Max amount (paise)"
+                value={String(
+                  razorpayPaymentDispatchPilotPlanReadiness.maxSafeAmountPaise,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayPaymentDispatchPilotPlanReadiness && (
+            <div className="px-6 pb-4 text-xs text-muted-foreground">
+              <strong>Next action:</strong>{" "}
+              {razorpayPaymentDispatchPilotPlanReadiness.nextAction}
+            </div>
+          )}
+
+          {razorpayPaymentDispatchPilotPlanReadiness && (
+            <div
+              className="px-6 pb-4"
+              data-testid="phase6s-pilot-contract-table"
+            >
+              <h4 className="text-sm font-semibold mb-2">
+                Limited internal pilot contract (9 events)
+              </h4>
+              <div className="overflow-x-auto rounded border border-border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40">
+                    <tr className="text-left">
+                      <th className="px-3 py-2">Event</th>
+                      <th className="px-3 py-2">Pilot eligibility</th>
+                      <th className="px-3 py-2">WhatsApp pilot action</th>
+                      <th className="px-3 py-2">Courier pilot action</th>
+                      <th className="px-3 py-2">Dispatch pilot action</th>
+                      <th className="px-3 py-2">Pilot in 6S</th>
+                      <th className="px-3 py-2">Send in 6S</th>
+                      <th className="px-3 py-2">Courier in 6S</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {razorpayPaymentDispatchPilotPlanReadiness.pilotContract.map(
+                      (row) => (
+                        <tr
+                          key={row.razorpayEventName}
+                          className="border-t border-border"
+                        >
+                          <td className="px-3 py-2 font-mono">
+                            {row.razorpayEventName}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.futurePilotEligibility}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.futureWhatsAppPilotAction}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.futureCourierPilotAction}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.futureDispatchPilotAction}
+                          </td>
+                          <td className="px-3 py-2">No</td>
+                          <td className="px-3 py-2">No</td>
+                          <td className="px-3 py-2">No</td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {razorpayPaymentDispatchPilotPlans && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Recent pilot plans (
+                {razorpayPaymentDispatchPilotPlans.items.length})
+              </h4>
+              {razorpayPaymentDispatchPilotPlans.items.length === 0 ? (
+                <div className="rounded border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                  No pilot plans recorded yet. Run the Phase 6S CLI
+                  commands —{" "}
+                  <code>
+                    inspect_razorpay_payment_dispatch_pilot_plan_readiness
+                  </code>
+                  ,{" "}
+                  <code>
+                    prepare_razorpay_payment_dispatch_pilot_plan
+                  </code>
+                  ,{" "}
+                  <code>
+                    approve_razorpay_payment_dispatch_pilot_plan
+                  </code>
+                  ,{" "}
+                  <code>
+                    reject_razorpay_payment_dispatch_pilot_plan
+                  </code>
+                  .
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded border border-border">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40">
+                      <tr className="text-left">
+                        <th className="px-3 py-2">ID</th>
+                        <th className="px-3 py-2">Event</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Pilot mode</th>
+                        <th className="px-3 py-2">WhatsApp action</th>
+                        <th className="px-3 py-2">Courier action</th>
+                        <th className="px-3 py-2">Dispatch action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {razorpayPaymentDispatchPilotPlans.items.map(
+                        (row) => (
+                          <tr
+                            key={row.id}
+                            className="border-t border-border"
+                          >
+                            <td className="px-3 py-2 font-mono">
+                              {row.id}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.eventName}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.status}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.pilotMode}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.proposedWhatsAppAction}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.proposedCourierAction}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.proposedDispatchAction}
+                            </td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {razorpayPaymentDispatchPilotPlanReadiness && (
+            <div className="px-6 pb-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Internal staff cohort checklist
+                </h4>
+                <ul className="space-y-2 text-xs">
+                  {razorpayPaymentDispatchPilotPlanReadiness.internalStaffCohortChecklist.map(
+                    (item) => (
+                      <li
+                        key={item.key}
+                        className="rounded border border-border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-mono text-[11px]">
+                          {item.key}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  WhatsApp pilot checklist
+                </h4>
+                <ul className="space-y-2 text-xs">
+                  {razorpayPaymentDispatchPilotPlanReadiness.whatsAppPilotChecklist.map(
+                    (item) => (
+                      <li
+                        key={item.key}
+                        className="rounded border border-border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-mono text-[11px]">
+                          {item.key}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Courier pilot checklist
+                </h4>
+                <ul className="space-y-2 text-xs">
+                  {razorpayPaymentDispatchPilotPlanReadiness.courierPilotChecklist.map(
+                    (item) => (
+                      <li
+                        key={item.key}
+                        className="rounded border border-border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-mono text-[11px]">
+                          {item.key}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Dispatch pilot checklist
+                </h4>
+                <ul className="space-y-2 text-xs">
+                  {razorpayPaymentDispatchPilotPlanReadiness.dispatchPilotChecklist.map(
+                    (item) => (
+                      <li
+                        key={item.key}
+                        className="rounded border border-border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-mono text-[11px]">
+                          {item.key}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {razorpayPaymentDispatchPilotPlanReadiness && (
+            <div className="px-6 pb-4 grid gap-3 lg:grid-cols-2">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Abort criteria
+                </h4>
+                <ul className="space-y-1 text-xs">
+                  {razorpayPaymentDispatchPilotPlanReadiness.abortCriteria.map(
+                    (item) => (
+                      <li
+                        key={item}
+                        className="font-mono rounded border border-border bg-muted/20 px-2 py-1"
+                      >
+                        {item}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Verification checklist
+                </h4>
+                <ul className="space-y-2 text-xs">
+                  {razorpayPaymentDispatchPilotPlanReadiness.verificationChecklist.map(
+                    (item) => (
+                      <li
+                        key={item.key}
+                        className="rounded border border-border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-mono text-[11px]">
+                          {item.key}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {razorpayPaymentDispatchPilotPlanReadiness && (
+            <div className="px-6 pb-4">
+              <details className="text-xs">
+                <summary
+                  className="cursor-pointer font-semibold"
+                  data-testid="phase6s-forbidden-actions"
+                >
+                  Phase 6S forbidden actions ({" "}
+                  {
+                    razorpayPaymentDispatchPilotPlanReadiness.forbiddenActions
+                      .length
+                  }
+                  )
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {razorpayPaymentDispatchPilotPlanReadiness.forbiddenActions.map(
+                    (action) => (
+                      <span
+                        key={action}
+                        className="rounded border border-border bg-muted/30 px-2 py-0.5 font-mono"
+                      >
+                        {action}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </details>
+            </div>
+          )}
+
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Pilot plan only.</strong> No "Start Pilot" / "Run
+            Pilot" / "Execute Pilot" / "Start Live Workflow" / "Send
+            WhatsApp" / "Queue WhatsApp" / "Notify Customer" / "Create
+            Shipment" / "Create AWB" / "Book Courier" / "Dispatch
+            Order" / "Call Delhivery" / "Call Meta" / "Mark Paid" /
+            "Capture Payment" / "Refund" / "Create Payment Link" /
+            "Mutate Order" / "Apply Payment" / "Apply Mutation" /
+            "Replay Event" / "Enable Mutation" / "Go Live" / "Run MCP
+            Tool" buttons exist on this page. Pilot plan review state
+            changes are exclusively via the Phase 6S CLI commands
             above.
           </div>
         </section>

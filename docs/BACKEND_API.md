@@ -7,12 +7,10 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 6R baseline:** documented through Phase 6R (Payment →
-> WhatsApp / Courier Dispatch Readiness, audit-only readiness contract,
-> CLI-only review state changes). Phase 6S is the next planned phase
-> (limited internal live payment → dispatch pilot planning) and will
-> sit behind a NEW env flag distinct from
-> `RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED`.
+> **Phase 6S baseline:** documented through Phase 6S (Limited Internal
+> Dispatch Pilot Plan, planning-only, CLI-only review state changes).
+> Phase 6T is the next planned phase (final Phase 6 audit + lock /
+> controlled pilot execution decision gate).
 
 ## Health
 
@@ -233,6 +231,40 @@ Every response preserves `business_mutation_was_made=false`,
 `customer_notification_sent=false`, `raw_secret_exposed=false`,
 `full_pii_exposed=false`. Production webhook secret is **never** consumed
 by this handler.
+
+## Phase 6S — Limited Internal Dispatch Pilot Plan (planning-only, CLI-only review state changes)
+
+Read-only HTTP layer over the Phase 6S Limited Internal Dispatch
+Pilot Plan review records. **There is no POST endpoint that prepares,
+approves, rejects, or archives a pilot plan** — review state changes
+are exclusively dispatched via CLI. **Phase 6S never executes a
+pilot, never sends a WhatsApp message, never calls Meta Cloud, never
+calls Delhivery, never creates a shipment / AWB, never mutates real
+``Order`` / ``Payment`` / ``Shipment`` / ``DiscountOfferLog`` /
+``Customer`` / ``Lead`` / ``WhatsAppMessage`` /
+``WhatsAppConversation`` rows, never calls Razorpay, never flips an
+env flag.**
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/payment-dispatch-pilot-plan-readiness/` | admin/staff | Phase 6S readiness composition: 16 locked-False safety invariants, env flag state, pilot plan counters (`pendingManualReview` / `approvedForFuturePhase6T` / `rejected` / `archived` / `blocked` / `pilotExecutionAllowedInPhase6S` / `whatsAppMessageCreated` / `whatsAppMessageQueued` / `metaCloudCallAttempted` / `delhiveryCallAttempted` / `shipmentCreated` / `awbCreated` / etc), Phase 6R approved-readiness count, 9-row Limited Internal Dispatch Pilot contract, four readiness checklists (internal staff cohort / WhatsApp / courier / dispatch), abort criteria, kill-switch + approval + rollback requirements, verification checklist, forbidden-action list, blockers, warnings, `safeToStartPhase6T`, `nextAction`. |
+| GET | `/api/v1/saas/razorpay/payment-dispatch-pilot-plans/?limit=N` | admin/staff | List recent `RazorpayPaymentDispatchPilotPlan` rows (sanitized — no raw payload, no PII) + counts + locked safety booleans. Response carries `frontendCanExecute=false`, `apiEndpointCanExecute=false`, `apiEndpointCanApprove=false`, `pilotExecutionAllowedInPhase6S=false`, plus every Phase 6S safety boolean (`realOrderMutationWasMade=false`, `whatsAppMessageCreated=false`, `whatsAppMessageQueued=false`, `metaCloudCallAttempted=false`, `delhiveryCallAttempted=false`, `shipmentCreated=false`, `awbCreated=false`, `customerNotificationSent=false`, `providerCallAttempted=false`). |
+| GET | `/api/v1/saas/razorpay/payment-dispatch-pilot-plans/<id>/` | admin/staff | Detail (sanitized). |
+| GET | `/api/v1/saas/razorpay/payment-dispatch-pilot-plan-preview/?readiness_id=<PHASE6R_READINESS_ID>` | admin/staff | Read-only preview of how a Phase 6S pilot plan would map from an approved Phase 6R readiness gate. Never creates rows. Returns `proposedContract` (`pilotExecutionAllowedInPhase6S` / `whatsappSendAllowedInPhase6S` / `courierBookingAllowedInPhase6S` / `providerCallAllowedInPhase6S` all `false`). |
+
+Every response preserves the 16 locked-False safety booleans:
+`pilotExecutionAllowedInPhase6S=false`,
+`liveSendAllowedInPhase6S=false`,
+`courierBookingAllowedInPhase6S=false`,
+`providerCallAllowedInPhase6S=false`, plus
+`realOrderMutationWasMade=false`, `realPaymentMutationWasMade=false`,
+`shipmentMutationWasMade=false`, `shipmentCreated=false`,
+`awbCreated=false`, `whatsAppMessageCreated=false`,
+`whatsAppMessageQueued=false`, `customerNotificationSent=false`,
+`metaCloudCallAttempted=false`, `delhiveryCallAttempted=false`,
+`razorpayCallAttempted=false`, `providerCallAttempted=false`.
+POST/PATCH/DELETE on every Phase 6S endpoint return 405.
+Admin/director/superuser auth required for every endpoint.
 
 ## Phase 6R — Payment → WhatsApp / Courier Dispatch Readiness (audit-only readiness contract, CLI-only review state changes)
 

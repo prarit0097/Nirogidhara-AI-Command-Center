@@ -18,6 +18,30 @@ artefact), runtime providers still use env/config, the global kill switch
 remains active, `MCP_ENABLED=false`, and
 `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`.
 
+**Phase 6S Limited Internal Dispatch Pilot Plan is FULL PASS
+(planning-only, CLI-only review state changes).** New
+`RazorpayPaymentDispatchPilotPlan` model + migration
+`payments.0009_phase6s_payment_dispatch_pilot_plan`, service module +
+7 management commands + 4 read-only admin/auth-protected DRF
+endpoints + `/saas-admin` section + 8 audit kinds + new env flag
+`RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED` (default `False`).
+**There is no POST API endpoint that prepares, approves, rejects, or
+archives a pilot plan** — review state changes are exclusively CLI.
+Approve requires non-empty manual review reason. Phase 6S pilot plan
+transitions never execute a pilot, never send a WhatsApp message,
+never call Meta Cloud / Delhivery / Razorpay, never create a shipment
+/ AWB, never touch real `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` /
+`WhatsAppConversation` rows. Internal cohort only:
+`internal_only=True`, `max_pilot_orders=1`, `max_amount_paise=100`.
+**Next backend phase: Phase 6T — Final Phase 6 audit + lock /
+controlled pilot execution decision gate** (composes the full
+Phase 6N → 6S audit chain into a single read-only attestation report
+and defines the kill-switch + Director-signoff contract any future
+controlled pilot execution would need). Do **not** enable any
+sandbox or readiness or pilot-plan env flag in production until
+Phase 6T implementation lands and passes its own acceptance criteria.
+
 **Phase 6R Payment → WhatsApp / Courier Dispatch Readiness is FULL
 PASS (audit-only readiness contract, CLI-only review state changes).**
 New `RazorpayPaymentDispatchReadinessGate` model + migration

@@ -77,7 +77,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6R inclusive (1441 tests)
+python -m pytest -q                     # Phase 1 -> 6S inclusive (1474 tests)
 python manage.py makemigrations --check --dry-run    # must report "No changes detected"
 python manage.py check                  # must report "0 issues"
 
@@ -291,6 +291,57 @@ by Phase 6M code paths.
 `/saas-admin` shows **Razorpay Webhook Handler (Test Mode)** with the
 event list (masked summary only) and the readiness card. **No "Replay"
 / "Apply mutation" / "Go Live" buttons on the UI.**
+
+## Phase 6S Razorpay limited internal dispatch pilot plan diagnostics
+
+Phase 6S is **planning-only and CLI-only** for review state changes.
+Review state changes write to `RazorpayPaymentDispatchPilotPlan` only —
+they NEVER execute a pilot, NEVER send a WhatsApp message, NEVER call
+Meta Cloud / Delhivery / Razorpay, NEVER create a shipment / AWB,
+NEVER touch real `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer` / `Lead` rows. **There is no API
+endpoint or frontend button that dispatches Phase 6S approval.**
+
+```bash
+cd backend
+# Read-only diagnostics first.
+python manage.py inspect_razorpay_payment_dispatch_pilot_plan_readiness --json
+python manage.py inspect_razorpay_payment_dispatch_pilot_plans --json
+python manage.py preview_razorpay_payment_dispatch_pilot_plan --readiness-id <PHASE_6R_READINESS_ID> --json
+
+# CLI-only review lifecycle. ``prepare``/``approve``/``reject``/``archive`` write
+# to RazorpayPaymentDispatchPilotPlan only. Approve requires --reason.
+python manage.py prepare_razorpay_payment_dispatch_pilot_plan --readiness-id <PHASE_6R_READINESS_ID> --json
+python manage.py approve_razorpay_payment_dispatch_pilot_plan --plan-id <PLAN_ID> --reason "Director sign-off for Phase 6S internal pilot plan" --json
+python manage.py reject_razorpay_payment_dispatch_pilot_plan --plan-id <PLAN_ID> --reason "Not yet" --json
+python manage.py archive_razorpay_payment_dispatch_pilot_plan --plan-id <PLAN_ID> --reason "Close" --json
+```
+
+Expected posture: `phase=6S`, `status=pilot_planning_only`,
+`razorpayPaymentDispatchPilotPlanEnabled=false`,
+`pilotExecutionEnabled=false`, `businessMutationEnabled=false`,
+`customerNotificationEnabled=false`, `providerCallAttempted=false`,
+`frontendCanExecute=false`, `apiEndpointCanExecute=false`,
+`apiEndpointCanApprove=false`, `executionPath="cli_only"`,
+`maxPilotOrders=1`, `maxSafeAmountPaise=100`. `safeToStartPhase6T=true`
+only after at least one Phase 6S pilot plan has been approved via the
+CLI.
+
+`/saas-admin` shows **Razorpay Limited Internal Dispatch Pilot Plan**
+with the readiness grid, 9-row pilot contract table (every "Pilot in
+6S" / "Send in 6S" / "Courier in 6S" cell `No`), recent pilot plans
+table (read-only — no buttons), four readiness checklists (internal
+staff cohort / WhatsApp / courier / dispatch), abort criteria,
+verification checklist, forbidden-action chips, and a "Pilot plan
+only" banner. **No "Start Pilot" / "Run Pilot" / "Execute Pilot" /
+"Send WhatsApp" / "Queue WhatsApp" / "Notify Customer" / "Create
+Shipment" / "Create AWB" / "Book Courier" / "Dispatch Order" / "Call
+Delhivery" / "Call Meta" / "Mark Paid" / "Capture Payment" / "Refund"
+/ "Apply Mutation" / "Mutate Order" / "Create Payment Link" /
+"Execute Webhook" / "Replay Event" / "Enable Mutation" / "Go Live" /
+"Run MCP Tool" / "Execute Workflow" / "Apply Order Update" / "Confirm
+Paid Order" / "Start Live Workflow" / "Approve Pilot Plan" / "Reject
+Pilot Plan" buttons exist anywhere.**
 
 ## Phase 6R Razorpay payment → WhatsApp / courier dispatch readiness diagnostics
 

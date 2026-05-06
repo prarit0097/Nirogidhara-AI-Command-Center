@@ -310,6 +310,15 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.payment_dispatch_readiness.archived": "archive",
     "razorpay.payment_dispatch_readiness.blocked": "ban",
     "razorpay.payment_dispatch_readiness.invariant_violation_blocked": "shield-off",
+    # Phase 6S Limited Internal Dispatch Pilot Plan (planning-only).
+    "razorpay.payment_dispatch_pilot_plan.readiness_inspected": "eye",
+    "razorpay.payment_dispatch_pilot_plan.previewed": "eye",
+    "razorpay.payment_dispatch_pilot_plan.prepared": "file-plus",
+    "razorpay.payment_dispatch_pilot_plan.approved_for_future_phase6t": "check-circle",
+    "razorpay.payment_dispatch_pilot_plan.rejected": "x-circle",
+    "razorpay.payment_dispatch_pilot_plan.archived": "archive",
+    "razorpay.payment_dispatch_pilot_plan.blocked": "ban",
+    "razorpay.payment_dispatch_pilot_plan.invariant_violation_blocked": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

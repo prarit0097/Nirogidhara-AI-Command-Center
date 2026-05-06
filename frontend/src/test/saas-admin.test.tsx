@@ -1092,3 +1092,145 @@ describe("Phase 6R - Razorpay Payment → WhatsApp / Courier Dispatch Readiness"
     ).toBeGreaterThan(0);
   });
 });
+
+describe("Phase 6S - Razorpay Limited Internal Dispatch Pilot Plan", () => {
+  it("exposes the Phase 6S API methods on the api client", async () => {
+    expect(
+      typeof api.getSaasRazorpayPaymentDispatchPilotPlanReadiness,
+    ).toBe("function");
+    expect(
+      typeof api.getSaasRazorpayPaymentDispatchPilotPlans,
+    ).toBe("function");
+
+    const readiness =
+      await api.getSaasRazorpayPaymentDispatchPilotPlanReadiness();
+    expect(readiness.phase).toBe("6S");
+    expect(readiness.status).toBe("pilot_planning_only");
+    expect(readiness.latestCompletedPhase).toBe("6R");
+    expect(readiness.nextPhase).toBe("6T");
+    expect(readiness.razorpayPaymentDispatchPilotPlanEnabled).toBe(false);
+    expect(readiness.pilotExecutionEnabled).toBe(false);
+    expect(readiness.frontendCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanApprove).toBe(false);
+    expect(readiness.executionPath).toBe("cli_only");
+    expect(readiness.maxSafeAmountPaise).toBe(100);
+    expect(readiness.maxPilotOrders).toBe(1);
+    expect(readiness.pilotContract.length).toBe(9);
+    readiness.pilotContract.forEach((row) => {
+      expect(row.pilotExecutionAllowedInPhase6S).toBe(false);
+      expect(row.whatsappSendAllowedInPhase6S).toBe(false);
+      expect(row.courierBookingAllowedInPhase6S).toBe(false);
+      expect(row.providerCallAllowedInPhase6S).toBe(false);
+      expect(row.customerNotificationAllowed).toBe(false);
+      expect(row.shipmentEffectAllowed).toBe(false);
+      expect(row.discountEffectAllowed).toBe(false);
+      expect(row.internalStaffOnly).toBe(true);
+      expect(row.maxPilotOrders).toBe(1);
+      expect(row.maxAmountPaise).toBe(100);
+    });
+    expect(readiness.safetyInvariants.pilotExecutionAllowed).toBe(false);
+    expect(readiness.safetyInvariants.liveSendAllowed).toBe(false);
+    expect(readiness.safetyInvariants.delhiveryCallAllowed).toBe(false);
+    expect(readiness.safetyInvariants.razorpayApiInvocationAllowed).toBe(
+      false,
+    );
+
+    const plans = await api.getSaasRazorpayPaymentDispatchPilotPlans();
+    expect(plans.phase).toBe("6S");
+    expect(plans.frontendCanExecute).toBe(false);
+    expect(plans.apiEndpointCanExecute).toBe(false);
+    expect(plans.apiEndpointCanApprove).toBe(false);
+    expect(plans.pilotExecutionAllowedInPhase6S).toBe(false);
+    expect(plans.realOrderMutationWasMade).toBe(false);
+    expect(plans.shipmentCreated).toBe(false);
+    expect(plans.awbCreated).toBe(false);
+    expect(plans.whatsAppMessageCreated).toBe(false);
+    expect(plans.whatsAppMessageQueued).toBe(false);
+    expect(plans.metaCloudCallAttempted).toBe(false);
+    expect(plans.delhiveryCallAttempted).toBe(false);
+    expect(plans.providerCallAttempted).toBe(false);
+  });
+
+  it("renders the Phase 6S section with locked safety state and CLI-only reminder", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText(
+        "Razorpay Limited Internal Dispatch Pilot Plan",
+      ),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(
+          "razorpay-payment-dispatch-pilot-plan-section",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByTestId("phase6s-safe-to-start-phase6t-badge"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6s-pilot-contract-table"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase6s-forbidden-actions"),
+    ).toBeInTheDocument();
+
+    // Locks rendered as "Disabled" multiple times.
+    expect(screen.getAllByText(/Disabled/i).length).toBeGreaterThan(8);
+
+    // Forbidden Phase 6S buttons absent.
+    const forbiddenButtonPatterns = [
+      /^start pilot$/i,
+      /^run pilot$/i,
+      /^execute pilot$/i,
+      /^send whatsapp$/i,
+      /^queue whatsapp$/i,
+      /^create shipment$/i,
+      /^create awb$/i,
+      /^book courier$/i,
+      /^dispatch order$/i,
+      /^notify customer$/i,
+      /^call delhivery$/i,
+      /^call meta$/i,
+      /^mark paid$/i,
+      /^capture payment$/i,
+      /^refund$/i,
+      /^create payment link$/i,
+      /^mutate order$/i,
+      /^apply payment$/i,
+      /^apply mutation$/i,
+      /^replay event$/i,
+      /^enable mutation$/i,
+      /^go live$/i,
+      /^run mcp tool$/i,
+      /^execute workflow$/i,
+      /^apply order update$/i,
+      /^confirm paid order$/i,
+      /^start live workflow$/i,
+      /^start courier$/i,
+      /^start delivery$/i,
+      /^trigger lifecycle$/i,
+    ];
+    for (const pattern of forbiddenButtonPatterns) {
+      expect(
+        screen.queryByRole("button", { name: pattern }),
+      ).not.toBeInTheDocument();
+    }
+
+    // No raw secret / env-var names / full phone leak.
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_live_");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("RAZORPAY_WEBHOOK_SECRET=");
+    expect(body).not.toMatch(/\+91\d{10}/);
+
+    // Pilot-plan-only banner present.
+    expect(
+      screen.getAllByText(/Pilot plan only/i).length,
+    ).toBeGreaterThan(0);
+  });
+});
