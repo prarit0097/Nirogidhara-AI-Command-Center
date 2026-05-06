@@ -23,16 +23,22 @@ from apps.payments.razorpay_payment_dispatch_pilot_plan import (
     prepare_phase6s_payment_dispatch_pilot_plan,
 )
 from apps.payments.razorpay_phase6_final_audit_lock import (
+    AUDIT_KIND_ARCHIVED,
+    AUDIT_KIND_BLOCKED,
+    AUDIT_KIND_INVARIANT_VIOLATION,
     AUDIT_KIND_LOCKED,
     AUDIT_KIND_PREPARED,
+    AUDIT_KIND_PREVIEWED,
+    AUDIT_KIND_READINESS,
+    AUDIT_KIND_REJECTED,
     assert_phase6t_no_live_execution_or_provider_call,
+    archive_phase6t_final_audit_lock,
     build_phase6t_final_audit_contract,
     inspect_phase6t_final_audit_lock_readiness,
     lock_phase6t_final_audit_record,
     prepare_phase6t_final_audit_lock,
-    reject_phase6t_final_audit_lock,
-    archive_phase6t_final_audit_lock,
     preview_phase6t_final_audit_lock,
+    reject_phase6t_final_audit_lock,
 )
 from apps.shipments.models import Shipment
 from apps.whatsapp.models import (
@@ -87,6 +93,21 @@ def test_contract_includes_phase_6n_through_6s_and_locks_effects_off() -> None:
         assert row["frontendExecutionAllowed"] is False
         assert row["apiExecutionAllowed"] is False
         assert row["cliOnlyReview"] is True
+
+
+def test_phase6t_audit_kinds_fit_audit_event_kind_column() -> None:
+    audit_kinds = [
+        AUDIT_KIND_READINESS,
+        AUDIT_KIND_PREVIEWED,
+        AUDIT_KIND_PREPARED,
+        AUDIT_KIND_LOCKED,
+        AUDIT_KIND_REJECTED,
+        AUDIT_KIND_ARCHIVED,
+        AUDIT_KIND_BLOCKED,
+        AUDIT_KIND_INVARIANT_VIOLATION,
+    ]
+    assert all(kind.startswith("razorpay.phase6_final_audit.") for kind in audit_kinds)
+    assert all(len(kind) <= 64 for kind in audit_kinds)
 
 
 @pytest.mark.django_db

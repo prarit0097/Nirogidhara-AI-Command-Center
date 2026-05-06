@@ -40,9 +40,7 @@ PHASE_6T_WARNING = (
 AUDIT_KIND_READINESS = "razorpay.phase6_final_audit.readiness_inspected"
 AUDIT_KIND_PREVIEWED = "razorpay.phase6_final_audit.previewed"
 AUDIT_KIND_PREPARED = "razorpay.phase6_final_audit.prepared"
-AUDIT_KIND_LOCKED = (
-    "razorpay.phase6_final_audit.locked_for_future_controlled_pilot_review"
-)
+AUDIT_KIND_LOCKED = "razorpay.phase6_final_audit.locked_review"
 AUDIT_KIND_REJECTED = "razorpay.phase6_final_audit.rejected"
 AUDIT_KIND_ARCHIVED = "razorpay.phase6_final_audit.archived"
 AUDIT_KIND_BLOCKED = "razorpay.phase6_final_audit.blocked"
