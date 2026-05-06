@@ -24,6 +24,10 @@ from .views import (
     ProviderTestPlansListView,
     RazorpayBusinessMutationSandboxPlanView,
     RazorpayBusinessMutationSandboxReadinessView,
+    RazorpayPaymentDispatchReadinessGateDetailView,
+    RazorpayPaymentDispatchReadinessGatesListView,
+    RazorpayPaymentDispatchReadinessPreviewView,
+    RazorpayPaymentDispatchReadinessView,
     RazorpayPaymentOrderWorkflowGateDetailView,
     RazorpayPaymentOrderWorkflowGatePreviewView,
     RazorpayPaymentOrderWorkflowGateReadinessView,
@@ -416,5 +420,26 @@ urlpatterns = [
         "razorpay/payment-order-workflow-gate-preview/",
         RazorpayPaymentOrderWorkflowGatePreviewView.as_view(),
         name="saas-razorpay-payment-order-workflow-gate-preview",
+    ),
+    # Phase 6R — Razorpay Payment → WhatsApp / Courier Dispatch Readiness (read-only API).
+    path(
+        "razorpay/payment-dispatch-readiness/",
+        RazorpayPaymentDispatchReadinessView.as_view(),
+        name="saas-razorpay-payment-dispatch-readiness",
+    ),
+    path(
+        "razorpay/payment-dispatch-readiness-gates/",
+        RazorpayPaymentDispatchReadinessGatesListView.as_view(),
+        name="saas-razorpay-payment-dispatch-readiness-gates",
+    ),
+    path(
+        "razorpay/payment-dispatch-readiness-gates/<int:pk>/",
+        RazorpayPaymentDispatchReadinessGateDetailView.as_view(),
+        name="saas-razorpay-payment-dispatch-readiness-gate-detail",
+    ),
+    path(
+        "razorpay/payment-dispatch-readiness-preview/",
+        RazorpayPaymentDispatchReadinessPreviewView.as_view(),
+        name="saas-razorpay-payment-dispatch-readiness-preview",
     ),
 ]

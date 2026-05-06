@@ -18,6 +18,27 @@ artefact), runtime providers still use env/config, the global kill switch
 remains active, `MCP_ENABLED=false`, and
 `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`.
 
+**Phase 6R Payment → WhatsApp / Courier Dispatch Readiness is FULL
+PASS (audit-only readiness contract, CLI-only review state changes).**
+New `RazorpayPaymentDispatchReadinessGate` model + migration
+`payments.0008_phase6r_payment_dispatch_readiness`, service module +
+7 management commands + 4 read-only admin/auth-protected DRF
+endpoints + `/saas-admin` section + 8 audit kinds + new env flag
+`RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED` (default `False`).
+**There is no POST API endpoint that prepares, approves, rejects, or
+archives a readiness gate** — review state changes are exclusively
+CLI. Approve requires non-empty manual review reason. Phase 6R
+readiness transitions never send a WhatsApp message, never call Meta
+Cloud / Delhivery, never create a shipment / AWB, never touch real
+`Order` / `Payment` / `Shipment` / `DiscountOfferLog` / `Customer` /
+`Lead` / `WhatsAppMessage` / `WhatsAppConversation` rows, never call
+Razorpay. **Next backend phase: Phase 6S — Limited Internal Live
+Payment → Dispatch Pilot Planning** (planning-only, single-staff-cohort
+pilot plan behind a NEW env flag distinct from
+`RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED`). Do **not** enable any
+sandbox or readiness env flag in production until Phase 6S implementation
+lands and passes its own acceptance criteria.
+
 **Phase 6Q Payment → Order Workflow Safety Gate is FULL PASS
 (audit-gate-only, CLI-only review state changes).** New
 `RazorpayPaymentOrderWorkflowGate` model + migration
@@ -30,13 +51,7 @@ archives a gate** — gate state changes are exclusively CLI. Approve
 requires non-empty manual review reason. Phase 6Q gate transitions
 never touch real `Order` / `Payment` / `Shipment` /
 `DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` /
-`WhatsAppConversation` rows. **Next backend phase: Phase 6R —
-Payment → WhatsApp/courier readiness, no live send yet** (audit-only
-readiness contract that maps an approved Phase 6Q gate into a future
-WhatsApp / courier dispatch readiness check, behind a NEW env flag
-distinct from `RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED`). Do
-**not** enable any sandbox env flag in production until Phase 6R
-implementation lands and passes its own acceptance criteria.
+`WhatsAppConversation` rows. **Phase 6R is now FULL PASS (see above).**
 
 **Phase 6P Controlled Internal Paid-Status Mutation Test is FULL
 PASS (sandbox-ledger-only, CLI-only execution).** New

@@ -301,6 +301,15 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.payment_order_gate.archived": "archive",
     "razorpay.payment_order_gate.blocked": "ban",
     "razorpay.payment_order_gate.invariant_violation_blocked": "shield-off",
+    # Phase 6R Payment → WhatsApp / Courier Dispatch Readiness (audit-only).
+    "razorpay.payment_dispatch_readiness.readiness_inspected": "eye",
+    "razorpay.payment_dispatch_readiness.previewed": "eye",
+    "razorpay.payment_dispatch_readiness.prepared": "file-plus",
+    "razorpay.payment_dispatch_readiness.approved_for_future_phase6s": "check-circle",
+    "razorpay.payment_dispatch_readiness.rejected": "x-circle",
+    "razorpay.payment_dispatch_readiness.archived": "archive",
+    "razorpay.payment_dispatch_readiness.blocked": "ban",
+    "razorpay.payment_dispatch_readiness.invariant_violation_blocked": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

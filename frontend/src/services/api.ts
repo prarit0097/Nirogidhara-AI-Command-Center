@@ -157,6 +157,8 @@ import type {
   SaasRazorpayAuditReview,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpayPaymentDispatchReadiness,
+  SaasRazorpayPaymentDispatchReadinessGatesResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
   SaasRazorpayPaymentOrderWorkflowGatesResponse,
   SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
@@ -1481,6 +1483,21 @@ export const api = {
       `/v1/saas/razorpay/payment-order-workflow-gates/?limit=${limit}`,
       () =>
         M.SAAS_RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATES as SaasRazorpayPaymentOrderWorkflowGatesResponse,
+    ),
+
+  // ---------- Phase 6R - Payment → WhatsApp / Courier Dispatch Readiness ----------
+
+  getSaasRazorpayPaymentDispatchReadiness: () =>
+    safeFetch<SaasRazorpayPaymentDispatchReadiness>(
+      "/v1/saas/razorpay/payment-dispatch-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_PAYMENT_DISPATCH_READINESS as SaasRazorpayPaymentDispatchReadiness,
+    ),
+  getSaasRazorpayPaymentDispatchReadinessGates: (limit: number = 25) =>
+    safeFetch<SaasRazorpayPaymentDispatchReadinessGatesResponse>(
+      `/v1/saas/razorpay/payment-dispatch-readiness-gates/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_PAYMENT_DISPATCH_READINESS_GATES as SaasRazorpayPaymentDispatchReadinessGatesResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

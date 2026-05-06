@@ -77,7 +77,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6Q inclusive (1409 tests)
+python -m pytest -q                     # Phase 1 -> 6R inclusive (1441 tests)
 python manage.py makemigrations --check --dry-run    # must report "No changes detected"
 python manage.py check                  # must report "0 issues"
 
@@ -291,6 +291,56 @@ by Phase 6M code paths.
 `/saas-admin` shows **Razorpay Webhook Handler (Test Mode)** with the
 event list (masked summary only) and the readiness card. **No "Replay"
 / "Apply mutation" / "Go Live" buttons on the UI.**
+
+## Phase 6R Razorpay payment → WhatsApp / courier dispatch readiness diagnostics
+
+Phase 6R is **audit-only readiness contract and CLI-only** for review
+state changes. Review state changes write to
+`RazorpayPaymentDispatchReadinessGate` only — they NEVER send a
+WhatsApp message, NEVER call Meta Cloud / Delhivery, NEVER create a
+shipment / AWB, NEVER touch real `Order` / `Payment` / `Shipment` /
+`DiscountOfferLog` / `Customer` / `Lead` rows, NEVER call Razorpay.
+**There is no API endpoint or frontend button that dispatches Phase
+6R approval.**
+
+```bash
+cd backend
+# Read-only diagnostics first.
+python manage.py inspect_razorpay_payment_dispatch_readiness --json
+python manage.py inspect_razorpay_payment_dispatch_readiness_gates --json
+python manage.py preview_razorpay_payment_dispatch_readiness_gate --gate-id <PHASE_6Q_GATE_ID> --json
+
+# CLI-only review lifecycle. ``prepare``/``approve``/``reject``/``archive`` write
+# to RazorpayPaymentDispatchReadinessGate only. Approve requires --reason.
+python manage.py prepare_razorpay_payment_dispatch_readiness_gate --gate-id <PHASE_6Q_GATE_ID> --json
+python manage.py approve_razorpay_payment_dispatch_readiness_gate --readiness-id <READINESS_ID> --reason "Director sign-off for Phase 6R readiness" --json
+python manage.py reject_razorpay_payment_dispatch_readiness_gate --readiness-id <READINESS_ID> --reason "Not yet" --json
+python manage.py archive_razorpay_payment_dispatch_readiness_gate --readiness-id <READINESS_ID> --reason "Close" --json
+```
+
+Expected posture: `phase=6R`, `status=dispatch_readiness_only`,
+`razorpayPaymentDispatchReadinessEnabled=false`,
+`businessMutationEnabled=false`,
+`customerNotificationEnabled=false`, `providerCallAttempted=false`,
+`frontendCanExecute=false`, `apiEndpointCanExecute=false`,
+`apiEndpointCanApprove=false`, `executionPath="cli_only"`.
+`safeToStartPhase6S=true` only after at least one Phase 6R readiness
+review has been approved via the CLI.
+
+`/saas-admin` shows **Razorpay Payment → WhatsApp / Courier
+Dispatch Readiness** with the readiness grid, 9-row dispatch
+readiness contract table (every "Send allowed in 6R" / "Courier in
+6R" cell `No`), recent readiness gates table (read-only — no
+buttons), three readiness checklists (WhatsApp / courier /
+dispatch), forbidden-action chips, and a "Readiness contract only"
+banner. **No "Send WhatsApp" / "Queue WhatsApp" / "Create Shipment"
+/ "Create AWB" / "Book Courier" / "Dispatch Order" / "Notify
+Customer" / "Mark Paid" / "Capture Payment" / "Refund" / "Apply
+Mutation" / "Mutate Order" / "Create Payment Link" / "Execute
+Webhook" / "Replay Event" / "Enable Mutation" / "Go Live" / "Run
+MCP Tool" / "Execute Workflow" / "Apply Order Update" / "Confirm
+Paid Order" / "Start Live Workflow" / "Approve Readiness" / "Reject
+Readiness" buttons exist anywhere.**
 
 ## Phase 6Q Razorpay payment → order workflow safety gate diagnostics
 

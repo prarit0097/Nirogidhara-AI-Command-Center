@@ -752,3 +752,192 @@ class RazorpayPaymentOrderWorkflowGate(models.Model):
             f"Phase6Q-Gate[{self.status}] {self.event_name} "
             f"(attempt={self.source_attempt_id})"
         )
+
+
+class RazorpayPaymentDispatchReadinessGate(models.Model):
+    """Phase 6R — audit-only Payment → WhatsApp/Courier readiness gate.
+
+    Each readiness gate evaluates whether a future production phase
+    could safely prepare WhatsApp customer notification + courier
+    dispatch readiness for a paid/order workflow. Phase 6R **never**
+    sends a WhatsApp message, **never** queues an outbound, **never**
+    calls Meta Cloud, **never** calls Delhivery, **never** creates a
+    shipment, **never** mutates real ``Order`` / ``Payment`` /
+    ``Customer`` / ``Lead`` / ``WhatsAppMessage`` /
+    ``WhatsAppLifecycleEvent`` rows. Approving a readiness gate only
+    flips ``status`` to ``approved_for_future_phase6s``.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        BLOCKED = "blocked", "Blocked"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        APPROVED_FOR_FUTURE_PHASE6S = (
+            "approved_for_future_phase6s",
+            "Approved for future Phase 6S",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+
+    source_workflow_gate = models.ForeignKey(
+        RazorpayPaymentOrderWorkflowGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_readiness_gates",
+    )
+    source_attempt = models.ForeignKey(
+        RazorpaySandboxPaidStatusMutationAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_readiness_gates",
+    )
+    source_ledger = models.ForeignKey(
+        RazorpaySandboxPaidStatusLedger,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_readiness_gates",
+    )
+    source_review = models.ForeignKey(
+        RazorpaySandboxStatusReview,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_readiness_gates",
+    )
+    razorpay_webhook_event = models.ForeignKey(
+        RazorpayWebhookEvent,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="payment_dispatch_readiness_gates",
+    )
+    source_event_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    event_name = models.CharField(max_length=128, db_index=True)
+    provider_environment = models.CharField(max_length=16, default="test")
+    provider_order_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_id = models.CharField(max_length=64, blank=True, default="")
+    provider_payment_link_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    currency = models.CharField(max_length=8, blank=True, default="")
+
+    proposed_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_order_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_order_effect = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_whatsapp_action = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+    proposed_courier_action = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+    proposed_dispatch_readiness_action = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Phase 6Q + 6P + 6O proof verification.
+    phase6q_gate_approved = models.BooleanField(default=False)
+    phase6p_execution_verified = models.BooleanField(default=False)
+    phase6p_rollback_verified = models.BooleanField(default=False)
+
+    synthetic_eligible = models.BooleanField(default=False)
+    manual_review_required = models.BooleanField(default=True)
+
+    # Locked-False safety booleans. Phase 6R never flips any of these
+    # to True. Asserted by ``assert_phase6r_no_live_send_or_courier_mutation``.
+    dispatch_readiness_allowed_in_phase6r = models.BooleanField(default=False)
+    real_order_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_payment_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    shipment_mutation_was_made = models.BooleanField(default=False)
+    shipment_created = models.BooleanField(default=False, db_index=True)
+    whatsapp_message_created = models.BooleanField(
+        default=False, db_index=True
+    )
+    whatsapp_message_queued = models.BooleanField(
+        default=False, db_index=True
+    )
+    customer_notification_sent = models.BooleanField(default=False)
+    meta_cloud_call_attempted = models.BooleanField(default=False)
+    delhivery_call_attempted = models.BooleanField(default=False)
+    razorpay_call_attempted = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    rollback_required = models.BooleanField(default=True)
+
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    safety_invariants = models.JSONField(default=dict, blank=True)
+    whatsapp_readiness_checklist = models.JSONField(default=list, blank=True)
+    courier_readiness_checklist = models.JSONField(default=list, blank=True)
+    dispatch_readiness_checklist = models.JSONField(default=list, blank=True)
+    rollback_plan = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6r_readiness_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6r_readiness_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=200, blank=True, default="")
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase6r_readiness_archives",
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(max_length=200, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "event_name")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase6R-Readiness[{self.status}] {self.event_name} "
+            f"(workflow_gate={self.source_workflow_gate_id})"
+        )

@@ -249,6 +249,18 @@ RAZORPAY_SANDBOX_PAID_STATUS_MUTATION_ENABLED = _razorpay_webhook_bool(
 RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED = _razorpay_webhook_bool(
     "RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED"
 )
+# ----- Phase 6R — Payment → WhatsApp/Courier Readiness (no live send) -----
+# Default off. When true, the Phase 6R service may prepare and
+# transition `RazorpayPaymentDispatchReadinessGate` review records
+# derived from approved Phase 6Q gates. The flag NEVER unlocks any
+# WhatsApp send, Meta Cloud call, Delhivery call, shipment creation,
+# customer notification, or business-row mutation; even when enabled,
+# the service writes only to its own readiness gate model. Production
+# `.env.production` is not edited — this default IS the production
+# posture.
+RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED = _razorpay_webhook_bool(
+    "RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

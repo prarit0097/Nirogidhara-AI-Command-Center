@@ -974,3 +974,121 @@ describe("Phase 6Q - Razorpay Payment → Order Workflow Safety Gate", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("Phase 6R - Razorpay Payment → WhatsApp / Courier Dispatch Readiness", () => {
+  it("exposes the Phase 6R API methods on the api client", async () => {
+    expect(
+      typeof api.getSaasRazorpayPaymentDispatchReadiness,
+    ).toBe("function");
+    expect(
+      typeof api.getSaasRazorpayPaymentDispatchReadinessGates,
+    ).toBe("function");
+
+    const readiness = await api.getSaasRazorpayPaymentDispatchReadiness();
+    expect(readiness.phase).toBe("6R");
+    expect(readiness.status).toBe("dispatch_readiness_only");
+    expect(readiness.latestCompletedPhase).toBe("6Q");
+    expect(readiness.nextPhase).toBe("6S");
+    expect(readiness.razorpayPaymentDispatchReadinessEnabled).toBe(false);
+    expect(readiness.frontendCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanApprove).toBe(false);
+    expect(readiness.executionPath).toBe("cli_only");
+    expect(readiness.maxSafeAmountPaise).toBe(100);
+    expect(readiness.readinessContract.length).toBe(9);
+    readiness.readinessContract.forEach((row) => {
+      expect(row.whatsappSendAllowedInPhase6R).toBe(false);
+      expect(row.courierBookingAllowedInPhase6R).toBe(false);
+      expect(row.providerCallAllowedInPhase6R).toBe(false);
+      expect(row.customerNotificationAllowed).toBe(false);
+      expect(row.shipmentEffectAllowed).toBe(false);
+      expect(row.discountEffectAllowed).toBe(false);
+    });
+    expect(readiness.safetyInvariants.whatsappSendAllowed).toBe(false);
+    expect(readiness.safetyInvariants.delhiveryCallAllowed).toBe(false);
+    expect(readiness.safetyInvariants.razorpayApiInvocationAllowed).toBe(
+      false,
+    );
+
+    const gates = await api.getSaasRazorpayPaymentDispatchReadinessGates();
+    expect(gates.phase).toBe("6R");
+    expect(gates.frontendCanExecute).toBe(false);
+    expect(gates.apiEndpointCanExecute).toBe(false);
+    expect(gates.apiEndpointCanApprove).toBe(false);
+    expect(gates.realOrderMutationWasMade).toBe(false);
+    expect(gates.realPaymentMutationWasMade).toBe(false);
+    expect(gates.shipmentCreated).toBe(false);
+    expect(gates.whatsAppMessageCreated).toBe(false);
+    expect(gates.whatsAppMessageQueued).toBe(false);
+    expect(gates.metaCloudCallAttempted).toBe(false);
+    expect(gates.delhiveryCallAttempted).toBe(false);
+  });
+
+  it("renders the Phase 6R section with locked safety state and CLI-only reminder", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText(
+        "Razorpay Payment → WhatsApp / Courier Dispatch Readiness",
+      ),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("razorpay-payment-dispatch-readiness-section"),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByTestId("phase6r-safe-to-start-phase6s-badge"),
+    ).toBeInTheDocument();
+
+    // Locks rendered as "Disabled" multiple times.
+    expect(screen.getAllByText(/Disabled/i).length).toBeGreaterThan(8);
+
+    // Forbidden Phase 6R buttons absent.
+    const forbiddenButtonPatterns = [
+      /^send whatsapp$/i,
+      /^queue whatsapp$/i,
+      /^create shipment$/i,
+      /^create awb$/i,
+      /^book courier$/i,
+      /^dispatch order$/i,
+      /^notify customer$/i,
+      /^mark paid$/i,
+      /^capture payment$/i,
+      /^refund$/i,
+      /^apply mutation$/i,
+      /^mutate order$/i,
+      /^create payment link$/i,
+      /^execute webhook$/i,
+      /^replay event$/i,
+      /^enable mutation$/i,
+      /^go live$/i,
+      /^run mcp tool$/i,
+      /^execute workflow$/i,
+      /^apply order update$/i,
+      /^confirm paid order$/i,
+      /^start live workflow$/i,
+      /^approve readiness$/i,
+      /^reject readiness$/i,
+    ];
+    for (const pattern of forbiddenButtonPatterns) {
+      expect(
+        screen.queryByRole("button", { name: pattern }),
+      ).not.toBeInTheDocument();
+    }
+
+    // No raw secret / env-var names / full phone leak.
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_live_");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("RAZORPAY_WEBHOOK_SECRET=");
+    expect(body).not.toMatch(/\+91\d{10}/);
+
+    // Readiness-only banner present.
+    expect(
+      screen.getAllByText(/Readiness contract only/i).length,
+    ).toBeGreaterThan(0);
+  });
+});

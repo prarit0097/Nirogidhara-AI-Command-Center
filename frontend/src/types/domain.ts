@@ -3161,6 +3161,171 @@ export interface SaasRazorpayPaymentOrderWorkflowGatesResponse {
   providerCallAttempted: false;
 }
 
+// ---------- Phase 6R - Payment → WhatsApp / Courier Dispatch Readiness ----------
+
+export type SaasRazorpayPaymentDispatchReadinessGateStatus =
+  | "draft"
+  | "blocked"
+  | "pending_manual_review"
+  | "approved_for_future_phase6s"
+  | "rejected"
+  | "archived";
+
+export interface SaasRazorpayPaymentDispatchReadinessContractRow {
+  razorpayEventName: string;
+  futureWhatsAppReadinessAction: string;
+  futureCourierReadinessAction: string;
+  futureDispatchReadinessAction: string;
+  whatsappSendAllowedInPhase6R: false;
+  courierBookingAllowedInPhase6R: false;
+  providerCallAllowedInPhase6R: false;
+  mutationAllowedInFuturePhase6S: string;
+  manualReviewRequired: true;
+  customerNotificationAllowed: false;
+  shipmentEffectAllowed: false;
+  discountEffectAllowed: false;
+  idempotencyRequired: true;
+  rollbackRequired: true;
+  blockers: string[];
+  notes: string[];
+}
+
+export interface SaasRazorpayPaymentDispatchReadinessGateDto {
+  id: number;
+  sourceWorkflowGateId: number | null;
+  sourceAttemptId: number | null;
+  sourceLedgerId: number | null;
+  sourceReviewId: number | null;
+  razorpayWebhookEventId: number | null;
+  sourceEventId: string;
+  eventName: string;
+  providerEnvironment: string;
+  providerOrderId: string;
+  providerPaymentId: string;
+  providerPaymentLinkId: string;
+  amountPaise: number | null;
+  currency: string;
+  proposedPaymentStatus: string;
+  proposedOrderStatus: string;
+  proposedOrderEffect: string;
+  proposedWhatsAppAction: string;
+  proposedCourierAction: string;
+  proposedDispatchReadinessAction: string;
+  status: SaasRazorpayPaymentDispatchReadinessGateStatus;
+  phase6QGateApproved: boolean;
+  phase6PExecutionVerified: boolean;
+  phase6PRollbackVerified: boolean;
+  syntheticEligible: boolean;
+  manualReviewRequired: boolean;
+  dispatchReadinessAllowedInPhase6R: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  shipmentMutationWasMade: false;
+  shipmentCreated: false;
+  whatsAppMessageCreated: false;
+  whatsAppMessageQueued: false;
+  customerNotificationSent: false;
+  metaCloudCallAttempted: false;
+  delhiveryCallAttempted: false;
+  razorpayCallAttempted: false;
+  providerCallAttempted: false;
+  rollbackRequired: boolean;
+  idempotencyKey: string;
+  blockers: string[];
+  warnings: string[];
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReason: string;
+  archivedByUsername: string;
+  archivedAt: string | null;
+  archiveReason: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasRazorpayPaymentDispatchReadinessGateCounts {
+  draft: number;
+  pendingManualReview: number;
+  approvedForFuturePhase6S: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+  realOrderMutationWasMade: number;
+  realPaymentMutationWasMade: number;
+  shipmentMutationWasMade: number;
+  shipmentCreated: number;
+  whatsAppMessageCreated: number;
+  whatsAppMessageQueued: number;
+  customerNotificationSent: number;
+  metaCloudCallAttempted: number;
+  delhiveryCallAttempted: number;
+  providerCallAttempted: number;
+}
+
+export interface SaasRazorpayPaymentDispatchReadiness {
+  phase: "6R";
+  status: "dispatch_readiness_only";
+  latestCompletedPhase: "6Q";
+  nextPhase: "6S";
+  razorpayPaymentDispatchReadinessEnabled: boolean;
+  businessMutationEnabled: false;
+  customerNotificationEnabled: false;
+  providerCallAttempted: false;
+  rawPayloadStorageEnabled: false;
+  phase6QApprovedGateCount: number;
+  readinessCounts: SaasRazorpayPaymentDispatchReadinessGateCounts;
+  readinessContract: SaasRazorpayPaymentDispatchReadinessContractRow[];
+  safetyInvariants: Record<string, boolean>;
+  whatsAppReadinessChecklist: Array<{
+    key: string;
+    description: string;
+    automated: boolean;
+  }>;
+  courierReadinessChecklist: Array<{
+    key: string;
+    description: string;
+    automated: boolean;
+  }>;
+  dispatchReadinessChecklist: Array<{
+    key: string;
+    description: string;
+    automated: boolean;
+  }>;
+  rollbackPlan: Record<string, unknown>;
+  forbiddenActions: string[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  maxSafeAmountPaise: number;
+  safeToStartPhase6S: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  recentReadinessGates: SaasRazorpayPaymentDispatchReadinessGateDto[];
+}
+
+export interface SaasRazorpayPaymentDispatchReadinessGatesResponse {
+  phase: "6R";
+  limit: number;
+  counts: SaasRazorpayPaymentDispatchReadinessGateCounts;
+  items: SaasRazorpayPaymentDispatchReadinessGateDto[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  shipmentMutationWasMade: false;
+  shipmentCreated: false;
+  whatsAppMessageCreated: false;
+  whatsAppMessageQueued: false;
+  customerNotificationSent: false;
+  metaCloudCallAttempted: false;
+  delhiveryCallAttempted: false;
+  providerCallAttempted: false;
+}
+
 // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------
 
 export interface SaasRazorpaySandboxPaidStatusEventMapping {

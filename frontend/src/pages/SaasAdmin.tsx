@@ -22,6 +22,8 @@ import type {
   SaasRazorpayWebhookEventDto,
   SaasRazorpayBusinessMutationSandboxPlan,
   SaasRazorpayBusinessMutationSandboxReadiness,
+  SaasRazorpayPaymentDispatchReadiness,
+  SaasRazorpayPaymentDispatchReadinessGatesResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
   SaasRazorpayPaymentOrderWorkflowGatesResponse,
   SaasRazorpaySandboxPaidStatusMutationAttemptsResponse,
@@ -141,6 +143,14 @@ export default function SaasAdminPage() {
     razorpayPaymentOrderWorkflowGates,
     setRazorpayPaymentOrderWorkflowGates,
   ] = useState<SaasRazorpayPaymentOrderWorkflowGatesResponse | null>(null);
+  const [
+    razorpayPaymentDispatchReadiness,
+    setRazorpayPaymentDispatchReadiness,
+  ] = useState<SaasRazorpayPaymentDispatchReadiness | null>(null);
+  const [
+    razorpayPaymentDispatchReadinessGates,
+    setRazorpayPaymentDispatchReadinessGates,
+  ] = useState<SaasRazorpayPaymentDispatchReadinessGatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -170,6 +180,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpaySandboxPaidStatusMutationAttempts(25),
       api.getSaasRazorpayPaymentOrderWorkflowGateReadiness(),
       api.getSaasRazorpayPaymentOrderWorkflowGates(25),
+      api.getSaasRazorpayPaymentDispatchReadiness(),
+      api.getSaasRazorpayPaymentDispatchReadinessGates(25),
     ])
       .then(
         ([
@@ -197,6 +209,8 @@ export default function SaasAdminPage() {
           spsAttempts,
           poRead,
           poGates,
+          pdRead,
+          pdGates,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -222,6 +236,8 @@ export default function SaasAdminPage() {
           setRazorpaySandboxPaidStatusAttempts(spsAttempts);
           setRazorpayPaymentOrderWorkflowReadiness(poRead);
           setRazorpayPaymentOrderWorkflowGates(poGates);
+          setRazorpayPaymentDispatchReadiness(pdRead);
+          setRazorpayPaymentDispatchReadinessGates(pdGates);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -2348,6 +2364,367 @@ export default function SaasAdminPage() {
             "Start Live Workflow" buttons exist on this page. Gate
             review state changes are exclusively via the Phase 6Q CLI
             commands above.
+          </div>
+        </section>
+      )}
+
+      {(razorpayPaymentDispatchReadiness ||
+        razorpayPaymentDispatchReadinessGates) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-payment-dispatch-readiness-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <Webhook className="h-5 w-5 text-primary" />
+                Razorpay Payment → WhatsApp / Courier Dispatch Readiness
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 6R — readiness contract only.{" "}
+                <strong>
+                  No WhatsApp send, no Meta Cloud call, no Delhivery call,
+                  no shipment / AWB creation, no real Order / Payment /
+                  Customer / Lead mutation, no Razorpay API call
+                </strong>
+                . Approving a readiness gate only marks it{" "}
+                <code>approved_for_future_phase6s</code> — review state
+                changes are CLI-only; no API endpoint or frontend button
+                dispatches Phase 6R approval.
+              </p>
+            </div>
+            {razorpayPaymentDispatchReadiness && (
+              <div data-testid="phase6r-safe-to-start-phase6s-badge">
+                <StatusPill
+                  tone={
+                    razorpayPaymentDispatchReadiness.safeToStartPhase6S
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayPaymentDispatchReadiness.safeToStartPhase6S
+                    ? "Ready for Phase 6S planning"
+                    : "Blocked — needs approved readiness review for future Phase 6S"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayPaymentDispatchReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayPaymentDispatchReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpayPaymentDispatchReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={razorpayPaymentDispatchReadiness.latestCompletedPhase}
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpayPaymentDispatchReadiness.nextPhase}
+              />
+              <KeyValue
+                label="Readiness flag"
+                value={
+                  razorpayPaymentDispatchReadiness.razorpayPaymentDispatchReadinessEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue label="WhatsApp send" value="Disabled" />
+              <KeyValue label="Meta Cloud call" value="Disabled" />
+              <KeyValue label="Delhivery call" value="Disabled" />
+              <KeyValue label="Shipment creation" value="Disabled" />
+              <KeyValue label="Customer notification" value="Disabled" />
+              <KeyValue label="Provider call" value="Disabled" />
+              <KeyValue
+                label="Frontend can execute"
+                value={
+                  razorpayPaymentDispatchReadiness.frontendCanExecute
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="API can approve"
+                value={
+                  razorpayPaymentDispatchReadiness.apiEndpointCanApprove
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Execution path"
+                value={razorpayPaymentDispatchReadiness.executionPath}
+              />
+              <KeyValue
+                label="Phase 6Q approved gates"
+                value={String(
+                  razorpayPaymentDispatchReadiness.phase6QApprovedGateCount,
+                )}
+              />
+              <KeyValue
+                label="Pending readiness reviews"
+                value={String(
+                  razorpayPaymentDispatchReadiness.readinessCounts
+                    .pendingManualReview,
+                )}
+              />
+              <KeyValue
+                label="Approved for future 6S"
+                value={String(
+                  razorpayPaymentDispatchReadiness.readinessCounts
+                    .approvedForFuturePhase6S,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayPaymentDispatchReadiness && (
+            <div className="px-6 pb-4 text-xs text-muted-foreground">
+              <strong>Next action:</strong>{" "}
+              {razorpayPaymentDispatchReadiness.nextAction}
+            </div>
+          )}
+
+          {razorpayPaymentDispatchReadiness && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Readiness contract (9 events)
+              </h4>
+              <div className="overflow-x-auto rounded border border-border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40">
+                    <tr className="text-left">
+                      <th className="px-3 py-2">Event</th>
+                      <th className="px-3 py-2">WhatsApp readiness</th>
+                      <th className="px-3 py-2">Courier readiness</th>
+                      <th className="px-3 py-2">Dispatch readiness</th>
+                      <th className="px-3 py-2">Send allowed in 6R</th>
+                      <th className="px-3 py-2">Courier in 6R</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {razorpayPaymentDispatchReadiness.readinessContract.map(
+                      (row) => (
+                        <tr
+                          key={row.razorpayEventName}
+                          className="border-t border-border"
+                        >
+                          <td className="px-3 py-2 font-mono">
+                            {row.razorpayEventName}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.futureWhatsAppReadinessAction}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.futureCourierReadinessAction}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.futureDispatchReadinessAction}
+                          </td>
+                          <td className="px-3 py-2">No</td>
+                          <td className="px-3 py-2">No</td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {razorpayPaymentDispatchReadinessGates && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Recent readiness gates ({" "}
+                {razorpayPaymentDispatchReadinessGates.items.length})
+              </h4>
+              {razorpayPaymentDispatchReadinessGates.items.length === 0 ? (
+                <div className="rounded border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                  No readiness gates recorded yet. Run the Phase 6R CLI
+                  commands —{" "}
+                  <code>
+                    inspect_razorpay_payment_dispatch_readiness
+                  </code>
+                  ,{" "}
+                  <code>
+                    prepare_razorpay_payment_dispatch_readiness_gate
+                  </code>
+                  ,{" "}
+                  <code>
+                    approve_razorpay_payment_dispatch_readiness_gate
+                  </code>
+                  ,{" "}
+                  <code>
+                    reject_razorpay_payment_dispatch_readiness_gate
+                  </code>
+                  .
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded border border-border">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40">
+                      <tr className="text-left">
+                        <th className="px-3 py-2">ID</th>
+                        <th className="px-3 py-2">Event</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">WhatsApp action</th>
+                        <th className="px-3 py-2">Courier action</th>
+                        <th className="px-3 py-2">Dispatch action</th>
+                        <th className="px-3 py-2">Sent / Queued / Shipped</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {razorpayPaymentDispatchReadinessGates.items.map(
+                        (row) => (
+                          <tr
+                            key={row.id}
+                            className="border-t border-border"
+                          >
+                            <td className="px-3 py-2 font-mono">{row.id}</td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.eventName}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.status}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.proposedWhatsAppAction}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.proposedCourierAction}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.proposedDispatchReadinessAction}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {row.whatsAppMessageCreated ? "S" : "-"}
+                              {row.whatsAppMessageQueued ? "Q" : "-"}
+                              {row.shipmentCreated ? "X" : "-"}
+                            </td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {razorpayPaymentDispatchReadiness && (
+            <div className="px-6 pb-4 grid gap-3 lg:grid-cols-3">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  WhatsApp readiness checklist
+                </h4>
+                <ul className="space-y-2 text-xs">
+                  {razorpayPaymentDispatchReadiness.whatsAppReadinessChecklist.map(
+                    (item) => (
+                      <li
+                        key={item.key}
+                        className="rounded border border-border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-mono text-[11px]">
+                          {item.key}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Courier readiness checklist
+                </h4>
+                <ul className="space-y-2 text-xs">
+                  {razorpayPaymentDispatchReadiness.courierReadinessChecklist.map(
+                    (item) => (
+                      <li
+                        key={item.key}
+                        className="rounded border border-border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-mono text-[11px]">
+                          {item.key}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Dispatch readiness checklist
+                </h4>
+                <ul className="space-y-2 text-xs">
+                  {razorpayPaymentDispatchReadiness.dispatchReadinessChecklist.map(
+                    (item) => (
+                      <li
+                        key={item.key}
+                        className="rounded border border-border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-mono text-[11px]">
+                          {item.key}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {razorpayPaymentDispatchReadiness && (
+            <div className="px-6 pb-4">
+              <details className="text-xs">
+                <summary className="cursor-pointer font-semibold">
+                  Phase 6R forbidden actions ({" "}
+                  {razorpayPaymentDispatchReadiness.forbiddenActions.length}
+                  )
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {razorpayPaymentDispatchReadiness.forbiddenActions.map(
+                    (action) => (
+                      <span
+                        key={action}
+                        className="rounded border border-border bg-muted/30 px-2 py-0.5 font-mono"
+                      >
+                        {action}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </details>
+            </div>
+          )}
+
+          <div className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+            <strong>Readiness contract only.</strong> No "Send WhatsApp"
+            / "Queue WhatsApp" / "Create Shipment" / "Create AWB" /
+            "Book Courier" / "Dispatch Order" / "Notify Customer" /
+            "Mark Paid" / "Capture Payment" / "Refund" / "Apply
+            Mutation" / "Mutate Order" / "Create Payment Link" /
+            "Execute Webhook" / "Replay Event" / "Enable Mutation" /
+            "Go Live" / "Run MCP Tool" / "Execute Workflow" / "Apply
+            Order Update" / "Confirm Paid Order" / "Start Live
+            Workflow" buttons exist on this page. Readiness review
+            state changes are exclusively via the Phase 6R CLI commands
+            above.
           </div>
         </section>
       )}

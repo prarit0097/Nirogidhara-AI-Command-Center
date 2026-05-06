@@ -7,11 +7,12 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 6Q baseline:** documented through Phase 6Q (Payment →
-> Order Workflow Safety Gate, audit-gate-only, CLI-only review state
-> changes). Phase 6R is the next planned phase (Payment →
-> WhatsApp/courier readiness contract) and will sit behind a NEW env
-> flag distinct from `RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED`.
+> **Phase 6R baseline:** documented through Phase 6R (Payment →
+> WhatsApp / Courier Dispatch Readiness, audit-only readiness contract,
+> CLI-only review state changes). Phase 6S is the next planned phase
+> (limited internal live payment → dispatch pilot planning) and will
+> sit behind a NEW env flag distinct from
+> `RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED`.
 
 ## Health
 
@@ -232,6 +233,35 @@ Every response preserves `business_mutation_was_made=false`,
 `customer_notification_sent=false`, `raw_secret_exposed=false`,
 `full_pii_exposed=false`. Production webhook secret is **never** consumed
 by this handler.
+
+## Phase 6R — Payment → WhatsApp / Courier Dispatch Readiness (audit-only readiness contract, CLI-only review state changes)
+
+Read-only HTTP layer over the Phase 6R dispatch readiness review
+records. **There is no POST endpoint that prepares, approves, rejects,
+or archives a readiness gate** — review state changes are exclusively
+dispatched via CLI. **Phase 6R never sends a WhatsApp message, never
+calls Meta Cloud, never calls Delhivery, never creates a shipment /
+AWB, never mutates real ``Order`` / ``Payment`` / ``Shipment`` /
+``DiscountOfferLog`` / ``Customer`` / ``Lead`` / ``WhatsAppMessage`` /
+``WhatsAppConversation`` rows, never calls Razorpay, never flips an
+env flag.**
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/payment-dispatch-readiness/` | admin/staff | Phase 6R readiness composition: locked-False safety invariants, env flag state, readiness counters (`pendingManualReview` / `approvedForFuturePhase6S` / `rejected` / `archived` / `blocked` / `whatsAppMessageCreated` / `whatsAppMessageQueued` / `metaCloudCallAttempted` / `delhiveryCallAttempted` / `shipmentCreated` / etc), Phase 6Q approved-gate count, 9-row dispatch readiness contract, three readiness checklists (WhatsApp / courier / dispatch), rollback plan, forbidden-action list, blockers, warnings, `safeToStartPhase6S`, `nextAction`. |
+| GET | `/api/v1/saas/razorpay/payment-dispatch-readiness-gates/?limit=N` | admin/staff | List recent `RazorpayPaymentDispatchReadinessGate` rows (sanitized — no raw payload, no PII) + counts + locked safety booleans. Response carries `frontendCanExecute=false`, `apiEndpointCanExecute=false`, `apiEndpointCanApprove=false`, plus every Phase 6R safety boolean (`realOrderMutationWasMade=false`, `whatsAppMessageCreated=false`, `whatsAppMessageQueued=false`, `metaCloudCallAttempted=false`, `delhiveryCallAttempted=false`, `shipmentCreated=false`, `customerNotificationSent=false`, `providerCallAttempted=false`). |
+| GET | `/api/v1/saas/razorpay/payment-dispatch-readiness-gates/<id>/` | admin/staff | Detail (sanitized). |
+| GET | `/api/v1/saas/razorpay/payment-dispatch-readiness-preview/?gate_id=<PHASE6Q_GATE_ID>` | admin/staff | Read-only preview of how a Phase 6R readiness gate would map from an approved Phase 6Q workflow gate. Never creates rows. Returns `proposedContract` (whatsappSendAllowedInPhase6R / courierBookingAllowedInPhase6R / providerCallAllowedInPhase6R all `false`). |
+
+Every response preserves the 12 locked-False safety booleans:
+`realOrderMutationWasMade=false`, `realPaymentMutationWasMade=false`,
+`shipmentMutationWasMade=false`, `shipmentCreated=false`,
+`whatsAppMessageCreated=false`, `whatsAppMessageQueued=false`,
+`customerNotificationSent=false`, `metaCloudCallAttempted=false`,
+`delhiveryCallAttempted=false`, `providerCallAttempted=false`,
+`dispatchReadinessAllowedInPhase6R=false`. POST/PATCH/DELETE on every
+Phase 6R endpoint return 405. Admin/director/superuser auth required
+for every endpoint.
 
 ## Phase 6Q — Payment → Order Workflow Safety Gate (audit-gate-only, CLI-only review state changes)
 

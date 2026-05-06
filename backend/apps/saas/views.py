@@ -85,7 +85,14 @@ from apps.payments.razorpay_payment_order_workflow_gate import (
     summarize_phase6q_payment_order_workflow_gates,
     _serialize_gate as _serialize_phase6q_gate,
 )
+from apps.payments.razorpay_payment_dispatch_readiness import (
+    inspect_phase6r_payment_dispatch_readiness,
+    preview_phase6r_payment_dispatch_readiness_gate,
+    summarize_phase6r_payment_dispatch_readiness_gates,
+    _serialize_readiness as _serialize_phase6r_readiness,
+)
 from apps.payments.models import (
+    RazorpayPaymentDispatchReadinessGate,
     RazorpayPaymentOrderWorkflowGate,
     RazorpaySandboxPaidStatusMutationAttempt,
     RazorpaySandboxStatusReview,
@@ -1514,6 +1521,110 @@ class RazorpayPaymentOrderWorkflowGatePreviewView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 6R — Payment → WhatsApp / Courier Dispatch Readiness (audit-only)
+# ---------------------------------------------------------------------------
+
+
+class RazorpayPaymentDispatchReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/payment-dispatch-readiness/`` — Phase 6R.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER mutates anything; NEVER sends
+    WhatsApp; NEVER calls Meta Cloud / Delhivery; review state changes
+    are CLI-only.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(inspect_phase6r_payment_dispatch_readiness())
+
+
+class RazorpayPaymentDispatchReadinessGatesListView(APIView):
+    """``GET /api/v1/saas/razorpay/payment-dispatch-readiness-gates/`` — Phase 6R list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase6r_payment_dispatch_readiness_gates(
+            limit=limit
+        )
+        return Response(
+            {
+                "phase": "6R",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "realOrderMutationWasMade": False,
+                "realPaymentMutationWasMade": False,
+                "shipmentMutationWasMade": False,
+                "shipmentCreated": False,
+                "whatsAppMessageCreated": False,
+                "whatsAppMessageQueued": False,
+                "customerNotificationSent": False,
+                "metaCloudCallAttempted": False,
+                "delhiveryCallAttempted": False,
+                "providerCallAttempted": False,
+            }
+        )
+
+
+class RazorpayPaymentDispatchReadinessGateDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/payment-dispatch-readiness-gates/<id>/`` — Phase 6R."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayPaymentDispatchReadinessGate.objects.filter(pk=pk).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 6R payment dispatch readiness gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase6r_readiness(row))
+
+
+class RazorpayPaymentDispatchReadinessPreviewView(APIView):
+    """``GET /api/v1/saas/razorpay/payment-dispatch-readiness-preview/?gate_id=<ID>`` — Phase 6R.
+
+    Read-only preview from an approved Phase 6Q workflow gate; never
+    creates rows; never sends WhatsApp; never calls Meta Cloud /
+    Delhivery.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            gate_id = int(request.query_params.get("gate_id") or 0)
+        except (TypeError, ValueError):
+            gate_id = 0
+        if gate_id <= 0:
+            return Response(
+                {"detail": "gate_id query param required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            preview_phase6r_payment_dispatch_readiness_gate(gate_id)
+        )
+
+
 class RazorpaySandboxPaidStatusMutationReadinessView(APIView):
     """``GET /api/v1/saas/razorpay/sandbox-paid-status-mutation-readiness/`` — Phase 6P.
 
@@ -1697,4 +1808,8 @@ __all__ = (
     "RazorpayPaymentOrderWorkflowGatesListView",
     "RazorpayPaymentOrderWorkflowGateDetailView",
     "RazorpayPaymentOrderWorkflowGatePreviewView",
+    "RazorpayPaymentDispatchReadinessView",
+    "RazorpayPaymentDispatchReadinessGatesListView",
+    "RazorpayPaymentDispatchReadinessGateDetailView",
+    "RazorpayPaymentDispatchReadinessPreviewView",
 )
