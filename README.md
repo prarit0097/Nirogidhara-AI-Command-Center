@@ -102,10 +102,10 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 # Backend migration drift gate — MUST report "No changes detected"
 cd backend && python manage.py makemigrations --check --dry-run
 
-# Backend (pytest, 1409 tests)
+# Backend (pytest, 1441 tests)
 cd backend && python -m pytest -q
 
-# Frontend (vitest, 56 tests)
+# Frontend (vitest, 58 tests)
 cd frontend && npm test
 ```
 
