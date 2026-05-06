@@ -28,6 +28,12 @@ from .views import (
     RazorpayPaymentDispatchPilotPlanPreviewView,
     RazorpayPaymentDispatchPilotPlanReadinessView,
     RazorpayPaymentDispatchPilotPlansListView,
+    RazorpayControlledPilotGateDetailView,
+    RazorpayControlledPilotGateDryRunsView,
+    RazorpayControlledPilotGatePreviewView,
+    RazorpayControlledPilotGateReadinessView,
+    RazorpayControlledPilotGateRollbackDryRunsView,
+    RazorpayControlledPilotGatesListView,
     RazorpayPhase6FinalAuditLockDetailView,
     RazorpayPhase6FinalAuditLockPreviewView,
     RazorpayPhase6FinalAuditLockReadinessView,
@@ -491,5 +497,36 @@ urlpatterns = [
         "razorpay/phase6-final-audit-lock-preview/",
         RazorpayPhase6FinalAuditLockPreviewView.as_view(),
         name="saas-razorpay-phase6-final-audit-lock-preview",
+    ),
+    # Phase 7B - Razorpay Controlled Pilot Execution Gate (read-only API).
+    path(
+        "razorpay/controlled-pilot-gate-readiness/",
+        RazorpayControlledPilotGateReadinessView.as_view(),
+        name="saas-razorpay-controlled-pilot-gate-readiness",
+    ),
+    path(
+        "razorpay/controlled-pilot-gates/",
+        RazorpayControlledPilotGatesListView.as_view(),
+        name="saas-razorpay-controlled-pilot-gates",
+    ),
+    path(
+        "razorpay/controlled-pilot-gates/<int:pk>/",
+        RazorpayControlledPilotGateDetailView.as_view(),
+        name="saas-razorpay-controlled-pilot-gate-detail",
+    ),
+    path(
+        "razorpay/controlled-pilot-gate-preview/",
+        RazorpayControlledPilotGatePreviewView.as_view(),
+        name="saas-razorpay-controlled-pilot-gate-preview",
+    ),
+    path(
+        "razorpay/controlled-pilot-gate-dry-runs/<int:gate_id>/",
+        RazorpayControlledPilotGateDryRunsView.as_view(),
+        name="saas-razorpay-controlled-pilot-gate-dry-runs",
+    ),
+    path(
+        "razorpay/controlled-pilot-gate-rollback-dry-runs/<int:gate_id>/",
+        RazorpayControlledPilotGateRollbackDryRunsView.as_view(),
+        name="saas-razorpay-controlled-pilot-gate-rollback-dry-runs",
     ),
 ]

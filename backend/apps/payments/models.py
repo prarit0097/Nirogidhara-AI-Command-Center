@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.db import models
+from django.utils import timezone
 
 
 class Payment(models.Model):
@@ -1348,4 +1349,306 @@ class RazorpayPhase6FinalAuditLock(models.Model):
         return (
             f"Phase6T-FinalAudit[{self.status}] {self.event_name} "
             f"(plan={self.source_pilot_plan_id})"
+        )
+
+
+class RazorpayControlledPilotExecutionGate(models.Model):
+    """Phase 7B - controlled pilot execution gate (gate-only).
+
+    A Phase 7B gate row references a locked Phase 6T final audit lock
+    chain and tracks the prepare / dry-run / rollback dry-run / approve
+    lifecycle that *would* later be considered by a future Phase 7C
+    review. Phase 7B **never** executes a pilot, **never** calls
+    Razorpay / Meta Cloud / Delhivery / Vapi, **never** sends or queues
+    a WhatsApp message, **never** creates a shipment / AWB, **never**
+    mutates real ``Order`` / ``Payment`` / ``Shipment`` /
+    ``DiscountOfferLog`` / ``Customer`` / ``Lead`` rows. Approving a
+    gate only flips ``status`` to
+    ``approved_for_future_phase7c_execution_review``.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        BLOCKED = "blocked", "Blocked"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        APPROVED_FOR_FUTURE_PHASE7C_EXECUTION_REVIEW = (
+            "approved_for_future_phase7c_execution_review",
+            "Approved for future Phase 7C execution review",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+
+    source_final_audit_lock = models.ForeignKey(
+        RazorpayPhase6FinalAuditLock,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="controlled_pilot_execution_gates",
+    )
+    source_pilot_plan = models.ForeignKey(
+        RazorpayPaymentDispatchPilotPlan,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="controlled_pilot_execution_gates",
+    )
+    source_readiness_gate = models.ForeignKey(
+        RazorpayPaymentDispatchReadinessGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="controlled_pilot_execution_gates",
+    )
+    source_workflow_gate = models.ForeignKey(
+        RazorpayPaymentOrderWorkflowGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="controlled_pilot_execution_gates",
+    )
+    source_attempt = models.ForeignKey(
+        RazorpaySandboxPaidStatusMutationAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="controlled_pilot_execution_gates",
+    )
+    source_ledger = models.ForeignKey(
+        RazorpaySandboxPaidStatusLedger,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="controlled_pilot_execution_gates",
+    )
+    source_review = models.ForeignKey(
+        RazorpaySandboxStatusReview,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="controlled_pilot_execution_gates",
+    )
+    source_event_record = models.ForeignKey(
+        RazorpayWebhookEvent,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="controlled_pilot_execution_gates",
+    )
+
+    source_event_id = models.CharField(
+        max_length=128, blank=True, default="", db_index=True
+    )
+    event_name = models.CharField(max_length=128, db_index=True)
+    provider_environment = models.CharField(max_length=16, default="test")
+    amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    currency = models.CharField(max_length=8, blank=True, default="")
+
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    phase6t_lock_verified = models.BooleanField(default=False)
+    phase6s_pilot_plan_verified = models.BooleanField(default=False)
+    phase6r_readiness_verified = models.BooleanField(default=False)
+    phase6q_workflow_gate_verified = models.BooleanField(default=False)
+    phase6p_attempt_verified = models.BooleanField(default=False)
+    phase6o_review_verified = models.BooleanField(default=False)
+    phase6m_event_verified = models.BooleanField(default=False)
+    full_chain_verified = models.BooleanField(default=False)
+
+    dry_run_passed = models.BooleanField(default=False, db_index=True)
+    rollback_dry_run_passed = models.BooleanField(default=False, db_index=True)
+
+    manual_review_required = models.BooleanField(default=True)
+    internal_only = models.BooleanField(default=True)
+    max_pilot_orders = models.PositiveIntegerField(default=1)
+    max_amount_paise = models.PositiveIntegerField(default=100)
+
+    # Locked-False safety booleans. Phase 7B never flips any of these
+    # to True. Asserted by ``assert_phase7b_no_unauthorised_provider_call``.
+    controlled_pilot_execution_allowed_in_phase7b = models.BooleanField(
+        default=False
+    )
+    live_execution_allowed_in_phase7b = models.BooleanField(default=False)
+    provider_call_allowed_in_phase7b = models.BooleanField(default=False)
+    business_mutation_allowed_in_phase7b = models.BooleanField(default=False)
+    customer_notification_allowed_in_phase7b = models.BooleanField(
+        default=False
+    )
+    whatsapp_send_allowed_in_phase7b = models.BooleanField(default=False)
+    whatsapp_queue_allowed_in_phase7b = models.BooleanField(default=False)
+    courier_booking_allowed_in_phase7b = models.BooleanField(default=False)
+    shipment_creation_allowed_in_phase7b = models.BooleanField(default=False)
+    awb_creation_allowed_in_phase7b = models.BooleanField(default=False)
+    frontend_execution_allowed_in_phase7b = models.BooleanField(default=False)
+    api_execution_allowed_in_phase7b = models.BooleanField(default=False)
+    real_order_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_payment_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    shipment_mutation_was_made = models.BooleanField(default=False)
+    shipment_created = models.BooleanField(default=False, db_index=True)
+    awb_created = models.BooleanField(default=False, db_index=True)
+    whatsapp_message_created = models.BooleanField(
+        default=False, db_index=True
+    )
+    whatsapp_message_queued = models.BooleanField(
+        default=False, db_index=True
+    )
+    customer_notification_sent = models.BooleanField(default=False)
+    meta_cloud_call_attempted = models.BooleanField(default=False)
+    delhivery_call_attempted = models.BooleanField(default=False)
+    razorpay_call_attempted = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    env_flag_flip_detected = models.BooleanField(default=False)
+    raw_secret_exposed = models.BooleanField(default=False)
+    full_pii_exposed = models.BooleanField(default=False)
+
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    safety_invariants = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7b_controlled_pilot_gate_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7b_controlled_pilot_gate_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=200, blank=True, default="")
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7b_controlled_pilot_gate_archives",
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(max_length=200, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "event_name")),
+            models.Index(fields=("-created_at", "status")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7B-PilotGate[{self.status}] {self.event_name} "
+            f"(lock={self.source_final_audit_lock_id})"
+        )
+
+
+class RazorpayControlledPilotGateDryRunRecord(models.Model):
+    """Phase 7B dry-run record. Re-validates the Phase 6T -> 6M chain
+    against current DB state. Never calls a provider; never mutates
+    business rows; never flips an env flag.
+    """
+
+    gate = models.ForeignKey(
+        RazorpayControlledPilotExecutionGate,
+        on_delete=models.CASCADE,
+        related_name="dry_run_records",
+    )
+    verified_at = models.DateTimeField(default=timezone.now, db_index=True)
+    phase6t_verified = models.BooleanField(default=False)
+    phase6s_verified = models.BooleanField(default=False)
+    phase6r_verified = models.BooleanField(default=False)
+    phase6q_verified = models.BooleanField(default=False)
+    phase6p_verified = models.BooleanField(default=False)
+    phase6o_verified = models.BooleanField(default=False)
+    phase6m_verified = models.BooleanField(default=False)
+    chain_pass = models.BooleanField(default=False, db_index=True)
+    evaluated_safety_invariants = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "-created_at")),
+            models.Index(fields=("chain_pass", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7B-DryRun[gate={self.gate_id} pass={self.chain_pass}]"
+        )
+
+
+class RazorpayControlledPilotGateRollbackDryRunRecord(models.Model):
+    """Phase 7B rollback dry-run record. Rehearses the synthetic gate-
+    state revert path that a future Phase 7C execution would need.
+    Phase 7B has no real artefact to revert; this record is purely
+    declarative. Never calls a provider; never flips an env flag.
+    """
+
+    class DryRunStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PASSED = "passed", "Passed"
+        FAILED = "failed", "Failed"
+
+    gate = models.ForeignKey(
+        RazorpayControlledPilotExecutionGate,
+        on_delete=models.CASCADE,
+        related_name="rollback_dry_run_records",
+    )
+    verified_at = models.DateTimeField(default=timezone.now, db_index=True)
+    dry_run_status = models.CharField(
+        max_length=16,
+        choices=DryRunStatus.choices,
+        default=DryRunStatus.PENDING,
+        db_index=True,
+    )
+    rehearsal_steps = models.JSONField(default=list, blank=True)
+    env_flag_snapshot = models.JSONField(default=dict, blank=True)
+    evaluated_safety_invariants = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "-created_at")),
+            models.Index(fields=("dry_run_status", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7B-RollbackDryRun[gate={self.gate_id} "
+            f"status={self.dry_run_status}]"
         )

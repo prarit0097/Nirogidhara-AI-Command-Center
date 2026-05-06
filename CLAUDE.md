@@ -7,7 +7,7 @@
 
 ## 0. Project context (60-second read)
 
-**Phase 6T status update:** Phase 6T Final Phase 6 Audit + Lock / Controlled Pilot Execution Decision Gate is complete. It is audit-lock-only and CLI-only for review state changes, with `RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED=false` by default. Verification baseline is **1495 backend tests + 62 frontend tests**, with `makemigrations --check`, `manage.py check`, frontend lint, frontend tests, and frontend build green. Next planned work is **Phase 7A only after explicit Director approval**; no live controlled pilot is implemented.
+**Phase 7B status update:** Phase 7B Controlled Pilot Execution Gate (gate-only) is complete. It is gate-only and CLI-only for review state changes, with `PHASE7_CONTROLLED_PILOT_GATE_ENABLED=false` by default. The gate prepares / dry-runs / rollback-dry-runs / approves a `RazorpayControlledPilotExecutionGate` row from a locked Phase 6T audit lock; it never executes a pilot, never calls Razorpay / Meta Cloud / Delhivery / Vapi, never sends or queues WhatsApp, never creates a shipment / AWB, never mutates `Order` / `Payment` / `Shipment` / `Customer` / `Lead`, never validates the live `RAZORPAY_KEY_ID`, never edits `.env.production`. Verification baseline is **1540 backend tests + 64 frontend tests**, with `makemigrations --check`, `manage.py check`, frontend lint, frontend tests, and frontend build green. Approval flips status to `approved_for_future_phase7c_execution_review` only — Phase 7C / live execution remains **not approved**.
 
 Full-stack AI Business Operating System for Nirogidhara Private Limited (Ayurvedic medicine D2C). React 18 + Vite + TS frontend talks to Django 5 + DRF backend. Director: Prarit Sidana — final authority for high-risk decisions. **Current strategic blueprint:** [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) (Master Blueprint v2.0 — supersedes the v1.0 PDF, which is now historical reference only).
 
@@ -618,13 +618,13 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
-python -m pytest -q                    # 1495 tests today
+python -m pytest -q                    # 1540 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                            # http://localhost:8080
-npm test                               # 62 tests today
+npm test                               # 64 tests today
 npm run lint                           # 0 errors expected
 npm run build                          # production build
 

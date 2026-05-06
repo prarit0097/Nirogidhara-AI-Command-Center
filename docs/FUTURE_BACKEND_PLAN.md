@@ -42,6 +42,39 @@ controlled pilot execution would need). Do **not** enable any
 sandbox or readiness or pilot-plan env flag in production until
 Phase 6T implementation lands and passes its own acceptance criteria.
 
+**Phase 7B Controlled Pilot Execution Gate is FULL PASS
+(gate-only, CLI-only review state changes).** New
+`RazorpayControlledPilotExecutionGate` +
+`RazorpayControlledPilotGateDryRunRecord` +
+`RazorpayControlledPilotGateRollbackDryRunRecord` models + migration
+`payments.0011_phase7b_controlled_pilot_gate`, service module + 9
+management commands (inspect / preview / prepare / dry-run /
+rollback-dry-run / approve / reject / archive / list — **no
+`execute_*` command exists**) + 6 read-only admin/auth-protected GET
+endpoints + `/saas-admin` read-only section + 13 audit kinds (each ≤
+64 chars) + new env flag `PHASE7_CONTROLLED_PILOT_GATE_ENABLED`
+(default `False`). **There is no POST API endpoint that prepares,
+dry-runs, rollback-dry-runs, approves, rejects, archives, or executes
+a gate** — review state changes are exclusively CLI. Approve requires
+non-empty manual review reason AND `dry_run_passed=true` AND
+`rollback_dry_run_passed=true`. Phase 7B never calls Razorpay / Meta
+Cloud / Delhivery / Vapi, never sends or queues WhatsApp, never
+creates a shipment / AWB, never mutates real `Order` / `Payment` /
+`Shipment` / `Customer` / `Lead`, never validates the live
+`RAZORPAY_KEY_ID` (provider-execution key validation is deferred to
+Phase 7C+), never edits `.env.production`. Approval flips status to
+`approved_for_future_phase7c_execution_review` only — **Phase 7C /
+live execution remains not approved**. Tests assert all provider
+clients (`razorpay_client`, `whatsapp.services`, `vapi_client`,
+`delhivery_client`) `assert_not_called` across the full lifecycle and
+no `Order` / `Payment` / `Shipment` / `Customer` / `Lead` /
+`WhatsAppMessage` / `WhatsAppLifecycleEvent` row is created or
+mutated. **Next backend phase: Phase 7C — Future Controlled Pilot
+Execution (NOT approved, NOT designed in this turn).** Phase 7C
+requires a fresh, dated, written Director approval naming a specific
+Phase 7B gate id; Phase 7B does not preempt or imply Phase 7C
+approval.
+
 **Phase 6T Final Phase 6 Audit + Lock is FULL PASS
 (audit-lock-only, CLI-only review state changes).** New
 `RazorpayPhase6FinalAuditLock` model + migration

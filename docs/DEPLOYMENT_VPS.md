@@ -1156,6 +1156,54 @@ Expected: `mcp_enabled=false`, `mcp_read_only_mode=true`,
 Re-run after every Docker recreate so the env is read fresh from
 `.env.production`.
 
+## 8.87 Phase 7B production posture - Razorpay Controlled Pilot Execution Gate (gate-only, CLI-only review state changes)
+
+Phase 7B is **gate-only** and does not approve live execution.
+The service writes to `RazorpayControlledPilotExecutionGate` +
+`RazorpayControlledPilotGateDryRunRecord` +
+`RazorpayControlledPilotGateRollbackDryRunRecord` only - it NEVER
+calls Razorpay / Meta Cloud / Delhivery / Vapi, NEVER sends or queues
+a WhatsApp message, NEVER creates a shipment / AWB, NEVER mutates real
+`Order` / `Payment` / `Customer` / `Lead`. Phase 7B does **not**
+validate the live `RAZORPAY_KEY_ID`; provider-execution key validation
+is deferred to Phase 7C+. **There is no API endpoint or frontend
+button that dispatches Phase 7B review state changes, and there is no
+`execute_*` command anywhere in the Phase 7B surface.**
+
+Required posture in `.env.production`:
+
+```dotenv
+# Phase 7B Controlled Pilot Execution Gate - keep false on production.
+PHASE7_CONTROLLED_PILOT_GATE_ENABLED=false
+```
+
+Verify dormant state after every deploy:
+
+```bash
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_controlled_pilot_gate_readiness --json
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production \
+    exec backend python manage.py inspect_razorpay_controlled_pilot_gates --limit 25 --json
+```
+
+Expected: `phase=7B`, `status=controlled_pilot_gate_only`,
+`phase7ControlledPilotGateEnabled=false`,
+`phase7BMakesProviderCall=false`,
+`phase7BSendsOrQueuesWhatsApp=false`,
+`phase7BCreatesShipmentOrAwb=false`,
+`phase7BMutatesBusinessRow=false`, `phase7BCallsRazorpay=false`,
+`phase7BValidatesLiveRazorpayKey=false`,
+`frontendCanExecute=false`, `apiEndpointCanExecute=false`,
+`apiEndpointCanApprove=false`, `executionPath="cli_only_review"`,
+`maxPilotOrders=1`, `maxSafeAmountPaise=100`. Counters
+(`controlledPilotExecutionAllowedInPhase7B`, `providerCallAttempted`,
+`realOrderMutationWasMade`, `realPaymentMutationWasMade`,
+`shipmentCreated`, `awbCreated`, `whatsAppMessageCreated`,
+`whatsAppMessageQueued`, `customerNotificationSent`,
+`metaCloudCallAttempted`, `delhiveryCallAttempted`,
+`razorpayCallAttempted`) all zero. **Phase 7C / live execution is
+not approved.**
+
 ## 8.85 Phase 6T production posture - Razorpay final Phase 6 audit lock (audit-lock-only, CLI-only review state changes)
 
 Phase 6T is **audit-lock-only** and does not approve live execution.

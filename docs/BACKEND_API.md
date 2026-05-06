@@ -236,6 +236,32 @@ Every response preserves `business_mutation_was_made=false`,
 `full_pii_exposed=false`. Production webhook secret is **never** consumed
 by this handler.
 
+## Phase 7B - Controlled Pilot Execution Gate (gate-only, CLI-only review state changes)
+
+Read-only HTTP layer over the Phase 7B controlled pilot gate. Review state
+changes are deliberately CLI-only; there is no POST prepare / dry-run /
+rollback-dry-run / approve / reject / archive endpoint and **no execute_*
+endpoint**.
+
+| Method | Endpoint | Auth | Returns |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-gate-readiness/` | admin/staff | Phase 7B readiness, `PHASE7_CONTROLLED_PILOT_GATE_ENABLED` flag state, gate counters, Phase 6T locked-record count, gate contract, internal-staff cohort checklist, kill-switch requirements, approval requirements, rollback rehearsal steps, abort criteria, env posture, forbidden actions, blockers/warnings, `safeToStartPhase7CExecutionReviewFlow`, `nextAction`. |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-gates/?limit=N` | admin/staff | Sanitized recent `RazorpayControlledPilotExecutionGate` rows + counts + locked safety booleans (`controlledPilotExecutionAllowedInPhase7B=false`, `liveExecutionAllowedInPhase7B=false`, `providerCallAllowedInPhase7B=false`, etc). |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-gates/<id>/` | admin/staff | Sanitized detail for one gate row. No raw secret, no raw signature, no full phone/email/address, no provider response. |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-gate-preview/?phase6t_lock_id=<PHASE6T_LOCK_ID>` | admin/staff | Read-only preview of Phase 7B eligibility from a locked Phase 6T audit lock. Never creates rows. |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-gate-dry-runs/<gate_id>/` | admin/staff | List of dry-run records for a Phase 7B gate. Read-only. |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-gate-rollback-dry-runs/<gate_id>/` | admin/staff | List of rollback-dry-run rehearsal records for a Phase 7B gate. Read-only. |
+
+POST/PATCH/PUT/DELETE on every Phase 7B endpoint return 405. Phase 7B never
+calls Razorpay / Meta Cloud / Delhivery / Vapi, never sends or queues
+WhatsApp, never creates a shipment / AWB, never mutates real `Order` /
+`Payment` / `Shipment` / `Customer` / `Lead` / `WhatsAppMessage` /
+`WhatsAppLifecycleEvent` rows, never validates the live `RAZORPAY_KEY_ID`
+(provider-execution key validation is deferred to Phase 7C+), never edits
+`.env.production`. Approval flips status to
+`approved_for_future_phase7c_execution_review` only — Phase 7C / live
+execution is **not approved**.
+
 ## Phase 6T - Final Phase 6 Audit + Lock (audit-lock-only, CLI-only review state changes)
 
 Read-only HTTP layer over the Phase 6T final audit-lock selector. Review

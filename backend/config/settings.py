@@ -284,6 +284,21 @@ RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED = _razorpay_webhook_bool(
 RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED = _razorpay_webhook_bool(
     "RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED"
 )
+# ----- Phase 7B - Controlled Pilot Execution Gate (gate-only) -----
+# Default off. When true, the Phase 7B service may prepare and
+# transition `RazorpayControlledPilotExecutionGate` review records,
+# `RazorpayControlledPilotGateDryRunRecord` rows, and
+# `RazorpayControlledPilotGateRollbackDryRunRecord` rows derived from
+# locked Phase 6T final audit lock chains. The flag NEVER unlocks any
+# pilot execution, provider call, WhatsApp send / queue, Meta Cloud
+# call, Delhivery call, shipment / AWB creation, customer
+# notification, or business-row mutation; even when enabled, the
+# service writes only to its own three Phase 7B tables. Production
+# `.env.production` is not edited - this default IS the production
+# posture.
+PHASE7_CONTROLLED_PILOT_GATE_ENABLED = _razorpay_webhook_bool(
+    "PHASE7_CONTROLLED_PILOT_GATE_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

@@ -77,7 +77,7 @@ curl http://localhost:8000/api/leads/ | head -c 400
 ```bash
 # Backend
 cd backend
-python -m pytest -q                     # Phase 1 -> 6T inclusive (1495 tests)
+python -m pytest -q                     # Phase 1 -> 7B inclusive (1540 tests)
 python manage.py makemigrations --check --dry-run    # must report "No changes detected"
 python manage.py check                  # must report "0 issues"
 
@@ -342,6 +342,60 @@ Delhivery" / "Call Meta" / "Mark Paid" / "Capture Payment" / "Refund"
 "Run MCP Tool" / "Execute Workflow" / "Apply Order Update" / "Confirm
 Paid Order" / "Start Live Workflow" / "Approve Pilot Plan" / "Reject
 Pilot Plan" buttons exist anywhere.**
+
+## Phase 7B Razorpay controlled pilot execution gate diagnostics
+
+Phase 7B is **gate-only and CLI-only** for review state changes. The
+service writes to `RazorpayControlledPilotExecutionGate` +
+`RazorpayControlledPilotGateDryRunRecord` +
+`RazorpayControlledPilotGateRollbackDryRunRecord` only - it NEVER
+executes a pilot, NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi,
+NEVER sends or queues a WhatsApp message, NEVER creates a shipment /
+AWB, NEVER mutates real `Order` / `Payment` / `Customer` / `Lead`. Phase
+7B does **not** validate the live `RAZORPAY_KEY_ID`; provider-execution
+key validation belongs to Phase 7C+. **There is no API endpoint or
+frontend button that dispatches Phase 7B review state changes, and there
+is no `execute_*` command anywhere in the Phase 7B surface.**
+
+```bash
+cd backend
+# Read-only diagnostics first.
+python manage.py inspect_razorpay_controlled_pilot_gate_readiness --json
+python manage.py inspect_razorpay_controlled_pilot_gates --limit 25 --json
+python manage.py preview_razorpay_controlled_pilot_gate \
+    --phase6t-lock-id <PHASE_6T_LOCK_ID> --json
+
+# CLI-only review lifecycle. ``prepare`` / ``dry_run`` /
+# ``rollback_dry_run`` / ``approve`` / ``reject`` / ``archive`` write
+# to Phase 7B tables only. Approve requires --reason AND
+# dry_run_passed=true AND rollback_dry_run_passed=true.
+python manage.py prepare_razorpay_controlled_pilot_gate \
+    --phase6t-lock-id <PHASE_6T_LOCK_ID> --json
+python manage.py dry_run_razorpay_controlled_pilot_gate \
+    --gate-id <GATE_ID> --json
+python manage.py rollback_dry_run_razorpay_controlled_pilot_gate \
+    --gate-id <GATE_ID> --reason "Pre-execution rehearsal" --json
+python manage.py approve_razorpay_controlled_pilot_gate \
+    --gate-id <GATE_ID> \
+    --reason "Director sign-off for future Phase 7C review" --json
+python manage.py reject_razorpay_controlled_pilot_gate \
+    --gate-id <GATE_ID> --reason "Not yet" --json
+python manage.py archive_razorpay_controlled_pilot_gate \
+    --gate-id <GATE_ID> --reason "Close" --json
+```
+
+Expected posture: `phase=7B`, `status=controlled_pilot_gate_only`,
+`phase7ControlledPilotGateEnabled=false` on production,
+`phase7BMakesProviderCall=false`,
+`phase7BSendsOrQueuesWhatsApp=false`,
+`phase7BCreatesShipmentOrAwb=false`,
+`phase7BMutatesBusinessRow=false`, `phase7BCallsRazorpay=false`,
+`phase7BValidatesLiveRazorpayKey=false`, `frontendCanExecute=false`,
+`apiEndpointCanExecute=false`, `apiEndpointCanApprove=false`,
+`executionPath="cli_only_review"`, `maxPilotOrders=1`,
+`maxSafeAmountPaise=100`. `safeToStartPhase7CExecutionReviewFlow=true`
+only after at least one Phase 7B gate has been approved via CLI -
+**this status name is gate-readiness, not Phase 7C approval**.
 
 ## Phase 6T Razorpay final Phase 6 audit lock diagnostics
 

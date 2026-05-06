@@ -26,6 +26,8 @@ import type {
   SaasRazorpayPaymentDispatchPilotPlansResponse,
   SaasRazorpayPaymentDispatchReadiness,
   SaasRazorpayPaymentDispatchReadinessGatesResponse,
+  SaasRazorpayControlledPilotGateReadiness,
+  SaasRazorpayControlledPilotGatesResponse,
   SaasRazorpayPhase6FinalAuditLockReadiness,
   SaasRazorpayPhase6FinalAuditLocksResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
@@ -171,6 +173,14 @@ export default function SaasAdminPage() {
     razorpayPhase6FinalAuditLocks,
     setRazorpayPhase6FinalAuditLocks,
   ] = useState<SaasRazorpayPhase6FinalAuditLocksResponse | null>(null);
+  const [
+    razorpayControlledPilotGateReadiness,
+    setRazorpayControlledPilotGateReadiness,
+  ] = useState<SaasRazorpayControlledPilotGateReadiness | null>(null);
+  const [
+    razorpayControlledPilotGates,
+    setRazorpayControlledPilotGates,
+  ] = useState<SaasRazorpayControlledPilotGatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -206,6 +216,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayPaymentDispatchPilotPlans(25),
       api.getSaasRazorpayPhase6FinalAuditLockReadiness(),
       api.getSaasRazorpayPhase6FinalAuditLocks(25),
+      api.getSaasRazorpayControlledPilotGateReadiness(),
+      api.getSaasRazorpayControlledPilotGates(25),
     ])
       .then(
         ([
@@ -239,6 +251,8 @@ export default function SaasAdminPage() {
           ppPlans,
           p6tRead,
           p6tLocks,
+          p7bRead,
+          p7bGates,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -270,6 +284,8 @@ export default function SaasAdminPage() {
           setRazorpayPaymentDispatchPilotPlans(ppPlans);
           setRazorpayPhase6FinalAuditLockReadiness(p6tRead);
           setRazorpayPhase6FinalAuditLocks(p6tLocks);
+          setRazorpayControlledPilotGateReadiness(p7bRead);
+          setRazorpayControlledPilotGates(p7bGates);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -3482,6 +3498,275 @@ export default function SaasAdminPage() {
             Audit Record Only, Decision Gate Only, Future Controlled
             Pilot Contract, Audit Chain Attestation, No Live Execution,
             No Provider Call.
+          </div>
+        </section>
+      )}
+
+      {(razorpayControlledPilotGateReadiness ||
+        razorpayControlledPilotGates) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-controlled-pilot-execution-gate-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Razorpay Controlled Pilot Execution Gate
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 7B - <strong>Gate Only</strong>. Approving a gate
+                only marks it{" "}
+                <code>approved_for_future_phase7c_execution_review</code>{" "}
+                - it does <strong>not</strong> execute a pilot, send
+                WhatsApp, call Razorpay / Meta Cloud / Delhivery, create
+                a shipment / AWB, or mutate any real business row.
+                Review state changes are CLI-only; this page is
+                read-only. Phase 7C / live execution is{" "}
+                <strong>not approved</strong>.
+              </p>
+            </div>
+            {razorpayControlledPilotGateReadiness && (
+              <div data-testid="phase7b-safe-to-start-phase7c-review-badge">
+                <StatusPill
+                  tone={
+                    razorpayControlledPilotGateReadiness.safeToStartPhase7CExecutionReviewFlow
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayControlledPilotGateReadiness.safeToStartPhase7CExecutionReviewFlow
+                    ? "Future Phase 7C review reachable"
+                    : "Future Phase 7C review blocked"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayControlledPilotGateReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayControlledPilotGateReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpayControlledPilotGateReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={
+                  razorpayControlledPilotGateReadiness.latestCompletedPhase
+                }
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpayControlledPilotGateReadiness.nextPhase}
+              />
+              <KeyValue
+                label="Phase 7B gate flag"
+                value={
+                  razorpayControlledPilotGateReadiness.phase7ControlledPilotGateEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue label="Pilot execution in 7B" value="No" />
+              <KeyValue label="Live execution in 7B" value="No" />
+              <KeyValue label="Provider call in 7B" value="No" />
+              <KeyValue label="Business mutation in 7B" value="No" />
+              <KeyValue label="WhatsApp send in 7B" value="No" />
+              <KeyValue label="WhatsApp queue in 7B" value="No" />
+              <KeyValue label="Meta Cloud call in 7B" value="No" />
+              <KeyValue label="Delhivery call in 7B" value="No" />
+              <KeyValue label="Razorpay call in 7B" value="No" />
+              <KeyValue label="Shipment creation in 7B" value="No" />
+              <KeyValue label="AWB creation in 7B" value="No" />
+              <KeyValue label="Customer notification in 7B" value="No" />
+              <KeyValue
+                label="Razorpay key validation in 7B"
+                value="No (deferred to Phase 7C+)"
+              />
+              <KeyValue label="Frontend can execute" value="No" />
+              <KeyValue label="API can execute" value="No" />
+              <KeyValue
+                label="Phase 6T locks for 7B review"
+                value={String(
+                  razorpayControlledPilotGateReadiness.phase6TLockedForFutureControlledPilotReviewCount,
+                )}
+              />
+              <KeyValue
+                label="Pending review gates"
+                value={String(
+                  razorpayControlledPilotGateReadiness.controlledPilotGateCounts
+                    .pendingManualReview,
+                )}
+              />
+              <KeyValue
+                label="Approved for future 7C"
+                value={String(
+                  razorpayControlledPilotGateReadiness.controlledPilotGateCounts
+                    .approvedForFuturePhase7CExecutionReview,
+                )}
+              />
+              <KeyValue
+                label="Max pilot orders"
+                value={String(
+                  razorpayControlledPilotGateReadiness.maxPilotOrders,
+                )}
+              />
+              <KeyValue
+                label="Max amount (paise)"
+                value={String(
+                  razorpayControlledPilotGateReadiness.maxSafeAmountPaise,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayControlledPilotGateReadiness && (
+            <div className="px-6 pb-4 text-xs text-muted-foreground">
+              <strong>Next action:</strong>{" "}
+              {razorpayControlledPilotGateReadiness.nextAction}
+            </div>
+          )}
+
+          {razorpayControlledPilotGateReadiness && (
+            <div
+              className="px-6 pb-4"
+              data-testid="phase7b-env-posture"
+            >
+              <h4 className="text-sm font-semibold mb-2">
+                Environment posture
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {razorpayControlledPilotGateReadiness.envPosture}
+              </p>
+            </div>
+          )}
+
+          {razorpayControlledPilotGates && (
+            <div className="px-6 pb-4">
+              <h4 className="text-sm font-semibold mb-2">
+                Recent controlled pilot gates ({" "}
+                {razorpayControlledPilotGates.items.length})
+              </h4>
+              {razorpayControlledPilotGates.items.length === 0 ? (
+                <div
+                  className="rounded border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground"
+                  data-testid="phase7b-cli-only-reminder"
+                >
+                  No gates recorded yet. Run the Phase 7B CLI commands -{" "}
+                  <code>
+                    inspect_razorpay_controlled_pilot_gate_readiness
+                  </code>
+                  ,{" "}
+                  <code>preview_razorpay_controlled_pilot_gate</code>,{" "}
+                  <code>prepare_razorpay_controlled_pilot_gate</code>,{" "}
+                  <code>dry_run_razorpay_controlled_pilot_gate</code>,{" "}
+                  <code>
+                    rollback_dry_run_razorpay_controlled_pilot_gate
+                  </code>
+                  ,{" "}
+                  <code>approve_razorpay_controlled_pilot_gate</code>,{" "}
+                  <code>reject_razorpay_controlled_pilot_gate</code>,{" "}
+                  <code>archive_razorpay_controlled_pilot_gate</code>,{" "}
+                  <code>inspect_razorpay_controlled_pilot_gates</code>.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded border border-border">
+                  <table
+                    className="w-full text-xs"
+                    data-testid="phase7b-gates-table"
+                  >
+                    <thead className="bg-muted/40">
+                      <tr className="text-left">
+                        <th className="px-3 py-2">ID</th>
+                        <th className="px-3 py-2">Lock ID</th>
+                        <th className="px-3 py-2">Event</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Dry-run</th>
+                        <th className="px-3 py-2">Rollback dry-run</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {razorpayControlledPilotGates.items.map((row) => (
+                        <tr
+                          key={row.id}
+                          className="border-t border-border"
+                        >
+                          <td className="px-3 py-2 font-mono">{row.id}</td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.sourceFinalAuditLockId ?? "-"}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.eventName}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.status}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.dryRunPassed ? "passed" : "pending"}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {row.rollbackDryRunPassed
+                              ? "passed"
+                              : "pending"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {razorpayControlledPilotGateReadiness && (
+            <div className="px-6 pb-4">
+              <details className="text-xs">
+                <summary
+                  className="cursor-pointer font-semibold"
+                  data-testid="phase7b-forbidden-actions"
+                >
+                  Phase 7B forbidden actions ({" "}
+                  {
+                    razorpayControlledPilotGateReadiness.forbiddenActions
+                      .length
+                  }
+                  )
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {razorpayControlledPilotGateReadiness.forbiddenActions.map(
+                    (action) => (
+                      <span
+                        key={action}
+                        className="rounded border border-border bg-muted/30 px-2 py-0.5 font-mono"
+                      >
+                        {action}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </details>
+            </div>
+          )}
+
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7b-cli-only-banner"
+          >
+            <strong>CLI-only Review.</strong> Inspect Gate, Preview
+            Gate, Gate Only, Dry-run Only, Rollback Dry-run Only, No
+            Live Execution, No Provider Call, Future Phase 7C Review
+            Only. No "Start Pilot" / "Run Pilot" / "Execute Pilot" /
+            "Send WhatsApp" / "Queue WhatsApp" / "Notify Customer" /
+            "Create Shipment" / "Create AWB" / "Book Courier" /
+            "Dispatch Order" / "Mark Paid" / "Capture Payment" /
+            "Refund" / "Create Payment Link" / "Mutate Order" /
+            "Replay Event" / "Enable Mutation" / "Go Live" / "Run MCP
+            Tool" / "Approve Gate" / "Reject Gate" buttons exist on
+            this page.
           </div>
         </section>
       )}

@@ -5,7 +5,7 @@ direction.
 
 ## Status (current)
 
-**Phase 6T baseline.** `/saas-admin` now renders every Phase 6 read-only
+**Phase 7B baseline.** `/saas-admin` now renders every Phase 6 + Phase 7B read-only
 section through Phase 6T:
 
 - **Phase 6E** — SaaS overview + integration settings metadata (read-only).
@@ -71,7 +71,7 @@ Sidebar collapse layout | done — shared collapsed state
 Mobile responsiveness | baseline done — KPI stack, sidebar drawer, tables horizontal-scroll on small screens; per-page tuning continues
 Dashboard polish | baseline done — premium spacing, hierarchy, executive feel; iterate as needed
 Workflow visuals | UI-component diagrams in `WorkflowMap`
-Vitest tests | 62 tests today. Phase 6J/6K/6L/6M-0/6M/6N/6O/6P/6Q/6R/**6S/6T** assertions in `frontend/src/test/saas-admin.test.tsx` cover render of every new section, absence of forbidden buttons, no raw env-var names like `RAZORPAY_KEY_SECRET` / `RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED` in body text, no full Indian phone numbers, and no raw secrets in any rendered preview. Phase 6T specifically asserts the final audit section, audit-chain table, lock records table, Director signoff contract, kill-switch contract, rollback contract, safety invariants, CLI-only reminder, and no forbidden execution buttons.
+Vitest tests | 64 tests today. Phase 6J/6K/6L/6M-0/6M/6N/6O/6P/6Q/6R/6S/6T/**7B** assertions in `frontend/src/test/saas-admin.test.tsx` cover render of every new section, absence of forbidden buttons, no raw env-var names like `RAZORPAY_KEY_SECRET` / `RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED` in body text, no full Indian phone numbers, and no raw secrets in any rendered preview. Phase 6T specifically asserts the final audit section, audit-chain table, lock records table, Director signoff contract, kill-switch contract, rollback contract, safety invariants, CLI-only reminder, and no forbidden execution buttons. **Phase 7B** specifically asserts the read-only "Razorpay Controlled Pilot Execution Gate" section (`razorpay-controlled-pilot-execution-gate-section`), the safe-to-start-phase7c-review badge, the env-posture block, the forbidden-actions chip cloud, the CLI-only banner, and that no Start Pilot / Run Pilot / Execute Pilot / Send WhatsApp / Queue WhatsApp / Notify Customer / Create Shipment / Create AWB / Book Courier / Dispatch Order / Call Delhivery / Call Meta / Call Razorpay / Mark Paid / Capture Payment / Refund / Create Payment Link / Mutate Order / Approve Gate / Reject Gate buttons exist on the page.
 ESLint warnings | 8 pre-existing shadcn warnings (`react-refresh/only-export-components`); 0 errors
 Mock fallback in `api.ts` | done — pages never break when backend is offline
 

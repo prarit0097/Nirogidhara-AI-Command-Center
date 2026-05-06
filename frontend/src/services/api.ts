@@ -161,6 +161,8 @@ import type {
   SaasRazorpayPaymentDispatchPilotPlansResponse,
   SaasRazorpayPaymentDispatchReadiness,
   SaasRazorpayPaymentDispatchReadinessGatesResponse,
+  SaasRazorpayControlledPilotGateReadiness,
+  SaasRazorpayControlledPilotGatesResponse,
   SaasRazorpayPhase6FinalAuditLockReadiness,
   SaasRazorpayPhase6FinalAuditLocksResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
@@ -1540,6 +1542,21 @@ export const api = {
       }`,
       () =>
         M.SAAS_RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_READINESS as SaasRazorpayPhase6FinalAuditLockReadiness,
+    ),
+
+  // ---------- Phase 7B - Controlled Pilot Execution Gate (gate-only) ----------
+
+  getSaasRazorpayControlledPilotGateReadiness: () =>
+    safeFetch<SaasRazorpayControlledPilotGateReadiness>(
+      "/v1/saas/razorpay/controlled-pilot-gate-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_CONTROLLED_PILOT_GATE_READINESS as SaasRazorpayControlledPilotGateReadiness,
+    ),
+  getSaasRazorpayControlledPilotGates: (limit: number = 25) =>
+    safeFetch<SaasRazorpayControlledPilotGatesResponse>(
+      `/v1/saas/razorpay/controlled-pilot-gates/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_CONTROLLED_PILOT_GATES as SaasRazorpayControlledPilotGatesResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

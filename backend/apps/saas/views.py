@@ -103,7 +103,18 @@ from apps.payments.razorpay_phase6_final_audit_lock import (
     summarize_phase6t_final_audit_locks,
     _serialize_audit_lock as _serialize_phase6t_audit_lock,
 )
+from apps.payments.razorpay_controlled_pilot_gate import (
+    inspect_phase7b_controlled_pilot_gate_readiness,
+    preview_phase7b_controlled_pilot_gate,
+    serialize_phase7b_dry_run_record as _serialize_phase7b_dry_run_record,
+    serialize_phase7b_gate as _serialize_phase7b_gate,
+    serialize_phase7b_rollback_dry_run_record as _serialize_phase7b_rollback_dry_run_record,
+    summarize_phase7b_controlled_pilot_gates,
+)
 from apps.payments.models import (
+    RazorpayControlledPilotExecutionGate,
+    RazorpayControlledPilotGateDryRunRecord,
+    RazorpayControlledPilotGateRollbackDryRunRecord,
     RazorpayPaymentDispatchPilotPlan,
     RazorpayPaymentDispatchReadinessGate,
     RazorpayPaymentOrderWorkflowGate,
@@ -1834,6 +1845,187 @@ class RazorpayPhase6FinalAuditLockPreviewView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 7B - Controlled Pilot Execution Gate (gate-only, CLI-only review)
+# ---------------------------------------------------------------------------
+
+
+class RazorpayControlledPilotGateReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-gate-readiness/`` - Phase 7B.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER calls a provider; NEVER sends
+    WhatsApp; review state changes are CLI-only.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(inspect_phase7b_controlled_pilot_gate_readiness())
+
+
+class RazorpayControlledPilotGatesListView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-gates/`` - Phase 7B list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase7b_controlled_pilot_gates(limit=limit)
+        return Response(
+            {
+                "phase": "7B",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only_review",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "controlledPilotExecutionAllowedInPhase7B": False,
+                "liveExecutionAllowedInPhase7B": False,
+                "providerCallAllowedInPhase7B": False,
+                "businessMutationAllowedInPhase7B": False,
+                "customerNotificationAllowedInPhase7B": False,
+                "whatsAppSendAllowedInPhase7B": False,
+                "whatsAppQueueAllowedInPhase7B": False,
+                "courierBookingAllowedInPhase7B": False,
+                "shipmentCreationAllowedInPhase7B": False,
+                "awbCreationAllowedInPhase7B": False,
+                "realOrderMutationWasMade": False,
+                "realPaymentMutationWasMade": False,
+                "shipmentMutationWasMade": False,
+                "shipmentCreated": False,
+                "awbCreated": False,
+                "whatsAppMessageCreated": False,
+                "whatsAppMessageQueued": False,
+                "customerNotificationSent": False,
+                "metaCloudCallAttempted": False,
+                "delhiveryCallAttempted": False,
+                "razorpayCallAttempted": False,
+                "providerCallAttempted": False,
+            }
+        )
+
+
+class RazorpayControlledPilotGateDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-gates/<id>/`` - Phase 7B."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayControlledPilotExecutionGate.objects.filter(pk=pk).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7B controlled pilot execution gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase7b_gate(row))
+
+
+class RazorpayControlledPilotGatePreviewView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-gate-preview/?phase6t_lock_id=<ID>`` - Phase 7B.
+
+    Read-only preview from a locked Phase 6T audit lock; never creates
+    rows; never calls a provider.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            lock_id = int(request.query_params.get("phase6t_lock_id") or 0)
+        except (TypeError, ValueError):
+            lock_id = 0
+        if lock_id <= 0:
+            return Response(
+                {"detail": "phase6t_lock_id query param required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(preview_phase7b_controlled_pilot_gate(lock_id))
+
+
+class RazorpayControlledPilotGateDryRunsView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-gate-dry-runs/<gate_id>/`` - Phase 7B."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayControlledPilotExecutionGate.objects.filter(
+                pk=gate_id
+            ).exists()
+        )
+        if not gate_exists:
+            return Response(
+                {"detail": "Phase 7B controlled pilot gate not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayControlledPilotGateDryRunRecord.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "7B",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase7b_dry_run_record(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+            }
+        )
+
+
+class RazorpayControlledPilotGateRollbackDryRunsView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-gate-rollback-dry-runs/<gate_id>/`` - Phase 7B."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayControlledPilotExecutionGate.objects.filter(
+                pk=gate_id
+            ).exists()
+        )
+        if not gate_exists:
+            return Response(
+                {"detail": "Phase 7B controlled pilot gate not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayControlledPilotGateRollbackDryRunRecord.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "7B",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase7b_rollback_dry_run_record(r)
+                    for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+            }
+        )
+
+
 class RazorpaySandboxPaidStatusMutationReadinessView(APIView):
     """``GET /api/v1/saas/razorpay/sandbox-paid-status-mutation-readiness/`` — Phase 6P.
 
@@ -2029,4 +2221,10 @@ __all__ = (
     "RazorpayPhase6FinalAuditLocksListView",
     "RazorpayPhase6FinalAuditLockDetailView",
     "RazorpayPhase6FinalAuditLockPreviewView",
+    "RazorpayControlledPilotGateReadinessView",
+    "RazorpayControlledPilotGatesListView",
+    "RazorpayControlledPilotGateDetailView",
+    "RazorpayControlledPilotGatePreviewView",
+    "RazorpayControlledPilotGateDryRunsView",
+    "RazorpayControlledPilotGateRollbackDryRunsView",
 )

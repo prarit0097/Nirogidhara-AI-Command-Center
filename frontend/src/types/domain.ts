@@ -3695,6 +3695,183 @@ export interface SaasRazorpayPhase6FinalAuditLocksResponse {
   providerCallAttempted: false;
 }
 
+// ---------- Phase 7B - Controlled Pilot Execution Gate (gate-only) ----------
+
+export type SaasRazorpayControlledPilotGateStatus =
+  | "draft"
+  | "blocked"
+  | "pending_manual_review"
+  | "approved_for_future_phase7c_execution_review"
+  | "rejected"
+  | "archived";
+
+export interface SaasRazorpayControlledPilotGateDto {
+  id: number;
+  sourceFinalAuditLockId: number | null;
+  sourcePilotPlanId: number | null;
+  sourceReadinessGateId: number | null;
+  sourceWorkflowGateId: number | null;
+  sourceAttemptId: number | null;
+  sourceLedgerId: number | null;
+  sourceReviewId: number | null;
+  sourceEventRecordId: number | null;
+  sourceEventId: string;
+  eventName: string;
+  providerEnvironment: string;
+  amountPaise: number | null;
+  currency: string;
+  status: SaasRazorpayControlledPilotGateStatus;
+  phase6TLockVerified: boolean;
+  phase6SPilotPlanVerified: boolean;
+  phase6RReadinessVerified: boolean;
+  phase6QWorkflowGateVerified: boolean;
+  phase6PAttemptVerified: boolean;
+  phase6OReviewVerified: boolean;
+  phase6MEventVerified: boolean;
+  fullChainVerified: boolean;
+  dryRunPassed: boolean;
+  rollbackDryRunPassed: boolean;
+  manualReviewRequired: boolean;
+  internalOnly: boolean;
+  maxPilotOrders: number;
+  maxAmountPaise: number;
+  controlledPilotExecutionAllowedInPhase7B: false;
+  liveExecutionAllowedInPhase7B: false;
+  providerCallAllowedInPhase7B: false;
+  businessMutationAllowedInPhase7B: false;
+  customerNotificationAllowedInPhase7B: false;
+  whatsAppSendAllowedInPhase7B: false;
+  whatsAppQueueAllowedInPhase7B: false;
+  courierBookingAllowedInPhase7B: false;
+  shipmentCreationAllowedInPhase7B: false;
+  awbCreationAllowedInPhase7B: false;
+  frontendExecutionAllowedInPhase7B: false;
+  apiExecutionAllowedInPhase7B: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  shipmentMutationWasMade: false;
+  shipmentCreated: false;
+  awbCreated: false;
+  whatsAppMessageCreated: false;
+  whatsAppMessageQueued: false;
+  customerNotificationSent: false;
+  metaCloudCallAttempted: false;
+  delhiveryCallAttempted: false;
+  razorpayCallAttempted: false;
+  providerCallAttempted: false;
+  envFlagFlipDetected: false;
+  rawSecretExposed: false;
+  fullPiiExposed: false;
+  idempotencyKey: string;
+  blockers: string[];
+  warnings: string[];
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReason: string;
+  archivedByUsername: string;
+  archivedAt: string | null;
+  archiveReason: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasRazorpayControlledPilotGateCounts {
+  draft: number;
+  pendingManualReview: number;
+  approvedForFuturePhase7CExecutionReview: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+  controlledPilotExecutionAllowedInPhase7B: number;
+  providerCallAttempted: number;
+  realOrderMutationWasMade: number;
+  realPaymentMutationWasMade: number;
+  shipmentCreated: number;
+  awbCreated: number;
+  whatsAppMessageCreated: number;
+  whatsAppMessageQueued: number;
+  customerNotificationSent: number;
+  metaCloudCallAttempted: number;
+  delhiveryCallAttempted: number;
+  razorpayCallAttempted: number;
+}
+
+export interface SaasRazorpayControlledPilotGateReadiness {
+  phase: "7B";
+  status: "controlled_pilot_gate_only";
+  latestCompletedPhase: "6T";
+  nextPhase: "7C_not_approved";
+  phase7ControlledPilotGateEnabled: boolean;
+  phase7BMakesProviderCall: false;
+  phase7BSendsOrQueuesWhatsApp: false;
+  phase7BCreatesShipmentOrAwb: false;
+  phase7BMutatesBusinessRow: false;
+  phase7BSendsCustomerNotification: false;
+  phase7BCallsRazorpay: false;
+  phase7BValidatesLiveRazorpayKey: false;
+  phase7BRazorpayKeyDisplayPolicy: string;
+  phase6TLockedForFutureControlledPilotReviewCount: number;
+  controlledPilotGateCounts: SaasRazorpayControlledPilotGateCounts;
+  controlledPilotGateContract: Record<string, unknown>;
+  safetyInvariants: Record<string, unknown>;
+  internalStaffCohortChecklist: Array<{
+    key: string;
+    description: string;
+    automated: boolean;
+  }>;
+  killSwitchRequirements: Record<string, unknown>;
+  approvalRequirements: Record<string, unknown>;
+  rollbackRehearsalSteps: Array<Record<string, unknown>>;
+  abortCriteria: string[];
+  forbiddenActions: string[];
+  executionPath: "cli_only_review";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  maxSafeAmountPaise: number;
+  maxPilotOrders: number;
+  envPosture: string;
+  razorpayKeyValidationOwnedBy: string;
+  safeToStartPhase7CExecutionReviewFlow: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  recentControlledPilotGates: SaasRazorpayControlledPilotGateDto[];
+}
+
+export interface SaasRazorpayControlledPilotGatesResponse {
+  phase: "7B";
+  limit: number;
+  counts: SaasRazorpayControlledPilotGateCounts;
+  items: SaasRazorpayControlledPilotGateDto[];
+  executionPath: "cli_only_review";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  controlledPilotExecutionAllowedInPhase7B: false;
+  liveExecutionAllowedInPhase7B: false;
+  providerCallAllowedInPhase7B: false;
+  businessMutationAllowedInPhase7B: false;
+  customerNotificationAllowedInPhase7B: false;
+  whatsAppSendAllowedInPhase7B: false;
+  whatsAppQueueAllowedInPhase7B: false;
+  courierBookingAllowedInPhase7B: false;
+  shipmentCreationAllowedInPhase7B: false;
+  awbCreationAllowedInPhase7B: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  shipmentMutationWasMade: false;
+  shipmentCreated: false;
+  awbCreated: false;
+  whatsAppMessageCreated: false;
+  whatsAppMessageQueued: false;
+  customerNotificationSent: false;
+  metaCloudCallAttempted: false;
+  delhiveryCallAttempted: false;
+  razorpayCallAttempted: false;
+  providerCallAttempted: false;
+}
+
 // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------
 
 export interface SaasRazorpaySandboxPaidStatusEventMapping {

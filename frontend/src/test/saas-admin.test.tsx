@@ -1379,3 +1379,152 @@ describe("Phase 6T - Razorpay Final Audit + Lock", () => {
     expect(body).not.toMatch(/\+91\d{10}/);
   });
 });
+
+describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
+  it("exposes the Phase 7B API methods on the api client", async () => {
+    expect(
+      typeof api.getSaasRazorpayControlledPilotGateReadiness,
+    ).toBe("function");
+    expect(
+      typeof api.getSaasRazorpayControlledPilotGates,
+    ).toBe("function");
+
+    const readiness =
+      await api.getSaasRazorpayControlledPilotGateReadiness();
+    expect(readiness.phase).toBe("7B");
+    expect(readiness.status).toBe("controlled_pilot_gate_only");
+    expect(readiness.latestCompletedPhase).toBe("6T");
+    expect(readiness.nextPhase).toBe("7C_not_approved");
+    expect(readiness.phase7ControlledPilotGateEnabled).toBe(false);
+    expect(readiness.phase7BMakesProviderCall).toBe(false);
+    expect(readiness.phase7BSendsOrQueuesWhatsApp).toBe(false);
+    expect(readiness.phase7BCreatesShipmentOrAwb).toBe(false);
+    expect(readiness.phase7BMutatesBusinessRow).toBe(false);
+    expect(readiness.phase7BSendsCustomerNotification).toBe(false);
+    expect(readiness.phase7BCallsRazorpay).toBe(false);
+    expect(readiness.phase7BValidatesLiveRazorpayKey).toBe(false);
+    expect(readiness.frontendCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanExecute).toBe(false);
+    expect(readiness.apiEndpointCanApprove).toBe(false);
+    expect(readiness.executionPath).toBe("cli_only_review");
+    expect(readiness.maxSafeAmountPaise).toBe(100);
+    expect(readiness.maxPilotOrders).toBe(1);
+    expect(readiness.safeToStartPhase7CExecutionReviewFlow).toBe(false);
+    expect(readiness.forbiddenActions.length).toBeGreaterThan(20);
+
+    const gates = await api.getSaasRazorpayControlledPilotGates();
+    expect(gates.phase).toBe("7B");
+    expect(gates.frontendCanExecute).toBe(false);
+    expect(gates.apiEndpointCanExecute).toBe(false);
+    expect(gates.apiEndpointCanApprove).toBe(false);
+    expect(gates.controlledPilotExecutionAllowedInPhase7B).toBe(false);
+    expect(gates.liveExecutionAllowedInPhase7B).toBe(false);
+    expect(gates.providerCallAllowedInPhase7B).toBe(false);
+    expect(gates.businessMutationAllowedInPhase7B).toBe(false);
+    expect(gates.whatsAppSendAllowedInPhase7B).toBe(false);
+    expect(gates.whatsAppQueueAllowedInPhase7B).toBe(false);
+    expect(gates.courierBookingAllowedInPhase7B).toBe(false);
+    expect(gates.shipmentCreationAllowedInPhase7B).toBe(false);
+    expect(gates.awbCreationAllowedInPhase7B).toBe(false);
+    expect(gates.realOrderMutationWasMade).toBe(false);
+    expect(gates.realPaymentMutationWasMade).toBe(false);
+    expect(gates.shipmentCreated).toBe(false);
+    expect(gates.awbCreated).toBe(false);
+    expect(gates.whatsAppMessageCreated).toBe(false);
+    expect(gates.whatsAppMessageQueued).toBe(false);
+    expect(gates.metaCloudCallAttempted).toBe(false);
+    expect(gates.delhiveryCallAttempted).toBe(false);
+    expect(gates.razorpayCallAttempted).toBe(false);
+    expect(gates.providerCallAttempted).toBe(false);
+  });
+
+  it("renders the Phase 7B gate section with locked safety state", async () => {
+    render(<SaasAdminPage />);
+
+    expect(
+      await screen.findByText(
+        "Razorpay Controlled Pilot Execution Gate",
+      ),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByTestId(
+        "razorpay-controlled-pilot-execution-gate-section",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase7b-safe-to-start-phase7c-review-badge"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase7b-forbidden-actions"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase7b-cli-only-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("phase7b-env-posture"),
+    ).toBeInTheDocument();
+
+    expect(screen.getAllByText(/^No$/i).length).toBeGreaterThan(10);
+    expect(screen.getAllByText(/CLI-only Review/i).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getAllByText(/Gate Only/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/No Live Execution/i).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/No Provider Call/i).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Future Phase 7C Review Only/i).length,
+    ).toBeGreaterThan(0);
+
+    const forbiddenButtonPatterns = [
+      /^start pilot$/i,
+      /^run pilot$/i,
+      /^execute pilot$/i,
+      /^execute$/i,
+      /^start controlled pilot$/i,
+      /^start live workflow$/i,
+      /^execute workflow$/i,
+      /^send whatsapp$/i,
+      /^queue whatsapp$/i,
+      /^notify customer$/i,
+      /^create shipment$/i,
+      /^create awb$/i,
+      /^book courier$/i,
+      /^dispatch order$/i,
+      /^call delhivery$/i,
+      /^call meta$/i,
+      /^call razorpay$/i,
+      /^mark paid$/i,
+      /^capture payment$/i,
+      /^refund$/i,
+      /^create payment link$/i,
+      /^mutate order$/i,
+      /^apply payment$/i,
+      /^apply mutation$/i,
+      /^execute webhook$/i,
+      /^replay event$/i,
+      /^enable mutation$/i,
+      /^go live$/i,
+      /^run mcp tool$/i,
+      /^apply order update$/i,
+      /^confirm paid order$/i,
+      /^approve gate$/i,
+      /^reject gate$/i,
+    ];
+    for (const pattern of forbiddenButtonPatterns) {
+      expect(
+        screen.queryByRole("button", { name: pattern }),
+      ).not.toBeInTheDocument();
+    }
+
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("rzp_live_");
+    expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    expect(body).not.toContain("RAZORPAY_WEBHOOK_SECRET=");
+    expect(body).not.toMatch(/\+91\d{10}/);
+  });
+});
