@@ -83,7 +83,7 @@ python manage.py check                  # must report "0 issues"
 
 # Frontend
 cd ../frontend
-npm test                                # Phase 1 -> 6T vitest tests (62 tests)
+npm test                                # Phase 1 -> 7B vitest tests (64 tests)
 npm run lint                            # 0 errors, ~8 pre-existing shadcn warnings
 npm run build                           # Production build
 ```
