@@ -4296,6 +4296,126 @@ export const SAAS_RAZORPAY_CONTROLLED_PILOT_GATES: Record<
   providerCallAttempted: false,
 };
 
+// ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
+
+const PHASE_7D_ATTEMPT_COUNTS = {
+  draft: 0,
+  blocked: 0,
+  pendingDirectorSignoff: 0,
+  approvedForOneShotRun: 0,
+  executed: 0,
+  failed: 0,
+  rolledBack: 0,
+  archived: 0,
+  providerCallAttempted: 0,
+  businessMutationWasMade: 0,
+  paymentLinkCreated: 0,
+  paymentCaptured: 0,
+  paymentRefunded: 0,
+  whatsAppMessageCreated: 0,
+  whatsAppMessageQueued: 0,
+  shipmentCreated: 0,
+  awbCreated: 0,
+  metaCloudCallAttempted: 0,
+  delhiveryCallAttempted: 0,
+  customerNotificationSent: 0,
+};
+
+export const SAAS_RAZORPAY_CONTROLLED_PILOT_EXECUTION_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "7D",
+  status: "razorpay_test_execution_only",
+  latestCompletedPhase: "7B",
+  nextPhase: "7E_not_approved",
+  envFlags: {
+    lifecycleEnabled: false,
+    directorOneShotApproved: false,
+    allowRazorpayTestOrder: false,
+  },
+  envFlagSnapshot: {
+    PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED: false,
+    PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION: false,
+    PHASE7D_ALLOW_RAZORPAY_TEST_ORDER: false,
+    PHASE7_CONTROLLED_PILOT_GATE_ENABLED: false,
+    RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED: false,
+    WHATSAPP_AI_AUTO_REPLY_ENABLED: false,
+    WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED: false,
+    MCP_ENABLED: false,
+  },
+  razorpayKeyAdvisory: {
+    razorpayKeyIdPresent: false,
+    razorpayKeyIdMasked: "",
+    razorpayKeyMode: "missing",
+    isTestKey: false,
+  },
+  killSwitch: {
+    enabled: true,
+    model: "RuntimeKillSwitch",
+  },
+  approvedPhase7BGateCount: 0,
+  attemptCounts: PHASE_7D_ATTEMPT_COUNTS,
+  phase7DRazorpayTestExecutionEnabled: false,
+  phase7DDirectorApprovedOneShotExecution: false,
+  phase7DAllowRazorpayTestOrder: false,
+  phase7DSendsOrQueuesWhatsApp: false,
+  phase7DCreatesShipmentOrAwb: false,
+  phase7DMutatesBusinessRow: false,
+  phase7DCallsMetaCloud: false,
+  phase7DCallsDelhivery: false,
+  phase7DCreatesPaymentLink: false,
+  phase7DCapturesPayment: false,
+  phase7DRefundsPayment: false,
+  phase7DSendsCustomerNotification: false,
+  blockers: [],
+  warnings: [
+    "Phase 7D is the Razorpay-only one-shot internal TEST execution. It NEVER sends WhatsApp, NEVER queues an outbound, NEVER calls Meta Cloud / Delhivery / Vapi, NEVER creates a shipment / AWB, NEVER creates a payment link, NEVER captures, NEVER refunds, NEVER mutates real Order / Payment / Customer / Lead rows.",
+  ],
+  nextAction: "enable_phase7d_lifecycle_flag_for_review_only",
+  forbiddenActions: [
+    "send_whatsapp_template",
+    "queue_whatsapp_outbound",
+    "call_meta_cloud_api",
+    "call_delhivery_api",
+    "create_shipment",
+    "create_awb",
+    "create_payment_link",
+    "capture_razorpay_payment",
+    "refund_razorpay_payment",
+    "send_customer_notification",
+    "execute_via_frontend",
+    "execute_via_api_endpoint",
+    "approve_via_api_endpoint",
+    "reject_via_api_endpoint",
+    "edit_dotenv_production",
+  ],
+};
+
+export const SAAS_RAZORPAY_CONTROLLED_PILOT_EXECUTION_ATTEMPTS: Record<
+  string,
+  unknown
+> = {
+  phase: "7D",
+  limit: 25,
+  counts: PHASE_7D_ATTEMPT_COUNTS,
+  items: [],
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  controlledPilotExecutionAllowedInPhase7D: false,
+  phase7DSendsOrQueuesWhatsApp: false,
+  phase7DCallsMetaCloud: false,
+  phase7DCallsDelhivery: false,
+  phase7DCreatesShipmentOrAwb: false,
+  phase7DCreatesPaymentLink: false,
+  phase7DCapturesPayment: false,
+  phase7DRefundsPayment: false,
+  phase7DSendsCustomerNotification: false,
+  phase7DMutatesBusinessRow: false,
+};
+
 const PHASE_6P_EVENT_MAPPING_FIXTURES: Record<string, [string, string]> = {
   "payment_link.paid": ["paid", "advance_paid_candidate"],
   "payment.captured": ["captured", "payment_verified_candidate"],

@@ -28,6 +28,11 @@ from .views import (
     RazorpayPaymentDispatchPilotPlanPreviewView,
     RazorpayPaymentDispatchPilotPlanReadinessView,
     RazorpayPaymentDispatchPilotPlansListView,
+    RazorpayControlledPilotExecutionAttemptDetailView,
+    RazorpayControlledPilotExecutionAttemptsListView,
+    RazorpayControlledPilotExecutionPreviewView,
+    RazorpayControlledPilotExecutionReadinessView,
+    RazorpayControlledPilotExecutionRollbacksView,
     RazorpayControlledPilotGateDetailView,
     RazorpayControlledPilotGateDryRunsView,
     RazorpayControlledPilotGatePreviewView,
@@ -528,5 +533,32 @@ urlpatterns = [
         "razorpay/controlled-pilot-gate-rollback-dry-runs/<int:gate_id>/",
         RazorpayControlledPilotGateRollbackDryRunsView.as_view(),
         name="saas-razorpay-controlled-pilot-gate-rollback-dry-runs",
+    ),
+    # Phase 7D - Razorpay Controlled Pilot Execution (one-shot Razorpay
+    # TEST execution; CLI-only review/execution; read-only API).
+    path(
+        "razorpay/controlled-pilot-execution-readiness/",
+        RazorpayControlledPilotExecutionReadinessView.as_view(),
+        name="saas-razorpay-controlled-pilot-execution-readiness",
+    ),
+    path(
+        "razorpay/controlled-pilot-execution-attempts/",
+        RazorpayControlledPilotExecutionAttemptsListView.as_view(),
+        name="saas-razorpay-controlled-pilot-execution-attempts",
+    ),
+    path(
+        "razorpay/controlled-pilot-execution-attempts/<int:pk>/",
+        RazorpayControlledPilotExecutionAttemptDetailView.as_view(),
+        name="saas-razorpay-controlled-pilot-execution-attempt-detail",
+    ),
+    path(
+        "razorpay/controlled-pilot-execution-preview/",
+        RazorpayControlledPilotExecutionPreviewView.as_view(),
+        name="saas-razorpay-controlled-pilot-execution-preview",
+    ),
+    path(
+        "razorpay/controlled-pilot-execution-rollbacks/<int:attempt_id>/",
+        RazorpayControlledPilotExecutionRollbacksView.as_view(),
+        name="saas-razorpay-controlled-pilot-execution-rollbacks",
     ),
 ]

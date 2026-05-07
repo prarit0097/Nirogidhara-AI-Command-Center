@@ -3872,6 +3872,153 @@ export interface SaasRazorpayControlledPilotGatesResponse {
   providerCallAttempted: false;
 }
 
+// ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
+
+export type SaasRazorpayControlledPilotExecutionAttemptStatus =
+  | "draft"
+  | "blocked"
+  | "pending_director_signoff"
+  | "approved_for_one_shot_run"
+  | "executed"
+  | "failed"
+  | "rolled_back"
+  | "archived";
+
+export interface SaasRazorpayControlledPilotExecutionAttemptDto {
+  id: number;
+  status: SaasRazorpayControlledPilotExecutionAttemptStatus;
+  rollbackStatus: "pending" | "completed" | "failed";
+  sourcePhase7BGateId: number | null;
+  sourcePhase6TLockId: number | null;
+  sourcePhase6SPilotPlanId: number | null;
+  sourcePhase6RReadinessGateId: number | null;
+  sourcePhase6QWorkflowGateId: number | null;
+  sourcePhase6PAttemptId: number | null;
+  sourcePhase6OReviewId: number | null;
+  sourcePhase6MEventId: string;
+  providerEnvironment: "test";
+  amountPaise: number;
+  currency: "INR";
+  receipt: string;
+  idempotencyKey: string;
+  providerObjectId: string;
+  providerStatus: string;
+  providerCallAttempted: boolean;
+  businessMutationWasMade: false;
+  paymentLinkCreated: false;
+  paymentCaptured: false;
+  paymentRefunded: false;
+  whatsAppMessageCreated: false;
+  whatsAppMessageQueued: false;
+  whatsAppLifecycleEventCreated: false;
+  shipmentCreated: false;
+  awbCreated: false;
+  metaCloudCallAttempted: false;
+  delhiveryCallAttempted: false;
+  customerNotificationSent: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  customerMutationWasMade: false;
+  leadMutationWasMade: false;
+  discountOfferLogMutationWasMade: false;
+  mcpToolCalled: false;
+  rawSecretExposed: false;
+  fullPiiExposed: false;
+  blockers: string[];
+  warnings: string[];
+  createdAt: string;
+  updatedAt: string;
+  executedAt: string | null;
+  rolledBackAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasRazorpayControlledPilotExecutionAttemptCounts {
+  draft: number;
+  blocked: number;
+  pendingDirectorSignoff: number;
+  approvedForOneShotRun: number;
+  executed: number;
+  failed: number;
+  rolledBack: number;
+  archived: number;
+  providerCallAttempted: number;
+  businessMutationWasMade: number;
+  paymentLinkCreated: number;
+  paymentCaptured: number;
+  paymentRefunded: number;
+  whatsAppMessageCreated: number;
+  whatsAppMessageQueued: number;
+  shipmentCreated: number;
+  awbCreated: number;
+  metaCloudCallAttempted: number;
+  delhiveryCallAttempted: number;
+  customerNotificationSent: number;
+}
+
+export interface SaasRazorpayControlledPilotExecutionReadiness {
+  phase: "7D";
+  status: "razorpay_test_execution_only";
+  latestCompletedPhase: "7B";
+  nextPhase: "7E_not_approved";
+  envFlags: {
+    lifecycleEnabled: boolean;
+    directorOneShotApproved: boolean;
+    allowRazorpayTestOrder: boolean;
+  };
+  envFlagSnapshot: Record<string, boolean>;
+  razorpayKeyAdvisory: {
+    razorpayKeyIdPresent: boolean;
+    razorpayKeyIdMasked: string;
+    razorpayKeyMode: "test" | "live" | "missing" | "unknown";
+    isTestKey: boolean;
+  };
+  killSwitch: {
+    enabled: boolean;
+    model: string;
+    id?: number;
+  };
+  approvedPhase7BGateCount: number;
+  attemptCounts: SaasRazorpayControlledPilotExecutionAttemptCounts;
+  phase7DRazorpayTestExecutionEnabled: boolean;
+  phase7DDirectorApprovedOneShotExecution: boolean;
+  phase7DAllowRazorpayTestOrder: boolean;
+  phase7DSendsOrQueuesWhatsApp: false;
+  phase7DCreatesShipmentOrAwb: false;
+  phase7DMutatesBusinessRow: false;
+  phase7DCallsMetaCloud: false;
+  phase7DCallsDelhivery: false;
+  phase7DCreatesPaymentLink: false;
+  phase7DCapturesPayment: false;
+  phase7DRefundsPayment: false;
+  phase7DSendsCustomerNotification: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasRazorpayControlledPilotExecutionAttemptsResponse {
+  phase: "7D";
+  limit: number;
+  counts: SaasRazorpayControlledPilotExecutionAttemptCounts;
+  items: SaasRazorpayControlledPilotExecutionAttemptDto[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  controlledPilotExecutionAllowedInPhase7D: false;
+  phase7DSendsOrQueuesWhatsApp: false;
+  phase7DCallsMetaCloud: false;
+  phase7DCallsDelhivery: false;
+  phase7DCreatesShipmentOrAwb: false;
+  phase7DCreatesPaymentLink: false;
+  phase7DCapturesPayment: false;
+  phase7DRefundsPayment: false;
+  phase7DSendsCustomerNotification: false;
+  phase7DMutatesBusinessRow: false;
+}
+
 // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------
 
 export interface SaasRazorpaySandboxPaidStatusEventMapping {

@@ -333,6 +333,21 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.controlled_pilot_gate.blocked": "ban",
     "razorpay.controlled_pilot_gate.kill_switch_disabled_blocked": "shield-off",
     "razorpay.controlled_pilot_gate.invariant_violation_blocked": "shield-off",
+    # Phase 7D Razorpay Controlled Pilot Execution (one-shot Razorpay
+    # TEST execution; CLI-only review/execution; never WhatsApp /
+    # Delhivery / business mutation / customer notification).
+    "razorpay.controlled_pilot_execution.readiness_inspected": "eye",
+    "razorpay.controlled_pilot_execution.previewed": "eye",
+    "razorpay.controlled_pilot_execution.attempt_prepared": "file-plus",
+    "razorpay.controlled_pilot_execution.approved_for_one_shot": "check-circle",
+    "razorpay.controlled_pilot_execution.executed": "play-circle",
+    "razorpay.controlled_pilot_execution.failed": "shield-off",
+    "razorpay.controlled_pilot_execution.rolled_back": "rotate-ccw",
+    "razorpay.controlled_pilot_execution.archived": "archive",
+    "razorpay.controlled_pilot_execution.blocked": "ban",
+    "razorpay.controlled_pilot_execution.kill_switch_blocked": "shield-off",
+    "razorpay.controlled_pilot_execution.invariant_violation_blocked": "shield-off",
+    "razorpay.controlled_pilot_execution.recovery_reconciled": "rotate-ccw",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

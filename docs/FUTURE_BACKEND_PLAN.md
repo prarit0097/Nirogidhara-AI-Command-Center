@@ -42,6 +42,45 @@ controlled pilot execution would need). Do **not** enable any
 sandbox or readiness or pilot-plan env flag in production until
 Phase 6T implementation lands and passes its own acceptance criteria.
 
+**Phase 7D Razorpay Controlled Pilot one-shot internal TEST
+execution capability is shipped (CLI-only, never run).** New
+`RazorpayControlledPilotExecutionAttempt` +
+`RazorpayControlledPilotExecutionRollback` models + migration
+`payments.0012_phase7d_controlled_pilot_execution`, new service
+module `apps.payments.razorpay_controlled_pilot_execution`, 9
+strictly-CLI management commands (inspect / preview / prepare /
+approve / **execute** / rollback / archive / list / recover), 5
+read-only auth-protected GET DRF endpoints under
+`/api/v1/saas/razorpay/controlled-pilot-execution-{readiness,
+attempts,attempts/<id>,preview,rollbacks/<attempt_id>}/` (**no
+POST execute / approve / reject / archive endpoint**), 12 audit
+kinds (each ≤ 64 chars), three new env flags (all default
+`false`): `PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED`,
+`PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION`,
+`PHASE7D_ALLOW_RAZORPAY_TEST_ORDER`. The
+`execute_razorpay_controlled_pilot_test_order` command is
+implemented but refuses dispatch unless every flag is `true`, the
+Director sign-off names the exact Phase 7B gate id, the kill
+switch is enabled, `RAZORPAY_KEY_ID` starts with `rzp_test_`, the
+source chain (Phase 7B → 6T → 6S → 6R → 6Q → 6P → 6O → 6M) is
+green, and the locked synthetic payload (`amount=100 paise`,
+`currency=INR`) is intact. Single-shot:
+`provider_call_attempted=True` flips BEFORE the SDK call so audit
+trail survives any SDK exception. Phase 7D **never** sends
+WhatsApp, never queues an outbound, never calls Meta Cloud /
+Delhivery / Vapi, never creates a shipment / AWB, never creates a
+payment link, never captures, never refunds, never mutates real
+`Order` / `Payment` / `Shipment` / `DiscountOfferLog` /
+`Customer` / `Lead`, never sends a customer notification, never
+edits any `.env*` file (asserted with a static-file scan in
+tests). 41 new backend tests (every provider call mocked at
+`_create_order_via_sdk`) + 2 new frontend tests; 1581 backend +
+66 frontend, all green. **Next backend phase: Phase 7E (WhatsApp
+send) / 7F (Delhivery shipment) / live customer flow remain NOT
+approved.** Approval of a Phase 7D attempt is a status transition
+only — actual provider execution requires a separate, dated,
+written Director directive that names the exact attempt id.
+
 **Phase 7B Controlled Pilot Execution Gate is FULL PASS
 (gate-only, CLI-only review state changes).** New
 `RazorpayControlledPilotExecutionGate` +

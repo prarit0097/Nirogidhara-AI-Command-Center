@@ -111,8 +111,17 @@ from apps.payments.razorpay_controlled_pilot_gate import (
     serialize_phase7b_rollback_dry_run_record as _serialize_phase7b_rollback_dry_run_record,
     summarize_phase7b_controlled_pilot_gates,
 )
+from apps.payments.razorpay_controlled_pilot_execution import (
+    inspect_phase7d_razorpay_test_execution_readiness,
+    preview_phase7d_razorpay_test_execution_attempt,
+    serialize_phase7d_attempt as _serialize_phase7d_attempt,
+    serialize_phase7d_rollback as _serialize_phase7d_rollback,
+    summarize_phase7d_attempts,
+)
 from apps.payments.models import (
+    RazorpayControlledPilotExecutionAttempt,
     RazorpayControlledPilotExecutionGate,
+    RazorpayControlledPilotExecutionRollback,
     RazorpayControlledPilotGateDryRunRecord,
     RazorpayControlledPilotGateRollbackDryRunRecord,
     RazorpayPaymentDispatchPilotPlan,
@@ -2141,6 +2150,146 @@ class RazorpayBusinessMutationSandboxReadinessView(APIView):
         )
 
 
+class RazorpayControlledPilotExecutionReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-execution-readiness/`` - Phase 7D.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER calls Razorpay; NEVER sends
+    WhatsApp; NEVER mutates business tables; NEVER edits any
+    ``.env*`` file. Review and execution state changes are CLI-only.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(
+            inspect_phase7d_razorpay_test_execution_readiness()
+        )
+
+
+class RazorpayControlledPilotExecutionAttemptsListView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-execution-attempts/`` - Phase 7D list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase7d_attempts(limit=limit)
+        return Response(
+            {
+                "phase": "7D",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "controlledPilotExecutionAllowedInPhase7D": False,
+                "phase7DSendsOrQueuesWhatsApp": False,
+                "phase7DCallsMetaCloud": False,
+                "phase7DCallsDelhivery": False,
+                "phase7DCreatesShipmentOrAwb": False,
+                "phase7DCreatesPaymentLink": False,
+                "phase7DCapturesPayment": False,
+                "phase7DRefundsPayment": False,
+                "phase7DSendsCustomerNotification": False,
+                "phase7DMutatesBusinessRow": False,
+            }
+        )
+
+
+class RazorpayControlledPilotExecutionAttemptDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-execution-attempts/<id>/`` - Phase 7D."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayControlledPilotExecutionAttempt.objects.filter(pk=pk)
+            .first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7D controlled pilot execution attempt "
+                        "not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase7d_attempt(row))
+
+
+class RazorpayControlledPilotExecutionPreviewView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-execution-preview/?gate_id=<ID>`` - Phase 7D.
+
+    Read-only preview from an approved Phase 7B gate; never creates
+    rows; never calls Razorpay.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            gate_id = int(request.query_params.get("gate_id") or 0)
+        except (TypeError, ValueError):
+            gate_id = 0
+        if gate_id <= 0:
+            return Response(
+                {"detail": "gate_id query param required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            preview_phase7d_razorpay_test_execution_attempt(gate_id)
+        )
+
+
+class RazorpayControlledPilotExecutionRollbacksView(APIView):
+    """``GET /api/v1/saas/razorpay/controlled-pilot-execution-rollbacks/<attempt_id>/`` - Phase 7D."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, attempt_id: int):
+        attempt_exists = (
+            RazorpayControlledPilotExecutionAttempt.objects.filter(
+                pk=attempt_id
+            ).exists()
+        )
+        if not attempt_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7D controlled pilot execution attempt "
+                        "not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayControlledPilotExecutionRollback.objects.filter(
+                attempt_id=attempt_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "7D",
+                "attemptId": attempt_id,
+                "items": [
+                    _serialize_phase7d_rollback(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+            }
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -2227,4 +2376,9 @@ __all__ = (
     "RazorpayControlledPilotGatePreviewView",
     "RazorpayControlledPilotGateDryRunsView",
     "RazorpayControlledPilotGateRollbackDryRunsView",
+    "RazorpayControlledPilotExecutionReadinessView",
+    "RazorpayControlledPilotExecutionAttemptsListView",
+    "RazorpayControlledPilotExecutionAttemptDetailView",
+    "RazorpayControlledPilotExecutionPreviewView",
+    "RazorpayControlledPilotExecutionRollbacksView",
 )

@@ -299,6 +299,36 @@ RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED = _razorpay_webhook_bool(
 PHASE7_CONTROLLED_PILOT_GATE_ENABLED = _razorpay_webhook_bool(
     "PHASE7_CONTROLLED_PILOT_GATE_ENABLED"
 )
+# ----- Phase 7D - Razorpay-only One-Shot Internal TEST Execution -----
+# All three default OFF. Production `.env.production` is NEVER edited by
+# code; the operator runbook is the only path that can flip these to
+# True for an explicit one-shot execution window.
+#
+# `PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED` controls the Phase 7D
+# review lifecycle (prepare/approve/preview/rollback/archive). Even
+# when True, no provider call is issued; the dedicated
+# `execute_razorpay_controlled_pilot_test_order` CLI is the only path
+# that may issue one Razorpay TEST `Orders.create()` request, and only
+# after every gate (per-attempt env flag, Director sign-off referencing
+# the exact gate id, key starts with `rzp_test_`, kill switch enabled,
+# amount=100 paise, source-chain green) is satisfied at runtime.
+#
+# `PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION` and
+# `PHASE7D_ALLOW_RAZORPAY_TEST_ORDER` must remain False outside the
+# one-shot operator-controlled execution window. The Phase 7D service
+# NEVER edits any `.env*` file, NEVER imports `dotenv`, and NEVER
+# silently rewrites env state; it records env-flag presence snapshots
+# on every attempt row at start and at end and refuses execution if
+# the snapshot is wrong.
+PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED = _razorpay_webhook_bool(
+    "PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED"
+)
+PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION = _razorpay_webhook_bool(
+    "PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION"
+)
+PHASE7D_ALLOW_RAZORPAY_TEST_ORDER = _razorpay_webhook_bool(
+    "PHASE7D_ALLOW_RAZORPAY_TEST_ORDER"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

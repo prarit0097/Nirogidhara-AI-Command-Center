@@ -26,6 +26,8 @@ import type {
   SaasRazorpayPaymentDispatchPilotPlansResponse,
   SaasRazorpayPaymentDispatchReadiness,
   SaasRazorpayPaymentDispatchReadinessGatesResponse,
+  SaasRazorpayControlledPilotExecutionAttemptsResponse,
+  SaasRazorpayControlledPilotExecutionReadiness,
   SaasRazorpayControlledPilotGateReadiness,
   SaasRazorpayControlledPilotGatesResponse,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -181,6 +183,16 @@ export default function SaasAdminPage() {
     razorpayControlledPilotGates,
     setRazorpayControlledPilotGates,
   ] = useState<SaasRazorpayControlledPilotGatesResponse | null>(null);
+  const [
+    razorpayControlledPilotExecutionReadiness,
+    setRazorpayControlledPilotExecutionReadiness,
+  ] = useState<SaasRazorpayControlledPilotExecutionReadiness | null>(null);
+  const [
+    razorpayControlledPilotExecutionAttempts,
+    setRazorpayControlledPilotExecutionAttempts,
+  ] = useState<SaasRazorpayControlledPilotExecutionAttemptsResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -218,6 +230,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayPhase6FinalAuditLocks(25),
       api.getSaasRazorpayControlledPilotGateReadiness(),
       api.getSaasRazorpayControlledPilotGates(25),
+      api.getSaasRazorpayControlledPilotExecutionReadiness(),
+      api.getSaasRazorpayControlledPilotExecutionAttempts(25),
     ])
       .then(
         ([
@@ -253,6 +267,8 @@ export default function SaasAdminPage() {
           p6tLocks,
           p7bRead,
           p7bGates,
+          p7dRead,
+          p7dAttempts,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -286,6 +302,8 @@ export default function SaasAdminPage() {
           setRazorpayPhase6FinalAuditLocks(p6tLocks);
           setRazorpayControlledPilotGateReadiness(p7bRead);
           setRazorpayControlledPilotGates(p7bGates);
+          setRazorpayControlledPilotExecutionReadiness(p7dRead);
+          setRazorpayControlledPilotExecutionAttempts(p7dAttempts);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -3767,6 +3785,211 @@ export default function SaasAdminPage() {
             "Replay Event" / "Enable Mutation" / "Go Live" / "Run MCP
             Tool" / "Approve Gate" / "Reject Gate" buttons exist on
             this page.
+          </div>
+        </section>
+      )}
+
+      {(razorpayControlledPilotExecutionReadiness ||
+        razorpayControlledPilotExecutionAttempts) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-controlled-pilot-execution-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Razorpay Controlled Pilot Execution (One-shot TEST)
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 7D - <strong>One-shot Razorpay TEST execution
+                only</strong>. The execute path is{" "}
+                <strong>CLI-only</strong> and refuses unless every
+                Phase 7D env flag is true, the Director sign-off names
+                the exact Phase 7B gate id, the kill switch is
+                enabled, the Razorpay key starts with{" "}
+                <code>rzp_test_</code>, and the source chain (Phase 7B
+                -&gt; 6T -&gt; 6S -&gt; 6R -&gt; 6Q -&gt; 6P -&gt; 6O
+                -&gt; 6M) is green. Phase 7D{" "}
+                <strong>never</strong> sends WhatsApp, calls Meta
+                Cloud / Delhivery / Vapi, creates a shipment / AWB,
+                creates a payment link, captures, refunds, mutates a
+                real Order / Payment / Customer / Lead row, edits any{" "}
+                <code>.env*</code> file, or sends a customer
+                notification. Review state changes are CLI-only; this
+                page is read-only.
+              </p>
+            </div>
+            {razorpayControlledPilotExecutionReadiness && (
+              <div data-testid="phase7d-status-badge">
+                <StatusPill
+                  tone={
+                    razorpayControlledPilotExecutionReadiness.killSwitch
+                      .enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayControlledPilotExecutionReadiness.killSwitch
+                    .enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayControlledPilotExecutionReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayControlledPilotExecutionReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpayControlledPilotExecutionReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={
+                  razorpayControlledPilotExecutionReadiness.latestCompletedPhase
+                }
+              />
+              <KeyValue
+                label="Next phase"
+                value={
+                  razorpayControlledPilotExecutionReadiness.nextPhase
+                }
+              />
+              <KeyValue
+                label="Lifecycle flag"
+                value={
+                  razorpayControlledPilotExecutionReadiness.envFlags
+                    .lifecycleEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue
+                label="Director one-shot"
+                value={
+                  razorpayControlledPilotExecutionReadiness.envFlags
+                    .directorOneShotApproved
+                    ? "Approved"
+                    : "Not approved"
+                }
+              />
+              <KeyValue
+                label="Allow Razorpay test order"
+                value={
+                  razorpayControlledPilotExecutionReadiness.envFlags
+                    .allowRazorpayTestOrder
+                    ? "Allowed"
+                    : "Disallowed"
+                }
+              />
+              <KeyValue
+                label="Razorpay key mode"
+                value={
+                  razorpayControlledPilotExecutionReadiness
+                    .razorpayKeyAdvisory.razorpayKeyMode
+                }
+              />
+              <KeyValue
+                label="Razorpay key id"
+                value={
+                  razorpayControlledPilotExecutionReadiness
+                    .razorpayKeyAdvisory.razorpayKeyIdMasked || "-"
+                }
+              />
+              <KeyValue
+                label="Approved Phase 7B gates"
+                value={String(
+                  razorpayControlledPilotExecutionReadiness.approvedPhase7BGateCount,
+                )}
+              />
+              <KeyValue label="Provider call in 7D" value="No" />
+              <KeyValue label="Business mutation in 7D" value="No" />
+              <KeyValue label="WhatsApp send in 7D" value="No" />
+              <KeyValue label="WhatsApp queue in 7D" value="No" />
+              <KeyValue label="Meta Cloud call in 7D" value="No" />
+              <KeyValue label="Delhivery call in 7D" value="No" />
+              <KeyValue label="Shipment / AWB in 7D" value="No" />
+              <KeyValue label="Payment link in 7D" value="No" />
+              <KeyValue label="Capture / refund in 7D" value="No" />
+              <KeyValue
+                label="Customer notification in 7D"
+                value="No"
+              />
+            </div>
+          )}
+
+          {razorpayControlledPilotExecutionAttempts && (
+            <div className="border-t border-border px-6 py-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6 text-xs">
+              <KeyValue
+                label="Draft"
+                value={String(
+                  razorpayControlledPilotExecutionAttempts.counts.draft,
+                )}
+              />
+              <KeyValue
+                label="Pending sign-off"
+                value={String(
+                  razorpayControlledPilotExecutionAttempts.counts
+                    .pendingDirectorSignoff,
+                )}
+              />
+              <KeyValue
+                label="Approved one-shot"
+                value={String(
+                  razorpayControlledPilotExecutionAttempts.counts
+                    .approvedForOneShotRun,
+                )}
+              />
+              <KeyValue
+                label="Executed"
+                value={String(
+                  razorpayControlledPilotExecutionAttempts.counts
+                    .executed,
+                )}
+              />
+              <KeyValue
+                label="Failed"
+                value={String(
+                  razorpayControlledPilotExecutionAttempts.counts.failed,
+                )}
+              />
+              <KeyValue
+                label="Rolled back"
+                value={String(
+                  razorpayControlledPilotExecutionAttempts.counts
+                    .rolledBack,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayControlledPilotExecutionReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {razorpayControlledPilotExecutionReadiness.nextAction}
+              </code>
+            </div>
+          )}
+
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7d-cli-only-banner"
+          >
+            <strong>CLI-only Execution Path.</strong> No "Execute
+            Razorpay" / "Create Order" / "Approve Attempt" / "Reject
+            Attempt" / "Send WhatsApp" / "Notify Customer" / "Create
+            Shipment" / "Create AWB" / "Book Courier" / "Mark Paid" /
+            "Capture Payment" / "Refund" / "Apply Mutation" / "Mutate
+            Order" / "Create Payment Link" / "Replay Event" / "Enable
+            Mutation" / "Go Live" / "Run MCP Tool" / "Edit .env"
+            buttons exist on this page.
           </div>
         </section>
       )}

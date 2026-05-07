@@ -1008,12 +1008,23 @@ def test_no_phase7c_module_or_flag_added() -> None:
 
 
 def test_no_execute_management_command_exists() -> None:
+    """Phase 7B (gate-only) must not ship an execute command. Phase
+    7D ships its own scoped `execute_razorpay_controlled_pilot_test_order`
+    which is gated separately and is NOT a Phase 7B command - this
+    test is intentionally scoped to the Phase 7B name pattern only.
+    """
     from django.core.management import get_commands
 
     commands = get_commands()
     for cmd in commands:
         cmd_lower = cmd.lower()
-        if "controlled_pilot" in cmd_lower:
+        # Match only Phase 7B gate commands (suffix _pilot_gate or
+        # _pilot_gates). Phase 7D commands use _pilot_execution_ /
+        # _pilot_test_order_ which are not Phase 7B.
+        if (
+            "controlled_pilot_gate" in cmd_lower
+            or cmd_lower.endswith("controlled_pilot_gates")
+        ):
             assert "execute" not in cmd_lower, (
                 f"Forbidden Phase 7B execute command exists: {cmd}"
             )

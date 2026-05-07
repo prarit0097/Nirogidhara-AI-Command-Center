@@ -1527,4 +1527,77 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
     expect(body).not.toContain("RAZORPAY_WEBHOOK_SECRET=");
     expect(body).not.toMatch(/\+91\d{10}/);
   });
+
+  it(
+    "renders the Phase 7D Razorpay Controlled Pilot Execution section " +
+      "in read-only / CLI-only safe state",
+    async () => {
+      render(<SaasAdminPage />);
+
+      expect(
+        await screen.findByText(
+          "Razorpay Controlled Pilot Execution (One-shot TEST)",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(
+          "razorpay-controlled-pilot-execution-section",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7d-status-badge"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7d-cli-only-banner"),
+      ).toBeInTheDocument();
+
+      expect(
+        screen.getAllByText(/CLI-only Execution Path/i).length,
+      ).toBeGreaterThan(0);
+      // The Phase 7D section locks every business-effect column to "No".
+      expect(screen.getAllByText(/^No$/i).length).toBeGreaterThan(10);
+    },
+  );
+
+  it(
+    "the Phase 7D section never exposes a live execute / approve / send button",
+    async () => {
+      render(<SaasAdminPage />);
+      await screen.findByTestId(
+        "razorpay-controlled-pilot-execution-section",
+      );
+
+      const phase7dForbiddenButtons = [
+        /^execute razorpay$/i,
+        /^create order$/i,
+        /^approve attempt$/i,
+        /^reject attempt$/i,
+        /^archive attempt$/i,
+        /^run one-shot$/i,
+        /^start one-shot$/i,
+        /^send whatsapp$/i,
+        /^notify customer$/i,
+        /^create payment link$/i,
+        /^capture payment$/i,
+        /^refund$/i,
+        /^create shipment$/i,
+        /^create awb$/i,
+        /^book courier$/i,
+        /^mutate order$/i,
+        /^apply mutation$/i,
+        /^enable mutation$/i,
+        /^go live$/i,
+        /^edit \.env$/i,
+      ];
+      for (const pattern of phase7dForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      const body = document.body.textContent ?? "";
+      expect(body).not.toContain("rzp_live_");
+      expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+    },
+  );
 });

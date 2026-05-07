@@ -1652,3 +1652,283 @@ class RazorpayControlledPilotGateRollbackDryRunRecord(models.Model):
             f"Phase7B-RollbackDryRun[gate={self.gate_id} "
             f"status={self.dry_run_status}]"
         )
+
+
+class RazorpayControlledPilotExecutionAttempt(models.Model):
+    """Phase 7D - Razorpay-only one-shot internal TEST execution attempt.
+
+    A single controlled Razorpay TEST-mode ``Orders.create()`` execution
+    attempt linked to one approved Phase 7B
+    :class:`RazorpayControlledPilotExecutionGate` row. This model
+    records safe summaries only and **never** mutates real ``Order`` /
+    ``Payment`` / ``Shipment`` / ``DiscountOfferLog`` / ``Customer`` /
+    ``Lead`` rows. Phase 7D never sends WhatsApp, never calls Meta
+    Cloud / Delhivery / Vapi, never creates a shipment / AWB, never
+    creates a payment link, never captures, and never refunds.
+    Approving an attempt only flips ``status`` to
+    ``approved_for_one_shot_run``. Even after approval, the actual
+    ``execute_*`` CLI requires three Phase 7D env flags + non-empty
+    Director sign-off + RAZORPAY_KEY_ID starting with ``rzp_test_`` +
+    RuntimeKillSwitch enabled + source-chain green; only then ONE
+    Razorpay TEST ``Orders.create()`` is issued.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        BLOCKED = "blocked", "Blocked"
+        PENDING_DIRECTOR_SIGNOFF = (
+            "pending_director_signoff",
+            "Pending Director sign-off",
+        )
+        APPROVED_FOR_ONE_SHOT_RUN = (
+            "approved_for_one_shot_run",
+            "Approved for one-shot run",
+        )
+        EXECUTED = "executed", "Executed"
+        FAILED = "failed", "Failed"
+        ROLLED_BACK = "rolled_back", "Rolled back"
+        ARCHIVED = "archived", "Archived"
+
+    class RollbackStatus(models.TextChoices):
+        NOT_REQUIRED = "not_required", "Not required"
+        PENDING = "pending", "Pending"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    source_phase7b_gate = models.ForeignKey(
+        RazorpayControlledPilotExecutionGate,
+        on_delete=models.PROTECT,
+        related_name="phase7d_execution_attempts",
+    )
+    source_phase6t_lock = models.ForeignKey(
+        RazorpayPhase6FinalAuditLock,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7d_execution_attempts",
+    )
+    source_pilot_plan = models.ForeignKey(
+        RazorpayPaymentDispatchPilotPlan,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7d_execution_attempts",
+    )
+    source_readiness_gate = models.ForeignKey(
+        RazorpayPaymentDispatchReadinessGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7d_execution_attempts",
+    )
+    source_workflow_gate = models.ForeignKey(
+        RazorpayPaymentOrderWorkflowGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7d_execution_attempts",
+    )
+    source_sandbox_attempt = models.ForeignKey(
+        RazorpaySandboxPaidStatusMutationAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7d_execution_attempts",
+    )
+    source_sandbox_review = models.ForeignKey(
+        RazorpaySandboxStatusReview,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7d_execution_attempts",
+    )
+    source_event_record = models.ForeignKey(
+        RazorpayWebhookEvent,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7d_execution_attempts",
+    )
+
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    provider_environment = models.CharField(max_length=16, default="test")
+    amount_paise = models.PositiveIntegerField(default=100)
+    currency = models.CharField(max_length=8, default="INR")
+    receipt = models.CharField(max_length=128, blank=True, default="")
+
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    safe_request_summary = models.JSONField(default=dict, blank=True)
+    safe_response_summary = models.JSONField(default=dict, blank=True)
+    provider_object_id = models.CharField(
+        max_length=64, blank=True, default="", db_index=True
+    )
+    provider_status = models.CharField(max_length=64, blank=True, default="")
+
+    rollback_status = models.CharField(
+        max_length=16,
+        choices=RollbackStatus.choices,
+        default=RollbackStatus.PENDING,
+    )
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+    rollback_reason = models.TextField(blank=True, default="")
+
+    director_signoff_text = models.TextField(blank=True, default="")
+    kill_switch_snapshot = models.JSONField(default=dict, blank=True)
+    env_flag_snapshot_at_start = models.JSONField(default=dict, blank=True)
+    env_flag_snapshot_at_end = models.JSONField(default=dict, blank=True)
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    safety_invariants = models.JSONField(default=dict, blank=True)
+
+    # Locked-False safety booleans. Phase 7D never flips any of these
+    # to True. Asserted by ``assert_phase7d_no_business_mutation``.
+    business_mutation_was_made = models.BooleanField(default=False)
+    payment_link_created = models.BooleanField(default=False)
+    payment_captured = models.BooleanField(default=False)
+    payment_refunded = models.BooleanField(default=False)
+    customer_notification_sent = models.BooleanField(default=False)
+    whatsapp_message_created = models.BooleanField(
+        default=False, db_index=True
+    )
+    whatsapp_message_queued = models.BooleanField(
+        default=False, db_index=True
+    )
+    whatsapp_lifecycle_event_created = models.BooleanField(default=False)
+    meta_cloud_call_attempted = models.BooleanField(default=False)
+    delhivery_call_attempted = models.BooleanField(default=False)
+    shipment_created = models.BooleanField(default=False, db_index=True)
+    awb_created = models.BooleanField(default=False, db_index=True)
+    real_order_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_payment_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    customer_mutation_was_made = models.BooleanField(default=False)
+    lead_mutation_was_made = models.BooleanField(default=False)
+    discount_offer_log_mutation_was_made = models.BooleanField(default=False)
+    mcp_tool_called = models.BooleanField(default=False)
+    kill_switch_disabled_during_attempt = models.BooleanField(default=False)
+    env_flag_flipped_outside_window = models.BooleanField(default=False)
+    raw_secret_exposed = models.BooleanField(default=False)
+    full_pii_exposed = models.BooleanField(default=False)
+
+    # Allowed-True booleans (single-attempt only).
+    provider_call_attempted = models.BooleanField(default=False)
+    razorpay_call_attempted = models.BooleanField(default=False)
+    idempotency_lock_acquired = models.BooleanField(default=False)
+    rollback_recorded = models.BooleanField(default=False)
+    director_signoff_present = models.BooleanField(default=False)
+
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7d_execution_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7d_execution_reviews",
+    )
+    executed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7d_execution_executors",
+    )
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7d_execution_archives",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=200, blank=True, default="")
+    executed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(max_length=200, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(fields=("provider_object_id", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7D-Attempt[{self.status}] gate={self.source_phase7b_gate_id}"
+        )
+
+
+class RazorpayControlledPilotExecutionRollback(models.Model):
+    """Phase 7D rollback record per attempt.
+
+    Phase 7D rollback is **record-only**: Razorpay TEST orders cannot
+    be deleted. Rolling back records the contract (`rolled_back_at`,
+    rollback reason) and never re-issues a provider call. The Phase 7D
+    service NEVER edits any ``.env*`` file; restoration of the three
+    Phase 7D window flags to ``False`` is operator-controlled and
+    verified externally.
+    """
+
+    class DryRunStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        on_delete=models.CASCADE,
+        related_name="rollback_records",
+    )
+    verified_at = models.DateTimeField(default=timezone.now, db_index=True)
+    rollback_status = models.CharField(
+        max_length=16,
+        choices=DryRunStatus.choices,
+        default=DryRunStatus.PENDING,
+        db_index=True,
+    )
+    rollback_reason = models.TextField(blank=True, default="")
+    env_flag_presence_at_rollback = models.JSONField(default=dict, blank=True)
+    evaluated_safety_invariants = models.JSONField(default=dict, blank=True)
+    provider_object_id_recorded = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    recovery_notes = models.TextField(blank=True, default="")
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("attempt", "-created_at")),
+            models.Index(fields=("rollback_status", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7D-Rollback[attempt={self.attempt_id} "
+            f"status={self.rollback_status}]"
+        )
