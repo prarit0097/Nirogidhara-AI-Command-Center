@@ -32,6 +32,8 @@ import type {
   SaasRazorpayControlledPilotGatesResponse,
   SaasRazorpayCourierReadiness,
   SaasRazorpayCourierReadinessGatesResponse,
+  SaasRazorpayCourierExecutionAttemptsResponse,
+  SaasRazorpayCourierExecutionReadiness,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -217,6 +219,14 @@ export default function SaasAdminPage() {
     razorpayCourierReadinessGates,
     setRazorpayCourierReadinessGates,
   ] = useState<SaasRazorpayCourierReadinessGatesResponse | null>(null);
+  const [
+    razorpayCourierExecutionReadiness,
+    setRazorpayCourierExecutionReadiness,
+  ] = useState<SaasRazorpayCourierExecutionReadiness | null>(null);
+  const [
+    razorpayCourierExecutionAttempts,
+    setRazorpayCourierExecutionAttempts,
+  ] = useState<SaasRazorpayCourierExecutionAttemptsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -260,6 +270,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayWhatsAppInternalNotificationGates(25),
       api.getSaasRazorpayCourierReadiness(),
       api.getSaasRazorpayCourierReadinessGates(25),
+      api.getSaasRazorpayCourierExecutionReadiness(),
+      api.getSaasRazorpayCourierExecutionAttempts(25),
     ])
       .then(
         ([
@@ -301,6 +313,8 @@ export default function SaasAdminPage() {
           p7eGates,
           p7fRead,
           p7fGates,
+          p7gRead,
+          p7gAttempts,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -340,6 +354,8 @@ export default function SaasAdminPage() {
           setRazorpayWhatsAppInternalNotificationGates(p7eGates);
           setRazorpayCourierReadiness(p7fRead);
           setRazorpayCourierReadinessGates(p7fGates);
+          setRazorpayCourierExecutionReadiness(p7gRead);
+          setRazorpayCourierExecutionAttempts(p7gAttempts);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -4455,6 +4471,305 @@ export default function SaasAdminPage() {
             "Run MCP Tool" / "Edit .env" buttons exist on this page.
             Phase 7F approval is a status transition only - it does
             NOT enable any provider call.
+          </div>
+        </section>
+      )}
+
+      {(razorpayCourierExecutionReadiness ||
+        razorpayCourierExecutionAttempts) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-courier-execution-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Razorpay Delhivery Courier One-shot TEST/MOCK Execution
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 7G — <strong>One-shot TEST/MOCK execution gate
+                only</strong>. The execute path is{" "}
+                <strong>CLI-only</strong> and lives behind three locked-OFF
+                env flags (
+                <code>PHASE7G_COURIER_EXECUTION_ENABLED</code>,{" "}
+                <code>PHASE7G_DIRECTOR_APPROVED_ONE_SHOT_COURIER_EXECUTION</code>
+                , <code>PHASE7G_ALLOW_DELHIVERY_TEST_AWB</code>). Phase 7G
+                is the only currently approved design path in this
+                controlled Phase 7 chain that may later issue one Delhivery
+                TEST/MOCK API request after fresh Director approval. Phase
+                7G-Live (real customer courier execution) remains{" "}
+                <strong>not approved</strong>. Phase 7G{" "}
+                <strong>never</strong> creates a <code>Shipment</code> row,
+                never books a courier pickup separately, never generates /
+                prints a courier label, never sends or queues WhatsApp,
+                never calls Meta Cloud / Razorpay / Vapi, never sends a
+                customer notification, never mutates real{" "}
+                <code>Order</code> / <code>Payment</code> /{" "}
+                <code>Customer</code> / <code>Lead</code> /{" "}
+                <code>DiscountOfferLog</code> rows, never edits any{" "}
+                <code>.env*</code> file. Provider/AWB summary lives on the
+                attempt row only. Synthetic payload customer name is the
+                literal "Phase 7G TEST"; phone is last-4 only ("0000");
+                address line is "[redacted]". Review state changes are
+                CLI-only; this page is read-only.
+              </p>
+            </div>
+            {razorpayCourierExecutionReadiness && (
+              <div data-testid="phase7g-status-badge">
+                <StatusPill
+                  tone={
+                    razorpayCourierExecutionReadiness.killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayCourierExecutionReadiness.killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayCourierExecutionReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayCourierExecutionReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpayCourierExecutionReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={
+                  razorpayCourierExecutionReadiness.latestCompletedPhase
+                }
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpayCourierExecutionReadiness.nextPhase}
+              />
+              <KeyValue
+                label="Phase 7G lifecycle flag"
+                value={
+                  razorpayCourierExecutionReadiness.phase7GCourierExecutionEnabled
+                    ? "Enabled"
+                    : "Disabled (safe)"
+                }
+              />
+              <KeyValue
+                label="Director-approved one-shot"
+                value={
+                  razorpayCourierExecutionReadiness.phase7GDirectorApprovedOneShotCourierExecution
+                    ? "Approved"
+                    : "Not approved (safe)"
+                }
+              />
+              <KeyValue
+                label="Allow Delhivery TEST AWB"
+                value={
+                  razorpayCourierExecutionReadiness.phase7GAllowDelhiveryTestAwb
+                    ? "Allowed"
+                    : "Locked (safe)"
+                }
+              />
+              <KeyValue
+                label="Allowed Delhivery modes"
+                value={razorpayCourierExecutionReadiness.phase7GAllowedDelhiveryModes.join(
+                  ", ",
+                )}
+              />
+              <KeyValue
+                label="Live customer courier"
+                value="Not approved"
+              />
+              <KeyValue
+                label="Delhivery mode"
+                value={String(
+                  razorpayCourierExecutionReadiness.envFlagSnapshot
+                    .DELHIVERY_MODE,
+                )}
+              />
+              <KeyValue
+                label="Phase 7F approved gates"
+                value={String(
+                  razorpayCourierExecutionReadiness.approvedPhase7FGateCount,
+                )}
+              />
+              <KeyValue
+                label="Delhivery token (presence)"
+                value={
+                  razorpayCourierExecutionReadiness.delhiveryEnvPresence
+                    .DELHIVERY_API_TOKEN_present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Delhivery base URL (presence)"
+                value={
+                  razorpayCourierExecutionReadiness.delhiveryEnvPresence
+                    .DELHIVERY_API_BASE_URL_present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Delhivery pickup loc (presence)"
+                value={
+                  razorpayCourierExecutionReadiness.delhiveryEnvPresence
+                    .DELHIVERY_PICKUP_LOCATION_present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Delhivery return addr (presence)"
+                value={
+                  razorpayCourierExecutionReadiness.delhiveryEnvPresence
+                    .DELHIVERY_RETURN_ADDRESS_present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Safe to run execution"
+                value={
+                  razorpayCourierExecutionReadiness.safeToRunPhase7GExecution
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue label="Shipment row in 7G" value="No" />
+              <KeyValue label="Pickup booking in 7G" value="No" />
+              <KeyValue label="Label generation in 7G" value="No" />
+              <KeyValue
+                label="Customer notification in 7G"
+                value="No"
+              />
+              <KeyValue label="WhatsApp send in 7G" value="No" />
+              <KeyValue label="WhatsApp queue in 7G" value="No" />
+              <KeyValue label="Meta Cloud call in 7G" value="No" />
+              <KeyValue label="Razorpay call in 7G" value="No" />
+              <KeyValue label="Vapi call in 7G" value="No" />
+              <KeyValue label="Business mutation in 7G" value="No" />
+            </div>
+          )}
+
+          {razorpayCourierExecutionAttempts && (
+            <div className="border-t border-border px-6 py-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6 text-xs">
+              <KeyValue
+                label="Draft"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts.draft,
+                )}
+              />
+              <KeyValue
+                label="Pending sign-off"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts
+                    .pendingDirectorSignoff,
+                )}
+              />
+              <KeyValue
+                label="Approved (one-shot)"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts
+                    .approvedForOneShotRun,
+                )}
+              />
+              <KeyValue
+                label="Executed"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts.executed,
+                )}
+              />
+              <KeyValue
+                label="Failed"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts.failed,
+                )}
+              />
+              <KeyValue
+                label="Rolled back (recorded)"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts
+                    .rolledBackRecorded,
+                )}
+              />
+              <KeyValue
+                label="Rejected"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts.rejected,
+                )}
+              />
+              <KeyValue
+                label="Archived"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts.archived,
+                )}
+              />
+              <KeyValue
+                label="AWB created"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts.awbCreated,
+                )}
+              />
+              <KeyValue
+                label="Shipment created (must be 0)"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts.shipmentCreated,
+                )}
+              />
+              <KeyValue
+                label="Business mutation (must be 0)"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts
+                    .businessMutationWasMade,
+                )}
+              />
+              <KeyValue
+                label="Customer notification (must be 0)"
+                value={String(
+                  razorpayCourierExecutionAttempts.counts
+                    .customerNotificationSent,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayCourierExecutionReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {razorpayCourierExecutionReadiness.nextAction}
+              </code>
+            </div>
+          )}
+
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7g-cli-only-banner"
+          >
+            <strong>CLI-only Execute.</strong> No "Execute Courier" /
+            "Run One-shot" / "Create AWB" / "Create Shipment" / "Book
+            Pickup" / "Generate Label" / "Print Label" / "Cancel AWB" /
+            "Send WhatsApp" / "Queue WhatsApp" / "Notify Customer" /
+            "Approve Attempt" / "Reject Attempt" / "Rollback" / "Mark
+            Paid" / "Capture Payment" / "Refund" / "Apply Mutation" /
+            "Mutate Order" / "Replay Event" / "Enable Mutation" / "Go
+            Live" / "Run MCP Tool" / "Edit .env" buttons exist on this
+            page. Phase 7G execution lives only behind the locked-OFF{" "}
+            <code>execute_delhivery_courier_one_shot</code> CLI command
+            and requires three Phase 7G env flags + non-empty Director
+            sign-off mentioning the Phase 7F gate id + non-empty
+            operator name + DELHIVERY_MODE acknowledgement matching
+            <code>mock</code> or <code>test</code> + record-only
+            rollback acknowledgement + RuntimeKillSwitch enabled +
+            full source-chain green.
           </div>
         </section>
       )}

@@ -132,12 +132,21 @@ from apps.payments.razorpay_courier_readiness import (
     serialize_phase7f_gate as _serialize_phase7f_gate,
     summarize_phase7f_gates,
 )
+from apps.payments.razorpay_courier_execution import (
+    inspect_phase7g_courier_execution_readiness,
+    preview_phase7g_courier_execution_attempt,
+    serialize_phase7g_attempt as _serialize_phase7g_attempt,
+    serialize_phase7g_rollback as _serialize_phase7g_rollback,
+    summarize_phase7g_attempts,
+)
 from apps.payments.models import (
     RazorpayControlledPilotExecutionAttempt,
     RazorpayControlledPilotExecutionGate,
     RazorpayControlledPilotExecutionRollback,
     RazorpayControlledPilotGateDryRunRecord,
     RazorpayControlledPilotGateRollbackDryRunRecord,
+    RazorpayCourierExecutionAttempt,
+    RazorpayCourierExecutionRollback,
     RazorpayPaymentDispatchPilotPlan,
     RazorpayPaymentDispatchReadinessGate,
     RazorpayPaymentOrderWorkflowGate,
@@ -2586,6 +2595,149 @@ class RazorpayCourierReadinessDryRunsView(APIView):
         )
 
 
+class RazorpayCourierExecutionReadinessView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-readiness/`` - Phase 7G.
+
+    Read-only readiness composition for the One-shot Delhivery
+    TEST/MOCK courier execution gate. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER calls Delhivery; NEVER
+    creates a Shipment / WorkflowStep / RescueAttempt / AWB / pickup
+    / label; NEVER sends WhatsApp; NEVER mutates real business rows;
+    NEVER edits any ``.env*`` file.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(inspect_phase7g_courier_execution_readiness())
+
+
+class RazorpayCourierExecutionAttemptsListView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-attempts/`` - Phase 7G list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase7g_attempts(limit=limit)
+        return Response(
+            {
+                "phase": "7G",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase7GCallsDelhivery": False,
+                "phase7GCreatesShipmentRow": False,
+                "phase7GCreatesAwbRowOnAttemptOnly": True,
+                "phase7GBooksCourierPickupSeparately": False,
+                "phase7GGeneratesCourierLabel": False,
+                "phase7GSendsWhatsApp": False,
+                "phase7GQueuesWhatsApp": False,
+                "phase7GCallsMetaCloud": False,
+                "phase7GCallsRazorpay": False,
+                "phase7GCallsVapi": False,
+                "phase7GSendsCustomerNotification": False,
+                "phase7GMutatesBusinessRow": False,
+                "phase7GLiveCustomerCourierApproved": False,
+            }
+        )
+
+
+class RazorpayCourierExecutionAttemptDetailView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-attempts/<pk>/`` - Phase 7G."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayCourierExecutionAttempt.objects.filter(pk=pk).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7G courier execution attempt not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase7g_attempt(row))
+
+
+class RazorpayCourierExecutionPreviewView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-preview/?gate_id=<ID>`` - Phase 7G."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            phase7f_gate_id = int(
+                request.query_params.get("gate_id") or 0
+            )
+        except (TypeError, ValueError):
+            phase7f_gate_id = 0
+        if phase7f_gate_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "gate_id query param must be a positive "
+                        "integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            preview_phase7g_courier_execution_attempt(phase7f_gate_id)
+        )
+
+
+class RazorpayCourierExecutionRollbacksView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-rollbacks/<attempt_id>/`` - Phase 7G."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, attempt_id: int):
+        attempt_exists = (
+            RazorpayCourierExecutionAttempt.objects.filter(
+                pk=attempt_id
+            ).exists()
+        )
+        if not attempt_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7G courier execution attempt not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayCourierExecutionRollback.objects.filter(
+                attempt_id=attempt_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "7G",
+                "attemptId": attempt_id,
+                "items": [
+                    _serialize_phase7g_rollback(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+            }
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -2687,4 +2839,9 @@ __all__ = (
     "RazorpayCourierReadinessGateDetailView",
     "RazorpayCourierReadinessPreviewView",
     "RazorpayCourierReadinessDryRunsView",
+    "RazorpayCourierExecutionReadinessView",
+    "RazorpayCourierExecutionAttemptsListView",
+    "RazorpayCourierExecutionAttemptDetailView",
+    "RazorpayCourierExecutionPreviewView",
+    "RazorpayCourierExecutionRollbacksView",
 )

@@ -2980,7 +2980,106 @@ python manage.py inspect_delhivery_courier_readiness_gates \
 NOT** invoke any `apps.shipments.integrations.delhivery_client`
 helper, **do NOT** call `apps.shipments.services.create_shipment`,
 **do NOT** edit `.env.production`. Phase 7F is gate-only by
-design. Phase 7G (live courier execution) is the only path that
-will ever issue a Delhivery API call, and it requires a future
-"execute-window guard for Delhivery" extension on
-`apps.saas.utc_window` AND a fresh Director directive.
+design. Phase 7G (one-shot Delhivery TEST/MOCK execution) is the
+only currently approved design path in this controlled Phase 7
+chain that may later issue one Delhivery TEST/MOCK API request
+after fresh Director approval. Phase 7G-Live (real customer
+courier execution) remains NOT approved.
+
+### Phase 7G — One-shot Delhivery TEST/MOCK Courier Execution Gate
+
+Phase 7G ships the one-shot Delhivery TEST/MOCK courier execution
+capability (CLI-only execution path; **never run on the VPS**;
+**no `Shipment` row at execute time**). Provider/AWB summary
+lives on `RazorpayCourierExecutionAttempt.provider_object_id` +
+`safe_response_summary` only — the existing
+`apps.shipments.Shipment` model has a plain `customer` CharField
+that would surface synthetic Phase 7G rows in operator dashboards
+/ RTO boards / shipment listings, so Phase 7G deliberately writes
+NO Shipment row.
+
+The execute path lives behind three locked-OFF env flags
+(`PHASE7G_COURIER_EXECUTION_ENABLED=false`,
+`PHASE7G_DIRECTOR_APPROVED_ONE_SHOT_COURIER_EXECUTION=false`,
+`PHASE7G_ALLOW_DELHIVERY_TEST_AWB=false`). The
+`execute_delhivery_courier_one_shot` command is the only CLI
+command that may dispatch — it refuses unless every flag is
+`true`, the Director sign-off mentions the source Phase 7F gate
+id, the operator name is non-empty, the
+`--mode-acknowledgement` matches the live `DELHIVERY_MODE` ∈
+{`mock`, `test`} (live is refused), the operator acknowledges
+record-only rollback, the kill switch is enabled, the source
+chain Phase 7F → 7E → 7D → 7B → 6T is green, and no prior
+provider call has been recorded for this attempt (idempotency
+lock).
+
+```bash
+# 1. Read-only readiness
+python manage.py inspect_delhivery_courier_execution_readiness \
+    --json --no-audit
+
+# 2. Read-only preview from a Phase 7F approved gate (no row creation)
+python manage.py preview_delhivery_courier_execution_attempt \
+    --gate-id <PHASE7F_GATE_ID> --json
+
+# 3. Prepare a Phase 7G attempt (creates ONE attempt row per Phase 7F gate)
+python manage.py prepare_delhivery_courier_execution_attempt \
+    --gate-id <PHASE7F_GATE_ID> --json
+# Requires PHASE7G_COURIER_EXECUTION_ENABLED=true.
+# Idempotent on the source Phase 7F gate id.
+# Refuses if DELHIVERY_MODE=live, kill switch off, or any
+# WhatsApp / Phase 7D / Phase 6K execute flag is on.
+
+# 4. Approve the attempt (status -> approved_for_one_shot_courier_test_or_live_review)
+# - Reason MUST be non-empty.
+# - Refuses unless PHASE7G_COURIER_EXECUTION_ENABLED=true.
+# - Approval does NOT enable any provider call.
+python manage.py approve_delhivery_courier_execution_attempt \
+    --attempt-id <ID> \
+    --reason "Director Phase 7G approve" \
+    --json
+
+# 5. Reject (only valid from draft / pending_director_signoff /
+#    approved_for_one_shot_run / blocked)
+python manage.py reject_delhivery_courier_execution_attempt \
+    --attempt-id <ID> --reason "Director paused live execution" --json
+
+# 6. List attempts (read-only summary)
+python manage.py inspect_delhivery_courier_execution_attempts \
+    --limit 25 --json
+```
+
+**The `execute_delhivery_courier_one_shot` command is documented
+for completeness but MUST NOT be run during normal operations.**
+It requires the three Phase 7G env flags AND
+`--confirm-one-shot-courier-execution` AND `--director-signoff`
+mentioning the Phase 7F gate id AND `--operator-name` AND
+`--mode-acknowledgement` matching the live `DELHIVERY_MODE` ∈
+{`mock`, `test`} AND `--rollback-record-only-acknowledged`. It
+calls the Delhivery client exactly once via the lazy-import
+`_create_awb_via_dedicated_wrapper` and records the AWB / status
+/ tracking-url summary on the attempt row. It writes NO
+`Shipment` / `WorkflowStep` / `RescueAttempt` row, never books a
+courier pickup separately, never generates / prints a courier
+label, never sends or queues WhatsApp, never calls Meta Cloud /
+Razorpay / Vapi, never sends a customer notification, never
+mutates real `Order` / `Payment` / `Customer` / `Lead` /
+`DiscountOfferLog` rows.
+
+```bash
+# Record-only rollback (NEVER calls Delhivery cancel)
+python manage.py rollback_delhivery_courier_execution_attempt \
+    --attempt-id <ID> \
+    --reason "Director-directed rollback" \
+    --json
+```
+
+`rollback_status` flips to `recorded_only_no_provider_cancel`;
+the value `completed` is intentionally not in the enum.
+
+**Do NOT** invoke `apps.shipments.integrations.delhivery_client`
+from anywhere outside `_create_awb_via_dedicated_wrapper`, **do
+NOT** call `apps.shipments.services.create_shipment`, **do NOT**
+add a `--send-whatsapp` / `--book-pickup` / `--generate-label`
+flag, **do NOT** edit `.env.production`. Phase 7G-Live (real
+customer courier execution) remains NOT approved.

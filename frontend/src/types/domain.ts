@@ -4011,6 +4011,187 @@ export interface SaasRazorpayCourierReadinessGatesResponse {
   phase7FMutatesBusinessRow: false;
 }
 
+// ---------- Phase 7G - One-shot Delhivery TEST/MOCK Courier Execution Gate ----------
+
+export type SaasRazorpayCourierExecutionAttemptStatus =
+  | "draft"
+  | "pending_director_signoff"
+  | "approved_for_one_shot_courier_test_or_live_review"
+  | "executed"
+  | "failed"
+  | "rolled_back_recorded"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export type SaasRazorpayCourierExecutionRollbackStatus =
+  | "not_required"
+  | "pending"
+  | "recorded_only_no_provider_cancel"
+  | "cancellation_attempted_separately";
+
+export interface SaasRazorpayCourierExecutionAttemptDto {
+  id: number;
+  status: SaasRazorpayCourierExecutionAttemptStatus;
+  sourcePhase7FGateId: number | null;
+  sourcePhase7EGateId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  sourcePhase7BGateId: number | null;
+  sourcePhase6TLockId: number | null;
+  delhiveryModeAtEachStep: Record<string, string>;
+  delhiveryEnvTokenPresent: boolean;
+  delhiveryEnvBaseUrlPresent: boolean;
+  delhiveryEnvPickupLocationPresent: boolean;
+  delhiveryEnvReturnAddressPresent: boolean;
+  killSwitchSnapshotAtEachStep: Record<string, unknown>;
+  envFlagSnapshotAtEachStep: Record<string, unknown>;
+  safetyInvariantsSnapshot: Record<string, unknown>;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  syntheticOrderId: string;
+  syntheticPayloadSummary: Record<string, unknown>;
+  idempotencyKey: string;
+  idempotencyLockAcquired: boolean;
+  providerObjectId: string;
+  providerStatus: string;
+  safeRequestSummary: Record<string, unknown>;
+  safeResponseSummary: Record<string, unknown>;
+  // Allowed-True booleans (single-attempt only).
+  providerCallAttempted: boolean;
+  delhiveryCallAttempted: boolean;
+  awbCreated: boolean;
+  // Locked-False booleans (always False; surfaced for the section to render).
+  shipmentCreated: false;
+  businessMutationWasMade: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  realShipmentMutationWasMade: false;
+  customerNotificationSent: false;
+  recordedSignoffWindowValid: boolean | null;
+  recordedSignoffWindowStartUtc: string | null;
+  recordedSignoffWindowEndUtc: string | null;
+  directorSignoffPresent: boolean;
+  directorSignoffPresentBoolean: boolean;
+  operatorName: string;
+  confirmOneShotCourierExecution: boolean;
+  modeAcknowledgement: string;
+  rollbackRecordOnlyAcknowledged: boolean;
+  rollbackStatus: SaasRazorpayCourierExecutionRollbackStatus;
+  rolledBackAt: string | null;
+  rollbackReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  requestedByUsername: string;
+  reviewedByUsername: string;
+  executedByUsername: string;
+  rolledBackByUsername: string;
+  rejectedByUsername: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  executedAt: string | null;
+  failedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasRazorpayCourierExecutionAttemptCounts {
+  draft: number;
+  blocked: number;
+  pendingDirectorSignoff: number;
+  approvedForOneShotRun: number;
+  executed: number;
+  failed: number;
+  rolledBackRecorded: number;
+  rejected: number;
+  archived: number;
+  providerCallAttempted: number;
+  delhiveryCallAttempted: number;
+  awbCreated: number;
+  shipmentCreated: number;
+  businessMutationWasMade: number;
+  realOrderMutationWasMade: number;
+  realPaymentMutationWasMade: number;
+  realShipmentMutationWasMade: number;
+  customerNotificationSent: number;
+}
+
+export interface SaasRazorpayCourierExecutionReadiness {
+  phase: "7G";
+  status: "delhivery_test_or_mock_one_shot_courier_execution_only";
+  latestCompletedPhase: "7F";
+  nextPhase: "phase_7g_live_or_phase_7h_not_approved";
+  phase7GCourierExecutionEnabled: boolean;
+  phase7GDirectorApprovedOneShotCourierExecution: boolean;
+  phase7GAllowDelhiveryTestAwb: boolean;
+  phase7GLiveCustomerCourierApproved: false;
+  phase7GAllowedDelhiveryModes: string[];
+  delhiveryEnvPresence: {
+    DELHIVERY_API_TOKEN_present: boolean;
+    DELHIVERY_API_BASE_URL_present: boolean;
+    DELHIVERY_PICKUP_LOCATION_present: boolean;
+    DELHIVERY_RETURN_ADDRESS_present: boolean;
+  };
+  envFlagSnapshot: Record<string, boolean | string>;
+  killSwitch: {
+    enabled: boolean;
+    model: string;
+    id?: number;
+  };
+  approvedPhase7FGateCount: number;
+  attemptCounts: SaasRazorpayCourierExecutionAttemptCounts;
+  executionContract: Record<string, unknown>;
+  forbiddenActions: string[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase7GCallsDelhivery: false;
+  phase7GCreatesShipmentRow: false;
+  phase7GCreatesAwbRowOnAttemptOnly: true;
+  phase7GBooksCourierPickupSeparately: false;
+  phase7GGeneratesCourierLabel: false;
+  phase7GSendsWhatsApp: false;
+  phase7GQueuesWhatsApp: false;
+  phase7GCallsMetaCloud: false;
+  phase7GCallsRazorpay: false;
+  phase7GCallsVapi: false;
+  phase7GSendsCustomerNotification: false;
+  phase7GMutatesBusinessRow: false;
+  safeToRunPhase7GExecution: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  recentAttempts: SaasRazorpayCourierExecutionAttemptDto[];
+}
+
+export interface SaasRazorpayCourierExecutionAttemptsResponse {
+  phase: "7G";
+  limit: number;
+  counts: SaasRazorpayCourierExecutionAttemptCounts;
+  items: SaasRazorpayCourierExecutionAttemptDto[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase7GCallsDelhivery: false;
+  phase7GCreatesShipmentRow: false;
+  phase7GCreatesAwbRowOnAttemptOnly: true;
+  phase7GBooksCourierPickupSeparately: false;
+  phase7GGeneratesCourierLabel: false;
+  phase7GSendsWhatsApp: false;
+  phase7GQueuesWhatsApp: false;
+  phase7GCallsMetaCloud: false;
+  phase7GCallsRazorpay: false;
+  phase7GCallsVapi: false;
+  phase7GSendsCustomerNotification: false;
+  phase7GMutatesBusinessRow: false;
+  phase7GLiveCustomerCourierApproved: false;
+}
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 export type SaasRazorpayControlledPilotExecutionAttemptStatus =

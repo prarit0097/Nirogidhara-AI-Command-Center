@@ -383,6 +383,24 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.courier_readiness.blocked": "ban",
     "razorpay.courier_readiness.kill_switch_blocked": "shield-off",
     "razorpay.courier_readiness.invariant_violation": "shield-off",
+    # Phase 7G - One-shot Delhivery TEST/MOCK Courier Execution Gate
+    # (CLI-only execution path; never creates a Shipment; never books
+    # a pickup separately; never generates a label; never sends
+    # WhatsApp; never mutates real business rows; never edits any
+    # .env file).
+    "razorpay.courier_execution.readiness_inspected": "eye",
+    "razorpay.courier_execution.previewed": "eye",
+    "razorpay.courier_execution.attempt_prepared": "file-plus",
+    "razorpay.courier_execution.approved_for_one_shot": "check-circle",
+    "razorpay.courier_execution.rejected": "x-circle",
+    "razorpay.courier_execution.executed": "send",
+    "razorpay.courier_execution.failed": "shield-off",
+    "razorpay.courier_execution.rolled_back_recorded": "rotate-ccw",
+    "razorpay.courier_execution.blocked": "ban",
+    "razorpay.courier_execution.kill_switch_blocked": "shield-off",
+    "razorpay.courier_execution.invariant_violation": "shield-off",
+    "razorpay.courier_execution.delhivery_mode_blocked": "shield-off",
+    "razorpay.courier_execution.duplicate_blocked": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

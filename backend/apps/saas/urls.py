@@ -38,6 +38,11 @@ from .views import (
     RazorpayCourierReadinessGatesListView,
     RazorpayCourierReadinessPreviewView,
     RazorpayCourierReadinessReadinessView,
+    RazorpayCourierExecutionAttemptDetailView,
+    RazorpayCourierExecutionAttemptsListView,
+    RazorpayCourierExecutionPreviewView,
+    RazorpayCourierExecutionReadinessView,
+    RazorpayCourierExecutionRollbacksView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -624,5 +629,32 @@ urlpatterns = [
         "delhivery/courier-readiness-dry-runs/<int:gate_id>/",
         RazorpayCourierReadinessDryRunsView.as_view(),
         name="saas-delhivery-courier-readiness-dry-runs",
+    ),
+    # Phase 7G - One-shot Delhivery TEST/MOCK Courier Execution Gate
+    # (CLI-only execute path; read-only API).
+    path(
+        "delhivery/courier-execution-readiness/",
+        RazorpayCourierExecutionReadinessView.as_view(),
+        name="saas-delhivery-courier-execution-readiness",
+    ),
+    path(
+        "delhivery/courier-execution-attempts/",
+        RazorpayCourierExecutionAttemptsListView.as_view(),
+        name="saas-delhivery-courier-execution-attempts",
+    ),
+    path(
+        "delhivery/courier-execution-attempts/<int:pk>/",
+        RazorpayCourierExecutionAttemptDetailView.as_view(),
+        name="saas-delhivery-courier-execution-attempt-detail",
+    ),
+    path(
+        "delhivery/courier-execution-preview/",
+        RazorpayCourierExecutionPreviewView.as_view(),
+        name="saas-delhivery-courier-execution-preview",
+    ),
+    path(
+        "delhivery/courier-execution-rollbacks/<int:attempt_id>/",
+        RazorpayCourierExecutionRollbacksView.as_view(),
+        name="saas-delhivery-courier-execution-rollbacks",
     ),
 ]

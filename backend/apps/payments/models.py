@@ -2479,3 +2479,346 @@ class RazorpayCourierReadinessDryRunRecord(models.Model):
             f"Phase7F-CourierDryRun[gate={self.gate_id} "
             f"kind={self.kind} status={self.status}]"
         )
+
+
+class RazorpayCourierExecutionAttempt(models.Model):
+    """Phase 7G - One-shot Delhivery TEST/MOCK courier execution attempt.
+
+    Phase 7G is the only currently approved design path in this
+    controlled Phase 7 chain that may later issue one Delhivery
+    TEST/MOCK API request after fresh Director approval. Phase
+    7G-Live (real customer courier execution) remains NOT approved.
+
+    Phase 7G **does NOT create a `Shipment` row** at execute time —
+    the existing ``apps.shipments.Shipment`` model has a ``customer``
+    plain CharField that would surface a synthetic Phase 7G row in
+    operator dashboards / RTO boards. Provider / AWB summary lives
+    on this attempt row only. ``shipment_created``,
+    ``business_mutation_was_made``, and
+    ``real_shipment_mutation_was_made`` stay ``False`` permanently.
+
+    Phase 7G never sends WhatsApp, never queues an outbound, never
+    calls Meta Cloud / Razorpay / Vapi, never sends a customer
+    notification, never books a courier pickup, never generates a
+    courier label, never mutates real ``Order`` / ``Payment`` /
+    ``Customer`` / ``Lead`` / ``DiscountOfferLog`` rows, never
+    edits any ``.env*`` file.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_DIRECTOR_SIGNOFF = (
+            "pending_director_signoff",
+            "Pending Director sign-off",
+        )
+        APPROVED_FOR_ONE_SHOT_RUN = (
+            "approved_for_one_shot_courier_test_or_live_review",
+            "Approved for one-shot courier test/mock review",
+        )
+        EXECUTED = "executed", "Executed"
+        FAILED = "failed", "Failed"
+        ROLLED_BACK_RECORDED = (
+            "rolled_back_recorded",
+            "Rolled back (record-only)",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    class RollbackStatus(models.TextChoices):
+        NOT_REQUIRED = "not_required", "Not required"
+        PENDING = "pending", "Pending"
+        RECORDED_ONLY_NO_PROVIDER_CANCEL = (
+            "recorded_only_no_provider_cancel",
+            "Recorded only (no provider cancel)",
+        )
+        CANCELLATION_ATTEMPTED_SEPARATELY = (
+            "cancellation_attempted_separately",
+            "Cancellation attempted separately",
+        )
+
+    source_phase7f_gate = models.ForeignKey(
+        RazorpayCourierReadinessGate,
+        on_delete=models.PROTECT,
+        related_name="phase7g_courier_execution_attempts",
+    )
+    source_phase7e_gate = models.ForeignKey(
+        RazorpayWhatsAppInternalNotificationGate,
+        on_delete=models.PROTECT,
+        related_name="phase7g_courier_execution_attempts",
+    )
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        on_delete=models.PROTECT,
+        related_name="phase7g_courier_execution_attempts",
+    )
+    source_phase7b_gate = models.ForeignKey(
+        RazorpayControlledPilotExecutionGate,
+        on_delete=models.PROTECT,
+        related_name="phase7g_courier_execution_attempts",
+    )
+    source_phase6t_lock = models.ForeignKey(
+        RazorpayPhase6FinalAuditLock,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7g_courier_execution_attempts",
+    )
+
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Snapshots and env-presence (Delhivery env values NEVER stored).
+    delhivery_mode_at_each_step = models.JSONField(default=dict, blank=True)
+    delhivery_env_token_present = models.BooleanField(default=False)
+    delhivery_env_base_url_present = models.BooleanField(default=False)
+    delhivery_env_pickup_location_present = models.BooleanField(default=False)
+    delhivery_env_return_address_present = models.BooleanField(default=False)
+    kill_switch_snapshot_at_each_step = models.JSONField(
+        default=dict, blank=True
+    )
+    env_flag_snapshot_at_each_step = models.JSONField(
+        default=dict, blank=True
+    )
+    safety_invariants_snapshot = models.JSONField(default=dict, blank=True)
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+
+    # Synthetic payload (NEVER real customer data).
+    synthetic_order_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    synthetic_payload_summary = models.JSONField(default=dict, blank=True)
+
+    # Idempotency.
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    idempotency_lock_acquired = models.BooleanField(default=False)
+
+    # Provider response.
+    provider_object_id = models.CharField(
+        max_length=64, blank=True, default="", db_index=True
+    )
+    provider_status = models.CharField(max_length=64, blank=True, default="")
+    safe_request_summary = models.JSONField(default=dict, blank=True)
+    safe_response_summary = models.JSONField(default=dict, blank=True)
+
+    # Allowed-True booleans (single-attempt only).
+    provider_call_attempted = models.BooleanField(
+        default=False, db_index=True
+    )
+    delhivery_call_attempted = models.BooleanField(
+        default=False, db_index=True
+    )
+    awb_created = models.BooleanField(default=False, db_index=True)
+
+    # Locked-False booleans (asserted by guard at every step).
+    shipment_created = models.BooleanField(default=False, db_index=True)
+    business_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_order_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_payment_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    real_shipment_mutation_was_made = models.BooleanField(
+        default=False, db_index=True
+    )
+    customer_notification_sent = models.BooleanField(
+        default=False, db_index=True
+    )
+
+    # Director sign-off + structured window (set only at execute time).
+    recorded_signoff_window_valid = models.BooleanField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_start_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_end_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    director_signoff_text = models.TextField(blank=True, default="")
+    director_signoff_present = models.BooleanField(default=False)
+
+    # Operator + execute acknowledgements.
+    operator_name = models.CharField(max_length=120, blank=True, default="")
+    confirm_one_shot_courier_execution = models.BooleanField(default=False)
+    mode_acknowledgement = models.CharField(
+        max_length=16, blank=True, default=""
+    )
+    rollback_record_only_acknowledged = models.BooleanField(default=False)
+
+    # Rollback (record-only).
+    rollback_status = models.CharField(
+        max_length=40,
+        choices=RollbackStatus.choices,
+        default=RollbackStatus.NOT_REQUIRED,
+    )
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+    rollback_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+
+    # Blockers / next action.
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+
+    # Reviewers + timestamps.
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7g_courier_execution_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7g_courier_execution_reviews",
+    )
+    executed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7g_courier_execution_executions",
+    )
+    rolled_back_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7g_courier_execution_rollbacks",
+    )
+    rejected_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7g_courier_execution_rejections",
+    )
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7g_courier_execution_archives",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    audit_event_id = models.BigIntegerField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7g_courier_execution_attempts",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7g_courier_execution_attempts",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(fields=("source_phase7f_gate", "-created_at")),
+            models.Index(fields=("source_phase7d_attempt", "-created_at")),
+            models.Index(
+                fields=("provider_object_id", "-created_at")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7G-CourierExec[id={self.pk} "
+            f"phase7f={self.source_phase7f_gate_id} "
+            f"status={self.status}]"
+        )
+
+
+class RazorpayCourierExecutionRollback(models.Model):
+    """Phase 7G rollback record per attempt.
+
+    **Record-only by design.** Even after a Delhivery cancel API is
+    separately approved later, Phase 7G's rollback never calls
+    Delhivery cancel — that lives in a future, separately-approved
+    command. ``rollback_status`` never takes the value ``completed``.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RECORDED_ONLY_NO_PROVIDER_CANCEL = (
+            "recorded_only_no_provider_cancel",
+            "Recorded only (no provider cancel)",
+        )
+        CANCELLATION_ATTEMPTED_SEPARATELY = (
+            "cancellation_attempted_separately",
+            "Cancellation attempted separately",
+        )
+
+    attempt = models.ForeignKey(
+        RazorpayCourierExecutionAttempt,
+        on_delete=models.CASCADE,
+        related_name="rollback_records",
+    )
+    verified_at = models.DateTimeField(default=timezone.now, db_index=True)
+    rollback_status = models.CharField(
+        max_length=40,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    rollback_reason = models.TextField(blank=True, default="")
+    cancellation_attempted = models.BooleanField(default=False)
+    cancellation_attempted_by_command = models.CharField(
+        max_length=128, blank=True, default=""
+    )
+    provider_object_id_recorded = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    env_flag_presence_at_rollback = models.JSONField(
+        default=dict, blank=True
+    )
+    evaluated_safety_invariants = models.JSONField(default=dict, blank=True)
+    recovery_notes = models.TextField(blank=True, default="")
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("attempt", "-created_at")),
+            models.Index(fields=("rollback_status", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7G-CourierRollback[attempt={self.attempt_id} "
+            f"status={self.rollback_status}]"
+        )

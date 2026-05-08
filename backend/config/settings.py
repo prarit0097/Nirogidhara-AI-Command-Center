@@ -360,6 +360,38 @@ PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED = _razorpay_webhook_bool(
 PHASE7F_COURIER_READINESS_GATE_ENABLED = _razorpay_webhook_bool(
     "PHASE7F_COURIER_READINESS_GATE_ENABLED"
 )
+# ----- Phase 7G - One-shot Delhivery TEST/MOCK Courier Execution Gate -----
+# All three default OFF. Production .env.production is NEVER edited
+# by code. Phase 7G is the one-shot Delhivery TEST/MOCK courier
+# execution capability — Phase 7G-Live (real customer courier
+# execution) remains NOT approved.
+#
+# `PHASE7G_COURIER_EXECUTION_ENABLED` controls the Phase 7G review
+# lifecycle (prepare/approve/preview/inspect). Even when True, no
+# provider call is issued; the dedicated
+# `execute_delhivery_courier_one_shot` CLI is the only path that
+# may issue one Delhivery `create_awb` request, and only after
+# every gate (per-attempt env flag, Director sign-off referencing
+# the source Phase 7F gate id, structured UTC window, mode
+# acknowledgement, kill switch enabled, source-chain green) is
+# satisfied at runtime.
+#
+# `PHASE7G_DIRECTOR_APPROVED_ONE_SHOT_COURIER_EXECUTION` and
+# `PHASE7G_ALLOW_DELHIVERY_TEST_AWB` must remain False outside the
+# explicit one-shot operator-controlled execution window. Phase 7G
+# never edits any `.env*` file, never imports `dotenv`, never
+# silently rewrites env state; it records env-flag presence
+# snapshots on every attempt row at start and at end and refuses
+# execution if the snapshot is wrong.
+PHASE7G_COURIER_EXECUTION_ENABLED = _razorpay_webhook_bool(
+    "PHASE7G_COURIER_EXECUTION_ENABLED"
+)
+PHASE7G_DIRECTOR_APPROVED_ONE_SHOT_COURIER_EXECUTION = _razorpay_webhook_bool(
+    "PHASE7G_DIRECTOR_APPROVED_ONE_SHOT_COURIER_EXECUTION"
+)
+PHASE7G_ALLOW_DELHIVERY_TEST_AWB = _razorpay_webhook_bool(
+    "PHASE7G_ALLOW_DELHIVERY_TEST_AWB"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

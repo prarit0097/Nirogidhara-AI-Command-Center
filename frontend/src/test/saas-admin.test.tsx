@@ -1755,4 +1755,90 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
       expect(body).not.toMatch(/\+91\d{10}/);
     },
   );
+
+  it(
+    "renders the Phase 7G Razorpay courier one-shot TEST/MOCK execution " +
+      "section in read-only / CLI-only safe state",
+    async () => {
+      render(<SaasAdminPage />);
+
+      expect(
+        await screen.findByText(
+          "Razorpay Delhivery Courier One-shot TEST/MOCK Execution",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("razorpay-courier-execution-section"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7g-status-badge"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7g-cli-only-banner"),
+      ).toBeInTheDocument();
+
+      expect(
+        screen.getAllByText(/CLI-only Execute/i).length,
+      ).toBeGreaterThan(0);
+      // Phase 7G section locks every business-effect column to "No".
+      expect(screen.getAllByText(/^No$/i).length).toBeGreaterThan(10);
+    },
+  );
+
+  it(
+    "the Phase 7G section never exposes a courier / send / approve / reject / execute button",
+    async () => {
+      render(<SaasAdminPage />);
+      await screen.findByTestId(
+        "razorpay-courier-execution-section",
+      );
+
+      const phase7gForbiddenButtons = [
+        /^execute courier$/i,
+        /^run one-shot$/i,
+        /^run one shot$/i,
+        /^create awb$/i,
+        /^create shipment$/i,
+        /^book pickup$/i,
+        /^book courier$/i,
+        /^generate label$/i,
+        /^print label$/i,
+        /^cancel awb$/i,
+        /^call delhivery$/i,
+        /^send whatsapp$/i,
+        /^queue whatsapp$/i,
+        /^send template$/i,
+        /^notify customer$/i,
+        /^notify staff$/i,
+        /^approve attempt$/i,
+        /^reject attempt$/i,
+        /^archive attempt$/i,
+        /^rollback$/i,
+        /^execute$/i,
+        /^create payment link$/i,
+        /^capture payment$/i,
+        /^refund$/i,
+        /^mutate order$/i,
+        /^apply mutation$/i,
+        /^enable mutation$/i,
+        /^go live$/i,
+        /^edit \.env$/i,
+      ];
+      for (const pattern of phase7gForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      const body = document.body.textContent ?? "";
+      // No raw secrets / tokens / phone numbers leak to the page.
+      expect(body).not.toContain("rzp_live_");
+      expect(body).not.toContain("DELHIVERY_API_TOKEN=");
+      expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+      expect(body).not.toMatch(/\+91\d{10}/);
+      // Synthetic-payload sentinels MUST be present (we want
+      // operators to see the redaction shape, not real PII).
+      expect(body).toContain("Phase 7G");
+    },
+  );
 });
