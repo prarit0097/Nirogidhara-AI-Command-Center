@@ -346,6 +346,20 @@ PHASE7D_ALLOW_RAZORPAY_TEST_ORDER = _razorpay_webhook_bool(
 PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED = _razorpay_webhook_bool(
     "PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED"
 )
+# ----- Phase 7F - Delhivery / Courier Controlled Readiness Gate -----
+# Default OFF. The Phase 7F gate is review-only and CLI-only; even
+# when this flag is True the service NEVER calls Delhivery, NEVER
+# creates a Shipment / WorkflowStep / RescueAttempt row, NEVER
+# creates an AWB, NEVER books a pickup, NEVER generates a courier
+# label, NEVER sends WhatsApp, NEVER calls Meta Cloud / Razorpay /
+# Vapi, NEVER mutates real Order / Payment / Customer / Lead rows,
+# NEVER edits any .env file. Approval flips status to
+# `approved_for_future_phase7g_or_courier_execution_review` only.
+# Live courier dispatch requires Phase 7G + a future execute-window
+# guard reusing apps.saas.utc_window.validate_within_director_window.
+PHASE7F_COURIER_READINESS_GATE_ENABLED = _razorpay_webhook_bool(
+    "PHASE7F_COURIER_READINESS_GATE_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

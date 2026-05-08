@@ -3872,6 +3872,145 @@ export interface SaasRazorpayControlledPilotGatesResponse {
   providerCallAttempted: false;
 }
 
+// ---------- Phase 7F - Delhivery / Courier Controlled Readiness ----------
+
+export type SaasRazorpayCourierReadinessGateStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "approved_for_future_phase7g_or_courier_execution_review"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasRazorpayCourierReadinessGateDto {
+  id: number;
+  status: SaasRazorpayCourierReadinessGateStatus;
+  sourcePhase7EGateId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  sourcePhase7BGateId: number | null;
+  sourcePhase6TLockId: number | null;
+  delhiveryModeAtPrepare: string;
+  delhiveryEnvTokenPresent: boolean;
+  delhiveryEnvBaseUrlPresent: boolean;
+  delhiveryEnvPickupLocationPresent: boolean;
+  delhiveryEnvReturnAddressPresent: boolean;
+  sourcePhase7DSignoffWindowValidationStatus:
+    | "valid_structured_window"
+    | "failed_or_legacy_free_text"
+    | "not_applicable";
+  phase7DHotfix1Present: boolean;
+  dryRunPassed: boolean;
+  dryRunFailedReasons: string[];
+  rollbackDryRunPassed: boolean;
+  rollbackDryRunFailedReasons: string[];
+  delhiveryCallAllowedInPhase7F: false;
+  courierBookingAllowedInPhase7F: false;
+  shipmentCreationAllowedInPhase7F: false;
+  awbCreationAllowedInPhase7F: false;
+  pickupBookingAllowedInPhase7F: false;
+  labelGenerationAllowedInPhase7F: false;
+  customerNotificationAllowedInPhase7F: false;
+  whatsappSendAllowedInPhase7F: false;
+  whatsappQueueAllowedInPhase7F: false;
+  metaCloudCallAllowedInPhase7F: false;
+  razorpayCallAllowedInPhase7F: false;
+  businessMutationAllowedInPhase7F: false;
+  realCustomerAllowedInPhase7F: false;
+  providerCallAttempted: false;
+  delhiveryCallAttempted: false;
+  shipmentCreated: false;
+  awbCreated: false;
+  pickupBooked: false;
+  labelGenerated: false;
+  customerNotificationSent: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  realShipmentMutationWasMade: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasRazorpayCourierReadinessGateCounts {
+  draft: number;
+  pending_manual_review: number;
+  approved_for_future_phase7g_or_courier_execution_review: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasRazorpayCourierReadiness {
+  phase: "7F";
+  status: "courier_readiness_only";
+  latestCompletedPhase: "7E";
+  nextPhase: "7G_or_courier_live_not_approved";
+  envFlags: {
+    phase7fCourierReadinessGateEnabled: boolean;
+  };
+  envFlagSnapshot: Record<string, boolean | string>;
+  delhiveryEnvPresence: {
+    DELHIVERY_API_TOKEN_present: boolean;
+    DELHIVERY_API_BASE_URL_present: boolean;
+    DELHIVERY_PICKUP_LOCATION_present: boolean;
+    DELHIVERY_RETURN_ADDRESS_present: boolean;
+  };
+  killSwitch: {
+    enabled: boolean;
+    model: string;
+    id?: number;
+  };
+  phase7DHotfix1Present: boolean;
+  phase7EApprovedGateCount: number;
+  phase7FGateCounts: SaasRazorpayCourierReadinessGateCounts;
+  items: SaasRazorpayCourierReadinessGateDto[];
+  phase7DSourceSignoffMayBeLegacyFreeTextWithAck: boolean;
+  phase7DHotfix1RequiredBeforeAnyFutureProviderTouchingCommand: boolean;
+  phase7FRequiresFutureExecuteWindowGuardForCourier: boolean;
+  phase7FCallsDelhivery: false;
+  phase7FCreatesShipmentRow: false;
+  phase7FCreatesAwb: false;
+  phase7FBooksPickup: false;
+  phase7FGeneratesLabel: false;
+  phase7FSendsCustomerNotification: false;
+  phase7FMutatesBusinessRow: false;
+  phase7FCallsMetaCloud: false;
+  phase7FCallsRazorpay: false;
+  phase7FSendsWhatsApp: false;
+  phase7FQueuesWhatsApp: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasRazorpayCourierReadinessGatesResponse {
+  phase: "7F";
+  limit: number;
+  counts: SaasRazorpayCourierReadinessGateCounts;
+  items: SaasRazorpayCourierReadinessGateDto[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase7FCallsDelhivery: false;
+  phase7FCreatesShipmentRow: false;
+  phase7FCreatesAwb: false;
+  phase7FBooksPickup: false;
+  phase7FGeneratesLabel: false;
+  phase7FSendsWhatsApp: false;
+  phase7FQueuesWhatsApp: false;
+  phase7FCallsMetaCloud: false;
+  phase7FCallsRazorpay: false;
+  phase7FSendsCustomerNotification: false;
+  phase7FMutatesBusinessRow: false;
+}
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 export type SaasRazorpayControlledPilotExecutionAttemptStatus =

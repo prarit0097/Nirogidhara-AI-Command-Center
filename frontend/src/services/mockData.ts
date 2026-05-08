@@ -4401,6 +4401,137 @@ export const SAAS_RAZORPAY_WHATSAPP_INTERNAL_NOTIFICATION_GATES: Record<
   phase7EMutatesBusinessRow: false,
 };
 
+// ---------- Phase 7F - Delhivery / Courier Controlled Readiness ----------
+
+const PHASE_7F_GATE_COUNTS = {
+  draft: 0,
+  pending_manual_review: 0,
+  approved_for_future_phase7g_or_courier_execution_review: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+};
+
+const PHASE_7F_FORBIDDEN_ACTIONS = [
+  "call_delhivery_api",
+  "call_delhivery_create_awb",
+  "call_delhivery_book_pickup",
+  "call_delhivery_generate_label",
+  "call_delhivery_track_awb",
+  "call_delhivery_cancel_awb",
+  "create_shipment_row",
+  "create_workflow_step_row",
+  "create_rescue_attempt_row",
+  "create_awb",
+  "book_courier_pickup",
+  "generate_courier_label",
+  "print_courier_label",
+  "send_customer_notification",
+  "send_whatsapp_template",
+  "send_whatsapp_freeform",
+  "queue_whatsapp_outbound",
+  "call_meta_cloud_api",
+  "call_razorpay_api",
+  "create_payment_link",
+  "capture_razorpay_payment",
+  "refund_razorpay_payment",
+  "mutate_real_order_status",
+  "mutate_real_payment_status",
+  "mutate_real_shipment_status",
+  "mutate_real_customer",
+  "mutate_real_lead",
+  "execute_via_frontend",
+  "execute_via_api_endpoint",
+  "approve_via_api_endpoint",
+  "edit_dotenv_any",
+];
+
+export const SAAS_RAZORPAY_COURIER_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "7F",
+  status: "courier_readiness_only",
+  latestCompletedPhase: "7E",
+  nextPhase: "7G_or_courier_live_not_approved",
+  envFlags: {
+    phase7fCourierReadinessGateEnabled: false,
+  },
+  envFlagSnapshot: {
+    PHASE7F_COURIER_READINESS_GATE_ENABLED: false,
+    PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED: false,
+    PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED: false,
+    PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION: false,
+    PHASE7D_ALLOW_RAZORPAY_TEST_ORDER: false,
+    PHASE7_CONTROLLED_PILOT_GATE_ENABLED: false,
+    PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED: false,
+    WHATSAPP_AI_AUTO_REPLY_ENABLED: false,
+    WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED: false,
+    WHATSAPP_PROVIDER: "mock",
+    WHATSAPP_LIVE_META_LIMITED_TEST_MODE: true,
+    DELHIVERY_MODE: "mock",
+  },
+  delhiveryEnvPresence: {
+    DELHIVERY_API_TOKEN_present: false,
+    DELHIVERY_API_BASE_URL_present: false,
+    DELHIVERY_PICKUP_LOCATION_present: false,
+    DELHIVERY_RETURN_ADDRESS_present: false,
+  },
+  killSwitch: {
+    enabled: true,
+    model: "RuntimeKillSwitch",
+  },
+  phase7DHotfix1Present: true,
+  phase7EApprovedGateCount: 1,
+  phase7FGateCounts: PHASE_7F_GATE_COUNTS,
+  items: [],
+  phase7DSourceSignoffMayBeLegacyFreeTextWithAck: true,
+  phase7DHotfix1RequiredBeforeAnyFutureProviderTouchingCommand: true,
+  phase7FRequiresFutureExecuteWindowGuardForCourier: true,
+  phase7FCallsDelhivery: false,
+  phase7FCreatesShipmentRow: false,
+  phase7FCreatesAwb: false,
+  phase7FBooksPickup: false,
+  phase7FGeneratesLabel: false,
+  phase7FSendsCustomerNotification: false,
+  phase7FMutatesBusinessRow: false,
+  phase7FCallsMetaCloud: false,
+  phase7FCallsRazorpay: false,
+  phase7FSendsWhatsApp: false,
+  phase7FQueuesWhatsApp: false,
+  blockers: [],
+  warnings: [
+    "Phase 7F is gate-only. It NEVER calls Delhivery, NEVER creates a Shipment / WorkflowStep / RescueAttempt / AWB / pickup / label, NEVER sends WhatsApp, NEVER calls Meta Cloud / Razorpay / Vapi, NEVER mutates real business rows, NEVER edits any .env file.",
+  ],
+  nextAction: "enable_phase7f_courier_readiness_gate_flag_for_review_only",
+  forbiddenActions: PHASE_7F_FORBIDDEN_ACTIONS,
+};
+
+export const SAAS_RAZORPAY_COURIER_READINESS_GATES: Record<
+  string,
+  unknown
+> = {
+  phase: "7F",
+  limit: 25,
+  counts: PHASE_7F_GATE_COUNTS,
+  items: [],
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  phase7FCallsDelhivery: false,
+  phase7FCreatesShipmentRow: false,
+  phase7FCreatesAwb: false,
+  phase7FBooksPickup: false,
+  phase7FGeneratesLabel: false,
+  phase7FSendsWhatsApp: false,
+  phase7FQueuesWhatsApp: false,
+  phase7FCallsMetaCloud: false,
+  phase7FCallsRazorpay: false,
+  phase7FSendsCustomerNotification: false,
+  phase7FMutatesBusinessRow: false,
+};
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 const PHASE_7D_ATTEMPT_COUNTS = {

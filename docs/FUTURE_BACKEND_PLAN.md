@@ -42,6 +42,64 @@ controlled pilot execution would need). Do **not** enable any
 sandbox or readiness or pilot-plan env flag in production until
 Phase 6T implementation lands and passes its own acceptance criteria.
 
+**Phase 7F Delhivery / Courier Controlled Readiness Gate is
+shipped (gate-only, CLI-only review state changes).** New
+`RazorpayCourierReadinessGate` +
+`RazorpayCourierReadinessDryRunRecord` models + migration
+`payments.0015_phase7f_courier_readiness_gate`, new service module
+`apps.payments.razorpay_courier_readiness`, 8 strictly-CLI
+management commands (inspect-readiness / preview / prepare /
+dry-run / rollback-dry-run / approve / reject / list-gates;
+**archive command intentionally deferred** — mirrors Phase 7E
+pattern), 5 read-only auth-protected GET DRF endpoints under
+`/api/v1/saas/delhivery/courier-readiness*` (**no POST endpoint
+dispatches state changes**), 13 audit kinds (each ≤ 64 chars), and
+new env flag `PHASE7F_COURIER_READINESS_GATE_ENABLED` (default
+`false`). Approve takes a **non-empty reason only** — there is no
+`--director-signoff` argument because Phase 7F approval is a
+status transition, not an execute trigger. Approve refuses unless
+`dry_run_passed=True` AND `rollback_dry_run_passed=True` AND
+`phase7d_hotfix_1_present=True` (re-checked at approve time).
+Reject requires non-empty reason and refuses unless gate is in
+`{draft, pending_manual_review}`. Phase 7F **never** calls the
+Delhivery API (asserted with mock spy), **never** creates a
+`Shipment` / `WorkflowStep` / `RescueAttempt` row (asserted with
+before/after counts on 11 business tables), **never** creates an
+AWB, **never** books a pickup, **never** generates a courier
+label, **never** sends or queues WhatsApp, **never** calls Meta
+Cloud / Razorpay / Vapi (asserted with mock spies), **never**
+sends a customer notification, **never** mutates real `Order` /
+`Payment` / `Customer` / `Lead` / `DiscountOfferLog` rows,
+**never** returns the raw `DELHIVERY_API_TOKEN` /
+`DELHIVERY_API_BASE_URL` (asserted with planted env values),
+**never** imports
+`apps.shipments.integrations.delhivery_client.create_awb` /
+`_create_via_sdk` / `apps.shipments.services.create_shipment` /
+`create_rescue_attempt` / `update_rescue_outcome` /
+`apps.whatsapp.services.send_*` / `queue_template_message` /
+`apps.whatsapp.integrations.whatsapp.meta_cloud_client` /
+`apps.payments.integrations.razorpay_client` / `dotenv` (asserted
+with static-file scan), **never** edits any `.env*` file. Approval
+flips status to
+`approved_for_future_phase7g_or_courier_execution_review` only —
+it does **NOT** enable any provider call. Source-chain
+requirements: Phase 7E gate
+`APPROVED_FOR_FUTURE_PHASE7F_OR_7E_SEND_REVIEW`, Phase 7D attempt
+`EXECUTED`/`ROLLED_BACK` with all 12 mutation/send/courier
+booleans False, Phase 7B gate approved, Phase 6T audit lock
+locked, kill switch enabled, `DELHIVERY_MODE in {mock, test}`
+(NEVER live), six WhatsApp automation flags False, four Phase
+6K/7D execute env flags False, **Phase 7D-Hotfix-1 importable**
+(verified at prepare AND re-verified at approve). 87 new backend
+tests + 2 new frontend tests; 1792 backend + 70 frontend, all
+green. **Next backend phase: Phase 7G (live courier execution) —
+NOT approved as of this commit and NOT designed.** Live courier
+execution requires a separate, dated, written Director directive
++ a future "execute-window guard for Delhivery" extension reusing
+`apps.saas.utc_window.validate_within_director_window` (15-minute
+cap, mirrors Phase 7D-Hotfix-1) + a new env flag (e.g.
+`PHASE7G_DELHIVERY_COURIER_EXECUTION_ENABLED`, default `false`).
+
 **Phase 7E Controlled Internal WhatsApp Notification Readiness
 Gate is shipped (gate-only, CLI-only review state changes).** New
 `RazorpayWhatsAppInternalNotificationGate` +

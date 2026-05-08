@@ -365,6 +365,24 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.whatsapp_internal_notification.kill_switch_blocked": "shield-off",
     "razorpay.whatsapp_internal_notification.invariant_violation": "shield-off",
     "razorpay.whatsapp_internal_notification.acked_legacy_signoff": "alert-triangle",
+    # Phase 7F Delhivery / Courier Controlled Readiness Gate
+    # (gate-only, CLI-only; never calls Delhivery; never creates a
+    # Shipment / WorkflowStep / RescueAttempt / AWB / pickup / label;
+    # never sends WhatsApp; never mutates real business rows; never
+    # edits any .env file).
+    "razorpay.courier_readiness.readiness_inspected": "eye",
+    "razorpay.courier_readiness.previewed": "eye",
+    "razorpay.courier_readiness.prepared": "file-plus",
+    "razorpay.courier_readiness.dry_run_passed": "check-circle",
+    "razorpay.courier_readiness.dry_run_failed": "shield-off",
+    "razorpay.courier_readiness.rb_dry_run_passed": "check-circle",
+    "razorpay.courier_readiness.rb_dry_run_failed": "shield-off",
+    "razorpay.courier_readiness.approved_future_courier": "check-circle",
+    "razorpay.courier_readiness.rejected": "x-circle",
+    "razorpay.courier_readiness.archived": "archive",
+    "razorpay.courier_readiness.blocked": "ban",
+    "razorpay.courier_readiness.kill_switch_blocked": "shield-off",
+    "razorpay.courier_readiness.invariant_violation": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

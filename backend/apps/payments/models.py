@@ -2227,3 +2227,255 @@ class RazorpayWhatsAppInternalNotificationDryRunRecord(models.Model):
             f"Phase7E-DryRun[gate={self.gate_id} kind={self.kind} "
             f"status={self.status}]"
         )
+
+
+class RazorpayCourierReadinessGate(models.Model):
+    """Phase 7F - Delhivery / Courier Controlled Readiness Gate.
+
+    Gate-only and CLI-only for review state changes. Phase 7F
+    references an approved Phase 7E WhatsApp internal notification
+    gate and turns it into an audit-only readiness contract for a
+    future Phase 7G courier execution. Approval flips status to
+    ``approved_for_future_phase7g_or_courier_execution_review`` only.
+
+    Phase 7F **never** calls the Delhivery API, **never** creates a
+    ``Shipment`` / ``WorkflowStep`` / ``RescueAttempt`` row,
+    **never** creates an AWB, **never** books a pickup, **never**
+    generates a courier label, **never** sends WhatsApp, **never**
+    calls Meta Cloud / Razorpay / Vapi, **never** mutates real
+    ``Order`` / ``Payment`` / ``Customer`` / ``Lead`` /
+    ``DiscountOfferLog`` rows, **never** sends a customer
+    notification, **never** edits any ``.env*`` file.
+
+    Live courier dispatch requires Phase 7G + a future
+    execute-window guard reusing
+    ``apps.saas.utc_window.validate_within_director_window``.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        APPROVED_FOR_FUTURE_PHASE7G_OR_COURIER_EXECUTION_REVIEW = (
+            "approved_for_future_phase7g_or_courier_execution_review",
+            "Approved for future Phase 7G or courier execution review",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    class SourcePhase7DSignoffWindowValidationStatus(models.TextChoices):
+        VALID_STRUCTURED_WINDOW = (
+            "valid_structured_window",
+            "Valid structured window",
+        )
+        FAILED_OR_LEGACY_FREE_TEXT = (
+            "failed_or_legacy_free_text",
+            "Failed or legacy free text",
+        )
+        NOT_APPLICABLE = "not_applicable", "Not applicable"
+
+    source_phase7e_gate = models.ForeignKey(
+        RazorpayWhatsAppInternalNotificationGate,
+        on_delete=models.PROTECT,
+        related_name="phase7f_courier_gates",
+    )
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        on_delete=models.PROTECT,
+        related_name="phase7f_courier_gates",
+    )
+    source_phase7b_gate = models.ForeignKey(
+        RazorpayControlledPilotExecutionGate,
+        on_delete=models.PROTECT,
+        related_name="phase7f_courier_gates",
+    )
+    source_phase6t_lock = models.ForeignKey(
+        RazorpayPhase6FinalAuditLock,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7f_courier_gates",
+    )
+
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Delhivery env snapshot (presence-only booleans, never values).
+    delhivery_mode_at_prepare = models.CharField(
+        max_length=16, default="mock"
+    )
+    delhivery_env_token_present = models.BooleanField(default=False)
+    delhivery_env_base_url_present = models.BooleanField(default=False)
+    delhivery_env_pickup_location_present = models.BooleanField(
+        default=False
+    )
+    delhivery_env_return_address_present = models.BooleanField(
+        default=False
+    )
+
+    # Source Phase 7D sign-off window status (recorded for diagnostics
+    # only; not blocking - Phase 7E already required acknowledgement
+    # for legacy rows).
+    source_phase7d_signoff_window_validation_status = models.CharField(
+        max_length=48,
+        choices=SourcePhase7DSignoffWindowValidationStatus.choices,
+        default=(
+            SourcePhase7DSignoffWindowValidationStatus.NOT_APPLICABLE
+        ),
+    )
+    phase7d_hotfix_1_present = models.BooleanField(default=False)
+
+    # Dry-run / rollback-dry-run flags.
+    dry_run_passed = models.BooleanField(default=False, db_index=True)
+    dry_run_failed_reasons = models.JSONField(default=list, blank=True)
+    rollback_dry_run_passed = models.BooleanField(
+        default=False, db_index=True
+    )
+    rollback_dry_run_failed_reasons = models.JSONField(
+        default=list, blank=True
+    )
+
+    # Snapshots and counts.
+    kill_switch_snapshot_at_each_step = models.JSONField(
+        default=dict, blank=True
+    )
+    env_flag_snapshot_at_each_step = models.JSONField(
+        default=dict, blank=True
+    )
+    safety_invariants_snapshot = models.JSONField(default=dict, blank=True)
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+
+    # Idempotency / blockers / next action.
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+
+    # Reviewers + timestamps.
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7f_courier_gate_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7f_courier_gate_reviews",
+    )
+    rejected_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7f_courier_gate_rejections",
+    )
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7f_courier_gate_archives",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7f_courier_gates",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7f_courier_gates",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(fields=("source_phase7e_gate", "-created_at")),
+            models.Index(fields=("source_phase7d_attempt", "-created_at")),
+            models.Index(
+                fields=("phase7d_hotfix_1_present", "status")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7F-CourierGate[id={self.pk} "
+            f"phase7e={self.source_phase7e_gate_id} "
+            f"status={self.status}]"
+        )
+
+
+class RazorpayCourierReadinessDryRunRecord(models.Model):
+    """Phase 7F - dry-run / rollback-dry-run rehearsal record."""
+
+    class Kind(models.TextChoices):
+        DRY_RUN = "dry_run", "Dry run"
+        ROLLBACK_DRY_RUN = "rollback_dry_run", "Rollback dry run"
+
+    class Status(models.TextChoices):
+        PASSED = "passed", "Passed"
+        FAILED = "failed", "Failed"
+        BLOCKED = "blocked", "Blocked"
+
+    gate = models.ForeignKey(
+        RazorpayCourierReadinessGate,
+        on_delete=models.CASCADE,
+        related_name="dry_run_records",
+    )
+    kind = models.CharField(
+        max_length=24, choices=Kind.choices, db_index=True
+    )
+    status = models.CharField(
+        max_length=24, choices=Status.choices, db_index=True
+    )
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    safety_invariants_snapshot = models.JSONField(default=dict, blank=True)
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "kind", "-created_at")),
+            models.Index(fields=("status", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7F-CourierDryRun[gate={self.gate_id} "
+            f"kind={self.kind} status={self.status}]"
+        )

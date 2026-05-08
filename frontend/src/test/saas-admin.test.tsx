@@ -1677,4 +1677,82 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
       expect(body).not.toMatch(/\+91\d{10}/);
     },
   );
+
+  it(
+    "renders the Phase 7F Delhivery / Courier Readiness section in " +
+      "read-only / CLI-only safe state",
+    async () => {
+      render(<SaasAdminPage />);
+
+      expect(
+        await screen.findByText("Delhivery / Courier Readiness"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("delhivery-courier-readiness-section"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7f-status-badge"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7f-cli-only-banner"),
+      ).toBeInTheDocument();
+
+      expect(
+        screen.getAllByText(/CLI-only Review/i).length,
+      ).toBeGreaterThan(0);
+      // Phase 7F section locks every business-effect column to "No".
+      expect(screen.getAllByText(/^No$/i).length).toBeGreaterThan(10);
+    },
+  );
+
+  it(
+    "the Phase 7F section never exposes a courier / send / approve / reject button",
+    async () => {
+      render(<SaasAdminPage />);
+      await screen.findByTestId(
+        "delhivery-courier-readiness-section",
+      );
+
+      const phase7fForbiddenButtons = [
+        /^create shipment$/i,
+        /^create awb$/i,
+        /^book pickup$/i,
+        /^book courier$/i,
+        /^generate label$/i,
+        /^print label$/i,
+        /^call delhivery$/i,
+        /^track awb$/i,
+        /^cancel awb$/i,
+        /^send whatsapp$/i,
+        /^queue whatsapp$/i,
+        /^send template$/i,
+        /^notify customer$/i,
+        /^notify staff$/i,
+        /^route to courier$/i,
+        /^approve gate$/i,
+        /^reject gate$/i,
+        /^approve readiness$/i,
+        /^reject readiness$/i,
+        /^execute$/i,
+        /^create payment link$/i,
+        /^capture payment$/i,
+        /^refund$/i,
+        /^mutate order$/i,
+        /^apply mutation$/i,
+        /^enable mutation$/i,
+        /^go live$/i,
+        /^edit \.env$/i,
+      ];
+      for (const pattern of phase7fForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      const body = document.body.textContent ?? "";
+      expect(body).not.toContain("rzp_live_");
+      expect(body).not.toContain("DELHIVERY_API_TOKEN=");
+      expect(body).not.toMatch(/\+91\d{10}/);
+    },
+  );
 });

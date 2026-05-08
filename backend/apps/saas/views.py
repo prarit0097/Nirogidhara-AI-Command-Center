@@ -125,6 +125,13 @@ from apps.payments.razorpay_whatsapp_internal_notification import (
     serialize_phase7e_gate as _serialize_phase7e_gate,
     summarize_phase7e_gates,
 )
+from apps.payments.razorpay_courier_readiness import (
+    inspect_phase7f_readiness,
+    preview_phase7f_gate,
+    serialize_phase7f_dry_run_record as _serialize_phase7f_dry_run_record,
+    serialize_phase7f_gate as _serialize_phase7f_gate,
+    summarize_phase7f_gates,
+)
 from apps.payments.models import (
     RazorpayControlledPilotExecutionAttempt,
     RazorpayControlledPilotExecutionGate,
@@ -137,6 +144,8 @@ from apps.payments.models import (
     RazorpayPhase6FinalAuditLock,
     RazorpaySandboxPaidStatusMutationAttempt,
     RazorpaySandboxStatusReview,
+    RazorpayCourierReadinessDryRunRecord,
+    RazorpayCourierReadinessGate,
     RazorpayWhatsAppInternalNotificationDryRunRecord,
     RazorpayWhatsAppInternalNotificationGate,
 )
@@ -2440,6 +2449,143 @@ class RazorpayWhatsAppInternalNotificationDryRunsView(APIView):
         )
 
 
+class RazorpayCourierReadinessReadinessView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-readiness/`` - Phase 7F.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER calls Delhivery; NEVER
+    creates a Shipment / WorkflowStep / RescueAttempt / AWB /
+    pickup / label; NEVER sends WhatsApp; NEVER mutates real
+    business rows; NEVER edits any ``.env*`` file.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(inspect_phase7f_readiness())
+
+
+class RazorpayCourierReadinessGatesListView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-readiness-gates/`` - Phase 7F list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase7f_gates(limit=limit)
+        return Response(
+            {
+                "phase": "7F",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase7FCallsDelhivery": False,
+                "phase7FCreatesShipmentRow": False,
+                "phase7FCreatesAwb": False,
+                "phase7FBooksPickup": False,
+                "phase7FGeneratesLabel": False,
+                "phase7FSendsWhatsApp": False,
+                "phase7FQueuesWhatsApp": False,
+                "phase7FCallsMetaCloud": False,
+                "phase7FCallsRazorpay": False,
+                "phase7FSendsCustomerNotification": False,
+                "phase7FMutatesBusinessRow": False,
+            }
+        )
+
+
+class RazorpayCourierReadinessGateDetailView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-readiness-gates/<pk>/`` - Phase 7F."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayCourierReadinessGate.objects.filter(pk=pk).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7F courier readiness gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase7f_gate(row))
+
+
+class RazorpayCourierReadinessPreviewView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-readiness-preview/?phase7e_gate_id=<ID>`` - Phase 7F."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            phase7e_gate_id = int(
+                request.query_params.get("phase7e_gate_id") or 0
+            )
+        except (TypeError, ValueError):
+            phase7e_gate_id = 0
+        if phase7e_gate_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "phase7e_gate_id query param must be a "
+                        "positive integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(preview_phase7f_gate(phase7e_gate_id))
+
+
+class RazorpayCourierReadinessDryRunsView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-readiness-dry-runs/<gate_id>/`` - Phase 7F."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayCourierReadinessGate.objects.filter(pk=gate_id)
+            .exists()
+        )
+        if not gate_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7F courier readiness gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayCourierReadinessDryRunRecord.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "7F",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase7f_dry_run_record(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+            }
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -2536,4 +2682,9 @@ __all__ = (
     "RazorpayWhatsAppInternalNotificationGateDetailView",
     "RazorpayWhatsAppInternalNotificationPreviewView",
     "RazorpayWhatsAppInternalNotificationDryRunsView",
+    "RazorpayCourierReadinessReadinessView",
+    "RazorpayCourierReadinessGatesListView",
+    "RazorpayCourierReadinessGateDetailView",
+    "RazorpayCourierReadinessPreviewView",
+    "RazorpayCourierReadinessDryRunsView",
 )

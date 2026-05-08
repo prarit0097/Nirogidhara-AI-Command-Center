@@ -7,16 +7,15 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 7E baseline:** documented through Phase 7E (Controlled
-> Internal WhatsApp Notification Readiness Gate, gate-only, CLI-only
-> review state changes). Phase 7D was executed once on 2026-05-07
-> (`order_SmThqpK6sc6Dhs`, attempt id 1, rolled back, no business
-> impact); Phase 7D-Hotfix-1 (structured UTC window guard for execute
-> commands) is mandatory before any future provider-touching command
-> runs. Phase 7F (Delhivery shipment) / Phase 7E-Live (real customer
-> WhatsApp send) remain NOT approved and NOT designed. Neither Phase
-> 7D, Phase 7E, nor Phase 7E-Live exposes a POST execute / approve /
-> reject / archive endpoint — every review state change is CLI-only.
+> **Phase 7F baseline:** documented through Phase 7F (Delhivery /
+> Courier Controlled Readiness Gate, gate-only, CLI-only review
+> state changes). Phase 7D-Hotfix-1 is shipped (structured UTC
+> window guard on Razorpay TEST execute commands). Phase 7G (live
+> courier execution) and Phase 7E-Live (real customer WhatsApp
+> send) remain NOT approved and NOT designed. Neither Phase 7D,
+> Phase 7E, Phase 7E-Live, Phase 7F, nor Phase 7G exposes a POST
+> execute / approve / reject / archive endpoint — every review
+> state change is CLI-only.
 >
 ## Health
 
@@ -974,3 +973,29 @@ POST/PATCH/DELETE on every endpoint return 405. **No POST endpoint
 dispatches state changes** — every gate transition is CLI-only via
 the 8 management commands documented in CLAUDE.md "Where things
 live".
+
+## Phase 7F - Delhivery / Courier Controlled Readiness Gate (CLI-only review)
+
+Read-only HTTP layer over the Phase 7F gate. Approval flips status
+to `approved_for_future_phase7g_or_courier_execution_review` only —
+it does NOT enable any provider call. Phase 7F never calls
+Delhivery, never creates a `Shipment` / `WorkflowStep` /
+`RescueAttempt` row, never creates an AWB, never books a pickup,
+never generates a courier label, never sends or queues WhatsApp,
+never calls Meta Cloud / Razorpay / Vapi, never sends a customer
+notification, never mutates real business rows, never edits any
+`.env*` file.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/delhivery/courier-readiness/` | admin/staff | Phase 7F readiness, `PHASE7F_COURIER_READINESS_GATE_ENABLED` flag, gate counters, Phase 7E approved-gate counter, kill-switch state, Delhivery mode + env presence (token / base URL / pickup loc / return addr — booleans only, never values), Phase 7D-Hotfix-1 importable flag, blockers/warnings, `nextAction`, 31 forbidden-actions list. |
+| GET | `/api/v1/saas/delhivery/courier-readiness-gates/?limit=N` | admin/staff | Phase 7F gate list. Locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/delhivery/courier-readiness-gates/<int:pk>/` | admin/staff | Read-only gate detail (whitelist serializer; never returns raw Delhivery env values or customer PII). |
+| GET | `/api/v1/saas/delhivery/courier-readiness-preview/?phase7e_gate_id=<ID>` | admin/staff | Read-only preview from a Phase 7E approved gate. Never creates rows. |
+| GET | `/api/v1/saas/delhivery/courier-readiness-dry-runs/<int:gate_id>/` | admin/staff | List of dry-run / rollback-dry-run records for a Phase 7F gate. |
+
+POST/PATCH/DELETE on every endpoint return 405. **No POST endpoint
+dispatches state changes** — every gate transition is CLI-only via
+the 8 management commands documented in CLAUDE.md "Where things
+live". **Archive command intentionally deferred** (mirrors Phase 7E
+pattern); reachable via reject + later one-shot operator workflow.

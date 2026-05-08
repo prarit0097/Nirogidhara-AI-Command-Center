@@ -165,6 +165,8 @@ import type {
   SaasRazorpayControlledPilotExecutionReadiness,
   SaasRazorpayControlledPilotGateReadiness,
   SaasRazorpayControlledPilotGatesResponse,
+  SaasRazorpayCourierReadiness,
+  SaasRazorpayCourierReadinessGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -1595,6 +1597,21 @@ export const api = {
       `/v1/saas/razorpay/whatsapp-internal-notification-gates/?limit=${limit}`,
       () =>
         M.SAAS_RAZORPAY_WHATSAPP_INTERNAL_NOTIFICATION_GATES as SaasRazorpayWhatsAppInternalNotificationGatesResponse,
+    ),
+
+  // ---------- Phase 7F - Delhivery / Courier Controlled Readiness ----------
+
+  getSaasRazorpayCourierReadiness: () =>
+    safeFetch<SaasRazorpayCourierReadiness>(
+      "/v1/saas/delhivery/courier-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_COURIER_READINESS as SaasRazorpayCourierReadiness,
+    ),
+  getSaasRazorpayCourierReadinessGates: (limit: number = 25) =>
+    safeFetch<SaasRazorpayCourierReadinessGatesResponse>(
+      `/v1/saas/delhivery/courier-readiness-gates/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_COURIER_READINESS_GATES as SaasRazorpayCourierReadinessGatesResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

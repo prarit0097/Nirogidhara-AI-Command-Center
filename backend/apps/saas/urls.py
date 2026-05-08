@@ -33,6 +33,11 @@ from .views import (
     RazorpayControlledPilotExecutionPreviewView,
     RazorpayControlledPilotExecutionReadinessView,
     RazorpayControlledPilotExecutionRollbacksView,
+    RazorpayCourierReadinessDryRunsView,
+    RazorpayCourierReadinessGateDetailView,
+    RazorpayCourierReadinessGatesListView,
+    RazorpayCourierReadinessPreviewView,
+    RazorpayCourierReadinessReadinessView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -592,5 +597,32 @@ urlpatterns = [
         "razorpay/whatsapp-internal-notification-dry-runs/<int:gate_id>/",
         RazorpayWhatsAppInternalNotificationDryRunsView.as_view(),
         name="saas-razorpay-whatsapp-internal-notification-dry-runs",
+    ),
+    # Phase 7F - Delhivery / Courier Controlled Readiness Gate
+    # (gate-only, CLI-only review state changes; read-only API).
+    path(
+        "delhivery/courier-readiness/",
+        RazorpayCourierReadinessReadinessView.as_view(),
+        name="saas-delhivery-courier-readiness",
+    ),
+    path(
+        "delhivery/courier-readiness-gates/",
+        RazorpayCourierReadinessGatesListView.as_view(),
+        name="saas-delhivery-courier-readiness-gates",
+    ),
+    path(
+        "delhivery/courier-readiness-gates/<int:pk>/",
+        RazorpayCourierReadinessGateDetailView.as_view(),
+        name="saas-delhivery-courier-readiness-gate-detail",
+    ),
+    path(
+        "delhivery/courier-readiness-preview/",
+        RazorpayCourierReadinessPreviewView.as_view(),
+        name="saas-delhivery-courier-readiness-preview",
+    ),
+    path(
+        "delhivery/courier-readiness-dry-runs/<int:gate_id>/",
+        RazorpayCourierReadinessDryRunsView.as_view(),
+        name="saas-delhivery-courier-readiness-dry-runs",
     ),
 ]

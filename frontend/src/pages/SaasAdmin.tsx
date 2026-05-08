@@ -30,6 +30,8 @@ import type {
   SaasRazorpayControlledPilotExecutionReadiness,
   SaasRazorpayControlledPilotGateReadiness,
   SaasRazorpayControlledPilotGatesResponse,
+  SaasRazorpayCourierReadiness,
+  SaasRazorpayCourierReadinessGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -207,6 +209,14 @@ export default function SaasAdminPage() {
   ] = useState<SaasRazorpayWhatsAppInternalNotificationGatesResponse | null>(
     null,
   );
+  const [
+    razorpayCourierReadiness,
+    setRazorpayCourierReadiness,
+  ] = useState<SaasRazorpayCourierReadiness | null>(null);
+  const [
+    razorpayCourierReadinessGates,
+    setRazorpayCourierReadinessGates,
+  ] = useState<SaasRazorpayCourierReadinessGatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -248,6 +258,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayControlledPilotExecutionAttempts(25),
       api.getSaasRazorpayWhatsAppInternalNotificationReadiness(),
       api.getSaasRazorpayWhatsAppInternalNotificationGates(25),
+      api.getSaasRazorpayCourierReadiness(),
+      api.getSaasRazorpayCourierReadinessGates(25),
     ])
       .then(
         ([
@@ -287,6 +299,8 @@ export default function SaasAdminPage() {
           p7dAttempts,
           p7eRead,
           p7eGates,
+          p7fRead,
+          p7fGates,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -324,6 +338,8 @@ export default function SaasAdminPage() {
           setRazorpayControlledPilotExecutionAttempts(p7dAttempts);
           setRazorpayWhatsAppInternalNotificationReadiness(p7eRead);
           setRazorpayWhatsAppInternalNotificationGates(p7eGates);
+          setRazorpayCourierReadiness(p7fRead);
+          setRazorpayCourierReadinessGates(p7fGates);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -4212,6 +4228,233 @@ export default function SaasAdminPage() {
             MCP Tool" / "Edit .env" buttons exist on this page.
             Phase 7E approval is a status transition only - it does
             NOT enable any send path.
+          </div>
+        </section>
+      )}
+
+      {(razorpayCourierReadiness || razorpayCourierReadinessGates) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="delhivery-courier-readiness-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Delhivery / Courier Readiness
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 7F - <strong>Gate Only</strong>. Approval flips
+                a gate to{" "}
+                <code>
+                  approved_for_future_phase7g_or_courier_execution_review
+                </code>
+                . Phase 7F <strong>never</strong> calls the Delhivery
+                API, never creates a <code>Shipment</code> /{" "}
+                <code>WorkflowStep</code> / <code>RescueAttempt</code>{" "}
+                row, never creates an AWB, never books a pickup,
+                never generates a courier label, never sends or
+                queues WhatsApp, never calls Meta Cloud / Razorpay /
+                Vapi, never sends a customer notification, never
+                mutates real <code>Order</code> / <code>Payment</code>{" "}
+                / <code>Customer</code> / <code>Lead</code> rows,
+                never edits any <code>.env*</code> file. Review state
+                changes are CLI-only; this page is read-only. Phase
+                7G (live courier execution) requires a separate
+                Director directive AND a future execute-window guard
+                reusing{" "}
+                <code>apps.saas.utc_window.validate_within_director_window</code>
+                . Phase 7G remains <strong>not approved</strong>.
+              </p>
+            </div>
+            {razorpayCourierReadiness && (
+              <div data-testid="phase7f-status-badge">
+                <StatusPill
+                  tone={
+                    razorpayCourierReadiness.killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayCourierReadiness.killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayCourierReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayCourierReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={razorpayCourierReadiness.status}
+              />
+              <KeyValue
+                label="Latest completed"
+                value={razorpayCourierReadiness.latestCompletedPhase}
+              />
+              <KeyValue
+                label="Next phase"
+                value={razorpayCourierReadiness.nextPhase}
+              />
+              <KeyValue
+                label="Phase 7F gate flag"
+                value={
+                  razorpayCourierReadiness.envFlags
+                    .phase7fCourierReadinessGateEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue
+                label="Delhivery mode"
+                value={String(
+                  razorpayCourierReadiness.envFlagSnapshot
+                    .DELHIVERY_MODE,
+                )}
+              />
+              <KeyValue
+                label="Phase 7E approved gates"
+                value={String(
+                  razorpayCourierReadiness.phase7EApprovedGateCount,
+                )}
+              />
+              <KeyValue
+                label="Phase 7D Hotfix-1 present"
+                value={
+                  razorpayCourierReadiness.phase7DHotfix1Present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Delhivery token (presence)"
+                value={
+                  razorpayCourierReadiness.delhiveryEnvPresence
+                    .DELHIVERY_API_TOKEN_present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Delhivery base URL (presence)"
+                value={
+                  razorpayCourierReadiness.delhiveryEnvPresence
+                    .DELHIVERY_API_BASE_URL_present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Delhivery pickup loc (presence)"
+                value={
+                  razorpayCourierReadiness.delhiveryEnvPresence
+                    .DELHIVERY_PICKUP_LOCATION_present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Delhivery return addr (presence)"
+                value={
+                  razorpayCourierReadiness.delhiveryEnvPresence
+                    .DELHIVERY_RETURN_ADDRESS_present
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue label="Delhivery call in 7F" value="No" />
+              <KeyValue label="Shipment row in 7F" value="No" />
+              <KeyValue label="AWB in 7F" value="No" />
+              <KeyValue label="Pickup booking in 7F" value="No" />
+              <KeyValue label="Label generation in 7F" value="No" />
+              <KeyValue
+                label="Customer notification in 7F"
+                value="No"
+              />
+              <KeyValue label="WhatsApp send in 7F" value="No" />
+              <KeyValue label="WhatsApp queue in 7F" value="No" />
+              <KeyValue label="Meta Cloud call in 7F" value="No" />
+              <KeyValue label="Razorpay call in 7F" value="No" />
+              <KeyValue label="Business mutation in 7F" value="No" />
+              <KeyValue
+                label="Real customer in 7F"
+                value="No"
+              />
+            </div>
+          )}
+
+          {razorpayCourierReadinessGates && (
+            <div className="border-t border-border px-6 py-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6 text-xs">
+              <KeyValue
+                label="Draft"
+                value={String(
+                  razorpayCourierReadinessGates.counts.draft,
+                )}
+              />
+              <KeyValue
+                label="Pending review"
+                value={String(
+                  razorpayCourierReadinessGates.counts
+                    .pending_manual_review,
+                )}
+              />
+              <KeyValue
+                label="Approved (future courier review)"
+                value={String(
+                  razorpayCourierReadinessGates.counts
+                    .approved_for_future_phase7g_or_courier_execution_review,
+                )}
+              />
+              <KeyValue
+                label="Rejected"
+                value={String(
+                  razorpayCourierReadinessGates.counts.rejected,
+                )}
+              />
+              <KeyValue
+                label="Archived"
+                value={String(
+                  razorpayCourierReadinessGates.counts.archived,
+                )}
+              />
+              <KeyValue
+                label="Blocked"
+                value={String(
+                  razorpayCourierReadinessGates.counts.blocked,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayCourierReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>{razorpayCourierReadiness.nextAction}</code>
+            </div>
+          )}
+
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7f-cli-only-banner"
+          >
+            <strong>CLI-only Review.</strong> No "Create Shipment" /
+            "Create AWB" / "Book Pickup" / "Generate Label" / "Print
+            Label" / "Call Delhivery" / "Track AWB" / "Cancel AWB" /
+            "Send WhatsApp" / "Queue WhatsApp" / "Notify Customer" /
+            "Notify Staff" / "Route to Courier" / "Approve Gate" /
+            "Reject Gate" / "Approve Readiness" / "Reject Readiness"
+            / "Execute" / "Mark Paid" / "Capture Payment" / "Refund"
+            / "Apply Mutation" / "Mutate Order" / "Create Payment
+            Link" / "Replay Event" / "Enable Mutation" / "Go Live" /
+            "Run MCP Tool" / "Edit .env" buttons exist on this page.
+            Phase 7F approval is a status transition only - it does
+            NOT enable any provider call.
           </div>
         </section>
       )}

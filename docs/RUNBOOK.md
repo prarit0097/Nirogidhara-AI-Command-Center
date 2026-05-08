@@ -2916,3 +2916,71 @@ python manage.py inspect_razorpay_whatsapp_internal_notification_gates \
 **Do NOT** add a `--send` flag, **do NOT** invoke any
 `apps.whatsapp.services.send_*` helper, **do NOT** call Meta Cloud,
 **do NOT** edit `.env.production`. Phase 7E is gate-only by design.
+
+## Phase 7F - Delhivery / Courier Controlled Readiness Gate diagnostics (read-only)
+
+Phase 7F is gate-only. It never calls the Delhivery API, never
+creates a `Shipment` / `WorkflowStep` / `RescueAttempt` row, never
+creates an AWB, never books a pickup, never generates a courier
+label, never sends or queues WhatsApp, never calls Meta Cloud /
+Razorpay / Vapi, never sends a customer notification, never
+mutates real business rows, never edits any `.env*` file.
+Approval flips status to
+`approved_for_future_phase7g_or_courier_execution_review` only —
+it does NOT enable any provider call. Phase 7G (live courier
+execution) requires a separate Director directive AND a future
+"execute-window guard for Delhivery" extension reusing
+`apps.saas.utc_window.validate_within_director_window` (15-minute
+cap, mirrors Phase 7D-Hotfix-1).
+
+```bash
+# 1. Read-only readiness
+python manage.py inspect_delhivery_courier_readiness \
+    --json --no-audit
+
+# 2. Read-only preview from a Phase 7E approved gate (no row creation)
+python manage.py preview_delhivery_courier_readiness_gate \
+    --phase7e-gate-id 1 --json
+
+# 3. Prepare a Phase 7F gate (creates ONE gate row per Phase 7E gate)
+python manage.py prepare_delhivery_courier_readiness_gate \
+    --phase7e-gate-id 1 --json
+# Requires PHASE7F_COURIER_READINESS_GATE_ENABLED=true.
+# Idempotent on the source Phase 7E gate id.
+# Refuses if DELHIVERY_MODE=live, kill switch off, or Hotfix-1 absent.
+
+# 4. Dry-run rehearsal (invariant guard + Shipment leak check)
+python manage.py dry_run_delhivery_courier_readiness_gate \
+    --gate-id <ID> --json
+
+# 5. Rollback-dry-run rehearsal (proves no row leaked between rehearsals)
+python manage.py rollback_dry_run_delhivery_courier_readiness_gate \
+    --gate-id <ID> --reason "Rehearsal complete" --json
+
+# 6. Approve the gate (status -> approved_for_future_phase7g_or_courier_execution_review)
+# - Reason MUST be non-empty.
+# - NO --director-signoff argument.
+# - Refuses unless dry_run_passed=True AND rollback_dry_run_passed=True
+#   AND phase7d_hotfix_1_present=True (re-checked at approve time).
+python manage.py approve_delhivery_courier_readiness_gate \
+    --gate-id <ID> \
+    --reason "Director Phase 7F approve" \
+    --json
+
+# 7. Reject (only valid from draft / pending_manual_review)
+python manage.py reject_delhivery_courier_readiness_gate \
+    --gate-id <ID> --reason "Director paused future-courier review" --json
+
+# 8. List gates (read-only summary)
+python manage.py inspect_delhivery_courier_readiness_gates \
+    --limit 25 --json
+```
+
+**Do NOT** add a `--send` / `--book` / `--create-awb` flag, **do
+NOT** invoke any `apps.shipments.integrations.delhivery_client`
+helper, **do NOT** call `apps.shipments.services.create_shipment`,
+**do NOT** edit `.env.production`. Phase 7F is gate-only by
+design. Phase 7G (live courier execution) is the only path that
+will ever issue a Delhivery API call, and it requires a future
+"execute-window guard for Delhivery" extension on
+`apps.saas.utc_window` AND a fresh Director directive.
