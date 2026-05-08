@@ -227,6 +227,25 @@ def _phase7d_test_settings(**overrides):
     return override_settings(**base)
 
 
+def _phase7d_valid_signoff(gate_pk: int) -> str:
+    """Phase 7D-Hotfix-1 compliant Director sign-off body: mentions
+    gate id AND carries structured BEGIN_UTC / END_UTC markers
+    spanning a valid 10-minute window straddling ``now``.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone as _tz
+
+    now = _tz.now()
+    start = now - timedelta(seconds=30)
+    end = start + timedelta(minutes=10)
+    return (
+        f"Director sign-off mentions gate {gate_pk}. "
+        f"BEGIN_UTC={start.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+        f"END_UTC={end.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Contract + audit-kind length (#4, #5, #34)
 # ---------------------------------------------------------------------------
@@ -773,9 +792,7 @@ def test_execute_success_path_no_business_mutation() -> None:
             result = execute_phase7d_razorpay_test_order(
                 attempt_id,
                 confirmed_by=None,
-                director_signoff=(
-                    f"Director sign-off mentions gate {gate.pk}"
-                ),
+                director_signoff=_phase7d_valid_signoff(gate.pk),
             )
     after = _row_counts()
     if not result["ok"]:
@@ -852,9 +869,7 @@ def test_execute_failure_path_marks_failed_no_orphan_object_id() -> None:
             result = execute_phase7d_razorpay_test_order(
                 attempt_id,
                 confirmed_by=None,
-                director_signoff=(
-                    f"Director sign-off mentions gate {gate.pk}"
-                ),
+                director_signoff=_phase7d_valid_signoff(gate.pk),
             )
     assert result["ok"] is False
     row = RazorpayControlledPilotExecutionAttempt.objects.get(
@@ -889,16 +904,12 @@ def test_execute_single_shot_second_run_refused() -> None:
             first = execute_phase7d_razorpay_test_order(
                 attempt_id,
                 confirmed_by=None,
-                director_signoff=(
-                    f"Director sign-off mentions gate {gate.pk}"
-                ),
+                director_signoff=_phase7d_valid_signoff(gate.pk),
             )
             second = execute_phase7d_razorpay_test_order(
                 attempt_id,
                 confirmed_by=None,
-                director_signoff=(
-                    f"Director sign-off mentions gate {gate.pk}"
-                ),
+                director_signoff=_phase7d_valid_signoff(gate.pk),
             )
     assert first["ok"] is True
     assert second["ok"] is False
@@ -929,9 +940,7 @@ def test_rollback_records_only_no_provider_call() -> None:
             execute_phase7d_razorpay_test_order(
                 attempt_id,
                 confirmed_by=None,
-                director_signoff=(
-                    f"Director sign-off mentions gate {gate.pk}"
-                ),
+                director_signoff=_phase7d_valid_signoff(gate.pk),
             )
     out = rollback_phase7d_razorpay_test_execution_attempt(
         attempt_id,
@@ -1069,9 +1078,7 @@ def test_audit_payloads_lack_forbidden_keys() -> None:
             execute_phase7d_razorpay_test_order(
                 attempt_id,
                 confirmed_by=None,
-                director_signoff=(
-                    f"Director sign-off mentions gate {gate.pk}"
-                ),
+                director_signoff=_phase7d_valid_signoff(gate.pk),
             )
     rows = AuditEvent.objects.filter(
         kind__startswith="razorpay.controlled_pilot_execution."

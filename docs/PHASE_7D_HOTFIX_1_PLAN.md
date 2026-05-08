@@ -1,7 +1,23 @@
 # Phase 7D-Hotfix-1 — Structured UTC Window Guard for Provider Execute Commands
 
-> Persisted plan for the **mandatory** follow-up after Phase 7E ships.
-> Until Hotfix-1 ships, no future provider-touching command may run.
+> **STATUS: SHIPPED.** Implemented in the Hotfix-1 commit on
+> `origin/main`. Migration:
+> `payments.0014_phase7d_hotfix_director_signoff_window` +
+> `saas.0007_phase7d_hotfix_director_signoff_window`. New shared
+> validator: `apps.saas.utc_window.validate_within_director_window`
+> (alias `validate_execution_window`). Both execute commands
+> (`execute_razorpay_controlled_pilot_test_order` and
+> `execute_single_razorpay_test_order`) now refuse to dispatch unless
+> the Director sign-off contains structured `BEGIN_UTC=...` /
+> `END_UTC=...` markers, the window length is ≤ 15 minutes, the
+> window is fresh (≤ 24h old), and the current UTC time is inside the
+> window. **Hotfix-1 did NOT re-run any execute command.**
+
+> Historical Phase 7D attempt id 1 (`order_SmThqpK6sc6Dhs`, executed
+> 2026-05-07T12:42:46Z, rolled back) is the canonical legacy
+> free-text row. Its `recorded_signoff_window_*` fields stayed `NULL`
+> (no backfill) — Phase 7E continues to handle this row via the
+> legacy-acknowledgement path.
 
 ---
 

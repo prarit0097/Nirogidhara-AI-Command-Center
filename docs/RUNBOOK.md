@@ -2830,9 +2830,17 @@ playbook once the VPS is provisioned.
 
 Phase 7D was executed once on 2026-05-07 (`order_SmThqpK6sc6Dhs`,
 attempt id 1, rolled back). The CLI execute path is **never** re-run
-in this runbook. Phase 7D-Hotfix-1 (structured UTC window guard) is
-mandatory before any future re-run — see
-[`PHASE_7D_HOTFIX_1_PLAN.md`](PHASE_7D_HOTFIX_1_PLAN.md).
+in this runbook. **Phase 7D-Hotfix-1 (structured UTC window guard)
+is SHIPPED**; both `execute_razorpay_controlled_pilot_test_order`
+and `execute_single_razorpay_test_order` now refuse to dispatch
+unless the Director sign-off carries structured `BEGIN_UTC=<ISO-Z>`
+/ `END_UTC=<ISO-Z>` markers, the window length is ≤ 15 min, the
+window is fresh (≤ 24h old), and `now ∈ [window_start,
+window_end]` at runtime. Historical Phase 7D attempt id 1 stays
+`NULL` on the new `recorded_signoff_window_*` fields and **MUST
+NOT be edited** — it is the canonical legacy free-text row that
+Phase 7E acknowledges via
+`--acknowledge-source-phase7d-window-violation`.
 
 ```bash
 # Read-only readiness; no provider call, no business mutation

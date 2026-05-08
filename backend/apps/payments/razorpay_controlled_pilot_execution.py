@@ -46,6 +46,10 @@ from django.utils import timezone
 
 from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
+from apps.saas.utc_window import (
+    parse_director_signoff_window,
+    validate_within_director_window,
+)
 
 from .models import (
     RazorpayControlledPilotExecutionAttempt,
@@ -1447,6 +1451,45 @@ def execute_phase7d_razorpay_test_order(
     ):
         blockers.append("director_signoff_must_mention_phase7b_gate_id")
 
+    # Phase 7D-Hotfix-1: structured UTC window guard.
+    # Parser is pure; validator is pure; no DB / env / provider call.
+    parsed_window = parse_director_signoff_window(director_signoff)
+    if parsed_window is None:
+        if director_signoff.strip():
+            blockers.append(
+                "phase7d_director_signoff_missing_structured_utc_window"
+            )
+    else:
+        window_validation = validate_within_director_window(parsed_window)
+        if not window_validation.valid:
+            for entry in window_validation.blockers:
+                if entry == "director_signoff_window_end_must_be_after_start":
+                    blockers.append(
+                        "phase7d_director_signoff_malformed_structured_utc_window"
+                    )
+                elif entry.startswith(
+                    "director_signoff_window_too_long"
+                ):
+                    blockers.append(
+                        "phase7d_director_signoff_window_too_long_max_15_min"
+                    )
+                elif entry == "director_signoff_window_stale_more_than_24h_old":
+                    blockers.append(
+                        "phase7d_director_signoff_window_stale_more_than_24h_old"
+                    )
+                elif entry.startswith(
+                    "now_outside_director_signoff_utc_window"
+                ):
+                    blockers.append(
+                        "phase7d_now_outside_director_signoff_utc_window"
+                    )
+                elif entry == "director_signoff_missing_structured_utc_window":
+                    blockers.append(
+                        "phase7d_director_signoff_missing_structured_utc_window"
+                    )
+                else:
+                    blockers.append(f"phase7d_{entry}")
+
     key_advisory = _razorpay_key_advisory()
     if not key_advisory["razorpayKeyIdPresent"]:
         blockers.append("RAZORPAY_KEY_ID_must_be_present")
@@ -1524,6 +1567,17 @@ def execute_phase7d_razorpay_test_order(
     attempt.director_signoff_text = (director_signoff or "")[:1000]
     attempt.director_signoff_present = True
     attempt.executed_by = confirmed_by
+    # Phase 7D-Hotfix-1: persist the parsed structured UTC window.
+    if parsed_window is not None:
+        attempt.recorded_signoff_window_valid = True
+        attempt.recorded_signoff_window_start_utc = (
+            parsed_window.window_start_utc
+        )
+        attempt.recorded_signoff_window_end_utc = (
+            parsed_window.window_end_utc
+        )
+    else:
+        attempt.recorded_signoff_window_valid = False
     attempt.save(
         update_fields=[
             "idempotency_lock_acquired",
@@ -1532,6 +1586,9 @@ def execute_phase7d_razorpay_test_order(
             "executed_by",
             "env_flag_snapshot_at_start",
             "kill_switch_snapshot",
+            "recorded_signoff_window_valid",
+            "recorded_signoff_window_start_utc",
+            "recorded_signoff_window_end_utc",
             "updated_at",
         ]
     )

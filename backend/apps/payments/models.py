@@ -1829,6 +1829,20 @@ class RazorpayControlledPilotExecutionAttempt(models.Model):
     rollback_recorded = models.BooleanField(default=False)
     director_signoff_present = models.BooleanField(default=False)
 
+    # Phase 7D-Hotfix-1: structured Director sign-off UTC window
+    # parsed at execute-time. NULL on every pre-Hotfix-1 row (do NOT
+    # backfill). NULL on rows where parsing failed before the
+    # validator was called.
+    recorded_signoff_window_valid = models.BooleanField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_start_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_end_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+
     requested_by = models.ForeignKey(
         "accounts.User",
         on_delete=models.SET_NULL,

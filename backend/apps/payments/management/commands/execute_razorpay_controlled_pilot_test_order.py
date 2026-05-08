@@ -15,6 +15,12 @@ is green:
 * The attempt status is ``approved_for_one_shot_run``.
 * The director sign-off text is non-empty AND mentions the exact
   Phase 7B gate id of the source.
+* **Phase 7D-Hotfix-1:** the director sign-off body MUST include
+  literal ``BEGIN_UTC=<ISO-8601-UTC-Z>`` and ``END_UTC=...`` markers,
+  the parsed window length must be ``<= 15 minutes``, the window
+  must be fresh (``window_start`` not older than 24 hours), and
+  ``datetime.now(tz=UTC)`` must fall inside ``[window_start,
+  window_end]`` at runtime. Free-text-only sign-off is refused.
 * ``RAZORPAY_KEY_ID`` starts with ``rzp_test_`` (live keys refused).
 * The shared kill switch is enabled.
 * Locked amount = 100 paise / INR.

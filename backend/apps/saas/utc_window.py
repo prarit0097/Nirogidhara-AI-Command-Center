@@ -42,6 +42,7 @@ from typing import Optional
 
 
 _MAX_REVIEW_WINDOW_SECONDS_DEFAULT = 24 * 60 * 60  # 24h for Phase 7E
+_MAX_EXECUTION_WINDOW_SECONDS_DEFAULT = 15 * 60  # 15 min for Phase 7D-Hotfix-1
 _STALE_WINDOW_MAX_AGE_SECONDS_DEFAULT = 24 * 60 * 60  # 24h
 
 
@@ -213,6 +214,91 @@ def validate_review_window(
     )
 
 
+def validate_within_director_window(
+    parsed: Optional[ParsedWindow],
+    *,
+    now: Optional[datetime] = None,
+    max_window_seconds: int = _MAX_EXECUTION_WINDOW_SECONDS_DEFAULT,
+    stale_window_max_age_seconds: int = (
+        _STALE_WINDOW_MAX_AGE_SECONDS_DEFAULT
+    ),
+) -> WindowValidationResult:
+    """Validate that ``now`` is inside a parsed Director sign-off
+    window, AND that the window itself is within the allowed length
+    + staleness budget.
+
+    This is the **execute-time** validator used by Phase 7D-Hotfix-1
+    on ``execute_razorpay_controlled_pilot_test_order`` and the
+    Phase 6K-equivalent ``execute_single_razorpay_test_order``.
+    Default ``max_window_seconds`` is 900 seconds (15 minutes) — much
+    stricter than the Phase 7E review-window helper
+    (``validate_review_window``).
+
+    Failure modes (additive):
+
+    - parser returned ``None`` (missing markers / malformed
+      timestamps).
+    - ``window_end <= window_start``.
+    - ``window_end - window_start > max_window_seconds``.
+    - ``now < window_start`` (execution before window opens).
+    - ``now > window_end`` (execution after window closes).
+    - ``window_start < now - stale_window_max_age_seconds`` (stale
+      window).
+
+    Pure: no DB read, no settings read, no env read, no logging,
+    never raises.
+    """
+    blockers: list[str] = []
+    if parsed is None:
+        blockers.append("director_signoff_missing_structured_utc_window")
+        return WindowValidationResult(
+            valid=False,
+            blockers=tuple(blockers),
+            window_start_utc=None,
+            window_end_utc=None,
+            window_length_seconds=0,
+        )
+
+    start = parsed.window_start_utc
+    end = parsed.window_end_utc
+    length_seconds = int((end - start).total_seconds())
+    current = _now_utc(now)
+
+    if length_seconds <= 0:
+        blockers.append(
+            "director_signoff_window_end_must_be_after_start"
+        )
+    if length_seconds > max_window_seconds:
+        max_min = max_window_seconds // 60
+        blockers.append(
+            f"director_signoff_window_too_long_max_{max_min}_min"
+        )
+    if start < current - _delta_seconds(stale_window_max_age_seconds):
+        blockers.append(
+            "director_signoff_window_stale_more_than_24h_old"
+        )
+    if length_seconds > 0 and current < start:
+        blockers.append(
+            "now_outside_director_signoff_utc_window_before_start"
+        )
+    if length_seconds > 0 and current > end:
+        blockers.append(
+            "now_outside_director_signoff_utc_window_after_end"
+        )
+
+    return WindowValidationResult(
+        valid=not blockers,
+        blockers=tuple(blockers),
+        window_start_utc=start,
+        window_end_utc=end,
+        window_length_seconds=max(length_seconds, 0),
+    )
+
+
+# Alias retained for clarity in plan docs.
+validate_execution_window = validate_within_director_window
+
+
 def _delta_seconds(seconds: int):
     """Return a ``timedelta`` for the given seconds.
 
@@ -235,4 +321,6 @@ __all__ = (
     "WindowValidationResult",
     "parse_director_signoff_window",
     "validate_review_window",
+    "validate_within_director_window",
+    "validate_execution_window",
 )

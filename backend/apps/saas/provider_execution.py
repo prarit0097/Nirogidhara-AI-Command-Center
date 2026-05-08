@@ -30,6 +30,10 @@ from apps.audit.signals import write_event
 
 from .context import get_default_organization
 from .live_gate import get_or_create_default_runtime_kill_switch
+from .utc_window import (
+    parse_director_signoff_window,
+    validate_within_director_window,
+)
 from .models import (
     Branch,
     Organization,
@@ -332,11 +336,39 @@ def _payload_contains_customer_data(payload: dict[str, Any]) -> bool:
     return False
 
 
+_WINDOW_BLOCKER_TRANSLATION_PHASE6K: dict[str, str] = {
+    "director_signoff_missing_structured_utc_window": (
+        "phase6k_director_signoff_missing_structured_utc_window"
+    ),
+    "director_signoff_window_end_must_be_after_start": (
+        "phase6k_director_signoff_malformed_structured_utc_window"
+    ),
+    "director_signoff_window_stale_more_than_24h_old": (
+        "phase6k_director_signoff_window_stale_more_than_24h_old"
+    ),
+    "now_outside_director_signoff_utc_window_before_start": (
+        "phase6k_now_outside_director_signoff_utc_window"
+    ),
+    "now_outside_director_signoff_utc_window_after_end": (
+        "phase6k_now_outside_director_signoff_utc_window"
+    ),
+}
+
+
+def _phase6k_window_blocker(entry: str) -> str:
+    if entry.startswith("director_signoff_window_too_long"):
+        return "phase6k_director_signoff_window_too_long_max_15_min"
+    if entry in _WINDOW_BLOCKER_TRANSLATION_PHASE6K:
+        return _WINDOW_BLOCKER_TRANSLATION_PHASE6K[entry]
+    return f"phase6k_{entry}"
+
+
 def _check_preconditions(
     plan: RuntimeProviderTestPlan,
     *,
     confirm: bool,
     env: dict[str, Any],
+    director_signoff: str = "",
 ) -> list[str]:
     blockers: list[str] = []
     policy = get_provider_execution_policy(plan.operation_type)
@@ -388,6 +420,26 @@ def _check_preconditions(
         status=RuntimeProviderExecutionAttempt.Status.SUCCEEDED,
     ).exists():
         blockers.append("plan_already_has_successful_execution")
+
+    # Phase 7D-Hotfix-1: structured Director sign-off UTC window.
+    if not director_signoff.strip():
+        blockers.append(
+            "phase6k_director_signoff_missing_structured_utc_window"
+        )
+    else:
+        parsed_window = parse_director_signoff_window(director_signoff)
+        if parsed_window is None:
+            blockers.append(
+                "phase6k_director_signoff_missing_structured_utc_window"
+            )
+        else:
+            window_validation = validate_within_director_window(
+                parsed_window
+            )
+            if not window_validation.valid:
+                for entry in window_validation.blockers:
+                    blockers.append(_phase6k_window_blocker(entry))
+
     return blockers
 
 
@@ -468,17 +520,22 @@ def prepare_single_provider_execution_attempt(
     env = inspect_razorpay_test_env()
     seed = _build_attempt_seed(plan, actor=actor)
     blockers = _check_preconditions(plan, confirm=True, env=env)
-    # During PREPARE we don't require the CLI confirm flag — that's an
-    # execute-time gate. Strip it from the prep blockers so the row
-    # only captures real configuration issues.
+    # During PREPARE we don't require the CLI confirm flag or the
+    # Phase 7D-Hotfix-1 structured UTC window — those are execute-time
+    # gates. Strip them from the prep blockers so the row only
+    # captures real configuration issues.
+    _execute_time_only_blockers = {
+        "explicit_cli_confirmation_required",
+        "plan_already_has_successful_execution",
+        "phase6k_director_signoff_missing_structured_utc_window",
+        "phase6k_director_signoff_malformed_structured_utc_window",
+        "phase6k_director_signoff_window_too_long_max_15_min",
+        "phase6k_director_signoff_window_stale_more_than_24h_old",
+        "phase6k_now_outside_director_signoff_utc_window",
+        "phase6k_director_signoff_window_end_must_be_after_start",
+    }
     blockers = [
-        b
-        for b in blockers
-        if b
-        not in {
-            "explicit_cli_confirmation_required",
-            "plan_already_has_successful_execution",
-        }
+        b for b in blockers if b not in _execute_time_only_blockers
     ]
     attempt = RuntimeProviderExecutionAttempt(
         execution_id=seed["execution_id"],
@@ -545,16 +602,36 @@ def execute_single_razorpay_test_order(
     *,
     actor=None,
     confirm: bool = False,
+    director_signoff: str = "",
 ) -> RuntimeProviderExecutionAttempt:
     """Issue ONE Razorpay test-mode ``create_order`` against the plan.
 
     This is the ONLY function in the Phase 6K codebase that may
     contact Razorpay. The CLI command is the only sanctioned caller
     in Phase 6K (no API endpoint).
+
+    Phase 7D-Hotfix-1: ``director_signoff`` MUST contain literal
+    ``BEGIN_UTC=<ISO-Z>`` / ``END_UTC=<ISO-Z>`` markers; window
+    length <= 15 minutes; window not stale > 24h; current UTC time
+    inside the window. Free-text-only sign-off is refused.
     """
     plan = RuntimeProviderTestPlan.objects.get(plan_id=plan_id)
     env = inspect_razorpay_test_env()
-    blockers = _check_preconditions(plan, confirm=confirm, env=env)
+    blockers = _check_preconditions(
+        plan,
+        confirm=confirm,
+        env=env,
+        director_signoff=director_signoff,
+    )
+
+    # Phase 7D-Hotfix-1: parse the structured window so the parsed
+    # values land on the row whether execution is blocked or
+    # proceeds. Parser is pure; no provider call.
+    parsed_window = (
+        parse_director_signoff_window(director_signoff)
+        if director_signoff
+        else None
+    )
 
     seed = _build_attempt_seed(plan, actor=actor)
     attempt = RuntimeProviderExecutionAttempt(
@@ -598,6 +675,17 @@ def execute_single_razorpay_test_order(
         ),
         requested_by=actor if _is_authenticated_user(actor) else None,
         metadata=seed["metadata"],
+        recorded_signoff_window_valid=(
+            True
+            if parsed_window is not None
+            else (False if director_signoff else None)
+        ),
+        recorded_signoff_window_start_utc=(
+            parsed_window.window_start_utc if parsed_window else None
+        ),
+        recorded_signoff_window_end_utc=(
+            parsed_window.window_end_utc if parsed_window else None
+        ),
     )
 
     if blockers:

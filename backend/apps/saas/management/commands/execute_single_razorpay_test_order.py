@@ -1,4 +1,4 @@
-"""``python manage.py execute_single_razorpay_test_order --plan-id <PLAN_ID> --confirm-test-execution --json``.
+"""``python manage.py execute_single_razorpay_test_order --plan-id <PLAN_ID> --confirm-test-execution --director-signoff "..." --json``.
 
 Phase 6K-B — the ONE manual command that may dispatch a real
 Razorpay TEST-MODE ``create_order`` call. Refuses to dispatch unless
@@ -12,6 +12,13 @@ EVERY precondition is satisfied:
 6. Plan amount = 100 paise, currency = INR.
 7. Plan payload carries no customer PII.
 8. Global runtime kill switch enabled.
+9. **Phase 7D-Hotfix-1:** ``--director-signoff`` is non-empty AND
+   contains literal ``BEGIN_UTC=<ISO-8601-UTC-Z>`` /
+   ``END_UTC=...`` markers, the parsed window length is
+   ``<= 15 minutes``, the window is fresh (``window_start`` not
+   older than 24 hours), and ``datetime.now(tz=UTC)`` falls inside
+   ``[window_start, window_end]`` at runtime. Free-text-only
+   sign-off is refused.
 
 Never logs the API key. Never creates a payment link. Never captures
 a payment. Never sends a customer notification. Never mutates a
@@ -59,17 +66,35 @@ class Command(BaseCommand):
                 "dispatch."
             ),
         )
+        parser.add_argument(
+            "--director-signoff",
+            default="",
+            type=str,
+            help=(
+                "Director sign-off text. Phase 7D-Hotfix-1 requires "
+                "literal BEGIN_UTC=<ISO-Z> and END_UTC=<ISO-Z> "
+                "markers; window length <= 15 minutes; window not "
+                "stale > 24h; current UTC time inside the window."
+            ),
+        )
         parser.add_argument("--json", action="store_true", help="Emit JSON.")
 
     def handle(self, *args, **options) -> None:
         plan_id = options["plan_id"]
         confirm = bool(options.get("confirm_test_execution"))
+        signoff = (options.get("director_signoff") or "").strip()
+        if not signoff:
+            raise CommandError(
+                "--director-signoff must be a non-empty string and "
+                "must contain structured BEGIN_UTC=... / END_UTC=... "
+                "markers (Phase 7D-Hotfix-1)."
+            )
         if not RuntimeProviderTestPlan.objects.filter(plan_id=plan_id).exists():
             raise CommandError(
                 f"Provider test plan not found: {plan_id}"
             )
         attempt = execute_single_razorpay_test_order(
-            plan_id, confirm=confirm
+            plan_id, confirm=confirm, director_signoff=signoff
         )
         Status = RuntimeProviderExecutionAttempt.Status
         report = {

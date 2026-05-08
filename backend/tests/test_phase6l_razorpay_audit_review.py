@@ -111,6 +111,24 @@ def _patch_create_order(response):
     )
 
 
+def _phase6l_signoff() -> str:
+    """Phase 7D-Hotfix-1 compliant Director sign-off body for the
+    Phase 6L fixture chain.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone as _tz
+
+    now = _tz.now()
+    start = now - timedelta(seconds=30)
+    end = start + timedelta(minutes=10)
+    return (
+        "Director Phase 6K-B Razorpay TEST sign-off for Phase 6L. "
+        f"BEGIN_UTC={start.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+        f"END_UTC={end.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    )
+
+
 def _executed_and_rolled_back(plan):
     """Drive a Phase 6K success → rollback flow with a mocked SDK."""
     response = {
@@ -122,7 +140,9 @@ def _executed_and_rolled_back(plan):
     }
     with _patch_create_order(response):
         attempt = execute_single_razorpay_test_order(
-            plan.plan_id, confirm=True
+            plan.plan_id,
+            confirm=True,
+            director_signoff=_phase6l_signoff(),
         )
     rolled = rollback_single_provider_execution_attempt(
         attempt.execution_id, reason="phase6l audit"

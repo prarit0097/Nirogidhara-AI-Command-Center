@@ -133,6 +133,27 @@ def _approved_plan() -> RuntimeProviderTestPlan:
     return plan
 
 
+def _valid_phase6k_signoff() -> str:
+    """Build a Phase 7D-Hotfix-1 compliant Director sign-off body for
+    use in Phase 6K execute fixtures.
+
+    Window opens 30 seconds before ``now`` and closes 10 minutes
+    later (well inside the 15-minute cap).
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone as _tz
+
+    now = _tz.now()
+    start = now - timedelta(seconds=30)
+    end = start + timedelta(minutes=10)
+    return (
+        "Director Phase 6K-B Razorpay TEST sign-off. "
+        f"BEGIN_UTC={start.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+        f"END_UTC={end.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Section A — Policy
 # ---------------------------------------------------------------------------
@@ -290,7 +311,7 @@ def test_d01_execute_blocks_without_confirm_flag(
 def test_d02_execute_blocks_without_env_flag(db, fake_razorpay_env_no_flag):
     _ensure_default_org()
     plan = _approved_plan()
-    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True)
+    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True, director_signoff=_valid_phase6k_signoff())
     assert attempt.status == RuntimeProviderExecutionAttempt.Status.BLOCKED
     assert any(PHASE_6K_ENV_FLAG in b for b in attempt.blockers)
     assert attempt.provider_call_attempted is False
@@ -299,7 +320,7 @@ def test_d02_execute_blocks_without_env_flag(db, fake_razorpay_env_no_flag):
 def test_d03_execute_blocks_for_live_key(db, fake_razorpay_live_env):
     _ensure_default_org()
     plan = _approved_plan()
-    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True)
+    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True, director_signoff=_valid_phase6k_signoff())
     assert attempt.status == RuntimeProviderExecutionAttempt.Status.BLOCKED
     assert any(
         "razorpay_key_id_is_live_key_refusing" in b for b in attempt.blockers
@@ -317,7 +338,7 @@ def test_d04_execute_blocks_when_plan_not_approved(
     )
     plan = validate_single_provider_test_plan(plan.plan_id)
     # Skip approve — plan stays in 'validated' state.
-    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True)
+    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True, director_signoff=_valid_phase6k_signoff())
     assert attempt.status == RuntimeProviderExecutionAttempt.Status.BLOCKED
     assert any(
         "approved_for_future_execution" in b for b in attempt.blockers
@@ -329,7 +350,7 @@ def test_d05_execute_blocks_when_amount_not_100(db, fake_razorpay_test_env):
     plan = _approved_plan()
     plan.amount_paise = 1000
     plan.save(update_fields=["amount_paise"])
-    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True)
+    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True, director_signoff=_valid_phase6k_signoff())
     assert attempt.status == RuntimeProviderExecutionAttempt.Status.BLOCKED
     assert any("amount_paise_must_be_100" in b for b in attempt.blockers)
 
@@ -341,7 +362,7 @@ def test_d06_execute_blocks_when_real_customer_data_allowed_true(
     plan = _approved_plan()
     plan.real_customer_data_allowed = True
     plan.save(update_fields=["real_customer_data_allowed"])
-    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True)
+    attempt = execute_single_razorpay_test_order(plan.plan_id, confirm=True, director_signoff=_valid_phase6k_signoff())
     assert attempt.status == RuntimeProviderExecutionAttempt.Status.BLOCKED
     assert any(
         "real_customer_data_must_be_false" in b for b in attempt.blockers
@@ -361,9 +382,9 @@ def test_d07_execute_blocks_duplicate_after_success(
         "receipt": "phase6k_demo",
     }
     with _patch_create_order(response):
-        first = execute_single_razorpay_test_order(plan.plan_id, confirm=True)
+        first = execute_single_razorpay_test_order(plan.plan_id, confirm=True, director_signoff=_valid_phase6k_signoff())
     assert first.status == RuntimeProviderExecutionAttempt.Status.SUCCEEDED
-    second = execute_single_razorpay_test_order(plan.plan_id, confirm=True)
+    second = execute_single_razorpay_test_order(plan.plan_id, confirm=True, director_signoff=_valid_phase6k_signoff())
     assert second.status == RuntimeProviderExecutionAttempt.Status.BLOCKED
     assert any(
         "plan_already_has_successful_execution" in b
@@ -383,7 +404,9 @@ def test_d08_execute_succeeds_with_mocked_sdk(db, fake_razorpay_test_env):
     }
     with _patch_create_order(response):
         attempt = execute_single_razorpay_test_order(
-            plan.plan_id, confirm=True
+            plan.plan_id,
+            confirm=True,
+            director_signoff=_valid_phase6k_signoff(),
         )
     assert attempt.status == RuntimeProviderExecutionAttempt.Status.SUCCEEDED
     assert attempt.provider_call_attempted is True
@@ -413,7 +436,9 @@ def test_d09_execute_failure_records_failed_status(
         side_effect=RazorpayTestExecutionError("Razorpay SDK error: BadRequestError"),
     ):
         attempt = execute_single_razorpay_test_order(
-            plan.plan_id, confirm=True
+            plan.plan_id,
+            confirm=True,
+            director_signoff=_valid_phase6k_signoff(),
         )
     assert attempt.status == RuntimeProviderExecutionAttempt.Status.FAILED
     assert attempt.provider_call_attempted is True
@@ -434,7 +459,9 @@ def test_d10_execute_does_not_leak_raw_secrets(db, fake_razorpay_test_env):
     }
     with _patch_create_order(response):
         attempt = execute_single_razorpay_test_order(
-            plan.plan_id, confirm=True
+            plan.plan_id,
+            confirm=True,
+            director_signoff=_valid_phase6k_signoff(),
         )
     blob = json.dumps(
         {
@@ -473,7 +500,9 @@ def test_e01_rollback_marks_completed(db, fake_razorpay_test_env):
     }
     with _patch_create_order(response):
         attempt = execute_single_razorpay_test_order(
-            plan.plan_id, confirm=True
+            plan.plan_id,
+            confirm=True,
+            director_signoff=_valid_phase6k_signoff(),
         )
     rolled = rollback_single_provider_execution_attempt(
         attempt.execution_id, reason="cleanup"
@@ -515,7 +544,7 @@ def test_e03_inspect_safe_to_run_only_with_clean_state(
         "receipt": "phase6k_done",
     }
     with _patch_create_order(response):
-        execute_single_razorpay_test_order(plan.plan_id, confirm=True)
+        execute_single_razorpay_test_order(plan.plan_id, confirm=True, director_signoff=_valid_phase6k_signoff())
 
     after = inspect_single_provider_execution_attempt()
     # Successful execution should immediately push the next action to
@@ -577,6 +606,8 @@ def test_f03_execute_command_blocks_without_confirm(
         "execute_single_razorpay_test_order",
         "--plan-id",
         plan.plan_id,
+        "--director-signoff",
+        _valid_phase6k_signoff(),
         "--json",
         stdout=out,
     )
@@ -602,6 +633,8 @@ def test_f04_execute_command_with_mocked_sdk(db, fake_razorpay_test_env):
             "--plan-id",
             plan.plan_id,
             "--confirm-test-execution",
+            "--director-signoff",
+            _valid_phase6k_signoff(),
             "--json",
             stdout=out,
         )
@@ -628,7 +661,9 @@ def test_f05_rollback_and_archive_commands(db, fake_razorpay_test_env):
     }
     with _patch_create_order(response):
         attempt = execute_single_razorpay_test_order(
-            plan.plan_id, confirm=True
+            plan.plan_id,
+            confirm=True,
+            director_signoff=_valid_phase6k_signoff(),
         )
     report = _run(
         "rollback_single_provider_execution_attempt",

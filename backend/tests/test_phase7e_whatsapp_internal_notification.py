@@ -112,6 +112,21 @@ def _row_counts() -> dict[str, int]:
     }
 
 
+def _phase7e_phase7d_signoff(gate_pk: int) -> str:
+    """Phase 7D-Hotfix-1 compliant Director sign-off body for the
+    Phase 7E fixture chain. Window opens 30s before now, closes 10
+    min later — well inside the 15-min cap.
+    """
+    now = timezone.now()
+    start = now - timedelta(seconds=30)
+    end = start + timedelta(minutes=10)
+    return (
+        f"Director one-shot Razorpay TEST sign-off mentions gate {gate_pk}. "
+        f"BEGIN_UTC={start.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+        f"END_UTC={end.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    )
+
+
 def _make_executed_and_rolled_back_phase7d_attempt(
     *, source_event_id: str
 ) -> RazorpayControlledPilotExecutionAttempt:
@@ -142,9 +157,7 @@ def _make_executed_and_rolled_back_phase7d_attempt(
             execute_phase7d_razorpay_test_order(
                 attempt_id,
                 confirmed_by=None,
-                director_signoff=(
-                    f"Director sign-off mentions gate {gate.pk}"
-                ),
+                director_signoff=_phase7e_phase7d_signoff(gate.pk),
             )
         rollback_phase7d_razorpay_test_execution_attempt(
             attempt_id, reason="Phase 7E fixture rollback"
@@ -152,6 +165,35 @@ def _make_executed_and_rolled_back_phase7d_attempt(
     return RazorpayControlledPilotExecutionAttempt.objects.get(
         pk=attempt_id
     )
+
+
+def _make_legacy_phase7d_attempt(
+    *, source_event_id: str
+) -> RazorpayControlledPilotExecutionAttempt:
+    """Like ``_make_executed_and_rolled_back_phase7d_attempt`` but
+    forces the recorded signoff window fields to NULL afterwards to
+    simulate a pre-Hotfix-1 ("legacy free-text") row.
+
+    Used by Phase 7E tests that explicitly verify the legacy
+    acknowledgement path on the approve command.
+    """
+    attempt = _make_executed_and_rolled_back_phase7d_attempt(
+        source_event_id=source_event_id
+    )
+    attempt.recorded_signoff_window_valid = None
+    attempt.recorded_signoff_window_start_utc = None
+    attempt.recorded_signoff_window_end_utc = None
+    attempt.save(
+        update_fields=[
+            "recorded_signoff_window_valid",
+            "recorded_signoff_window_start_utc",
+            "recorded_signoff_window_end_utc",
+            "updated_at",
+        ]
+    )
+    # Clear the structured window status flagged by prepare so
+    # Phase 7E preview / prepare classifies the source as legacy.
+    return attempt
 
 
 def _phase7e_test_settings(**overrides):
@@ -575,9 +617,15 @@ def test_prepare_creates_gate_with_locked_safety_booleans() -> None:
     assert row.idempotency_key == (
         f"phase7e::wa_notify::attempt::{attempt.pk}"
     )
+    # Post-Phase-7D-Hotfix-1: new Phase 7D execute path records a
+    # structured window on the source attempt, so Phase 7E classifies
+    # it as ``valid_structured_window``. The historical (pre-Hotfix-1)
+    # legacy-free-text path is exercised separately by
+    # ``_make_legacy_phase7d_attempt`` + the legacy-acknowledgement
+    # tests.
     assert (
         row.source_phase7d_signoff_window_validation_status
-        == RazorpayWhatsAppInternalNotificationGate.SourcePhase7DSignoffWindowValidationStatus.FAILED_OR_LEGACY_FREE_TEXT
+        == RazorpayWhatsAppInternalNotificationGate.SourcePhase7DSignoffWindowValidationStatus.VALID_STRUCTURED_WINDOW
     )
 
 
@@ -769,14 +817,29 @@ def test_rollback_dry_run_passes_after_dry_run() -> None:
 
 
 def _walk_to_ready_to_approve_gate(
-    *, source_event_id: str
+    *, source_event_id: str, legacy_signoff: bool = True
 ) -> tuple[
     RazorpayWhatsAppInternalNotificationGate,
     RazorpayControlledPilotExecutionAttempt,
 ]:
-    attempt = _make_executed_and_rolled_back_phase7d_attempt(
-        source_event_id=source_event_id
-    )
+    """Walks a Phase 7B gate -> Phase 7D execute+rollback ->
+    Phase 7E prepare + dry-run + rollback-dry-run -> ready to
+    approve.
+
+    ``legacy_signoff=True`` (default) forces the source Phase 7D
+    attempt's recorded window fields to NULL so the Phase 7E gate
+    classifies the source as ``failed_or_legacy_free_text``,
+    matching the historical (pre-Hotfix-1) state for the existing
+    suite of legacy-acknowledgement tests.
+    """
+    if legacy_signoff:
+        attempt = _make_legacy_phase7d_attempt(
+            source_event_id=source_event_id
+        )
+    else:
+        attempt = _make_executed_and_rolled_back_phase7d_attempt(
+            source_event_id=source_event_id
+        )
     with _phase7e_test_settings():
         prepared = prepare_phase7e_gate(attempt.pk)
         gate_id = prepared["gate"]["id"]

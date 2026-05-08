@@ -93,32 +93,43 @@ provider-touching command runs.** See
 [`PHASE_7D_HOTFIX_1_PLAN.md`](PHASE_7D_HOTFIX_1_PLAN.md).
 
 **Phase 7D-Hotfix-1 — Structured UTC Window Guard for
-provider-touching execute commands (PENDING; mandatory before any
-future re-run).** New `validate_execution_window` helper added to
-`apps.saas.utc_window` (`max_window_seconds=900`).
+provider-touching execute commands (SHIPPED 2026-05-07).** New
+`validate_within_director_window` helper added to
+`apps.saas.utc_window` (alias `validate_execution_window`,
+`max_window_seconds=900`).
 `execute_razorpay_controlled_pilot_test_order` and
 `execute_single_razorpay_test_order` modified to call
-`parse_director_signoff_window` + `validate_execution_window`;
+`parse_director_signoff_window` + `validate_within_director_window`;
 reject if parser returns `None` (no structured markers), window
 length > 15 min, `now < window_start`, `now > window_end`, or
 window stale (`window_start < now - 24h`). New blocker strings
 `phase7d_director_signoff_missing_structured_utc_window`,
 `phase7d_now_outside_director_signoff_utc_window`,
 `phase7d_director_signoff_window_too_long_max_15_min`,
-`phase7d_director_signoff_window_stale_more_than_24h_old`. Three
-new nullable fields added to
-`RazorpayControlledPilotExecutionAttempt` and
-`RuntimeProviderExecutionAttempt`
-(`recorded_signoff_window_start_utc`,
-`recorded_signoff_window_end_utc`,
-`recorded_signoff_window_valid`); past rows keep `NULL` / `False`
-(no backfill). Migration
-`payments.0014_phase7d_hotfix_director_signoff_window`. New
-backend tests parametrized over: missing markers, malformed
-timestamp, window > 15 min, `now < start`, `now > end`, stale
-window, valid in-window run accepted, idempotency unchanged, mock
-SDK never invoked. **Hotfix-1 does NOT re-run any execute
-command.**
+`phase7d_director_signoff_window_stale_more_than_24h_old`,
+`phase7d_director_signoff_malformed_structured_utc_window`, plus
+their `phase6k_*` mirrors on the Phase 6K execute path. Three new
+nullable fields added to `RazorpayControlledPilotExecutionAttempt`
+(migration `payments.0014_phase7d_hotfix_director_signoff_window`)
+and `RuntimeProviderExecutionAttempt` (migration
+`saas.0007_phase7d_hotfix_director_signoff_window`):
+`recorded_signoff_window_valid` (BooleanField, null=True),
+`recorded_signoff_window_start_utc` (DateTimeField, null=True),
+`recorded_signoff_window_end_utc` (DateTimeField, null=True). **Past
+rows kept `NULL` — no backfill, no `RunPython` data migration**.
+Historical Phase 7D attempt id 1 (`order_SmThqpK6sc6Dhs`) is
+**NOT edited** and remains the canonical legacy free-text row that
+Phase 7E continues to acknowledge via
+`--acknowledge-source-phase7d-window-violation`. New backend tests
+parametrized over: missing markers, malformed timestamp, window >
+15 min, `now < start`, `now > end`, stale window, valid in-window
+run accepted, idempotency unchanged, mock SDK never invoked.
+**Hotfix-1 did NOT re-run any execute command.** No real Razorpay
+HTTP request was issued; no WhatsApp send / queue; no Meta Cloud /
+Delhivery call; no shipment / AWB; no payment link / capture /
+refund; no customer notification; no business mutation; no
+`.env*` edit. Test baseline: 1672 → **1705 backend** (+33 net),
+68 frontend unchanged.
 
 **Phase 7D Razorpay Controlled Pilot one-shot internal TEST
 execution was shipped and executed once on 2026-05-07 (rolled

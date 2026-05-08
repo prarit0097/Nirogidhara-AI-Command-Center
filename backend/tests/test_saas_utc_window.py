@@ -17,7 +17,9 @@ from apps.saas.utc_window import (
     ParsedWindow,
     WindowValidationResult,
     parse_director_signoff_window,
+    validate_execution_window,
     validate_review_window,
+    validate_within_director_window,
 )
 
 
@@ -270,3 +272,152 @@ def test_validate_naive_now_is_treated_as_utc() -> None:
     naive_now = datetime(2026, 5, 8, 8, 30, 0)
     out = validate_review_window(parsed, now=naive_now)
     assert out.valid is True
+
+
+# ---------------------------------------------------------------------------
+# validate_within_director_window (Phase 7D-Hotfix-1 execution-time guard)
+# ---------------------------------------------------------------------------
+
+
+def _exec_now() -> datetime:
+    return datetime(2026, 5, 8, 9, 30, 0, tzinfo=timezone.utc)
+
+
+def _parsed_around_exec_now(
+    *,
+    start_offset_seconds: int = -60,
+    duration_seconds: int = 600,
+) -> ParsedWindow:
+    start = _exec_now() + timedelta(seconds=start_offset_seconds)
+    end = start + timedelta(seconds=duration_seconds)
+    return ParsedWindow(
+        window_start_utc=start,
+        window_end_utc=end,
+        raw_signoff_text_truncated="",
+    )
+
+
+def test_execute_window_alias_matches_validate_within() -> None:
+    parsed = _parsed_around_exec_now()
+    a = validate_within_director_window(parsed, now=_exec_now())
+    b = validate_execution_window(parsed, now=_exec_now())
+    assert a == b
+
+
+def test_execute_validate_refuses_when_parsed_is_none() -> None:
+    out = validate_within_director_window(None, now=_exec_now())
+    assert out.valid is False
+    assert (
+        "director_signoff_missing_structured_utc_window" in out.blockers
+    )
+
+
+def test_execute_validate_refuses_when_now_before_window_start() -> None:
+    parsed = ParsedWindow(
+        window_start_utc=_exec_now() + timedelta(minutes=5),
+        window_end_utc=_exec_now() + timedelta(minutes=10),
+        raw_signoff_text_truncated="",
+    )
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is False
+    assert any(
+        "outside_director_signoff_utc_window_before_start" in b
+        for b in out.blockers
+    )
+
+
+def test_execute_validate_refuses_when_now_after_window_end() -> None:
+    parsed = ParsedWindow(
+        window_start_utc=_exec_now() - timedelta(minutes=10),
+        window_end_utc=_exec_now() - timedelta(minutes=2),
+        raw_signoff_text_truncated="",
+    )
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is False
+    assert any(
+        "outside_director_signoff_utc_window_after_end" in b
+        for b in out.blockers
+    )
+
+
+def test_execute_validate_refuses_window_longer_than_15_min_default() -> None:
+    parsed = _parsed_around_exec_now(
+        start_offset_seconds=-60, duration_seconds=16 * 60
+    )
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is False
+    assert any("window_too_long_max_15_min" in b for b in out.blockers)
+
+
+def test_execute_validate_refuses_stale_window() -> None:
+    parsed = ParsedWindow(
+        window_start_utc=_exec_now() - timedelta(days=2),
+        window_end_utc=_exec_now() - timedelta(days=2)
+        + timedelta(minutes=10),
+        raw_signoff_text_truncated="",
+    )
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is False
+    assert any("stale_more_than_24h" in b for b in out.blockers)
+
+
+def test_execute_validate_accepts_valid_in_window_run() -> None:
+    parsed = _parsed_around_exec_now(
+        start_offset_seconds=-60, duration_seconds=600
+    )  # 10 min window, now sits 60s after start
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is True
+    assert out.blockers == ()
+
+
+def test_execute_validate_refuses_end_before_start() -> None:
+    parsed = ParsedWindow(
+        window_start_utc=_exec_now() + timedelta(minutes=10),
+        window_end_utc=_exec_now() + timedelta(minutes=5),
+        raw_signoff_text_truncated="",
+    )
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is False
+    assert any(
+        "end_must_be_after_start" in b for b in out.blockers
+    )
+
+
+def test_execute_validate_pure_no_db_no_settings_no_env(monkeypatch) -> None:
+    """The execute validator never reads Django settings, env, or DB."""
+    monkeypatch.setattr("os.environ", {})
+    parsed = _parsed_around_exec_now()
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is True
+
+
+def test_execute_validate_default_max_15_min() -> None:
+    """Default max_window_seconds for execute window is 900 (15 min)."""
+    # 14:59 minutes accepted.
+    parsed = _parsed_around_exec_now(
+        start_offset_seconds=-30, duration_seconds=14 * 60 + 59
+    )
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is True
+
+
+def test_parse_then_validate_within_window_full_chain() -> None:
+    """End-to-end: parse a director signoff body and validate."""
+    start = _exec_now() - timedelta(minutes=2)
+    end = start + timedelta(minutes=10)
+    body = (
+        "Director one-shot Razorpay TEST sign-off for Phase 7B gate 1. "
+        f"BEGIN_UTC={start.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+        f"END_UTC={end.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    )
+    parsed = parse_director_signoff_window(body)
+    assert parsed is not None
+    out = validate_within_director_window(parsed, now=_exec_now())
+    assert out.valid is True
+
+
+def test_parse_returns_none_for_free_text_only() -> None:
+    """Legacy free-text sign-off (no markers) cannot satisfy the parser."""
+    body = "Director sign-off for Phase 7B gate 1. Approved."
+    assert parse_director_signoff_window(body) is None
+
