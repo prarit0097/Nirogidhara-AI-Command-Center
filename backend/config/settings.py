@@ -329,6 +329,23 @@ PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION = _razorpay_webhook_bool(
 PHASE7D_ALLOW_RAZORPAY_TEST_ORDER = _razorpay_webhook_bool(
     "PHASE7D_ALLOW_RAZORPAY_TEST_ORDER"
 )
+# ----- Phase 7E - Controlled Internal WhatsApp Notification Readiness -----
+# Default OFF. The Phase 7E gate is review-only and CLI-only; even
+# when this flag is True the service NEVER sends WhatsApp, NEVER
+# queues an outbound, NEVER calls Meta Cloud / Delhivery / Vapi,
+# NEVER creates a shipment / AWB / payment link, NEVER captures or
+# refunds, NEVER sends a customer notification, and NEVER mutates
+# real Order / Payment / Shipment / Customer / Lead rows. Approval
+# of a Phase 7E gate flips status to
+# `approved_for_future_phase7f_or_7e_send_review` only - it does
+# NOT enable any send path. Live customer notification still
+# requires a separate, dated, written Director directive AND
+# Phase 7D-Hotfix-1 must already have shipped before any future
+# provider-touching command (re-run of execute_*, future Phase 7F,
+# future Phase 7E-Live).
+PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED = _razorpay_webhook_bool(
+    "PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

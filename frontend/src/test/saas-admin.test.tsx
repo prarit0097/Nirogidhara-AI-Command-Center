@@ -1600,4 +1600,81 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
       expect(body).not.toContain("RAZORPAY_KEY_SECRET");
     },
   );
+
+  it(
+    "renders the Phase 7E Razorpay → WhatsApp Internal Notification Readiness section " +
+      "in read-only / CLI-only safe state",
+    async () => {
+      render(<SaasAdminPage />);
+
+      expect(
+        await screen.findByText(
+          "Razorpay → WhatsApp Internal Notification Readiness",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(
+          "razorpay-whatsapp-internal-notification-section",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7e-status-badge"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7e-cli-only-banner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(/CLI-only Review/i).length,
+      ).toBeGreaterThan(0);
+      // Phase 7E section locks every business-effect column to "No".
+      expect(screen.getAllByText(/^No$/i).length).toBeGreaterThan(10);
+    },
+  );
+
+  it(
+    "the Phase 7E section never exposes a send / queue / approve / reject button",
+    async () => {
+      render(<SaasAdminPage />);
+      await screen.findByTestId(
+        "razorpay-whatsapp-internal-notification-section",
+      );
+
+      const phase7eForbiddenButtons = [
+        /^send whatsapp$/i,
+        /^queue whatsapp$/i,
+        /^send template$/i,
+        /^send notification$/i,
+        /^notify staff$/i,
+        /^notify customer$/i,
+        /^route to whatsapp$/i,
+        /^approve gate$/i,
+        /^reject gate$/i,
+        /^approve attempt$/i,
+        /^archive attempt$/i,
+        /^execute$/i,
+        /^create shipment$/i,
+        /^create awb$/i,
+        /^book courier$/i,
+        /^create payment link$/i,
+        /^capture payment$/i,
+        /^refund$/i,
+        /^mark paid$/i,
+        /^mutate order$/i,
+        /^apply mutation$/i,
+        /^enable mutation$/i,
+        /^go live$/i,
+        /^edit \.env$/i,
+      ];
+      for (const pattern of phase7eForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      const body = document.body.textContent ?? "";
+      expect(body).not.toContain("rzp_live_");
+      expect(body).not.toContain("RAZORPAY_KEY_SECRET");
+      expect(body).not.toMatch(/\+91\d{10}/);
+    },
+  );
 });

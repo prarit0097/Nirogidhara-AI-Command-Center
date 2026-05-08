@@ -4296,6 +4296,111 @@ export const SAAS_RAZORPAY_CONTROLLED_PILOT_GATES: Record<
   providerCallAttempted: false,
 };
 
+// ---------- Phase 7E - Controlled Internal WhatsApp Notification Readiness ----------
+
+const PHASE_7E_GATE_COUNTS = {
+  draft: 0,
+  pending_manual_review: 0,
+  approved_for_future_phase7f_or_7e_send_review: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+};
+
+export const SAAS_RAZORPAY_WHATSAPP_INTERNAL_NOTIFICATION_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "7E",
+  status: "whatsapp_internal_notification_readiness_only",
+  latestCompletedPhase: "7D",
+  nextPhase: "7F_or_7E_live_not_approved",
+  envFlags: {
+    phase7eGateEnabled: false,
+  },
+  envFlagSnapshot: {
+    PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED: false,
+    PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED: false,
+    PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION: false,
+    PHASE7D_ALLOW_RAZORPAY_TEST_ORDER: false,
+    PHASE7_CONTROLLED_PILOT_GATE_ENABLED: false,
+    PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED: false,
+    WHATSAPP_AI_AUTO_REPLY_ENABLED: false,
+    WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED: false,
+    WHATSAPP_CALL_HANDOFF_ENABLED: false,
+    WHATSAPP_RESCUE_DISCOUNT_ENABLED: false,
+    WHATSAPP_PROVIDER: "mock",
+    WHATSAPP_LIVE_META_LIMITED_TEST_MODE: true,
+    DELHIVERY_MODE: "mock",
+  },
+  killSwitch: {
+    enabled: true,
+    model: "RuntimeKillSwitch",
+  },
+  phase7DRolledBackEligibleCount: 1,
+  phase7DEligibleForPhase7ECount: 0,
+  gateCounts: PHASE_7E_GATE_COUNTS,
+  items: [],
+  phase7DSourceSignoffMayBeLegacyFreeTextWithAck: true,
+  phase7DHotfix1RequiredBeforeAnyFutureProviderTouchingCommand: true,
+  phase7ESendsWhatsApp: false,
+  phase7EQueuesWhatsApp: false,
+  phase7ECallsMetaCloud: false,
+  phase7ECallsDelhivery: false,
+  phase7ECreatesShipmentOrAwb: false,
+  phase7ECreatesPaymentLink: false,
+  phase7ECapturesPayment: false,
+  phase7ERefundsPayment: false,
+  phase7ESendsCustomerNotification: false,
+  phase7EMutatesBusinessRow: false,
+  blockers: [],
+  warnings: [
+    "Phase 7E is gate-only. It NEVER sends WhatsApp, NEVER queues, NEVER calls Meta Cloud / Delhivery / Vapi, NEVER creates a shipment / AWB / payment link, NEVER captures, NEVER refunds, NEVER mutates real business rows, NEVER sends a customer notification, and NEVER edits any .env file.",
+  ],
+  nextAction: "enable_phase7e_gate_flag_for_review_only",
+  forbiddenActions: [
+    "send_whatsapp_template",
+    "send_whatsapp_freeform",
+    "queue_whatsapp_outbound",
+    "call_meta_cloud_api",
+    "call_delhivery_api",
+    "create_shipment",
+    "create_awb",
+    "create_payment_link",
+    "capture_razorpay_payment",
+    "refund_razorpay_payment",
+    "send_customer_notification",
+    "execute_via_frontend",
+    "execute_via_api_endpoint",
+    "approve_via_api_endpoint",
+    "edit_dotenv_any",
+  ],
+};
+
+export const SAAS_RAZORPAY_WHATSAPP_INTERNAL_NOTIFICATION_GATES: Record<
+  string,
+  unknown
+> = {
+  phase: "7E",
+  limit: 25,
+  counts: PHASE_7E_GATE_COUNTS,
+  items: [],
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  phase7ESendsWhatsApp: false,
+  phase7EQueuesWhatsApp: false,
+  phase7ECallsMetaCloud: false,
+  phase7ECallsDelhivery: false,
+  phase7ECreatesShipmentOrAwb: false,
+  phase7ECreatesPaymentLink: false,
+  phase7ECapturesPayment: false,
+  phase7ERefundsPayment: false,
+  phase7ESendsCustomerNotification: false,
+  phase7EMutatesBusinessRow: false,
+};
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 const PHASE_7D_ATTEMPT_COUNTS = {

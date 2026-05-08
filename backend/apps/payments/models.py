@@ -1932,3 +1932,284 @@ class RazorpayControlledPilotExecutionRollback(models.Model):
             f"Phase7D-Rollback[attempt={self.attempt_id} "
             f"status={self.rollback_status}]"
         )
+
+
+class RazorpayWhatsAppInternalNotificationGate(models.Model):
+    """Phase 7E - Controlled Internal WhatsApp Notification Readiness Gate.
+
+    Gate-only and CLI-only for review state changes. Phase 7E
+    references an executed-and-rolled-back Phase 7D attempt and turns
+    it into an audit-only readiness contract for a future Phase 7F /
+    Phase 7E-Live decision. Approval flips status to
+    ``approved_for_future_phase7f_or_7e_send_review`` only - it does
+    NOT enable any send path.
+
+    Phase 7E **never** sends a WhatsApp message, **never** queues an
+    outbound, **never** calls Meta Cloud, **never** calls Delhivery /
+    Vapi, **never** creates a shipment / AWB / payment link, **never**
+    captures, **never** refunds, **never** mutates real ``Order`` /
+    ``Payment`` / ``Shipment`` / ``DiscountOfferLog`` / ``Customer`` /
+    ``Lead`` rows, **never** sends a customer notification, and
+    **never** edits any ``.env*`` file.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        APPROVED_FOR_FUTURE_PHASE7F_OR_7E_SEND_REVIEW = (
+            "approved_for_future_phase7f_or_7e_send_review",
+            "Approved for future Phase 7F or 7E send review",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    class SourcePhase7DSignoffWindowValidationStatus(models.TextChoices):
+        VALID_STRUCTURED_WINDOW = (
+            "valid_structured_window",
+            "Valid structured window",
+        )
+        FAILED_OR_LEGACY_FREE_TEXT = (
+            "failed_or_legacy_free_text",
+            "Failed or legacy free text",
+        )
+        NOT_APPLICABLE = "not_applicable", "Not applicable"
+
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        on_delete=models.PROTECT,
+        related_name="phase7e_notification_gates",
+    )
+    source_phase7b_gate = models.ForeignKey(
+        RazorpayControlledPilotExecutionGate,
+        on_delete=models.PROTECT,
+        related_name="phase7e_notification_gates",
+    )
+    source_phase6t_lock = models.ForeignKey(
+        RazorpayPhase6FinalAuditLock,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7e_notification_gates",
+    )
+
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Internal cohort metadata (last-4 only; never full E.164).
+    target_internal_cohort_phone_suffix_last4 = models.CharField(
+        max_length=4, blank=True, default=""
+    )
+    target_internal_cohort_member_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+
+    # Proposed templates / variable keys (NOT values; NOT PII).
+    proposed_template_action_keys = models.JSONField(
+        default=list, blank=True
+    )
+    proposed_template_names_resolved = models.JSONField(
+        default=list, blank=True
+    )
+    proposed_variable_keys = models.JSONField(default=list, blank=True)
+
+    # Claim-Vault grounding state (set by dry-run).
+    claim_vault_grounded = models.BooleanField(
+        default=False, db_index=True
+    )
+    claim_vault_blockers = models.JSONField(default=list, blank=True)
+
+    # Dry-run / rollback-dry-run flags (set by their respective commands).
+    dry_run_passed = models.BooleanField(default=False, db_index=True)
+    dry_run_failed_reasons = models.JSONField(default=list, blank=True)
+    rollback_dry_run_passed = models.BooleanField(
+        default=False, db_index=True
+    )
+    rollback_dry_run_failed_reasons = models.JSONField(
+        default=list, blank=True
+    )
+
+    # Source Phase 7D sign-off window state (recorded but not blocking;
+    # Phase 7E approval handles legacy free-text via acknowledgement).
+    source_phase7d_signoff_window_validation_status = models.CharField(
+        max_length=48,
+        choices=SourcePhase7DSignoffWindowValidationStatus.choices,
+        default=(
+            SourcePhase7DSignoffWindowValidationStatus.NOT_APPLICABLE
+        ),
+    )
+    source_phase7d_window_violation_acknowledged = models.BooleanField(
+        default=False
+    )
+    source_phase7d_window_violation_ack_at = models.DateTimeField(
+        null=True, blank=True
+    )
+
+    # Phase 7E review-only window parsed from the new Director sign-off
+    # at approve time (NOT the source Phase 7D sign-off).
+    phase7e_future_review_signoff_window_start_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    phase7e_future_review_signoff_window_end_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    phase7e_future_review_signoff_window_valid = models.BooleanField(
+        default=False
+    )
+
+    # Director sign-off raw text (stored; serializer NEVER returns).
+    director_signoff_text = models.TextField(blank=True, default="")
+
+    # Snapshots and counts.
+    kill_switch_snapshot_at_each_step = models.JSONField(
+        default=dict, blank=True
+    )
+    env_flag_snapshot_at_each_step = models.JSONField(
+        default=dict, blank=True
+    )
+    safety_invariants_snapshot = models.JSONField(default=dict, blank=True)
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+
+    # Idempotency / blockers / next action.
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+
+    # Reviewers + timestamps.
+    requested_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7e_gate_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7e_gate_reviews",
+    )
+    rejected_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7e_gate_rejections",
+    )
+    archived_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phase7e_gate_archives",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7e_notification_gates",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7e_notification_gates",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(fields=("source_phase7d_attempt", "-created_at")),
+            models.Index(fields=("claim_vault_grounded", "status")),
+            models.Index(
+                fields=(
+                    "phase7e_future_review_signoff_window_valid",
+                    "status",
+                )
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7E-NotifGate[id={self.pk} "
+            f"attempt={self.source_phase7d_attempt_id} "
+            f"status={self.status}]"
+        )
+
+
+class RazorpayWhatsAppInternalNotificationDryRunRecord(models.Model):
+    """Phase 7E - dry-run / rollback-dry-run rehearsal record.
+
+    Mirrors the Phase 7B dry-run record pattern so multiple
+    rehearsals can stack against one gate. Each record proves that
+    no business row leaked between rehearsals.
+    """
+
+    class Kind(models.TextChoices):
+        DRY_RUN = "dry_run", "Dry run"
+        ROLLBACK_DRY_RUN = "rollback_dry_run", "Rollback dry run"
+
+    class Status(models.TextChoices):
+        PASSED = "passed", "Passed"
+        FAILED = "failed", "Failed"
+        BLOCKED = "blocked", "Blocked"
+
+    gate = models.ForeignKey(
+        RazorpayWhatsAppInternalNotificationGate,
+        on_delete=models.CASCADE,
+        related_name="dry_run_records",
+    )
+    kind = models.CharField(
+        max_length=24, choices=Kind.choices, db_index=True
+    )
+    status = models.CharField(
+        max_length=24, choices=Status.choices, db_index=True
+    )
+    idempotency_key = models.CharField(
+        max_length=200, unique=True, db_index=True
+    )
+    safety_invariants_snapshot = models.JSONField(default=dict, blank=True)
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    claim_vault_grounded = models.BooleanField(default=False)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "kind", "-created_at")),
+            models.Index(fields=("status", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7E-DryRun[gate={self.gate_id} kind={self.kind} "
+            f"status={self.status}]"
+        )

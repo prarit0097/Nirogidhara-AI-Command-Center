@@ -33,6 +33,11 @@ from .views import (
     RazorpayControlledPilotExecutionPreviewView,
     RazorpayControlledPilotExecutionReadinessView,
     RazorpayControlledPilotExecutionRollbacksView,
+    RazorpayWhatsAppInternalNotificationDryRunsView,
+    RazorpayWhatsAppInternalNotificationGateDetailView,
+    RazorpayWhatsAppInternalNotificationGatesListView,
+    RazorpayWhatsAppInternalNotificationPreviewView,
+    RazorpayWhatsAppInternalNotificationReadinessView,
     RazorpayControlledPilotGateDetailView,
     RazorpayControlledPilotGateDryRunsView,
     RazorpayControlledPilotGatePreviewView,
@@ -560,5 +565,32 @@ urlpatterns = [
         "razorpay/controlled-pilot-execution-rollbacks/<int:attempt_id>/",
         RazorpayControlledPilotExecutionRollbacksView.as_view(),
         name="saas-razorpay-controlled-pilot-execution-rollbacks",
+    ),
+    # Phase 7E - WhatsApp Internal Notification Readiness Gate (gate-only,
+    # CLI-only review state changes; read-only API).
+    path(
+        "razorpay/whatsapp-internal-notification-readiness/",
+        RazorpayWhatsAppInternalNotificationReadinessView.as_view(),
+        name="saas-razorpay-whatsapp-internal-notification-readiness",
+    ),
+    path(
+        "razorpay/whatsapp-internal-notification-gates/",
+        RazorpayWhatsAppInternalNotificationGatesListView.as_view(),
+        name="saas-razorpay-whatsapp-internal-notification-gates",
+    ),
+    path(
+        "razorpay/whatsapp-internal-notification-gates/<int:pk>/",
+        RazorpayWhatsAppInternalNotificationGateDetailView.as_view(),
+        name="saas-razorpay-whatsapp-internal-notification-gate-detail",
+    ),
+    path(
+        "razorpay/whatsapp-internal-notification-preview/",
+        RazorpayWhatsAppInternalNotificationPreviewView.as_view(),
+        name="saas-razorpay-whatsapp-internal-notification-preview",
+    ),
+    path(
+        "razorpay/whatsapp-internal-notification-dry-runs/<int:gate_id>/",
+        RazorpayWhatsAppInternalNotificationDryRunsView.as_view(),
+        name="saas-razorpay-whatsapp-internal-notification-dry-runs",
     ),
 ]

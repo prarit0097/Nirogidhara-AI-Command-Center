@@ -118,6 +118,13 @@ from apps.payments.razorpay_controlled_pilot_execution import (
     serialize_phase7d_rollback as _serialize_phase7d_rollback,
     summarize_phase7d_attempts,
 )
+from apps.payments.razorpay_whatsapp_internal_notification import (
+    inspect_phase7e_readiness,
+    preview_phase7e_gate,
+    serialize_phase7e_dry_run_record as _serialize_phase7e_dry_run_record,
+    serialize_phase7e_gate as _serialize_phase7e_gate,
+    summarize_phase7e_gates,
+)
 from apps.payments.models import (
     RazorpayControlledPilotExecutionAttempt,
     RazorpayControlledPilotExecutionGate,
@@ -130,6 +137,8 @@ from apps.payments.models import (
     RazorpayPhase6FinalAuditLock,
     RazorpaySandboxPaidStatusMutationAttempt,
     RazorpaySandboxStatusReview,
+    RazorpayWhatsAppInternalNotificationDryRunRecord,
+    RazorpayWhatsAppInternalNotificationGate,
 )
 from apps.payments.razorpay_webhook_readiness import (
     get_razorpay_webhook_handler_readiness,
@@ -2290,6 +2299,147 @@ class RazorpayControlledPilotExecutionRollbacksView(APIView):
         )
 
 
+class RazorpayWhatsAppInternalNotificationReadinessView(APIView):
+    """``GET /api/v1/saas/razorpay/whatsapp-internal-notification-readiness/`` - Phase 7E.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER sends WhatsApp; NEVER queues;
+    NEVER calls Meta Cloud / Delhivery / Vapi; NEVER mutates real
+    business rows; NEVER edits any ``.env*`` file. Review and gate
+    state changes are CLI-only.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(inspect_phase7e_readiness())
+
+
+class RazorpayWhatsAppInternalNotificationGatesListView(APIView):
+    """``GET /api/v1/saas/razorpay/whatsapp-internal-notification-gates/`` - Phase 7E list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = summarize_phase7e_gates(limit=limit)
+        return Response(
+            {
+                "phase": "7E",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase7ESendsWhatsApp": False,
+                "phase7EQueuesWhatsApp": False,
+                "phase7ECallsMetaCloud": False,
+                "phase7ECallsDelhivery": False,
+                "phase7ECreatesShipmentOrAwb": False,
+                "phase7ECreatesPaymentLink": False,
+                "phase7ECapturesPayment": False,
+                "phase7ERefundsPayment": False,
+                "phase7ESendsCustomerNotification": False,
+                "phase7EMutatesBusinessRow": False,
+            }
+        )
+
+
+class RazorpayWhatsAppInternalNotificationGateDetailView(APIView):
+    """``GET /api/v1/saas/razorpay/whatsapp-internal-notification-gates/<pk>/`` - Phase 7E."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayWhatsAppInternalNotificationGate.objects.filter(pk=pk)
+            .first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7E WhatsApp internal notification gate "
+                        "not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase7e_gate(row))
+
+
+class RazorpayWhatsAppInternalNotificationPreviewView(APIView):
+    """``GET /api/v1/saas/razorpay/whatsapp-internal-notification-preview/?attempt_id=<ID>`` - Phase 7E.
+
+    Read-only preview from a Phase 7D attempt; never creates rows;
+    never sends WhatsApp.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            attempt_id = int(request.query_params.get("attempt_id") or 0)
+        except (TypeError, ValueError):
+            attempt_id = 0
+        if attempt_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "attempt_id query param must be a positive integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(preview_phase7e_gate(attempt_id))
+
+
+class RazorpayWhatsAppInternalNotificationDryRunsView(APIView):
+    """``GET /api/v1/saas/razorpay/whatsapp-internal-notification-dry-runs/<gate_id>/`` - Phase 7E."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayWhatsAppInternalNotificationGate.objects.filter(
+                pk=gate_id
+            ).exists()
+        )
+        if not gate_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7E WhatsApp internal notification gate "
+                        "not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayWhatsAppInternalNotificationDryRunRecord.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "7E",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase7e_dry_run_record(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+            }
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -2381,4 +2531,9 @@ __all__ = (
     "RazorpayControlledPilotExecutionAttemptDetailView",
     "RazorpayControlledPilotExecutionPreviewView",
     "RazorpayControlledPilotExecutionRollbacksView",
+    "RazorpayWhatsAppInternalNotificationReadinessView",
+    "RazorpayWhatsAppInternalNotificationGatesListView",
+    "RazorpayWhatsAppInternalNotificationGateDetailView",
+    "RazorpayWhatsAppInternalNotificationPreviewView",
+    "RazorpayWhatsAppInternalNotificationDryRunsView",
 )

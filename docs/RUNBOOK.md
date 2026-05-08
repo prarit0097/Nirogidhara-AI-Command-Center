@@ -2825,3 +2825,86 @@ playbook once the VPS is provisioned.
 | `OperationalError: no such table` | Same — run migrations. |
 | `python` command not found on Windows | Use `py -3.10` or install Python 3.10+ from python.org. |
 | `npm test` hangs | The Vitest run completes in ~7s. If it hangs there's likely a stale process — `Ctrl+C` and retry. |
+
+## Phase 7D - Razorpay Controlled Pilot one-shot TEST execution diagnostics (post-rollback, read-only)
+
+Phase 7D was executed once on 2026-05-07 (`order_SmThqpK6sc6Dhs`,
+attempt id 1, rolled back). The CLI execute path is **never** re-run
+in this runbook. Phase 7D-Hotfix-1 (structured UTC window guard) is
+mandatory before any future re-run — see
+[`PHASE_7D_HOTFIX_1_PLAN.md`](PHASE_7D_HOTFIX_1_PLAN.md).
+
+```bash
+# Read-only readiness; no provider call, no business mutation
+python manage.py inspect_razorpay_controlled_pilot_execution_readiness \
+    --json --no-audit
+
+# List the attempt history (whitelisted summary; never raw provider response)
+python manage.py inspect_razorpay_controlled_pilot_execution_attempts \
+    --limit 25 --json
+```
+
+**Do NOT** run `execute_razorpay_controlled_pilot_test_order` from
+this runbook. Director-approved one-shot execution requires a fresh
+dated written directive AND Phase 7D-Hotfix-1 to ship first.
+
+## Phase 7E - WhatsApp Internal Notification Readiness Gate diagnostics (read-only)
+
+Phase 7E is gate-only. It never sends WhatsApp, never queues, never
+calls Meta Cloud, never calls Delhivery, never creates a shipment /
+AWB / payment link, never captures, never refunds, never mutates
+real business rows, never edits any `.env*` file. Approval flips
+status to `approved_for_future_phase7f_or_7e_send_review` only — it
+does NOT enable any send path.
+
+```bash
+# 1. Read-only readiness
+python manage.py inspect_razorpay_whatsapp_internal_notification_readiness \
+    --json --no-audit
+
+# 2. Read-only preview from a Phase 7D rolled-back attempt (no row creation)
+python manage.py preview_razorpay_whatsapp_internal_notification_gate \
+    --attempt-id 1 --json
+
+# 3. Prepare a Phase 7E gate (creates ONE gate row per Phase 7D attempt)
+python manage.py prepare_razorpay_whatsapp_internal_notification_gate \
+    --attempt-id 1 --json
+# Requires PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED=true.
+# Idempotent on the source Phase 7D attempt id.
+
+# 4. Dry-run rehearsal (Claim-Vault grounding + invariant guard)
+python manage.py dry_run_razorpay_whatsapp_internal_notification_gate \
+    --gate-id <ID> --json
+
+# 5. Rollback-dry-run rehearsal (proves no row leaked between rehearsals)
+python manage.py rollback_dry_run_razorpay_whatsapp_internal_notification_gate \
+    --gate-id <ID> --reason "Rehearsal complete" --json
+
+# 6. Approve the gate (status -> approved_for_future_phase7f_or_7e_send_review)
+# - Reason MUST be non-empty.
+# - Director sign-off MUST contain BEGIN_UTC=... / END_UTC=... markers
+#   AND literally reference phase7d_attempt_id_<ID>.
+# - Review window length must be <= 24h.
+# - For legacy free-text source Phase 7D signoff (every existing pre-Hotfix-1
+#   attempt is): set --acknowledge-source-phase7d-window-violation AND
+#   include literal token "acknowledged_phase7d_window_violation_ref_attempt_<ID>"
+#   in the --reason body.
+python manage.py approve_razorpay_whatsapp_internal_notification_gate \
+    --gate-id <ID> \
+    --reason "Director sign-off Phase 7E review. acknowledged_phase7d_window_violation_ref_attempt_1" \
+    --director-signoff "Director sign-off Phase 7E review window. phase7d_attempt_id_1 BEGIN_UTC=2026-05-08T09:00:00Z END_UTC=2026-05-08T10:00:00Z" \
+    --acknowledge-source-phase7d-window-violation \
+    --json
+
+# 7. Reject (only valid from draft / pending_manual_review)
+python manage.py reject_razorpay_whatsapp_internal_notification_gate \
+    --gate-id <ID> --reason "Director paused future-send review" --json
+
+# 8. List gates (read-only summary)
+python manage.py inspect_razorpay_whatsapp_internal_notification_gates \
+    --limit 25 --json
+```
+
+**Do NOT** add a `--send` flag, **do NOT** invoke any
+`apps.whatsapp.services.send_*` helper, **do NOT** call Meta Cloud,
+**do NOT** edit `.env.production`. Phase 7E is gate-only by design.

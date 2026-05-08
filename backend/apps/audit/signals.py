@@ -348,6 +348,23 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.controlled_pilot_execution.kill_switch_blocked": "shield-off",
     "razorpay.controlled_pilot_execution.invariant_violation_blocked": "shield-off",
     "razorpay.controlled_pilot_execution.recovery_reconciled": "rotate-ccw",
+    # Phase 7E WhatsApp Internal Notification Readiness Gate (gate-only,
+    # CLI-only; never sends WhatsApp; never queues; never calls Meta
+    # Cloud / Delhivery; never mutates business rows; never edits .env).
+    "razorpay.whatsapp_internal_notification.readiness_inspected": "eye",
+    "razorpay.whatsapp_internal_notification.previewed": "eye",
+    "razorpay.whatsapp_internal_notification.prepared": "file-plus",
+    "razorpay.whatsapp_internal_notification.dry_run_passed": "check-circle",
+    "razorpay.whatsapp_internal_notification.dry_run_failed": "shield-off",
+    "razorpay.whatsapp_internal_notification.rb_dry_run_passed": "check-circle",
+    "razorpay.whatsapp_internal_notification.rb_dry_run_failed": "shield-off",
+    "razorpay.whatsapp_internal_notification.approved_future_send": "check-circle",
+    "razorpay.whatsapp_internal_notification.rejected": "x-circle",
+    "razorpay.whatsapp_internal_notification.archived": "archive",
+    "razorpay.whatsapp_internal_notification.blocked": "ban",
+    "razorpay.whatsapp_internal_notification.kill_switch_blocked": "shield-off",
+    "razorpay.whatsapp_internal_notification.invariant_violation": "shield-off",
+    "razorpay.whatsapp_internal_notification.acked_legacy_signoff": "alert-triangle",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

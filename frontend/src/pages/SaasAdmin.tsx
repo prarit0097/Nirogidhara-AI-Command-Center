@@ -30,6 +30,8 @@ import type {
   SaasRazorpayControlledPilotExecutionReadiness,
   SaasRazorpayControlledPilotGateReadiness,
   SaasRazorpayControlledPilotGatesResponse,
+  SaasRazorpayWhatsAppInternalNotificationGatesResponse,
+  SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
   SaasRazorpayPhase6FinalAuditLocksResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
@@ -193,6 +195,18 @@ export default function SaasAdminPage() {
   ] = useState<SaasRazorpayControlledPilotExecutionAttemptsResponse | null>(
     null,
   );
+  const [
+    razorpayWhatsAppInternalNotificationReadiness,
+    setRazorpayWhatsAppInternalNotificationReadiness,
+  ] = useState<SaasRazorpayWhatsAppInternalNotificationReadiness | null>(
+    null,
+  );
+  const [
+    razorpayWhatsAppInternalNotificationGates,
+    setRazorpayWhatsAppInternalNotificationGates,
+  ] = useState<SaasRazorpayWhatsAppInternalNotificationGatesResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -232,6 +246,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayControlledPilotGates(25),
       api.getSaasRazorpayControlledPilotExecutionReadiness(),
       api.getSaasRazorpayControlledPilotExecutionAttempts(25),
+      api.getSaasRazorpayWhatsAppInternalNotificationReadiness(),
+      api.getSaasRazorpayWhatsAppInternalNotificationGates(25),
     ])
       .then(
         ([
@@ -269,6 +285,8 @@ export default function SaasAdminPage() {
           p7bGates,
           p7dRead,
           p7dAttempts,
+          p7eRead,
+          p7eGates,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -304,6 +322,8 @@ export default function SaasAdminPage() {
           setRazorpayControlledPilotGates(p7bGates);
           setRazorpayControlledPilotExecutionReadiness(p7dRead);
           setRazorpayControlledPilotExecutionAttempts(p7dAttempts);
+          setRazorpayWhatsAppInternalNotificationReadiness(p7eRead);
+          setRazorpayWhatsAppInternalNotificationGates(p7eGates);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -3990,6 +4010,208 @@ export default function SaasAdminPage() {
             Order" / "Create Payment Link" / "Replay Event" / "Enable
             Mutation" / "Go Live" / "Run MCP Tool" / "Edit .env"
             buttons exist on this page.
+          </div>
+        </section>
+      )}
+
+      {(razorpayWhatsAppInternalNotificationReadiness ||
+        razorpayWhatsAppInternalNotificationGates) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="razorpay-whatsapp-internal-notification-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Razorpay → WhatsApp Internal Notification Readiness
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 7E - <strong>Gate Only</strong>. Approval flips
+                a gate to{" "}
+                <code>
+                  approved_for_future_phase7f_or_7e_send_review
+                </code>
+                . Phase 7E <strong>never</strong> sends a WhatsApp
+                message, never queues an outbound, never calls Meta
+                Cloud / Delhivery / Vapi, never creates a shipment /
+                AWB / payment link, never captures, never refunds,
+                never mutates real <code>Order</code> /{" "}
+                <code>Payment</code> / <code>Shipment</code> /{" "}
+                <code>Customer</code> / <code>Lead</code> rows, never
+                sends a customer notification, and never edits any{" "}
+                <code>.env*</code> file. Review state changes are
+                CLI-only; this page is read-only. Phase 7F (Delhivery
+                shipment) / Phase 7E-Live (real customer WhatsApp
+                send) remain <strong>not approved</strong>; any
+                future provider-touching command requires Phase 7D-
+                Hotfix-1 (structured UTC window guard) to ship first.
+              </p>
+            </div>
+            {razorpayWhatsAppInternalNotificationReadiness && (
+              <div data-testid="phase7e-status-badge">
+                <StatusPill
+                  tone={
+                    razorpayWhatsAppInternalNotificationReadiness
+                      .killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayWhatsAppInternalNotificationReadiness
+                    .killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+
+          {razorpayWhatsAppInternalNotificationReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={razorpayWhatsAppInternalNotificationReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={
+                  razorpayWhatsAppInternalNotificationReadiness.status
+                }
+              />
+              <KeyValue
+                label="Latest completed"
+                value={
+                  razorpayWhatsAppInternalNotificationReadiness.latestCompletedPhase
+                }
+              />
+              <KeyValue
+                label="Next phase"
+                value={
+                  razorpayWhatsAppInternalNotificationReadiness.nextPhase
+                }
+              />
+              <KeyValue
+                label="Phase 7E gate flag"
+                value={
+                  razorpayWhatsAppInternalNotificationReadiness
+                    .envFlags.phase7eGateEnabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
+              />
+              <KeyValue
+                label="Phase 7D rolled-back source"
+                value={String(
+                  razorpayWhatsAppInternalNotificationReadiness.phase7DRolledBackEligibleCount,
+                )}
+              />
+              <KeyValue
+                label="Phase 7D Hotfix-1 required"
+                value={
+                  razorpayWhatsAppInternalNotificationReadiness
+                    .phase7DHotfix1RequiredBeforeAnyFutureProviderTouchingCommand
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue
+                label="Legacy free-text signoff allowed (with ack)"
+                value={
+                  razorpayWhatsAppInternalNotificationReadiness
+                    .phase7DSourceSignoffMayBeLegacyFreeTextWithAck
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              <KeyValue label="WhatsApp send in 7E" value="No" />
+              <KeyValue label="WhatsApp queue in 7E" value="No" />
+              <KeyValue label="Meta Cloud call in 7E" value="No" />
+              <KeyValue label="Delhivery call in 7E" value="No" />
+              <KeyValue label="Shipment / AWB in 7E" value="No" />
+              <KeyValue label="Payment link in 7E" value="No" />
+              <KeyValue label="Capture / refund in 7E" value="No" />
+              <KeyValue
+                label="Customer notification in 7E"
+                value="No"
+              />
+              <KeyValue label="Business mutation in 7E" value="No" />
+              <KeyValue
+                label="Real customer phone in 7E"
+                value="No"
+              />
+            </div>
+          )}
+
+          {razorpayWhatsAppInternalNotificationGates && (
+            <div className="border-t border-border px-6 py-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6 text-xs">
+              <KeyValue
+                label="Draft"
+                value={String(
+                  razorpayWhatsAppInternalNotificationGates.counts.draft,
+                )}
+              />
+              <KeyValue
+                label="Pending review"
+                value={String(
+                  razorpayWhatsAppInternalNotificationGates.counts
+                    .pending_manual_review,
+                )}
+              />
+              <KeyValue
+                label="Approved (future send review)"
+                value={String(
+                  razorpayWhatsAppInternalNotificationGates.counts
+                    .approved_for_future_phase7f_or_7e_send_review,
+                )}
+              />
+              <KeyValue
+                label="Rejected"
+                value={String(
+                  razorpayWhatsAppInternalNotificationGates.counts.rejected,
+                )}
+              />
+              <KeyValue
+                label="Archived"
+                value={String(
+                  razorpayWhatsAppInternalNotificationGates.counts.archived,
+                )}
+              />
+              <KeyValue
+                label="Blocked"
+                value={String(
+                  razorpayWhatsAppInternalNotificationGates.counts.blocked,
+                )}
+              />
+            </div>
+          )}
+
+          {razorpayWhatsAppInternalNotificationReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {
+                  razorpayWhatsAppInternalNotificationReadiness.nextAction
+                }
+              </code>
+            </div>
+          )}
+
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7e-cli-only-banner"
+          >
+            <strong>CLI-only Review.</strong> No "Send WhatsApp" /
+            "Queue WhatsApp" / "Send Template" / "Send Notification" /
+            "Notify Staff" / "Route to WhatsApp" / "Approve Gate" /
+            "Reject Gate" / "Approve Attempt" / "Execute" / "Notify
+            Customer" / "Create Shipment" / "Create AWB" / "Book
+            Courier" / "Mark Paid" / "Capture Payment" / "Refund" /
+            "Apply Mutation" / "Mutate Order" / "Create Payment Link"
+            / "Replay Event" / "Enable Mutation" / "Go Live" / "Run
+            MCP Tool" / "Edit .env" buttons exist on this page.
+            Phase 7E approval is a status transition only - it does
+            NOT enable any send path.
           </div>
         </section>
       )}

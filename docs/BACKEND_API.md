@@ -7,10 +7,16 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 7B baseline:** documented through Phase 7B (Controlled Pilot
-> Execution Gate, gate-only, CLI-only review state changes).
-> Phase 7C is NOT approved and NOT designed; Phase 7B does not authorize
-> provider calls, WhatsApp sends, courier booking, or business mutation.
+> **Phase 7E baseline:** documented through Phase 7E (Controlled
+> Internal WhatsApp Notification Readiness Gate, gate-only, CLI-only
+> review state changes). Phase 7D was executed once on 2026-05-07
+> (`order_SmThqpK6sc6Dhs`, attempt id 1, rolled back, no business
+> impact); Phase 7D-Hotfix-1 (structured UTC window guard for execute
+> commands) is mandatory before any future provider-touching command
+> runs. Phase 7F (Delhivery shipment) / Phase 7E-Live (real customer
+> WhatsApp send) remain NOT approved and NOT designed. Neither Phase
+> 7D, Phase 7E, nor Phase 7E-Live exposes a POST execute / approve /
+> reject / archive endpoint — every review state change is CLI-only.
 >
 ## Health
 
@@ -925,3 +931,46 @@ default `IsAuthenticatedOrReadOnly`.
 
 CAIO is intentionally absent from every role-set: it is an AI-agent identity,
 not a user role, and per blueprint §6.3 must never execute business actions.
+
+## Phase 7D - Razorpay Controlled Pilot Execution (CLI-only review; one-shot TEST execute path)
+
+Read-only HTTP layer. Phase 7D was executed once on 2026-05-07
+(`order_SmThqpK6sc6Dhs`, attempt id 1, rolled back, no business
+mutation). The execute path is CLI-only via
+`manage.py execute_razorpay_controlled_pilot_test_order` and refuses
+unless every safety gate is green. Phase 7D-Hotfix-1 will add a
+structured UTC window guard before any future re-run.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-execution-readiness/` | admin/staff | Phase 7D readiness, env flag state, attempt counters, kill-switch state, source-chain eligibility, blockers/warnings, `nextAction`. |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-execution-attempts/?limit=N` | admin/staff | Phase 7D attempt list with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-execution-attempts/<int:pk>/` | admin/staff | Read-only attempt detail (whitelist serializer; never returns raw signoff text or raw provider response). |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-execution-preview/?gate_id=<ID>` | admin/staff | Read-only preview from a Phase 7B-approved gate. Never creates rows. |
+| GET | `/api/v1/saas/razorpay/controlled-pilot-execution-rollbacks/<int:attempt_id>/` | admin/staff | List of rollback records for a Phase 7D attempt. |
+
+POST/PATCH/DELETE on every endpoint return 405. **No POST execute /
+approve / reject / archive endpoint exists.**
+
+## Phase 7E - WhatsApp Internal Notification Readiness Gate (CLI-only review)
+
+Read-only HTTP layer over the Phase 7E gate. Approval flips status
+to `approved_for_future_phase7f_or_7e_send_review` only — it does
+NOT enable any send path. Phase 7E never sends WhatsApp, never
+queues, never calls Meta Cloud / Delhivery / Vapi, never creates a
+shipment / AWB / payment link, never captures, never refunds, never
+sends a customer notification, never mutates real business rows,
+never edits any `.env*` file.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/razorpay/whatsapp-internal-notification-readiness/` | admin/staff | Phase 7E readiness, `PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED` flag, gate counters, Phase 7D rolled-back-eligible counter, kill-switch state, blockers/warnings, `nextAction`, forbidden-actions list. |
+| GET | `/api/v1/saas/razorpay/whatsapp-internal-notification-gates/?limit=N` | admin/staff | Phase 7E gate list. Locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/razorpay/whatsapp-internal-notification-gates/<int:pk>/` | admin/staff | Read-only gate detail (whitelist serializer; never returns full director sign-off text or any PII). |
+| GET | `/api/v1/saas/razorpay/whatsapp-internal-notification-preview/?attempt_id=<ID>` | admin/staff | Read-only preview from a rolled-back Phase 7D attempt. Never creates rows. |
+| GET | `/api/v1/saas/razorpay/whatsapp-internal-notification-dry-runs/<int:gate_id>/` | admin/staff | List of dry-run / rollback-dry-run records for a Phase 7E gate. |
+
+POST/PATCH/DELETE on every endpoint return 405. **No POST endpoint
+dispatches state changes** — every gate transition is CLI-only via
+the 8 management commands documented in CLAUDE.md "Where things
+live".

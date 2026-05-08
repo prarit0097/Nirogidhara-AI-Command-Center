@@ -165,6 +165,8 @@ import type {
   SaasRazorpayControlledPilotExecutionReadiness,
   SaasRazorpayControlledPilotGateReadiness,
   SaasRazorpayControlledPilotGatesResponse,
+  SaasRazorpayWhatsAppInternalNotificationGatesResponse,
+  SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
   SaasRazorpayPhase6FinalAuditLocksResponse,
   SaasRazorpayPaymentOrderWorkflowGateReadiness,
@@ -1576,6 +1578,23 @@ export const api = {
       `/v1/saas/razorpay/controlled-pilot-execution-attempts/?limit=${limit}`,
       () =>
         M.SAAS_RAZORPAY_CONTROLLED_PILOT_EXECUTION_ATTEMPTS as SaasRazorpayControlledPilotExecutionAttemptsResponse,
+    ),
+
+  // ---------- Phase 7E - Controlled Internal WhatsApp Notification Readiness ----------
+
+  getSaasRazorpayWhatsAppInternalNotificationReadiness: () =>
+    safeFetch<SaasRazorpayWhatsAppInternalNotificationReadiness>(
+      "/v1/saas/razorpay/whatsapp-internal-notification-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_WHATSAPP_INTERNAL_NOTIFICATION_READINESS as SaasRazorpayWhatsAppInternalNotificationReadiness,
+    ),
+  getSaasRazorpayWhatsAppInternalNotificationGates: (
+    limit: number = 25,
+  ) =>
+    safeFetch<SaasRazorpayWhatsAppInternalNotificationGatesResponse>(
+      `/v1/saas/razorpay/whatsapp-internal-notification-gates/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_WHATSAPP_INTERNAL_NOTIFICATION_GATES as SaasRazorpayWhatsAppInternalNotificationGatesResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

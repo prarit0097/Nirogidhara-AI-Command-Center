@@ -42,8 +42,87 @@ controlled pilot execution would need). Do **not** enable any
 sandbox or readiness or pilot-plan env flag in production until
 Phase 6T implementation lands and passes its own acceptance criteria.
 
+**Phase 7E Controlled Internal WhatsApp Notification Readiness
+Gate is shipped (gate-only, CLI-only review state changes).** New
+`RazorpayWhatsAppInternalNotificationGate` +
+`RazorpayWhatsAppInternalNotificationDryRunRecord` models +
+migration `payments.0013_phase7e_whatsapp_internal_notification_gate`,
+new service module
+`apps.payments.razorpay_whatsapp_internal_notification`, 8
+strictly-CLI management commands (inspect-readiness / preview /
+prepare / dry-run / rollback-dry-run / approve / reject /
+list-gates), 5 read-only auth-protected GET DRF endpoints under
+`/api/v1/saas/razorpay/whatsapp-internal-notification-{readiness,
+gates,gates/<pk>,preview,dry-runs/<gate_id>}/` (**no POST endpoint
+dispatches state changes**), 14 audit kinds (each ≤ 64 chars), new
+env flag `PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED`
+(default `false`), and a new shared utility `apps.saas.utc_window`
+that ships pure `parse_director_signoff_window` +
+`validate_review_window`. Phase 7E uses the utility for review-only
+approval validation; Phase 7D-Hotfix-1 (separate later turn) reuses
+and extends it with `validate_execution_window
+(max_window_seconds=900)` for execute commands. Approve refuses
+unless `dry_run_passed=True` AND `rollback_dry_run_passed=True` AND
+`claim_vault_grounded=True` AND non-empty reason AND
+`--director-signoff` parses structured `BEGIN_UTC=...` /
+`END_UTC=...` markers AND review-window length ≤ 24h AND signoff
+literally references `phase7d_attempt_id_<ID>`; legacy free-text
+source Phase 7D signoff requires
+`--acknowledge-source-phase7d-window-violation` AND `--reason`
+literally contains
+`acknowledged_phase7d_window_violation_ref_attempt_<ID>`. Phase 7E
+**never** sends a WhatsApp message, **never** queues an outbound,
+**never** calls Meta Cloud / Delhivery / Vapi (asserted with mock
+spies), **never** creates a shipment / AWB / payment link,
+**never** captures, **never** refunds, **never** sends a customer
+notification, **never** mutates real `Order` / `Payment` /
+`Shipment` / `DiscountOfferLog` / `Customer` / `Lead` rows
+(asserted with before/after counts), **never** imports
+`apps.whatsapp.services.send_*` /
+`apps.whatsapp.integrations.whatsapp.meta_cloud_client` / `dotenv`
+(asserted with static-file scan), **never** edits any `.env*`
+file. Approval flips status to
+`approved_for_future_phase7f_or_7e_send_review` only — it does
+**NOT** enable any send path. 91 new backend tests (71 service +
+20 utility) + 2 new frontend tests; 1672 backend + 68 frontend,
+all green. **Next backend phase: Phase 7D-Hotfix-1 (structured
+UTC window guard for `execute_razorpay_controlled_pilot_test_order`
++ `execute_single_razorpay_test_order`; reuses and extends
+`apps.saas.utc_window`). MANDATORY before any future
+provider-touching command runs.** See
+[`PHASE_7D_HOTFIX_1_PLAN.md`](PHASE_7D_HOTFIX_1_PLAN.md).
+
+**Phase 7D-Hotfix-1 — Structured UTC Window Guard for
+provider-touching execute commands (PENDING; mandatory before any
+future re-run).** New `validate_execution_window` helper added to
+`apps.saas.utc_window` (`max_window_seconds=900`).
+`execute_razorpay_controlled_pilot_test_order` and
+`execute_single_razorpay_test_order` modified to call
+`parse_director_signoff_window` + `validate_execution_window`;
+reject if parser returns `None` (no structured markers), window
+length > 15 min, `now < window_start`, `now > window_end`, or
+window stale (`window_start < now - 24h`). New blocker strings
+`phase7d_director_signoff_missing_structured_utc_window`,
+`phase7d_now_outside_director_signoff_utc_window`,
+`phase7d_director_signoff_window_too_long_max_15_min`,
+`phase7d_director_signoff_window_stale_more_than_24h_old`. Three
+new nullable fields added to
+`RazorpayControlledPilotExecutionAttempt` and
+`RuntimeProviderExecutionAttempt`
+(`recorded_signoff_window_start_utc`,
+`recorded_signoff_window_end_utc`,
+`recorded_signoff_window_valid`); past rows keep `NULL` / `False`
+(no backfill). Migration
+`payments.0014_phase7d_hotfix_director_signoff_window`. New
+backend tests parametrized over: missing markers, malformed
+timestamp, window > 15 min, `now < start`, `now > end`, stale
+window, valid in-window run accepted, idempotency unchanged, mock
+SDK never invoked. **Hotfix-1 does NOT re-run any execute
+command.**
+
 **Phase 7D Razorpay Controlled Pilot one-shot internal TEST
-execution capability is shipped (CLI-only, never run).** New
+execution was shipped and executed once on 2026-05-07 (rolled
+back; no business / customer impact).** New
 `RazorpayControlledPilotExecutionAttempt` +
 `RazorpayControlledPilotExecutionRollback` models + migration
 `payments.0012_phase7d_controlled_pilot_execution`, new service

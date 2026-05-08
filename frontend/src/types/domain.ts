@@ -4019,6 +4019,133 @@ export interface SaasRazorpayControlledPilotExecutionAttemptsResponse {
   phase7DMutatesBusinessRow: false;
 }
 
+// ---------- Phase 7E - Controlled Internal WhatsApp Notification Readiness ----------
+
+export type SaasRazorpayWhatsAppInternalNotificationGateStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "approved_for_future_phase7f_or_7e_send_review"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export type SaasRazorpayWhatsAppInternalNotificationGateSourcePhase7DSignoffWindowValidationStatus =
+  | "valid_structured_window"
+  | "failed_or_legacy_free_text"
+  | "not_applicable";
+
+export interface SaasRazorpayWhatsAppInternalNotificationGateDto {
+  id: number;
+  status: SaasRazorpayWhatsAppInternalNotificationGateStatus;
+  sourcePhase7DAttemptId: number | null;
+  sourcePhase7BGateId: number | null;
+  sourcePhase6TLockId: number | null;
+  targetInternalCohortPhoneSuffixLast4: string;
+  proposedTemplateActionKeys: string[];
+  proposedTemplateNamesResolved: string[];
+  proposedVariableKeys: string[];
+  claimVaultGrounded: boolean;
+  claimVaultBlockers: string[];
+  dryRunPassed: boolean;
+  dryRunFailedReasons: string[];
+  rollbackDryRunPassed: boolean;
+  rollbackDryRunFailedReasons: string[];
+  sourcePhase7DSignoffWindowValidationStatus: SaasRazorpayWhatsAppInternalNotificationGateSourcePhase7DSignoffWindowValidationStatus;
+  sourcePhase7DWindowViolationAcknowledged: boolean;
+  sourcePhase7DWindowViolationAckAt: string | null;
+  phase7EFutureReviewSignoffWindowStartUtc: string | null;
+  phase7EFutureReviewSignoffWindowEndUtc: string | null;
+  phase7EFutureReviewSignoffWindowValid: boolean;
+  whatsappSendAllowedInPhase7E: false;
+  whatsappQueueAllowedInPhase7E: false;
+  metaCloudCallAllowedInPhase7E: false;
+  businessMutationAllowedInPhase7E: false;
+  customerNotificationAllowedInPhase7E: false;
+  realCustomerAllowedInPhase7E: false;
+  providerCallAttempted: false;
+  whatsAppMessageCreated: false;
+  whatsAppMessageQueued: false;
+  whatsAppLifecycleEventCreated: false;
+  metaCloudCallAttempted: false;
+  customerNotificationSent: false;
+  realOrderMutationWasMade: false;
+  realPaymentMutationWasMade: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasRazorpayWhatsAppInternalNotificationGateCounts {
+  draft: number;
+  pending_manual_review: number;
+  approved_for_future_phase7f_or_7e_send_review: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasRazorpayWhatsAppInternalNotificationReadiness {
+  phase: "7E";
+  status: "whatsapp_internal_notification_readiness_only";
+  latestCompletedPhase: "7D";
+  nextPhase: "7F_or_7E_live_not_approved";
+  envFlags: {
+    phase7eGateEnabled: boolean;
+  };
+  envFlagSnapshot: Record<string, boolean | string>;
+  killSwitch: {
+    enabled: boolean;
+    model: string;
+    id?: number;
+  };
+  phase7DRolledBackEligibleCount: number;
+  phase7DEligibleForPhase7ECount: number;
+  gateCounts: SaasRazorpayWhatsAppInternalNotificationGateCounts;
+  items: SaasRazorpayWhatsAppInternalNotificationGateDto[];
+  phase7DSourceSignoffMayBeLegacyFreeTextWithAck: boolean;
+  phase7DHotfix1RequiredBeforeAnyFutureProviderTouchingCommand: boolean;
+  phase7ESendsWhatsApp: false;
+  phase7EQueuesWhatsApp: false;
+  phase7ECallsMetaCloud: false;
+  phase7ECallsDelhivery: false;
+  phase7ECreatesShipmentOrAwb: false;
+  phase7ECreatesPaymentLink: false;
+  phase7ECapturesPayment: false;
+  phase7ERefundsPayment: false;
+  phase7ESendsCustomerNotification: false;
+  phase7EMutatesBusinessRow: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasRazorpayWhatsAppInternalNotificationGatesResponse {
+  phase: "7E";
+  limit: number;
+  counts: SaasRazorpayWhatsAppInternalNotificationGateCounts;
+  items: SaasRazorpayWhatsAppInternalNotificationGateDto[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase7ESendsWhatsApp: false;
+  phase7EQueuesWhatsApp: false;
+  phase7ECallsMetaCloud: false;
+  phase7ECallsDelhivery: false;
+  phase7ECreatesShipmentOrAwb: false;
+  phase7ECreatesPaymentLink: false;
+  phase7ECapturesPayment: false;
+  phase7ERefundsPayment: false;
+  phase7ESendsCustomerNotification: false;
+  phase7EMutatesBusinessRow: false;
+}
+
 // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------
 
 export interface SaasRazorpaySandboxPaidStatusEventMapping {
