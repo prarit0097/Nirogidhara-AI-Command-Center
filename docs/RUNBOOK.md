@@ -3055,8 +3055,20 @@ It requires the three Phase 7G env flags AND
 `--confirm-one-shot-courier-execution` AND `--director-signoff`
 mentioning the Phase 7F gate id AND `--operator-name` AND
 `--mode-acknowledgement` matching the live `DELHIVERY_MODE` ∈
-{`mock`, `test`} AND `--rollback-record-only-acknowledged`. It
-calls the Delhivery client exactly once via the lazy-import
+{`mock`, `test`} AND `--rollback-record-only-acknowledged`.
+**Phase 7G-Hotfix-1:** the `--director-signoff` body MUST also
+contain literal `BEGIN_UTC=<ISO-8601-UTC-Z>` and
+`END_UTC=<ISO-8601-UTC-Z>` markers, the parsed window length must
+be `≤ 15 minutes`, the window must be fresh (`window_start` not
+older than 24h), `END_UTC > BEGIN_UTC`, and
+`datetime.now(tz=UTC)` must fall inside `[window_start,
+window_end]` at runtime — refusal happens before the lazy
+`_create_awb_via_dedicated_wrapper` import + Delhivery client
+touch. Free-text-only sign-off is refused. On success the parsed
+window is persisted via `recorded_signoff_window_valid=True` +
+`recorded_signoff_window_start_utc` +
+`recorded_signoff_window_end_utc` on the attempt row. It calls
+the Delhivery client exactly once via the lazy-import
 `_create_awb_via_dedicated_wrapper` and records the AWB / status
 / tracking-url summary on the attempt row. It writes NO
 `Shipment` / `WorkflowStep` / `RescueAttempt` row, never books a

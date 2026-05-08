@@ -4,6 +4,28 @@
 > this doc and `nd.md` disagree, `nd.md` wins; this doc must be
 > updated to match.
 >
+> **Phase 7G-Hotfix-1 — Structured UTC Window Guard for Delhivery
+> execute command — SHIPPED.** `execute_phase7g_courier_one_shot`
+> (and the `execute_delhivery_courier_one_shot` CLI) now refuse to
+> dispatch unless `--director-signoff` contains literal
+> `BEGIN_UTC=<ISO-Z>` / `END_UTC=<ISO-Z>` markers, parsed window
+> length ≤ 15 minutes (reuses `apps.saas.utc_window.validate_within_director_window`
+> with `max_window_seconds=900`), window not stale > 24h,
+> `END_UTC > BEGIN_UTC`, and `now ∈ [window_start, window_end]`.
+> Refusal happens **before** the lazy `_create_awb_via_dedicated_wrapper`
+> import + Delhivery client touch (asserted in every refusal test
+> with `mock.MagicMock.assert_not_called`). On success the parsed
+> window is persisted via `recorded_signoff_window_valid=True` +
+> `recorded_signoff_window_start_utc` + `recorded_signoff_window_end_utc`
+> (nullable fields already on `RazorpayCourierExecutionAttempt`
+> from Phase 7G migration `payments.0016` — no new migration). New
+> blockers: `phase7g_director_signoff_missing_structured_utc_window`,
+> `phase7g_director_signoff_malformed_structured_utc_window`,
+> `phase7g_director_signoff_window_too_long_max_15_min`,
+> `phase7g_director_signoff_window_stale_more_than_24h_old`,
+> `phase7g_now_before_director_signoff_utc_window_start`,
+> `phase7g_now_after_director_signoff_utc_window_end`.
+>
 > **Phase 7G-Live (real customer courier execution) remains NOT
 > approved as of this commit.** Phase 7G is the only currently
 > approved design path in this controlled Phase 7 chain that may

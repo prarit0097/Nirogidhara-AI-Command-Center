@@ -1,7 +1,7 @@
 """``python manage.py execute_delhivery_courier_one_shot \\
     --attempt-id <ID> \\
     --confirm-one-shot-courier-execution \\
-    --director-signoff "..." \\
+    --director-signoff "...BEGIN_UTC=2026-05-08T12:00:00Z END_UTC=2026-05-08T12:10:00Z..." \\
     --operator-name "..." \\
     --mode-acknowledgement "mock|test" \\
     --rollback-record-only-acknowledged \\
@@ -19,6 +19,12 @@ safety gate is green:
   ``approved_for_one_shot_courier_test_or_live_review``.
 * The director sign-off text is non-empty AND mentions the source
   Phase 7F gate id.
+* **Phase 7G-Hotfix-1:** the director sign-off body MUST include
+  literal ``BEGIN_UTC=<ISO-8601-UTC-Z>`` and ``END_UTC=<ISO-8601-UTC-Z>``
+  markers, the parsed window length must be ``<= 15 minutes``, the
+  window must be fresh (``window_start`` not older than 24 hours), and
+  ``datetime.now(tz=UTC)`` must fall inside ``[window_start,
+  window_end]`` at runtime. Free-text-only sign-off is refused.
 * ``--operator-name`` is a non-empty string.
 * ``--mode-acknowledgement`` matches the live ``DELHIVERY_MODE``
   (must be ``mock`` or ``test``; live is refused).
@@ -75,7 +81,14 @@ class Command(BaseCommand):
             type=str,
             help=(
                 "Director sign-off text. Must be non-empty AND must "
-                "mention the source Phase 7F gate id."
+                "mention the source Phase 7F gate id. Phase 7G-Hotfix-1: "
+                "must include literal BEGIN_UTC=<ISO-8601-UTC-Z> and "
+                "END_UTC=<ISO-8601-UTC-Z> markers; parsed window length "
+                "must be <= 15 minutes; window must be fresh "
+                "(window_start not older than 24h); now must fall "
+                "inside [window_start, window_end]. Free-text-only "
+                "sign-off is refused; stale or future windows are "
+                "blocked before the Delhivery client is touched."
             ),
         )
         parser.add_argument(

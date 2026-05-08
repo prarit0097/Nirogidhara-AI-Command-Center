@@ -68,6 +68,10 @@ from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 from apps.crm.models import Customer, Lead
 from apps.orders.models import DiscountOfferLog, Order
+from apps.saas.utc_window import (
+    parse_director_signoff_window,
+    validate_within_director_window,
+)
 from apps.shipments.models import RescueAttempt, Shipment, WorkflowStep
 from apps.whatsapp.models import (
     WhatsAppHandoffToCall,
@@ -1667,6 +1671,59 @@ def execute_phase7g_courier_one_shot(
         blockers.append(
             "director_signoff_must_mention_phase7f_gate_id"
         )
+
+    # Phase 7G-Hotfix-1: structured UTC window guard.
+    # Parser is pure; validator is pure; no DB / env / provider call.
+    # Refusal happens before the lazy Delhivery wrapper import + call.
+    parsed_window = parse_director_signoff_window(director_signoff)
+    if parsed_window is None:
+        if director_signoff.strip():
+            blockers.append(
+                "phase7g_director_signoff_missing_structured_utc_window"
+            )
+    else:
+        window_validation = validate_within_director_window(
+            parsed_window
+        )
+        if not window_validation.valid:
+            for entry in window_validation.blockers:
+                if entry == "director_signoff_window_end_must_be_after_start":
+                    blockers.append(
+                        "phase7g_director_signoff_malformed_structured_utc_window"
+                    )
+                elif entry.startswith(
+                    "director_signoff_window_too_long"
+                ):
+                    blockers.append(
+                        "phase7g_director_signoff_window_too_long_max_15_min"
+                    )
+                elif entry == (
+                    "director_signoff_window_stale_more_than_24h_old"
+                ):
+                    blockers.append(
+                        "phase7g_director_signoff_window_stale_more_than_24h_old"
+                    )
+                elif entry == (
+                    "now_outside_director_signoff_utc_window_before_start"
+                ):
+                    blockers.append(
+                        "phase7g_now_before_director_signoff_utc_window_start"
+                    )
+                elif entry == (
+                    "now_outside_director_signoff_utc_window_after_end"
+                ):
+                    blockers.append(
+                        "phase7g_now_after_director_signoff_utc_window_end"
+                    )
+                elif entry == (
+                    "director_signoff_missing_structured_utc_window"
+                ):
+                    blockers.append(
+                        "phase7g_director_signoff_missing_structured_utc_window"
+                    )
+                else:
+                    blockers.append(f"phase7g_{entry}")
+
     if not operator_name.strip():
         blockers.append("operator_name_must_be_non_empty")
     if not confirm_one_shot_courier_execution:
@@ -1776,6 +1833,17 @@ def execute_phase7g_courier_one_shot(
     attempt.confirm_one_shot_courier_execution = True
     attempt.rollback_record_only_acknowledged = True
     attempt.executed_by = confirmed_by
+    # Phase 7G-Hotfix-1: persist the parsed structured UTC window.
+    if parsed_window is not None:
+        attempt.recorded_signoff_window_valid = True
+        attempt.recorded_signoff_window_start_utc = (
+            parsed_window.window_start_utc
+        )
+        attempt.recorded_signoff_window_end_utc = (
+            parsed_window.window_end_utc
+        )
+    else:
+        attempt.recorded_signoff_window_valid = False
     attempt.save(
         update_fields=[
             "idempotency_lock_acquired",
@@ -1789,6 +1857,9 @@ def execute_phase7g_courier_one_shot(
             "kill_switch_snapshot_at_each_step",
             "env_flag_snapshot_at_each_step",
             "delhivery_mode_at_each_step",
+            "recorded_signoff_window_valid",
+            "recorded_signoff_window_start_utc",
+            "recorded_signoff_window_end_utc",
             "updated_at",
         ]
     )

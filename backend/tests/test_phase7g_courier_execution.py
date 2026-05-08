@@ -192,11 +192,37 @@ def _make_approved_phase7g_attempt(
     return RazorpayCourierExecutionAttempt.objects.get(pk=attempt_id)
 
 
-def _signoff_text(phase7f_gate_id: int) -> str:
+def _structured_signoff(
+    phase7f_gate_id: int,
+    *,
+    begin_offset_seconds: int = -60,
+    end_offset_seconds: int = 60,
+) -> str:
+    """Build a Phase 7G-Hotfix-1 compliant Director sign-off.
+
+    Defaults to a 2-minute window centered on ``datetime.now(tz=UTC)``,
+    i.e. begin = now-60s, end = now+60s, so ``validate_within_director_window``
+    returns ``valid=True``. Tests override the offsets to exercise the
+    "now before start", "now after end", "window > 15 min", and "stale
+    window" branches.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(tz=timezone.utc).replace(microsecond=0)
+    begin = now + timedelta(seconds=begin_offset_seconds)
+    end = now + timedelta(seconds=end_offset_seconds)
+    begin_iso = begin.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_iso = end.strftime("%Y-%m-%dT%H:%M:%SZ")
     return (
         f"Director sign-off for Phase 7G one-shot courier "
-        f"execution against Phase 7F gate {phase7f_gate_id}."
+        f"execution against Phase 7F gate {phase7f_gate_id}. "
+        f"BEGIN_UTC={begin_iso} END_UTC={end_iso}"
     )
+
+
+def _signoff_text(phase7f_gate_id: int) -> str:
+    """Hotfix-1 compliant default sign-off used by every happy-path test."""
+    return _structured_signoff(phase7f_gate_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1742,4 +1768,397 @@ def test_inspect_readiness_returns_blockers_when_attempt_was_mutated() -> None:
     out = inspect_phase7g_courier_execution_readiness()
     assert any(
         "businessMutationWasMade" in b for b in out["blockers"]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 7G-Hotfix-1 - Structured UTC Window Guard
+#
+# Every refusal in this block must complete BEFORE the lazy
+# `_create_awb_via_dedicated_wrapper` import + call. The wrapper is
+# patched as a `MagicMock` and asserted `assert_not_called` so a
+# false-positive that accidentally reaches the network would fail
+# the test deterministically.
+#
+# No real Delhivery call. No AWB. No Shipment row. No business
+# mutation. No customer notification. No `.env` edit.
+# ---------------------------------------------------------------------------
+
+
+def _signoff_without_markers(phase7f_gate_id: int) -> str:
+    """Free-text-only sign-off; mentions the gate id but has no
+    BEGIN_UTC / END_UTC markers."""
+    return (
+        f"Director sign-off for Phase 7G one-shot courier "
+        f"execution against Phase 7F gate {phase7f_gate_id}. "
+        f"This is a free-text only signature."
+    )
+
+
+def _signoff_malformed_timestamp(phase7f_gate_id: int) -> str:
+    """Malformed BEGIN_UTC / END_UTC values (no trailing 'Z',
+    invalid ISO)."""
+    return (
+        f"Director sign-off for Phase 7G one-shot courier "
+        f"execution against Phase 7F gate {phase7f_gate_id}. "
+        f"BEGIN_UTC=2026-13-99T99:99:99 END_UTC=not-a-timestamp"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix1_execute_refuses_when_signoff_has_no_structured_markers() -> (
+    None
+):
+    """Free-text-only signoff is refused before the wrapper."""
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_no_markers"
+    )
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        out = execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=_signoff_without_markers(
+                attempt.source_phase7f_gate_id
+            ),
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    patched.assert_not_called()
+    assert out["ok"] is False
+    assert any(
+        "phase7g_director_signoff_missing_structured_utc_window" in b
+        for b in out["blockers"]
+    )
+    row = RazorpayCourierExecutionAttempt.objects.get(pk=attempt.pk)
+    assert row.provider_call_attempted is False
+    assert row.delhivery_call_attempted is False
+    assert row.awb_created is False
+    assert row.shipment_created is False
+    assert row.business_mutation_was_made is False
+    assert row.customer_notification_sent is False
+
+
+@pytest.mark.django_db
+def test_hotfix1_execute_refuses_when_signoff_timestamps_are_malformed() -> (
+    None
+):
+    """Malformed BEGIN_UTC / END_UTC -> parser returns None ->
+    refusal before the wrapper."""
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_malformed"
+    )
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        out = execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=_signoff_malformed_timestamp(
+                attempt.source_phase7f_gate_id
+            ),
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    patched.assert_not_called()
+    assert out["ok"] is False
+    assert any(
+        "phase7g_director_signoff_missing_structured_utc_window" in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix1_execute_refuses_when_now_before_window_start() -> None:
+    """now < BEGIN_UTC -> refusal before the wrapper."""
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_now_before"
+    )
+    # Window opens 10 minutes in the future, closes 13 minutes in
+    # the future (a valid 3-min window, but `now` is before start).
+    signoff = _structured_signoff(
+        attempt.source_phase7f_gate_id,
+        begin_offset_seconds=600,
+        end_offset_seconds=780,
+    )
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        out = execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=signoff,
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    patched.assert_not_called()
+    assert out["ok"] is False
+    assert any(
+        "phase7g_now_before_director_signoff_utc_window_start" in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix1_execute_refuses_when_now_after_window_end() -> None:
+    """now > END_UTC -> refusal before the wrapper."""
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_now_after"
+    )
+    # Window opened 10 minutes ago, closed 5 minutes ago.
+    signoff = _structured_signoff(
+        attempt.source_phase7f_gate_id,
+        begin_offset_seconds=-600,
+        end_offset_seconds=-300,
+    )
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        out = execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=signoff,
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    patched.assert_not_called()
+    assert out["ok"] is False
+    assert any(
+        "phase7g_now_after_director_signoff_utc_window_end" in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix1_execute_refuses_when_window_longer_than_15_minutes() -> (
+    None
+):
+    """window_end - window_start > 15 min -> refusal before the
+    wrapper. Use a 16-minute window centered on now."""
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_too_long"
+    )
+    signoff = _structured_signoff(
+        attempt.source_phase7f_gate_id,
+        begin_offset_seconds=-2 * 60,
+        end_offset_seconds=14 * 60,
+    )
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        out = execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=signoff,
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    patched.assert_not_called()
+    assert out["ok"] is False
+    assert any(
+        "phase7g_director_signoff_window_too_long_max_15_min" in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix1_execute_refuses_when_window_is_stale_past_24h() -> None:
+    """window_start more than 24h before now -> refusal before the
+    wrapper."""
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_stale"
+    )
+    # Window opened 25 hours ago, closed 24h59m ago.
+    signoff = _structured_signoff(
+        attempt.source_phase7f_gate_id,
+        begin_offset_seconds=-25 * 60 * 60,
+        end_offset_seconds=-(24 * 60 * 60 + 59 * 60),
+    )
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        out = execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=signoff,
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    patched.assert_not_called()
+    assert out["ok"] is False
+    assert any(
+        "phase7g_director_signoff_window_stale_more_than_24h_old" in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix1_execute_refuses_when_window_end_before_start() -> None:
+    """END_UTC <= BEGIN_UTC -> refusal before the wrapper."""
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_end_before_start"
+    )
+    signoff = _structured_signoff(
+        attempt.source_phase7f_gate_id,
+        begin_offset_seconds=120,
+        end_offset_seconds=-120,
+    )
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        out = execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=signoff,
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    patched.assert_not_called()
+    assert out["ok"] is False
+    assert any(
+        "phase7g_director_signoff_malformed_structured_utc_window" in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix1_execute_valid_window_reaches_wrapper_and_persists_fields() -> (
+    None
+):
+    """Valid Hotfix-1 window dispatches to the (mocked) wrapper and
+    persists `recorded_signoff_window_*` fields on the attempt row.
+
+    Asserts (in addition to the hotfix-1 specifics) that NO
+    Shipment / WorkflowStep / RescueAttempt / WhatsAppMessage row
+    is created and every locked-False boolean stays False.
+    """
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_valid_window"
+    )
+    signoff = _structured_signoff(
+        attempt.source_phase7f_gate_id,
+        begin_offset_seconds=-60,
+        end_offset_seconds=120,
+    )
+    before = _row_counts()
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper",
+        return_value={
+            "awb": "DLH00112233",
+            "status": "Pickup Scheduled",
+            "tracking_url": "https://delhivery.example/track/DLH00112233",
+        },
+    ) as patched:
+        out = execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=signoff,
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    after = _row_counts()
+    patched.assert_called_once()
+    assert out["ok"] is True, out.get("blockers")
+
+    row = RazorpayCourierExecutionAttempt.objects.get(pk=attempt.pk)
+    assert row.recorded_signoff_window_valid is True
+    assert row.recorded_signoff_window_start_utc is not None
+    assert row.recorded_signoff_window_end_utc is not None
+    assert (
+        row.recorded_signoff_window_end_utc
+        > row.recorded_signoff_window_start_utc
+    )
+    # Phase 7G "no Shipment" invariant - business + send + courier
+    # row counts unchanged, locked-False booleans still False.
+    assert before == after
+    assert row.shipment_created is False
+    assert row.business_mutation_was_made is False
+    assert row.real_order_mutation_was_made is False
+    assert row.real_payment_mutation_was_made is False
+    assert row.real_shipment_mutation_was_made is False
+    assert row.customer_notification_sent is False
+    # Allowed-True booleans are now True.
+    assert row.provider_call_attempted is True
+    assert row.delhivery_call_attempted is True
+    assert row.awb_created is True
+
+
+@pytest.mark.django_db
+def test_hotfix1_window_refusal_records_attempt_blocked_no_provider_call() -> (
+    None
+):
+    """A window-refusal must persist the attempt as `blocked`,
+    leave provider_call_attempted=False, and emit no `executed`
+    audit row."""
+    attempt = _make_approved_phase7g_attempt(
+        source_event_id="evt_phase7g_hf1_blocked_state"
+    )
+    AuditEvent.objects.filter(kind=AUDIT_KIND_EXECUTED).delete()
+    with _phase7g_execute_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        execute_phase7g_courier_one_shot(
+            attempt.pk,
+            director_signoff=_signoff_without_markers(
+                attempt.source_phase7f_gate_id
+            ),
+            operator_name="Prarit Sidana",
+            mode_acknowledgement="mock",
+            confirm_one_shot_courier_execution=True,
+            rollback_record_only_acknowledged=True,
+        )
+    patched.assert_not_called()
+    row = RazorpayCourierExecutionAttempt.objects.get(pk=attempt.pk)
+    assert (
+        row.status
+        == RazorpayCourierExecutionAttempt.Status.BLOCKED
+    )
+    assert row.provider_call_attempted is False
+    assert row.delhivery_call_attempted is False
+    assert row.awb_created is False
+    assert (
+        AuditEvent.objects.filter(kind=AUDIT_KIND_EXECUTED).exists()
+        is False
+    )
+
+
+def test_hotfix1_service_module_imports_window_helpers_at_top_level() -> None:
+    """Static-file scan: the service module must import
+    `parse_director_signoff_window` and
+    `validate_within_director_window` from `apps.saas.utc_window`
+    at the top level, NOT lazily."""
+    src_path = importlib.import_module(
+        "apps.payments.razorpay_courier_execution"
+    ).__file__
+    with open(src_path, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    assert (
+        "from apps.saas.utc_window import" in text
+    ), "Phase 7G must import the UTC window helpers."
+    assert "parse_director_signoff_window" in text
+    assert "validate_within_director_window" in text
+
+
+def test_hotfix1_command_help_text_mentions_begin_utc_end_utc() -> None:
+    """The CLI help text must teach operators about BEGIN_UTC /
+    END_UTC and the 15-minute cap."""
+    src_path = importlib.import_module(
+        "apps.payments.management.commands."
+        "execute_delhivery_courier_one_shot"
+    ).__file__
+    with open(src_path, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    assert "BEGIN_UTC" in text
+    assert "END_UTC" in text
+    assert "15 minutes" in text or "15-minute" in text or (
+        "<= 15" in text
     )
