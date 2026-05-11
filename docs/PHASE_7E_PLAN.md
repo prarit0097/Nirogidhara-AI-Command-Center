@@ -3,6 +3,32 @@
 > Persisted plan. Source of truth for Phase 7E implementation. If this
 > doc and `nd.md` disagree, `nd.md` wins; this doc must be updated to
 > match.
+>
+> **Phase 7E-Live-A — Internal allowed-list WhatsApp one-shot send
+> gate — SHIPPED (CLI-only execute path; locked-OFF; never run on the
+> VPS; never sends to a real customer phone).** New
+> `payments.RazorpayWhatsAppInternalSendAttempt` model + migration
+> `payments.0017`. Recipient MUST be on
+> `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` (stored as last-4 only);
+> template MUST be an approved Meta template with Claim Vault
+> grounding (no freeform medical text). The Meta Cloud client is
+> **lazy-imported only inside `_send_internal_template_via_meta_cloud`**
+> (asserted by a static-file scan). Execute path refuses unless
+> `PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED=true` +
+> `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` +
+> `--confirm-internal-whatsapp-send` + `--director-signoff` with
+> structured `BEGIN_UTC=` / `END_UTC=` markers (≤ 15 min, fresh,
+> now-in-window — reuses `apps.saas.utc_window`) + non-empty
+> `--operator-name` + kill switch enabled + every broad WhatsApp
+> automation flag off + no prior provider call. 8 strictly-CLI
+> management commands; 4 read-only auth-protected GET endpoints
+> under `/api/v1/saas/whatsapp/internal-send-{readiness,attempts,
+> attempts/<pk>,preview}/`; **no POST execute / approve / reject
+> endpoint exists**. 9 audit kinds
+> (`phase7e.internal_send.{readiness_inspected,previewed,prepared,
+> approved,executed,failed,rollback_recorded,rejected,blocked}`).
+> Defaults LOCKED: `PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED=false`.
+> Phase 7E-Live-B (real customer WhatsApp send) remains NOT approved.
 
 ---
 

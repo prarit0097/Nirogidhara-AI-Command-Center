@@ -3111,3 +3111,110 @@ NOT** call `apps.shipments.services.create_shipment`, **do NOT**
 add a `--send-whatsapp` / `--book-pickup` / `--generate-label`
 flag, **do NOT** edit `.env.production`. Phase 7G-Live (real
 customer courier execution) remains NOT approved.
+
+### Phase 7H — Final Audit / Evidence Lock for Completed Phase 7G Execution
+
+Phase 7H is **lock-only**. It snapshots the immutable fields off a
+completed Phase 7G TEST/MOCK courier execution attempt (status =
+`rolled_back_recorded`, `provider_call_attempted=True`,
+`awb_created=True`, all locked-False booleans still `False`) into a
+separate `RazorpayCourierExecutionEvidenceLock` row. Approval flips
+status to `locked` only — it does NOT authorize any live execution.
+Phase 7H NEVER calls Delhivery, never creates a `Shipment` /
+AWB row, never sends or queues WhatsApp, never calls Meta Cloud /
+Razorpay / Vapi, never sends a customer notification, never mutates
+real business rows.
+
+```bash
+# 1. Read-only readiness
+python manage.py inspect_phase7h_courier_execution_evidence_lock \
+    --json --no-audit
+
+# 2. Read-only preview from a completed Phase 7G attempt (no row creation)
+python manage.py preview_phase7h_courier_execution_evidence_lock \
+    --attempt-id <PHASE7G_ATTEMPT_ID> --json
+
+# 3. Prepare a Phase 7H evidence-lock row (one per attempt; idempotent)
+python manage.py prepare_phase7h_courier_execution_evidence_lock \
+    --attempt-id <PHASE7G_ATTEMPT_ID> --json
+
+# 4. Approve (status -> locked). Mandatory non-empty reason.
+python manage.py approve_phase7h_courier_execution_evidence_lock \
+    --lock-id <ID> --reason "Director Phase 7H lock" --json
+
+# 5. Reject (only from draft / pending_manual_review / blocked).
+python manage.py reject_phase7h_courier_execution_evidence_lock \
+    --lock-id <ID> --reason "Director paused lock review" --json
+
+# 6. Archive (after locked / rejected).
+python manage.py archive_phase7h_courier_execution_evidence_lock \
+    --lock-id <ID> --reason "Director archive" --json
+```
+
+### Phase 7E-Live-A — Internal Allowed-list WhatsApp One-shot Send Gate
+
+Phase 7E-Live-A is the **only currently approved design path** for a
+real Meta Cloud WhatsApp HTTP send in this controlled Phase 7 chain
+after fresh Director approval. The recipient MUST be on
+`WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS` (stored as last-4 only);
+the template MUST be an approved Meta template with Claim Vault
+grounding; no freeform medical text. Execute path is **CLI-only**
+and requires `PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED=true` +
+`WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` + a fresh Director
+sign-off with structured `BEGIN_UTC=` / `END_UTC=` markers (≤ 15
+min; reuses `apps.saas.utc_window.validate_within_director_window`)
++ non-empty operator name + kill switch enabled + every broad
+WhatsApp automation flag (`WHATSAPP_AI_AUTO_REPLY_ENABLED` /
+`WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED` /
+`WHATSAPP_CALL_HANDOFF_ENABLED` /
+`WHATSAPP_RESCUE_DISCOUNT_ENABLED` /
+`WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED` /
+`WHATSAPP_REORDER_DAY20_ENABLED`) off + no prior provider call.
+
+```bash
+# 1. Read-only readiness
+python manage.py inspect_phase7e_live_internal_whatsapp_send_readiness \
+    --json --no-audit
+
+# 2. Read-only preview from an approved Phase 7E gate
+python manage.py preview_phase7e_live_internal_whatsapp_send \
+    --gate-id <PHASE7E_GATE_ID> --json
+
+# 3. Prepare an internal send attempt (one per Phase 7E gate; idempotent)
+python manage.py prepare_phase7e_live_internal_whatsapp_send \
+    --gate-id <PHASE7E_GATE_ID> \
+    --template-name "nrg_internal_test_intro" \
+    --template-language "en" \
+    --allowed-recipient-last4 NNNN \
+    --json
+
+# 4. Approve (state transition only; requires reason + signoff)
+python manage.py approve_phase7e_live_internal_whatsapp_send \
+    --attempt-id <ID> \
+    --reason "Director approve" \
+    --director-signoff "Director PS approve." \
+    --json
+
+# 5. THE ONLY MET-A-CLOUD-TOUCHING COMMAND - never run during normal ops.
+# Requires three Phase 7E-Live env flags + structured BEGIN_UTC/END_UTC
+# (≤ 15 min) + operator name + kill switch + all broad-automation flags off.
+python manage.py execute_phase7e_live_internal_whatsapp_send \
+    --attempt-id <ID> \
+    --confirm-internal-whatsapp-send \
+    --operator-name "Prarit Sidana" \
+    --director-signoff "...BEGIN_UTC=2026-05-09T10:00:00Z END_UTC=2026-05-09T10:10:00Z..." \
+    --json
+
+# 6. Record-only rollback (never calls Meta Cloud delete/cancel).
+python manage.py rollback_phase7e_live_internal_whatsapp_send \
+    --attempt-id <ID> --reason "Director rollback" --json
+```
+
+**Phase 7E-Live-A NEVER sends to a real customer phone (recipient
+must be on `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`); NEVER queues
+broad automation; NEVER calls Delhivery / Razorpay / Vapi; NEVER
+sends a customer notification; NEVER mutates real `Order` /
+`Payment` / `Customer` / `Lead` / `DiscountOfferLog` rows; NEVER
+sends freeform medical text (approved Meta template only); NEVER
+edits any `.env*` file.** Phase 7E-Live-B (real customer WhatsApp
+send) remains NOT approved.

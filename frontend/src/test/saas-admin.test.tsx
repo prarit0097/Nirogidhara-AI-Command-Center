@@ -1841,4 +1841,94 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
       expect(body).toContain("Phase 7G");
     },
   );
+
+  it(
+    "renders the Phase 7H Courier Execution Evidence Lock section in " +
+      "read-only / lock-only safe state",
+    async () => {
+      render(<SaasAdminPage />);
+      expect(
+        await screen.findByText(
+          "Phase 7H Courier Execution Evidence Lock",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7h-courier-evidence-lock-section"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7h-cli-only-banner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(/Lock-only.*CLI-only Review/i).length,
+      ).toBeGreaterThan(0);
+
+      const phase7hForbiddenButtons = [
+        /^lock evidence$/i,
+        /^approve lock$/i,
+        /^reject lock$/i,
+        /^archive lock$/i,
+        /^execute$/i,
+        /^send whatsapp$/i,
+        /^notify customer$/i,
+        /^edit \.env$/i,
+        /^go live$/i,
+      ];
+      for (const pattern of phase7hForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
+
+  it(
+    "renders the Phase 7E-Live-A Internal WhatsApp One-shot section " +
+      "in read-only / internal-only safe state",
+    async () => {
+      render(<SaasAdminPage />);
+      expect(
+        await screen.findByText(
+          "Phase 7E-Live-A Internal WhatsApp One-shot",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7e-live-internal-send-section"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7e-live-cli-only-banner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(/CLI-only Execute/i).length,
+      ).toBeGreaterThan(0);
+
+      const phase7eLiveForbiddenButtons = [
+        /^send whatsapp$/i,
+        /^queue whatsapp$/i,
+        /^send template$/i,
+        /^notify customer$/i,
+        /^approve send$/i,
+        /^reject send$/i,
+        /^execute$/i,
+        /^run one-shot$/i,
+        /^approve attempt$/i,
+        /^reject attempt$/i,
+        /^rollback$/i,
+        /^mutate order$/i,
+        /^apply mutation$/i,
+        /^go live$/i,
+        /^edit \.env$/i,
+      ];
+      for (const pattern of phase7eLiveForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      // No raw secrets / tokens / real phone leak.
+      const body = document.body.textContent ?? "";
+      expect(body).not.toContain("META_WA_TOKEN");
+      expect(body).not.toContain("DELHIVERY_API_TOKEN=");
+      expect(body).not.toMatch(/\+91\d{10}/);
+    },
+  );
 });

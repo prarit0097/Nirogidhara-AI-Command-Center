@@ -392,6 +392,20 @@ PHASE7G_DIRECTOR_APPROVED_ONE_SHOT_COURIER_EXECUTION = _razorpay_webhook_bool(
 PHASE7G_ALLOW_DELHIVERY_TEST_AWB = _razorpay_webhook_bool(
     "PHASE7G_ALLOW_DELHIVERY_TEST_AWB"
 )
+# `PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED` controls the
+# Phase 7E-Live-A internal allowed-list WhatsApp one-shot send
+# lifecycle (prepare/approve/execute/rollback). Locked OFF by
+# default. The actual send is CLI-only and additionally requires
+# a fresh Director sign-off with structured BEGIN_UTC/END_UTC
+# markers (reusing `apps.saas.utc_window`) AND
+# `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` AND a recipient on
+# the existing `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`
+# allow-list. Phase 7E-Live-A NEVER sends to a real customer
+# phone, NEVER mutates business rows, and NEVER edits any
+# .env file.
+PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED = _razorpay_webhook_bool(
+    "PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

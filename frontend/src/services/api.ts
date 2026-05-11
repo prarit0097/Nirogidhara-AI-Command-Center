@@ -169,6 +169,10 @@ import type {
   SaasRazorpayCourierReadinessGatesResponse,
   SaasRazorpayCourierExecutionAttemptsResponse,
   SaasRazorpayCourierExecutionReadiness,
+  SaasRazorpayCourierExecutionEvidenceLockReadiness,
+  SaasRazorpayCourierExecutionEvidenceLocksResponse,
+  SaasPhase7ELiveInternalSendReadiness,
+  SaasPhase7ELiveInternalSendAttemptsResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -1629,6 +1633,36 @@ export const api = {
       `/v1/saas/delhivery/courier-execution-attempts/?limit=${limit}`,
       () =>
         M.SAAS_RAZORPAY_COURIER_EXECUTION_ATTEMPTS as SaasRazorpayCourierExecutionAttemptsResponse,
+    ),
+
+  // ---------- Phase 7H - Courier Execution Evidence Lock ----------
+
+  getSaasRazorpayCourierExecutionEvidenceLockReadiness: () =>
+    safeFetch<SaasRazorpayCourierExecutionEvidenceLockReadiness>(
+      "/v1/saas/delhivery/courier-execution-evidence-lock-readiness/",
+      () =>
+        M.SAAS_RAZORPAY_COURIER_EXECUTION_EVIDENCE_LOCK_READINESS as SaasRazorpayCourierExecutionEvidenceLockReadiness,
+    ),
+  getSaasRazorpayCourierExecutionEvidenceLocks: (limit: number = 25) =>
+    safeFetch<SaasRazorpayCourierExecutionEvidenceLocksResponse>(
+      `/v1/saas/delhivery/courier-execution-evidence-locks/?limit=${limit}`,
+      () =>
+        M.SAAS_RAZORPAY_COURIER_EXECUTION_EVIDENCE_LOCKS as SaasRazorpayCourierExecutionEvidenceLocksResponse,
+    ),
+
+  // ---------- Phase 7E-Live-A - Internal Allowed-list WhatsApp One-shot Send ----------
+
+  getSaasPhase7ELiveInternalSendReadiness: () =>
+    safeFetch<SaasPhase7ELiveInternalSendReadiness>(
+      "/v1/saas/whatsapp/internal-send-readiness/",
+      () =>
+        M.SAAS_PHASE7E_LIVE_INTERNAL_SEND_READINESS as SaasPhase7ELiveInternalSendReadiness,
+    ),
+  getSaasPhase7ELiveInternalSendAttempts: (limit: number = 25) =>
+    safeFetch<SaasPhase7ELiveInternalSendAttemptsResponse>(
+      `/v1/saas/whatsapp/internal-send-attempts/?limit=${limit}`,
+      () =>
+        M.SAAS_PHASE7E_LIVE_INTERNAL_SEND_ATTEMPTS as SaasPhase7ELiveInternalSendAttemptsResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

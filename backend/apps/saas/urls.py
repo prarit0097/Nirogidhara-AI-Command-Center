@@ -43,6 +43,14 @@ from .views import (
     RazorpayCourierExecutionPreviewView,
     RazorpayCourierExecutionReadinessView,
     RazorpayCourierExecutionRollbacksView,
+    RazorpayCourierExecutionEvidenceLockDetailView,
+    RazorpayCourierExecutionEvidenceLockPreviewView,
+    RazorpayCourierExecutionEvidenceLockReadinessView,
+    RazorpayCourierExecutionEvidenceLocksListView,
+    WhatsAppInternalSendAttemptDetailView,
+    WhatsAppInternalSendAttemptsListView,
+    WhatsAppInternalSendPreviewView,
+    WhatsAppInternalSendReadinessView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -656,5 +664,50 @@ urlpatterns = [
         "delhivery/courier-execution-rollbacks/<int:attempt_id>/",
         RazorpayCourierExecutionRollbacksView.as_view(),
         name="saas-delhivery-courier-execution-rollbacks",
+    ),
+    # Phase 7H - Courier Execution Evidence Lock (lock-only;
+    # read-only API; CLI-only state changes).
+    path(
+        "delhivery/courier-execution-evidence-lock-readiness/",
+        RazorpayCourierExecutionEvidenceLockReadinessView.as_view(),
+        name="saas-delhivery-courier-execution-evidence-lock-readiness",
+    ),
+    path(
+        "delhivery/courier-execution-evidence-locks/",
+        RazorpayCourierExecutionEvidenceLocksListView.as_view(),
+        name="saas-delhivery-courier-execution-evidence-locks",
+    ),
+    path(
+        "delhivery/courier-execution-evidence-locks/<int:pk>/",
+        RazorpayCourierExecutionEvidenceLockDetailView.as_view(),
+        name="saas-delhivery-courier-execution-evidence-lock-detail",
+    ),
+    path(
+        "delhivery/courier-execution-evidence-lock-preview/",
+        RazorpayCourierExecutionEvidenceLockPreviewView.as_view(),
+        name="saas-delhivery-courier-execution-evidence-lock-preview",
+    ),
+    # Phase 7E-Live-A - Internal Allowed-list WhatsApp One-shot Send
+    # Gate (CLI-only execute; read-only API; never sends to real
+    # customer; never mutates business rows).
+    path(
+        "whatsapp/internal-send-readiness/",
+        WhatsAppInternalSendReadinessView.as_view(),
+        name="saas-whatsapp-internal-send-readiness",
+    ),
+    path(
+        "whatsapp/internal-send-attempts/",
+        WhatsAppInternalSendAttemptsListView.as_view(),
+        name="saas-whatsapp-internal-send-attempts",
+    ),
+    path(
+        "whatsapp/internal-send-attempts/<int:pk>/",
+        WhatsAppInternalSendAttemptDetailView.as_view(),
+        name="saas-whatsapp-internal-send-attempt-detail",
+    ),
+    path(
+        "whatsapp/internal-send-preview/",
+        WhatsAppInternalSendPreviewView.as_view(),
+        name="saas-whatsapp-internal-send-preview",
     ),
 ]

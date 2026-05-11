@@ -4858,3 +4858,223 @@ export interface SaasRazorpayBusinessMutationSandboxPlan {
     neverIncludes: string[];
   }>;
 }
+
+// ---------- Phase 7H - Courier Execution Evidence Lock ----------
+
+export type SaasRazorpayCourierExecutionEvidenceLockStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "locked"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasRazorpayCourierExecutionEvidenceLockDto {
+  id: number;
+  status: SaasRazorpayCourierExecutionEvidenceLockStatus;
+  sourcePhase7GAttemptId: number | null;
+  sourcePhase7FGateId: number | null;
+  sourcePhase7EGateId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  sourcePhase7BGateId: number | null;
+  sourcePhase6TLockId: number | null;
+  providerObjectIdSnapshot: string;
+  providerStatusSnapshot: string;
+  recordedSignoffWindowValidSnapshot: boolean | null;
+  executedAtSnapshot: string | null;
+  rolledBackAtSnapshot: string | null;
+  rollbackStatusSnapshot: string;
+  shipmentCreatedSnapshot: boolean;
+  businessMutationWasMadeSnapshot: boolean;
+  customerNotificationSentSnapshot: boolean;
+  evidenceJson: Record<string, unknown>;
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lockedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasRazorpayCourierExecutionEvidenceLockCounts {
+  draft: number;
+  pending_manual_review: number;
+  locked: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasRazorpayCourierExecutionEvidenceLockReadiness {
+  phase: "7H";
+  status: "courier_evidence_lock_only";
+  latestCompletedPhase: "7G";
+  nextPhase: "phase_7g_live_or_phase_7h_complete";
+  killSwitch: { enabled: boolean; model: string; id?: number };
+  eligiblePhase7GAttemptCount: number;
+  phase7HLockCounts: SaasRazorpayCourierExecutionEvidenceLockCounts;
+  items: SaasRazorpayCourierExecutionEvidenceLockDto[];
+  phase7HCallsDelhivery: false;
+  phase7HCreatesShipmentRow: false;
+  phase7HCreatesAwb: false;
+  phase7HSendsWhatsApp: false;
+  phase7HQueuesWhatsApp: false;
+  phase7HCallsMetaCloud: false;
+  phase7HCallsRazorpay: false;
+  phase7HSendsCustomerNotification: false;
+  phase7HMutatesBusinessRow: false;
+  phase7HLiveCustomerCourierApproved: false;
+  executionPath: "lock_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasRazorpayCourierExecutionEvidenceLocksResponse {
+  phase: "7H";
+  limit: number;
+  counts: SaasRazorpayCourierExecutionEvidenceLockCounts;
+  items: SaasRazorpayCourierExecutionEvidenceLockDto[];
+  executionPath: "lock_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase7HCallsDelhivery: false;
+  phase7HCreatesShipmentRow: false;
+  phase7HCreatesAwb: false;
+  phase7HSendsWhatsApp: false;
+  phase7HQueuesWhatsApp: false;
+  phase7HCallsMetaCloud: false;
+  phase7HCallsRazorpay: false;
+  phase7HSendsCustomerNotification: false;
+  phase7HMutatesBusinessRow: false;
+  phase7HLiveCustomerCourierApproved: false;
+}
+
+// ---------- Phase 7E-Live-A - Internal Allowed-list WhatsApp One-shot Send ----------
+
+export type SaasPhase7ELiveInternalSendStatus =
+  | "draft"
+  | "pending_director_signoff"
+  | "approved_for_internal_one_shot_send"
+  | "executed"
+  | "failed"
+  | "rollback_recorded"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasPhase7ELiveInternalSendAttemptDto {
+  id: number;
+  status: SaasPhase7ELiveInternalSendStatus;
+  sourcePhase7EGateId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  sourcePhase7BGateId: number | null;
+  sourcePhase6TLockId: number | null;
+  templateName: string;
+  templateLanguage: string;
+  allowedRecipientLast4: string;
+  recipientScope: "internal_staff_allow_list";
+  providerMessageId: string;
+  providerStatus: string;
+  safeRequestSummary: Record<string, unknown>;
+  safeResponseSummary: Record<string, unknown>;
+  recordedSignoffWindowValid: boolean | null;
+  recordedSignoffWindowStartUtc: string | null;
+  recordedSignoffWindowEndUtc: string | null;
+  providerCallAttempted: boolean;
+  metaCloudCallAttempted: boolean;
+  whatsAppMessageCreated: boolean;
+  whatsAppMessageQueued: boolean;
+  customerNotificationSent: false;
+  businessMutationWasMade: false;
+  realCustomerAllowed: false;
+  realCustomerPhoneUsed: false;
+  claimVaultGrounded: boolean;
+  idempotencyKey: string;
+  idempotencyLockAcquired: boolean;
+  directorSignoffPresent: boolean;
+  operatorName: string;
+  confirmInternalWhatsAppSend: boolean;
+  rollbackReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  executedAt: string | null;
+  failedAt: string | null;
+  rolledBackAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasPhase7ELiveInternalSendCounts {
+  draft: number;
+  pending_director_signoff: number;
+  approved_for_internal_one_shot_send: number;
+  executed: number;
+  failed: number;
+  rollback_recorded: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasPhase7ELiveInternalSendReadiness {
+  phase: "7E-Live-A";
+  status: "internal_allowed_list_whatsapp_one_shot_send_only";
+  latestCompletedPhase: "7E";
+  nextPhase: "phase_7e_live_a_executed_or_phase_7e_live_b_not_approved";
+  phase7ELiveInternalWhatsAppSendEnabled: boolean;
+  whatsAppLiveMetaLimitedTestMode: boolean;
+  allowedTestNumbersCount: number;
+  envFlagSnapshot: Record<string, boolean | string>;
+  killSwitch: { enabled: boolean; model: string; id?: number };
+  attemptCounts: SaasPhase7ELiveInternalSendCounts;
+  items: SaasPhase7ELiveInternalSendAttemptDto[];
+  phase7ELiveSendsToRealCustomer: false;
+  phase7ELiveMutatesBusinessRow: false;
+  phase7ELiveCustomerNotification: false;
+  phase7ELiveSupportsFreeformMedicalText: false;
+  phase7ELiveRecipientScope: "internal_staff_allow_list";
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  safeToRunPhase7ELiveSend: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  recentAttempts: SaasPhase7ELiveInternalSendAttemptDto[];
+}
+
+export interface SaasPhase7ELiveInternalSendAttemptsResponse {
+  phase: "7E-Live-A";
+  limit: number;
+  counts: SaasPhase7ELiveInternalSendCounts;
+  items: SaasPhase7ELiveInternalSendAttemptDto[];
+  executionPath: "cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  recipientScope: "internal_staff_allow_list";
+  phase7ELiveSendsToRealCustomer: false;
+  phase7ELiveMutatesBusinessRow: false;
+  phase7ELiveCustomerNotification: false;
+  phase7ELiveSupportsFreeformMedicalText: false;
+}

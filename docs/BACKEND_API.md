@@ -999,3 +999,38 @@ dispatches state changes** — every gate transition is CLI-only via
 the 8 management commands documented in CLAUDE.md "Where things
 live". **Archive command intentionally deferred** (mirrors Phase 7E
 pattern); reachable via reject + later one-shot operator workflow.
+
+### Phase 7H — Courier Execution Evidence Lock (lock-only)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/delhivery/courier-execution-evidence-lock-readiness/` | admin/staff | Read-only readiness composition. |
+| GET | `/api/v1/saas/delhivery/courier-execution-evidence-locks/?limit=N` | admin/staff | Phase 7H lock listing with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/delhivery/courier-execution-evidence-locks/<int:pk>/` | admin/staff | Read-only lock detail (whitelist serializer; never returns raw provider response / Director sign-off text / customer PII). |
+| GET | `/api/v1/saas/delhivery/courier-execution-evidence-lock-preview/?attempt_id=<ID>` | admin/staff | Read-only preview from a completed Phase 7G attempt. Never creates rows. |
+
+POST/PATCH/DELETE on every Phase 7H endpoint return 405. **No POST
+endpoint dispatches lock state changes** — every transition is
+CLI-only via the 6 management commands
+(`inspect_phase7h_courier_execution_evidence_lock`, `preview_…`,
+`prepare_…`, `approve_…_lock --reason`, `reject_…_lock --reason`,
+`archive_…_lock --reason`). Phase 7H never calls Delhivery, never
+creates a `Shipment` / AWB row, never mutates business rows.
+
+### Phase 7E-Live-A — Internal Allowed-list WhatsApp One-shot Send
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/whatsapp/internal-send-readiness/` | admin/staff | Read-only readiness composition. |
+| GET | `/api/v1/saas/whatsapp/internal-send-attempts/?limit=N` | admin/staff | Phase 7E-Live-A attempt listing with `recipientScope=internal_staff_allow_list` + safety locks. |
+| GET | `/api/v1/saas/whatsapp/internal-send-attempts/<int:pk>/` | admin/staff | Read-only attempt detail (whitelist serializer; never returns raw Meta token / full phone / raw provider response / Director sign-off text). |
+| GET | `/api/v1/saas/whatsapp/internal-send-preview/?gate_id=<ID>` | admin/staff | Read-only preview from an approved Phase 7E gate. Never creates rows. |
+
+POST/PATCH/DELETE on every Phase 7E-Live-A endpoint return 405.
+**No POST endpoint dispatches state changes** — every transition
+is CLI-only via the 8 management commands. Phase 7E-Live-A never
+sends to a real customer phone; never queues broad automation;
+never calls Delhivery / Razorpay / Vapi; never sends a customer
+notification; never mutates real business rows; never edits any
+`.env*` file. **Phase 7E-Live-B (real customer WhatsApp send)
+remains NOT approved.**

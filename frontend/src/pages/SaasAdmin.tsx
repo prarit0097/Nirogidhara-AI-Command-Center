@@ -34,6 +34,10 @@ import type {
   SaasRazorpayCourierReadinessGatesResponse,
   SaasRazorpayCourierExecutionAttemptsResponse,
   SaasRazorpayCourierExecutionReadiness,
+  SaasRazorpayCourierExecutionEvidenceLockReadiness,
+  SaasRazorpayCourierExecutionEvidenceLocksResponse,
+  SaasPhase7ELiveInternalSendReadiness,
+  SaasPhase7ELiveInternalSendAttemptsResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -227,6 +231,26 @@ export default function SaasAdminPage() {
     razorpayCourierExecutionAttempts,
     setRazorpayCourierExecutionAttempts,
   ] = useState<SaasRazorpayCourierExecutionAttemptsResponse | null>(null);
+  const [
+    razorpayCourierExecutionEvidenceLockReadiness,
+    setRazorpayCourierExecutionEvidenceLockReadiness,
+  ] = useState<SaasRazorpayCourierExecutionEvidenceLockReadiness | null>(
+    null,
+  );
+  const [
+    razorpayCourierExecutionEvidenceLocks,
+    setRazorpayCourierExecutionEvidenceLocks,
+  ] = useState<SaasRazorpayCourierExecutionEvidenceLocksResponse | null>(
+    null,
+  );
+  const [
+    phase7eLiveInternalSendReadiness,
+    setPhase7eLiveInternalSendReadiness,
+  ] = useState<SaasPhase7ELiveInternalSendReadiness | null>(null);
+  const [
+    phase7eLiveInternalSendAttempts,
+    setPhase7eLiveInternalSendAttempts,
+  ] = useState<SaasPhase7ELiveInternalSendAttemptsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -272,6 +296,10 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayCourierReadinessGates(25),
       api.getSaasRazorpayCourierExecutionReadiness(),
       api.getSaasRazorpayCourierExecutionAttempts(25),
+      api.getSaasRazorpayCourierExecutionEvidenceLockReadiness(),
+      api.getSaasRazorpayCourierExecutionEvidenceLocks(25),
+      api.getSaasPhase7ELiveInternalSendReadiness(),
+      api.getSaasPhase7ELiveInternalSendAttempts(25),
     ])
       .then(
         ([
@@ -315,6 +343,10 @@ export default function SaasAdminPage() {
           p7fGates,
           p7gRead,
           p7gAttempts,
+          p7hRead,
+          p7hLocks,
+          p7eLiveRead,
+          p7eLiveAttempts,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -356,6 +388,10 @@ export default function SaasAdminPage() {
           setRazorpayCourierReadinessGates(p7fGates);
           setRazorpayCourierExecutionReadiness(p7gRead);
           setRazorpayCourierExecutionAttempts(p7gAttempts);
+          setRazorpayCourierExecutionEvidenceLockReadiness(p7hRead);
+          setRazorpayCourierExecutionEvidenceLocks(p7hLocks);
+          setPhase7eLiveInternalSendReadiness(p7eLiveRead);
+          setPhase7eLiveInternalSendAttempts(p7eLiveAttempts);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -4770,6 +4806,280 @@ export default function SaasAdminPage() {
             <code>mock</code> or <code>test</code> + record-only
             rollback acknowledgement + RuntimeKillSwitch enabled +
             full source-chain green.
+          </div>
+        </section>
+      )}
+
+      {(razorpayCourierExecutionEvidenceLockReadiness ||
+        razorpayCourierExecutionEvidenceLocks) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase7h-courier-evidence-lock-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 7H Courier Execution Evidence Lock
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 7H — <strong>lock-only</strong>. Snapshots the
+                immutable fields off a completed Phase 7G TEST/MOCK
+                courier execution attempt (status =
+                <code>rolled_back_recorded</code> with{" "}
+                <code>provider_call_attempted=true</code> +{" "}
+                <code>awb_created=true</code> AND every locked-False
+                boolean still <code>false</code>). Approval flips
+                status to <code>locked</code>; it does NOT enable any
+                live execution. Phase 7H NEVER calls Delhivery, NEVER
+                creates a <code>Shipment</code> / AWB row, NEVER
+                sends or queues WhatsApp, NEVER calls Meta Cloud /
+                Razorpay / Vapi, NEVER sends a customer notification,
+                NEVER mutates real <code>Order</code> /{" "}
+                <code>Payment</code> / <code>Customer</code> /{" "}
+                <code>Lead</code> rows, NEVER edits any{" "}
+                <code>.env*</code> file. Review state changes are
+                CLI-only. Phase 7G-Live (real customer courier
+                execution) remains <strong>not approved</strong>.
+              </p>
+            </div>
+            {razorpayCourierExecutionEvidenceLockReadiness && (
+              <div data-testid="phase7h-status-badge">
+                <StatusPill
+                  tone={
+                    razorpayCourierExecutionEvidenceLockReadiness.killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {razorpayCourierExecutionEvidenceLockReadiness.killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+          {razorpayCourierExecutionEvidenceLockReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={
+                  razorpayCourierExecutionEvidenceLockReadiness.phase
+                }
+              />
+              <KeyValue
+                label="Status"
+                value={
+                  razorpayCourierExecutionEvidenceLockReadiness.status
+                }
+              />
+              <KeyValue
+                label="Eligible 7G attempts"
+                value={String(
+                  razorpayCourierExecutionEvidenceLockReadiness.eligiblePhase7GAttemptCount,
+                )}
+              />
+              <KeyValue label="Calls Delhivery" value="No" />
+              <KeyValue label="Creates AWB" value="No" />
+              <KeyValue label="Creates Shipment row" value="No" />
+              <KeyValue label="Sends WhatsApp" value="No" />
+              <KeyValue label="Calls Meta Cloud" value="No" />
+              <KeyValue label="Calls Razorpay" value="No" />
+              <KeyValue
+                label="Customer notification"
+                value="No"
+              />
+              <KeyValue label="Business mutation" value="No" />
+              <KeyValue
+                label="Live customer courier"
+                value="Not approved"
+              />
+            </div>
+          )}
+          {razorpayCourierExecutionEvidenceLocks &&
+            razorpayCourierExecutionEvidenceLocks.items.length > 0 && (
+              <div className="border-t border-border px-6 py-4 text-xs">
+                {razorpayCourierExecutionEvidenceLocks.items.map(
+                  (lock) => (
+                    <div
+                      key={lock.id}
+                      className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5 py-1 border-b border-border last:border-0"
+                    >
+                      <span>
+                        id=<strong>{lock.id}</strong>
+                      </span>
+                      <span>status={lock.status}</span>
+                      <span>
+                        7G attempt={lock.sourcePhase7GAttemptId}
+                      </span>
+                      <span>
+                        AWB={lock.providerObjectIdSnapshot || "-"}
+                      </span>
+                      <span>
+                        rollback={lock.rollbackStatusSnapshot}
+                      </span>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+          {razorpayCourierExecutionEvidenceLockReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {
+                  razorpayCourierExecutionEvidenceLockReadiness.nextAction
+                }
+              </code>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7h-cli-only-banner"
+          >
+            <strong>Lock-only · CLI-only Review.</strong> No "Lock
+            Evidence" / "Approve Lock" / "Reject Lock" / "Archive
+            Lock" / "Execute" / "Send" / "Notify" buttons exist on
+            this page. Phase 7H approval is a status transition only —
+            it does NOT enable any provider call.
+          </div>
+        </section>
+      )}
+
+      {(phase7eLiveInternalSendReadiness ||
+        phase7eLiveInternalSendAttempts) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase7e-live-internal-send-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 7E-Live-A Internal WhatsApp One-shot
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 7E-Live-A — <strong>internal-staff only</strong>.
+                Recipient MUST be on{" "}
+                <code>WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS</code>;
+                template MUST be approved with Claim Vault grounding;
+                no freeform medical text. Execute path is{" "}
+                <strong>CLI-only</strong> and requires a fresh
+                Director sign-off with structured{" "}
+                <code>BEGIN_UTC=</code> / <code>END_UTC=</code>{" "}
+                markers (≤ 15 min). Phase 7E-Live-A NEVER sends to a
+                real customer phone, NEVER queues broad automation,
+                NEVER mutates real <code>Order</code> /{" "}
+                <code>Payment</code> / <code>Customer</code> /{" "}
+                <code>Lead</code> rows, NEVER edits any{" "}
+                <code>.env*</code> file. Phase 7E-Live-B (real
+                customer WhatsApp send) remains{" "}
+                <strong>not approved</strong>.
+              </p>
+            </div>
+            {phase7eLiveInternalSendReadiness && (
+              <div data-testid="phase7e-live-status-badge">
+                <StatusPill
+                  tone={
+                    phase7eLiveInternalSendReadiness.killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {phase7eLiveInternalSendReadiness.killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+          {phase7eLiveInternalSendReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={phase7eLiveInternalSendReadiness.phase}
+              />
+              <KeyValue
+                label="Recipient scope"
+                value={
+                  phase7eLiveInternalSendReadiness.phase7ELiveRecipientScope
+                }
+              />
+              <KeyValue
+                label="Send flag"
+                value={
+                  phase7eLiveInternalSendReadiness.phase7ELiveInternalWhatsAppSendEnabled
+                    ? "Enabled"
+                    : "Disabled (safe)"
+                }
+              />
+              <KeyValue
+                label="Limited test mode"
+                value={
+                  phase7eLiveInternalSendReadiness.whatsAppLiveMetaLimitedTestMode
+                    ? "On"
+                    : "Off"
+                }
+              />
+              <KeyValue
+                label="Allow-list size"
+                value={String(
+                  phase7eLiveInternalSendReadiness.allowedTestNumbersCount,
+                )}
+              />
+              <KeyValue label="Sends to real customer" value="No" />
+              <KeyValue label="Mutates business rows" value="No" />
+              <KeyValue label="Customer notification" value="No" />
+              <KeyValue
+                label="Supports freeform medical text"
+                value="No"
+              />
+              <KeyValue
+                label="Safe to run send"
+                value={
+                  phase7eLiveInternalSendReadiness.safeToRunPhase7ELiveSend
+                    ? "Yes"
+                    : "No"
+                }
+              />
+            </div>
+          )}
+          {phase7eLiveInternalSendAttempts && (
+            <div className="border-t border-border px-6 py-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-5 text-xs">
+              {Object.entries(
+                phase7eLiveInternalSendAttempts.counts,
+              ).map(([status, count]) => (
+                <KeyValue
+                  key={status}
+                  label={status}
+                  value={String(count)}
+                />
+              ))}
+            </div>
+          )}
+          {phase7eLiveInternalSendReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {phase7eLiveInternalSendReadiness.nextAction}
+              </code>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7e-live-cli-only-banner"
+          >
+            <strong>CLI-only Execute.</strong> No "Send WhatsApp" /
+            "Queue WhatsApp" / "Send Template" / "Notify Customer" /
+            "Approve Send" / "Reject Send" / "Execute" / "Run
+            One-shot" / "Approve Attempt" / "Reject Attempt" /
+            "Rollback" / "Mutate Order" / "Apply Mutation" / "Go
+            Live" / "Edit .env" buttons exist on this page. The
+            actual send lives only behind the locked-OFF{" "}
+            <code>execute_phase7e_live_internal_whatsapp_send</code>{" "}
+            CLI command and requires three structured Director
+            sign-off conditions + the allow-list recipient + the
+            structured UTC window.
           </div>
         </section>
       )}

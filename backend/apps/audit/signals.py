@@ -402,6 +402,29 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.courier_execution.delhivery_mode_blocked": "shield-off",
     "razorpay.courier_execution.duplicate_blocked": "shield-off",
     "razorpay.courier_execution.retry_prepared": "rotate-cw",
+    # Phase 7H - Final audit / evidence lock for completed Phase 7G
+    # TEST/MOCK courier execution (lock-only; never calls Delhivery;
+    # never mutates business rows; never edits any .env file).
+    "phase7h.courier_evidence.readiness_inspected": "eye",
+    "phase7h.courier_evidence.previewed": "eye",
+    "phase7h.courier_evidence.prepared": "file-plus",
+    "phase7h.courier_evidence.locked": "lock",
+    "phase7h.courier_evidence.rejected": "x-circle",
+    "phase7h.courier_evidence.archived": "archive",
+    "phase7h.courier_evidence.blocked": "ban",
+    # Phase 7E-Live-A - Internal allowed-list WhatsApp one-shot send
+    # gate (CLI-only execution; structured UTC window guard;
+    # internal-staff allow-list only; never to real customer;
+    # never mutates business rows; never edits .env).
+    "phase7e.internal_send.readiness_inspected": "eye",
+    "phase7e.internal_send.previewed": "eye",
+    "phase7e.internal_send.prepared": "file-plus",
+    "phase7e.internal_send.approved": "check-circle",
+    "phase7e.internal_send.executed": "send",
+    "phase7e.internal_send.failed": "shield-off",
+    "phase7e.internal_send.rollback_recorded": "rotate-ccw",
+    "phase7e.internal_send.rejected": "x-circle",
+    "phase7e.internal_send.blocked": "ban",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

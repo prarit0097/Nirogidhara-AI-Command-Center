@@ -4687,6 +4687,162 @@ export const SAAS_RAZORPAY_COURIER_EXECUTION_ATTEMPTS: Record<
   phase7GLiveCustomerCourierApproved: false,
 };
 
+// ---------- Phase 7H - Courier Execution Evidence Lock ----------
+
+const PHASE_7H_LOCK_COUNTS = {
+  draft: 0,
+  pending_manual_review: 0,
+  locked: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+};
+
+export const SAAS_RAZORPAY_COURIER_EXECUTION_EVIDENCE_LOCK_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "7H",
+  status: "courier_evidence_lock_only",
+  latestCompletedPhase: "7G",
+  nextPhase: "phase_7g_live_or_phase_7h_complete",
+  killSwitch: { enabled: true, model: "RuntimeKillSwitch" },
+  eligiblePhase7GAttemptCount: 0,
+  phase7HLockCounts: PHASE_7H_LOCK_COUNTS,
+  items: [],
+  phase7HCallsDelhivery: false,
+  phase7HCreatesShipmentRow: false,
+  phase7HCreatesAwb: false,
+  phase7HSendsWhatsApp: false,
+  phase7HQueuesWhatsApp: false,
+  phase7HCallsMetaCloud: false,
+  phase7HCallsRazorpay: false,
+  phase7HSendsCustomerNotification: false,
+  phase7HMutatesBusinessRow: false,
+  phase7HLiveCustomerCourierApproved: false,
+  executionPath: "lock_only_cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  blockers: [],
+  warnings: [
+    "Phase 7H is the Final Audit / Evidence Lock for the completed Phase 7G TEST/MOCK courier execution. It is lock-only. Phase 7G-Live (real customer courier execution) remains NOT approved.",
+  ],
+  nextAction: "no_eligible_phase7g_attempt_present",
+  forbiddenActions: [
+    "call_delhivery_api",
+    "create_awb",
+    "create_shipment_row",
+    "send_whatsapp_template",
+    "send_whatsapp_freeform",
+    "queue_whatsapp_outbound",
+    "send_customer_notification",
+    "call_meta_cloud_api",
+    "call_razorpay_api",
+    "mutate_real_order_status",
+    "edit_dotenv_any",
+  ],
+};
+
+export const SAAS_RAZORPAY_COURIER_EXECUTION_EVIDENCE_LOCKS: Record<
+  string,
+  unknown
+> = {
+  phase: "7H",
+  limit: 25,
+  counts: PHASE_7H_LOCK_COUNTS,
+  items: [],
+  executionPath: "lock_only_cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  phase7HCallsDelhivery: false,
+  phase7HCreatesShipmentRow: false,
+  phase7HCreatesAwb: false,
+  phase7HSendsWhatsApp: false,
+  phase7HQueuesWhatsApp: false,
+  phase7HCallsMetaCloud: false,
+  phase7HCallsRazorpay: false,
+  phase7HSendsCustomerNotification: false,
+  phase7HMutatesBusinessRow: false,
+  phase7HLiveCustomerCourierApproved: false,
+};
+
+// ---------- Phase 7E-Live-A - Internal Allowed-list WhatsApp One-shot Send ----------
+
+const PHASE_7E_LIVE_ATTEMPT_COUNTS = {
+  draft: 0,
+  pending_director_signoff: 0,
+  approved_for_internal_one_shot_send: 0,
+  executed: 0,
+  failed: 0,
+  rollback_recorded: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+};
+
+export const SAAS_PHASE7E_LIVE_INTERNAL_SEND_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "7E-Live-A",
+  status: "internal_allowed_list_whatsapp_one_shot_send_only",
+  latestCompletedPhase: "7E",
+  nextPhase: "phase_7e_live_a_executed_or_phase_7e_live_b_not_approved",
+  phase7ELiveInternalWhatsAppSendEnabled: false,
+  whatsAppLiveMetaLimitedTestMode: true,
+  allowedTestNumbersCount: 0,
+  envFlagSnapshot: {
+    PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED: false,
+    PHASE7E_WHATSAPP_INTERNAL_NOTIFICATION_GATE_ENABLED: false,
+    WHATSAPP_LIVE_META_LIMITED_TEST_MODE: true,
+    WHATSAPP_AI_AUTO_REPLY_ENABLED: false,
+    WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED: false,
+    WHATSAPP_PROVIDER: "mock",
+  },
+  killSwitch: { enabled: true, model: "RuntimeKillSwitch" },
+  attemptCounts: PHASE_7E_LIVE_ATTEMPT_COUNTS,
+  items: [],
+  phase7ELiveSendsToRealCustomer: false,
+  phase7ELiveMutatesBusinessRow: false,
+  phase7ELiveCustomerNotification: false,
+  phase7ELiveSupportsFreeformMedicalText: false,
+  phase7ELiveRecipientScope: "internal_staff_allow_list",
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  safeToRunPhase7ELiveSend: false,
+  blockers: [
+    "WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS_must_contain_at_least_one_entry",
+  ],
+  warnings: [
+    "Phase 7E-Live-A is the Internal Allowed-list WhatsApp One-shot Send Gate. Recipient MUST be on WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS. Phase 7E-Live-A never sends to a real customer, never mutates business rows, never edits .env.",
+  ],
+  nextAction: "fix_phase7e_live_safety_blockers",
+  recentAttempts: [],
+};
+
+export const SAAS_PHASE7E_LIVE_INTERNAL_SEND_ATTEMPTS: Record<
+  string,
+  unknown
+> = {
+  phase: "7E-Live-A",
+  limit: 25,
+  counts: PHASE_7E_LIVE_ATTEMPT_COUNTS,
+  items: [],
+  executionPath: "cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  recipientScope: "internal_staff_allow_list",
+  phase7ELiveSendsToRealCustomer: false,
+  phase7ELiveMutatesBusinessRow: false,
+  phase7ELiveCustomerNotification: false,
+  phase7ELiveSupportsFreeformMedicalText: false,
+};
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 const PHASE_7D_ATTEMPT_COUNTS = {

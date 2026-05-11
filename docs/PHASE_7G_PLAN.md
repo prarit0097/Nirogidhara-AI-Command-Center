@@ -4,6 +4,20 @@
 > this doc and `nd.md` disagree, `nd.md` wins; this doc must be
 > updated to match.
 >
+> **Phase 7H — Final audit/evidence lock for the completed Phase
+> 7G TEST/MOCK execution — SHIPPED.** New
+> `payments.RazorpayCourierExecutionEvidenceLock` model +
+> migration `payments.0017`. Lock-only: never calls Delhivery,
+> never creates a Shipment / AWB row, never mutates business rows,
+> never edits any `.env*` file. 7 audit kinds
+> (`phase7h.courier_evidence.{readiness_inspected,previewed,
+> prepared,locked,rejected,archived,blocked}`). 4 read-only auth-
+> protected GET endpoints under
+> `/api/v1/saas/delhivery/courier-execution-evidence-lock-{readiness,
+> locks,locks/<pk>,preview}/`. Approval flips status to `locked`
+> only — it does NOT authorize any live execution. Phase 7G-Live
+> remains NOT approved.
+>
 > **Phase 7G-Hotfix-2 — Safe retry after pre-window blocked
 > non-provider attempt — SHIPPED.**
 > `prepare_phase7g_courier_execution_attempt` now selects the

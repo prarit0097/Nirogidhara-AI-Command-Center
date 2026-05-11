@@ -2738,6 +2738,224 @@ class RazorpayCourierExecutionRollbacksView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 7H - Courier Execution Evidence Lock (read-only)
+# ---------------------------------------------------------------------------
+
+
+from apps.payments.razorpay_courier_execution_evidence_lock import (  # noqa: E402
+    inspect_phase7h_evidence_lock_readiness as _inspect_phase7h_readiness,
+    preview_phase7h_evidence_lock as _preview_phase7h_lock,
+    serialize_phase7h_evidence_lock as _serialize_phase7h_lock,
+    summarize_phase7h_evidence_locks as _summarize_phase7h_locks,
+)
+from apps.payments.models import (  # noqa: E402
+    RazorpayCourierExecutionEvidenceLock,
+    RazorpayWhatsAppInternalSendAttempt,
+)
+
+
+class RazorpayCourierExecutionEvidenceLockReadinessView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-evidence-lock-readiness/`` - Phase 7H.
+
+    Read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(_inspect_phase7h_readiness())
+
+
+class RazorpayCourierExecutionEvidenceLocksListView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-evidence-locks/`` - Phase 7H list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = _summarize_phase7h_locks(limit=limit)
+        return Response(
+            {
+                "phase": "7H",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "lock_only_cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase7HCallsDelhivery": False,
+                "phase7HCreatesShipmentRow": False,
+                "phase7HCreatesAwb": False,
+                "phase7HSendsWhatsApp": False,
+                "phase7HQueuesWhatsApp": False,
+                "phase7HCallsMetaCloud": False,
+                "phase7HCallsRazorpay": False,
+                "phase7HSendsCustomerNotification": False,
+                "phase7HMutatesBusinessRow": False,
+                "phase7HLiveCustomerCourierApproved": False,
+            }
+        )
+
+
+class RazorpayCourierExecutionEvidenceLockDetailView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-evidence-locks/<pk>/`` - Phase 7H."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayCourierExecutionEvidenceLock.objects.filter(
+                pk=pk
+            ).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7H courier execution evidence lock "
+                        "not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase7h_lock(row))
+
+
+class RazorpayCourierExecutionEvidenceLockPreviewView(APIView):
+    """``GET /api/v1/saas/delhivery/courier-execution-evidence-lock-preview/?attempt_id=<ID>`` - Phase 7H."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            attempt_id = int(
+                request.query_params.get("attempt_id") or 0
+            )
+        except (TypeError, ValueError):
+            attempt_id = 0
+        if attempt_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "attempt_id query param must be a positive "
+                        "integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(_preview_phase7h_lock(attempt_id))
+
+
+# ---------------------------------------------------------------------------
+# Phase 7E-Live-A - Internal Allowed-list WhatsApp Send (read-only)
+# ---------------------------------------------------------------------------
+
+
+from apps.payments.razorpay_whatsapp_internal_send import (  # noqa: E402
+    inspect_phase7e_live_internal_send_readiness as _inspect_phase7e_live_readiness,
+    preview_phase7e_live_internal_send as _preview_phase7e_live_send,
+    serialize_phase7e_live_internal_send_attempt as _serialize_phase7e_live_attempt,
+    summarize_phase7e_live_internal_send_attempts as _summarize_phase7e_live_attempts,
+)
+
+
+class WhatsAppInternalSendReadinessView(APIView):
+    """``GET /api/v1/saas/whatsapp/internal-send-readiness/`` - Phase 7E-Live-A.
+
+    Read-only readiness. Auth + admin only; POST/PATCH/DELETE
+    return 405. No API execute endpoint exists.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(_inspect_phase7e_live_readiness())
+
+
+class WhatsAppInternalSendAttemptsListView(APIView):
+    """``GET /api/v1/saas/whatsapp/internal-send-attempts/`` - Phase 7E-Live-A."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = _summarize_phase7e_live_attempts(limit=limit)
+        return Response(
+            {
+                "phase": "7E-Live-A",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "recipientScope": "internal_staff_allow_list",
+                "phase7ELiveSendsToRealCustomer": False,
+                "phase7ELiveMutatesBusinessRow": False,
+                "phase7ELiveCustomerNotification": False,
+                "phase7ELiveSupportsFreeformMedicalText": False,
+            }
+        )
+
+
+class WhatsAppInternalSendAttemptDetailView(APIView):
+    """``GET /api/v1/saas/whatsapp/internal-send-attempts/<pk>/`` - Phase 7E-Live-A."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayWhatsAppInternalSendAttempt.objects.filter(
+                pk=pk
+            ).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7E-Live-A internal WhatsApp send "
+                        "attempt not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase7e_live_attempt(row))
+
+
+class WhatsAppInternalSendPreviewView(APIView):
+    """``GET /api/v1/saas/whatsapp/internal-send-preview/?gate_id=<ID>`` - Phase 7E-Live-A."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            gate_id = int(request.query_params.get("gate_id") or 0)
+        except (TypeError, ValueError):
+            gate_id = 0
+        if gate_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "gate_id query param must be a positive integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(_preview_phase7e_live_send(gate_id))
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -2844,4 +3062,12 @@ __all__ = (
     "RazorpayCourierExecutionAttemptDetailView",
     "RazorpayCourierExecutionPreviewView",
     "RazorpayCourierExecutionRollbacksView",
+    "RazorpayCourierExecutionEvidenceLockReadinessView",
+    "RazorpayCourierExecutionEvidenceLocksListView",
+    "RazorpayCourierExecutionEvidenceLockDetailView",
+    "RazorpayCourierExecutionEvidenceLockPreviewView",
+    "WhatsAppInternalSendReadinessView",
+    "WhatsAppInternalSendAttemptsListView",
+    "WhatsAppInternalSendAttemptDetailView",
+    "WhatsAppInternalSendPreviewView",
 )
