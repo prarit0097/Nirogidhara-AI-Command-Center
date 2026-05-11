@@ -1931,4 +1931,52 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
       expect(body).not.toMatch(/\+91\d{10}/);
     },
   );
+
+  it(
+    "renders the Phase 7I Final Audit Lock section in read-only / " +
+      "lock-only safe state",
+    async () => {
+      render(<SaasAdminPage />);
+      expect(
+        await screen.findByText("Phase 7I Final Audit Lock"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7i-final-audit-lock-section"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase7i-cli-only-banner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(/Lock-only.*CLI-only Review/i).length,
+      ).toBeGreaterThan(0);
+
+      const phase7iForbiddenButtons = [
+        /^lock final audit$/i,
+        /^approve lock$/i,
+        /^reject lock$/i,
+        /^archive lock$/i,
+        /^execute$/i,
+        /^send whatsapp$/i,
+        /^call razorpay$/i,
+        /^call delhivery$/i,
+        /^notify$/i,
+        /^refund$/i,
+        /^capture$/i,
+        /^apply mutation$/i,
+        /^go live$/i,
+        /^edit \.env$/i,
+      ];
+      for (const pattern of phase7iForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      const body = document.body.textContent ?? "";
+      expect(body).not.toContain("rzp_live_");
+      expect(body).not.toContain("DELHIVERY_API_TOKEN=");
+      expect(body).not.toContain("META_WA_TOKEN");
+      expect(body).not.toMatch(/\+91\d{10}/);
+    },
+  );
 });

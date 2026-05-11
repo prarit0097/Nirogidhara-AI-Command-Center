@@ -1034,3 +1034,25 @@ never calls Delhivery / Razorpay / Vapi; never sends a customer
 notification; never mutates real business rows; never edits any
 `.env*` file. **Phase 7E-Live-B (real customer WhatsApp send)
 remains NOT approved.**
+
+### Phase 7I — Final Phase 7 Payment + WhatsApp + Courier Audit Lock (lock-only)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/phase7/final-audit-lock-readiness/` | admin/staff | Read-only readiness composition (eligibility counters + locked-False safety contract). |
+| GET | `/api/v1/saas/phase7/final-audit-locks/?limit=N` | admin/staff | Phase 7I lock listing with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/phase7/final-audit-locks/<int:pk>/` | admin/staff | Read-only lock detail (whitelist serializer; never returns raw token / full phone / raw provider response / Director sign-off text). |
+| GET | `/api/v1/saas/phase7/final-audit-lock-preview/?phase7g_attempt_id=N&phase7h_evidence_lock_id=N[&phase7e_live_attempt_id=N][&phase7d_attempt_id=N]` | admin/staff | Read-only preview composed from the four source records. Never creates rows. |
+
+POST/PATCH/DELETE on every Phase 7I endpoint return 405. **No POST
+endpoint dispatches lock state changes** — every transition is
+CLI-only via the 6 management commands
+(`inspect_phase7i_final_audit_lock`, `preview_…`, `prepare_…`,
+`approve_…_lock --reason`, `reject_…_lock --reason`,
+`archive_…_lock --reason`). Phase 7I never calls Razorpay / Meta
+Cloud / Delhivery / Vapi, never sends or queues WhatsApp, never
+creates a `Shipment` / AWB / payment link, never captures /
+refunds, never sends a customer notification, never mutates real
+business rows. **Phase 7G-Live (real customer courier execution)
+and Phase 7E-Live-B (real customer WhatsApp send) remain NOT
+approved.**

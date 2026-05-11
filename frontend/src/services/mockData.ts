@@ -4843,6 +4843,99 @@ export const SAAS_PHASE7E_LIVE_INTERNAL_SEND_ATTEMPTS: Record<
   phase7ELiveSupportsFreeformMedicalText: false,
 };
 
+// ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
+
+const PHASE_7I_LOCK_COUNTS = {
+  draft: 0,
+  pending_manual_review: 0,
+  locked: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+};
+
+export const SAAS_PHASE7I_FINAL_AUDIT_LOCK_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "7I",
+  status: "final_phase7_audit_lock_only",
+  latestCompletedPhase: "7H",
+  nextPhase: "phase7i_locked_or_phase7_live_not_approved",
+  killSwitch: { enabled: true, model: "RuntimeKillSwitch" },
+  eligiblePhase7HEvidenceLockCount: 0,
+  eligiblePhase7ELiveAttemptCount: 0,
+  eligiblePhase7GAttemptCount: 0,
+  phase7ILockCounts: PHASE_7I_LOCK_COUNTS,
+  items: [],
+  phase7ICallsRazorpay: false,
+  phase7ICallsMetaCloud: false,
+  phase7ICallsDelhivery: false,
+  phase7ICallsVapi: false,
+  phase7ISendsWhatsApp: false,
+  phase7IQueuesWhatsApp: false,
+  phase7ICreatesShipmentRow: false,
+  phase7ICreatesAwb: false,
+  phase7ICreatesPaymentLink: false,
+  phase7ICapturesPayment: false,
+  phase7IRefundsPayment: false,
+  phase7ISendsCustomerNotification: false,
+  phase7IMutatesBusinessRow: false,
+  phase7ELiveBApproved: false,
+  phase7GLiveApproved: false,
+  executionPath: "lock_only_cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  blockers: [],
+  warnings: [
+    "Phase 7I is the Final Phase 7 Payment + WhatsApp + Courier Audit Lock. Lock-only meta-audit over Phase 7D + 7E-Live-A + 7G + 7H. Phase 7E-Live-B (real customer WhatsApp send) and Phase 7G-Live (real customer courier execution) remain NOT approved.",
+  ],
+  nextAction: "no_eligible_source_chain_present",
+  forbiddenActions: [
+    "call_razorpay_api",
+    "call_meta_cloud_api",
+    "call_delhivery_api",
+    "send_whatsapp_template",
+    "queue_whatsapp_outbound",
+    "create_awb",
+    "create_shipment_row",
+    "create_payment_link",
+    "send_customer_notification",
+    "mutate_real_order_status",
+    "edit_dotenv_any",
+  ],
+};
+
+export const SAAS_PHASE7I_FINAL_AUDIT_LOCKS: Record<
+  string,
+  unknown
+> = {
+  phase: "7I",
+  limit: 25,
+  counts: PHASE_7I_LOCK_COUNTS,
+  items: [],
+  executionPath: "lock_only_cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  phase7ICallsRazorpay: false,
+  phase7ICallsMetaCloud: false,
+  phase7ICallsDelhivery: false,
+  phase7ICallsVapi: false,
+  phase7ISendsWhatsApp: false,
+  phase7IQueuesWhatsApp: false,
+  phase7ICreatesShipmentRow: false,
+  phase7ICreatesAwb: false,
+  phase7ICreatesPaymentLink: false,
+  phase7ICapturesPayment: false,
+  phase7IRefundsPayment: false,
+  phase7ISendsCustomerNotification: false,
+  phase7IMutatesBusinessRow: false,
+  phase7ELiveBApproved: false,
+  phase7GLiveApproved: false,
+};
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 const PHASE_7D_ATTEMPT_COUNTS = {

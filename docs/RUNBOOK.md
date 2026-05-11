@@ -3250,3 +3250,74 @@ sends a customer notification; NEVER mutates real `Order` /
 sends freeform medical text (approved Meta template only); NEVER
 edits any `.env*` file.** Phase 7E-Live-B (real customer WhatsApp
 send) remains NOT approved.
+
+### Phase 7I — Final Phase 7 Payment + WhatsApp + Courier Audit Lock
+
+Phase 7I is **lock-only meta-audit** over the full controlled
+Phase 7 chain: Phase 7D Razorpay TEST execution + Phase 7E-Live-A
+internal allowed-list WhatsApp one-shot send + Phase 7G Delhivery
+TEST/MOCK courier execution + Phase 7H courier execution evidence
+lock. It snapshots the immutable fields off all four source
+records into a single `RazorpayPhase7FinalAuditLock` row. Approval
+flips status to `locked` only — it does NOT authorize any live
+execution. Phase 7I NEVER calls Razorpay / Meta Cloud / Delhivery
+/ Vapi, NEVER sends or queues WhatsApp, NEVER creates a `Shipment`
+/ AWB / payment link, NEVER captures / refunds, NEVER sends a
+customer notification, NEVER mutates real business rows.
+
+```bash
+# 1. Read-only readiness composition.
+python manage.py inspect_phase7i_final_audit_lock \
+    --json --no-audit
+
+# 2. Read-only preview from Phase 7G + Phase 7H sources (auto-
+#    resolves Phase 7E-Live-A and Phase 7D from the chain; pass
+#    explicitly when the chain has multiple eligible Phase 7E
+#    attempts).
+python manage.py preview_phase7i_final_audit_lock \
+    --phase7g-attempt-id <PHASE7G_ATTEMPT_ID> \
+    --phase7h-evidence-lock-id <PHASE7H_LOCK_ID> \
+    [--phase7e-live-attempt-id <PHASE7E_LIVE_ATTEMPT_ID>] \
+    [--phase7d-attempt-id <PHASE7D_ATTEMPT_ID>] --json
+
+# 3. Prepare a Phase 7I row (one per Phase 7H lock; idempotent).
+python manage.py prepare_phase7i_final_audit_lock \
+    --phase7g-attempt-id <PHASE7G_ATTEMPT_ID> \
+    --phase7h-evidence-lock-id <PHASE7H_LOCK_ID> \
+    [--phase7e-live-attempt-id <PHASE7E_LIVE_ATTEMPT_ID>] \
+    [--phase7d-attempt-id <PHASE7D_ATTEMPT_ID>] --json
+
+# 4. Lock the Phase 7I row (status -> locked). Mandatory non-empty
+#    reason. No provider call, no business mutation, no live
+#    execution enabled.
+python manage.py approve_phase7i_final_audit_lock \
+    --lock-id <ID> \
+    --reason "Director Phase 7I final audit lock" --json
+
+# 5. Reject (only from draft / pending_manual_review / blocked).
+python manage.py reject_phase7i_final_audit_lock \
+    --lock-id <ID> \
+    --reason "Director paused final-audit review" --json
+
+# 6. Archive (after locked / rejected).
+python manage.py archive_phase7i_final_audit_lock \
+    --lock-id <ID> --reason "Director archive" --json
+```
+
+**Phase 7I refuses to prepare unless:**
+- Phase 7H lock is in `status=locked`.
+- Phase 7E-Live-A attempt is `rollback_recorded` with non-empty
+  `provider_message_id`, `whatsapp_message_created=True`,
+  `recorded_signoff_window_valid=True`, `claim_vault_grounded=True`,
+  `recipient_scope=internal_staff_allow_list`, and every customer /
+  business / real-customer-phone boolean False.
+- Phase 7G attempt is `rolled_back_recorded` with `awb_created=True`,
+  `rollback_status=recorded_only_no_provider_cancel`, and every
+  shipment / business / customer-notification boolean False.
+- Phase 7D attempt is `executed` or `rolled_back` with every
+  business / customer / shipment / WhatsApp / Meta-cloud / Delhivery
+  / payment-link / capture / refund boolean False.
+- The kill switch is enabled.
+
+**Phase 7G-Live (real customer courier execution) and Phase 7E-Live-B
+(real customer WhatsApp send) remain NOT approved.**

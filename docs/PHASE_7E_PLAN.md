@@ -4,6 +4,25 @@
 > doc and `nd.md` disagree, `nd.md` wins; this doc must be updated to
 > match.
 >
+> **Phase 7I — Final Phase 7 Payment + WhatsApp + Courier Audit
+> Lock — SHIPPED (lock-only meta-audit; CLI-only review state
+> changes).** Phase 7I snapshots immutable fields off Phase 7D +
+> Phase 7E-Live-A (this gate's eligibility requires
+> `rollback_recorded` + non-empty `provider_message_id` +
+> `whatsapp_message_created=True` + `recorded_signoff_window_valid
+> =True` + `claim_vault_grounded=True` + `recipient_scope=
+> internal_staff_allow_list` + every customer/business/real-customer
+> -phone boolean False) + Phase 7G + Phase 7H into a single
+> composite row. New `payments.RazorpayPhase7FinalAuditLock` model
+> + migration `payments.0018`. 7 audit kinds
+> (`phase7i.final_audit.{readiness_inspected,previewed,prepared,
+> locked,rejected,archived,blocked}`). 6 strictly-CLI management
+> commands. 4 read-only auth-protected GET endpoints under
+> `/api/v1/saas/phase7/final-audit-lock-{readiness,locks,
+> locks/<pk>,preview}/`. Phase 7I NEVER calls a provider, NEVER
+> sends WhatsApp, NEVER mutates business rows, NEVER edits any
+> `.env*` file. Phase 7E-Live-B remains NOT approved.
+>
 > **Phase 7E-Live-A-Hotfix-3 — Safe retry after no-provider manual
 > rollback before execution — SHIPPED.** Extends the
 > `_retry_eligible` predicate with a second path: an attempt is

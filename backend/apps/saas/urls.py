@@ -51,6 +51,10 @@ from .views import (
     WhatsAppInternalSendAttemptsListView,
     WhatsAppInternalSendPreviewView,
     WhatsAppInternalSendReadinessView,
+    Phase7IFinalAuditLockDetailView,
+    Phase7IFinalAuditLockPreviewView,
+    Phase7IFinalAuditLockReadinessView,
+    Phase7IFinalAuditLocksListView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -709,5 +713,27 @@ urlpatterns = [
         "whatsapp/internal-send-preview/",
         WhatsAppInternalSendPreviewView.as_view(),
         name="saas-whatsapp-internal-send-preview",
+    ),
+    # Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit
+    # Lock (lock-only; read-only API; CLI-only state changes).
+    path(
+        "phase7/final-audit-lock-readiness/",
+        Phase7IFinalAuditLockReadinessView.as_view(),
+        name="saas-phase7i-final-audit-lock-readiness",
+    ),
+    path(
+        "phase7/final-audit-locks/",
+        Phase7IFinalAuditLocksListView.as_view(),
+        name="saas-phase7i-final-audit-locks",
+    ),
+    path(
+        "phase7/final-audit-locks/<int:pk>/",
+        Phase7IFinalAuditLockDetailView.as_view(),
+        name="saas-phase7i-final-audit-lock-detail",
+    ),
+    path(
+        "phase7/final-audit-lock-preview/",
+        Phase7IFinalAuditLockPreviewView.as_view(),
+        name="saas-phase7i-final-audit-lock-preview",
     ),
 ]

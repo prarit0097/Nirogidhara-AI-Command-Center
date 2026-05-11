@@ -2956,6 +2956,133 @@ class WhatsAppInternalSendPreviewView(APIView):
         return Response(_preview_phase7e_live_send(gate_id))
 
 
+# ---------------------------------------------------------------------------
+# Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock
+# ---------------------------------------------------------------------------
+
+
+from apps.payments.phase7_final_audit_lock import (  # noqa: E402
+    inspect_phase7i_final_audit_lock_readiness as _inspect_phase7i_readiness,
+    preview_phase7i_final_audit_lock as _preview_phase7i_lock,
+    serialize_phase7i_final_audit_lock as _serialize_phase7i_lock,
+    summarize_phase7i_final_audit_locks as _summarize_phase7i_locks,
+)
+from apps.payments.models import (  # noqa: E402
+    RazorpayPhase7FinalAuditLock,
+)
+
+
+class Phase7IFinalAuditLockReadinessView(APIView):
+    """``GET /api/v1/saas/phase7/final-audit-lock-readiness/`` -
+    Phase 7I read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(_inspect_phase7i_readiness())
+
+
+class Phase7IFinalAuditLocksListView(APIView):
+    """``GET /api/v1/saas/phase7/final-audit-locks/`` - Phase 7I list."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = _summarize_phase7i_locks(limit=limit)
+        return Response(
+            {
+                "phase": "7I",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "lock_only_cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase7ICallsRazorpay": False,
+                "phase7ICallsMetaCloud": False,
+                "phase7ICallsDelhivery": False,
+                "phase7ICallsVapi": False,
+                "phase7ISendsWhatsApp": False,
+                "phase7IQueuesWhatsApp": False,
+                "phase7ICreatesShipmentRow": False,
+                "phase7ICreatesAwb": False,
+                "phase7ICreatesPaymentLink": False,
+                "phase7ICapturesPayment": False,
+                "phase7IRefundsPayment": False,
+                "phase7ISendsCustomerNotification": False,
+                "phase7IMutatesBusinessRow": False,
+                "phase7ELiveBApproved": False,
+                "phase7GLiveApproved": False,
+            }
+        )
+
+
+class Phase7IFinalAuditLockDetailView(APIView):
+    """``GET /api/v1/saas/phase7/final-audit-locks/<pk>/`` - Phase 7I."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayPhase7FinalAuditLock.objects.filter(pk=pk).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 7I final audit lock not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase7i_lock(row))
+
+
+class Phase7IFinalAuditLockPreviewView(APIView):
+    """``GET /api/v1/saas/phase7/final-audit-lock-preview/?...`` - Phase 7I."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        def _coerce_positive(name: str) -> int:
+            try:
+                return int(request.query_params.get(name) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        g_id = _coerce_positive("phase7g_attempt_id")
+        h_id = _coerce_positive("phase7h_evidence_lock_id")
+        e_id = _coerce_positive("phase7e_live_attempt_id") or None
+        d_id = _coerce_positive("phase7d_attempt_id") or None
+        if g_id <= 0 or h_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "phase7g_attempt_id and "
+                        "phase7h_evidence_lock_id query params must "
+                        "be positive integers."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            _preview_phase7i_lock(
+                phase7g_attempt_id=g_id,
+                phase7h_evidence_lock_id=h_id,
+                phase7e_live_attempt_id=e_id,
+                phase7d_attempt_id=d_id,
+            )
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -3070,4 +3197,8 @@ __all__ = (
     "WhatsAppInternalSendAttemptsListView",
     "WhatsAppInternalSendAttemptDetailView",
     "WhatsAppInternalSendPreviewView",
+    "Phase7IFinalAuditLockReadinessView",
+    "Phase7IFinalAuditLocksListView",
+    "Phase7IFinalAuditLockDetailView",
+    "Phase7IFinalAuditLockPreviewView",
 )

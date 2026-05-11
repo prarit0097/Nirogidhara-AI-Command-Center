@@ -3215,3 +3215,241 @@ class RazorpayWhatsAppInternalSendAttempt(models.Model):
             f"phase7e_gate={self.source_phase7e_gate_id} "
             f"status={self.status}]"
         )
+
+
+class RazorpayPhase7FinalAuditLock(models.Model):
+    """Phase 7I — Final Phase 7 Payment + WhatsApp + Courier Audit Lock.
+
+    Lock-only meta-audit that freezes evidence across the full
+    controlled Phase 7 chain:
+
+    * Phase 7D — Razorpay TEST execution (one-shot, rolled back),
+    * Phase 7E-Live-A — internal allowed-list WhatsApp one-shot send
+      (rollback_recorded with `whatsapp_message_created=True`),
+    * Phase 7G — Delhivery TEST/MOCK courier execution (one-shot,
+      rolled_back_recorded with `awb_created=True`),
+    * Phase 7H — courier execution evidence lock (status=locked).
+
+    Phase 7I never calls Razorpay / Meta Cloud / Delhivery / Vapi,
+    never sends or queues WhatsApp, never creates a `Shipment` / AWB
+    / payment link, never captures / refunds, never sends a customer
+    notification, never mutates real `Order` / `Payment` /
+    `Customer` / `Lead` / `DiscountOfferLog` rows, never edits any
+    `.env*` file. Review state changes are CLI-only.
+
+    Status flow:
+        draft -> pending_manual_review -> locked / rejected / archived
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        LOCKED = "locked", "Locked"
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    # Source-chain references (every link required to compose the
+    # final audit; Phase 6T is optional because it pre-dates Phase 7).
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        on_delete=models.PROTECT,
+        related_name="phase7i_final_audit_locks",
+    )
+    source_phase7e_live_send_attempt = models.ForeignKey(
+        RazorpayWhatsAppInternalSendAttempt,
+        on_delete=models.PROTECT,
+        related_name="phase7i_final_audit_locks",
+    )
+    source_phase7g_attempt = models.ForeignKey(
+        RazorpayCourierExecutionAttempt,
+        on_delete=models.PROTECT,
+        related_name="phase7i_final_audit_locks",
+    )
+    source_phase7h_evidence_lock = models.ForeignKey(
+        RazorpayCourierExecutionEvidenceLock,
+        on_delete=models.PROTECT,
+        related_name="phase7i_final_audit_locks",
+    )
+    source_phase6t_lock = models.ForeignKey(
+        RazorpayPhase6FinalAuditLock,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase7i_final_audit_locks",
+    )
+
+    status = models.CharField(
+        max_length=40,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # --- Phase 7D snapshot ---
+    phase7d_attempt_status_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7d_provider_object_id_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7d_business_mutation_was_made_snapshot = models.BooleanField(
+        default=False
+    )
+    phase7d_customer_notification_sent_snapshot = models.BooleanField(
+        default=False
+    )
+
+    # --- Phase 7E-Live-A snapshot ---
+    phase7e_live_attempt_status_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7e_live_provider_message_id_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7e_live_provider_status_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7e_live_template_name_snapshot = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    phase7e_live_template_language_snapshot = models.CharField(
+        max_length=16, blank=True, default=""
+    )
+    phase7e_live_allowed_recipient_last4_snapshot = models.CharField(
+        max_length=8, blank=True, default=""
+    )
+    phase7e_live_recipient_scope_snapshot = models.CharField(
+        max_length=40, blank=True, default=""
+    )
+    phase7e_live_whatsapp_message_created_snapshot = (
+        models.BooleanField(default=False)
+    )
+    phase7e_live_whatsapp_message_queued_snapshot = (
+        models.BooleanField(default=False)
+    )
+    phase7e_live_customer_notification_sent_snapshot = (
+        models.BooleanField(default=False)
+    )
+    phase7e_live_business_mutation_was_made_snapshot = (
+        models.BooleanField(default=False)
+    )
+    phase7e_live_real_customer_phone_used_snapshot = (
+        models.BooleanField(default=False)
+    )
+    phase7e_live_claim_vault_grounded_snapshot = models.BooleanField(
+        default=False
+    )
+    phase7e_live_recorded_signoff_window_valid_snapshot = (
+        models.BooleanField(null=True, blank=True)
+    )
+
+    # --- Phase 7G snapshot ---
+    phase7g_attempt_status_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7g_provider_object_id_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7g_provider_status_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7g_rollback_status_snapshot = models.CharField(
+        max_length=40, blank=True, default=""
+    )
+    phase7g_awb_created_snapshot = models.BooleanField(default=False)
+    phase7g_shipment_created_snapshot = models.BooleanField(default=False)
+    phase7g_business_mutation_was_made_snapshot = models.BooleanField(
+        default=False
+    )
+    phase7g_customer_notification_sent_snapshot = models.BooleanField(
+        default=False
+    )
+    phase7g_recorded_signoff_window_valid_snapshot = (
+        models.BooleanField(null=True, blank=True)
+    )
+
+    # --- Phase 7H snapshot ---
+    phase7h_evidence_lock_status_snapshot = models.CharField(
+        max_length=40, blank=True, default=""
+    )
+    phase7h_provider_object_id_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase7h_shipment_created_snapshot = models.BooleanField(default=False)
+    phase7h_business_mutation_was_made_snapshot = models.BooleanField(
+        default=False
+    )
+    phase7h_customer_notification_sent_snapshot = models.BooleanField(
+        default=False
+    )
+
+    # Composite evidence JSON (whitelisted; never carries raw tokens
+    # / full phones / raw provider response bodies).
+    evidence_json = models.JSONField(default=dict, blank=True)
+
+    # Reviewer + lifecycle metadata.
+    reviewed_by_username = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7i_final_audit_lock_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.TextField(blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7i_final_audit_locks",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase7i_final_audit_locks",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(
+                fields=("source_phase7h_evidence_lock", "-created_at")
+            ),
+            models.Index(
+                fields=("source_phase7g_attempt", "-created_at")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase7I-FinalAuditLock[id={self.pk} "
+            f"phase7d_attempt={self.source_phase7d_attempt_id} "
+            f"phase7e_live_attempt={self.source_phase7e_live_send_attempt_id} "
+            f"phase7g_attempt={self.source_phase7g_attempt_id} "
+            f"phase7h_lock={self.source_phase7h_evidence_lock_id} "
+            f"status={self.status}]"
+        )

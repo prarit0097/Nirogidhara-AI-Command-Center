@@ -426,6 +426,17 @@ ICON_BY_KIND: dict[str, str] = {
     "phase7e.internal_send.rejected": "x-circle",
     "phase7e.internal_send.blocked": "ban",
     "phase7e.internal_send.retry_prepared": "rotate-cw",
+    # Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit
+    # Lock (lock-only meta-audit over Phase 7D + 7E-Live-A + 7G +
+    # 7H; never calls provider; never mutates business rows; never
+    # edits any .env file).
+    "phase7i.final_audit.readiness_inspected": "eye",
+    "phase7i.final_audit.previewed": "eye",
+    "phase7i.final_audit.prepared": "file-plus",
+    "phase7i.final_audit.locked": "lock",
+    "phase7i.final_audit.rejected": "x-circle",
+    "phase7i.final_audit.archived": "archive",
+    "phase7i.final_audit.blocked": "ban",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

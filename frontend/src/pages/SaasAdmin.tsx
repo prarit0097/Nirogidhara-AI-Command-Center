@@ -38,6 +38,8 @@ import type {
   SaasRazorpayCourierExecutionEvidenceLocksResponse,
   SaasPhase7ELiveInternalSendReadiness,
   SaasPhase7ELiveInternalSendAttemptsResponse,
+  SaasPhase7IFinalAuditLockReadiness,
+  SaasPhase7IFinalAuditLocksResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -251,6 +253,14 @@ export default function SaasAdminPage() {
     phase7eLiveInternalSendAttempts,
     setPhase7eLiveInternalSendAttempts,
   ] = useState<SaasPhase7ELiveInternalSendAttemptsResponse | null>(null);
+  const [
+    phase7iFinalAuditLockReadiness,
+    setPhase7iFinalAuditLockReadiness,
+  ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
+  const [
+    phase7iFinalAuditLocks,
+    setPhase7iFinalAuditLocks,
+  ] = useState<SaasPhase7IFinalAuditLocksResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -300,6 +310,8 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayCourierExecutionEvidenceLocks(25),
       api.getSaasPhase7ELiveInternalSendReadiness(),
       api.getSaasPhase7ELiveInternalSendAttempts(25),
+      api.getSaasPhase7IFinalAuditLockReadiness(),
+      api.getSaasPhase7IFinalAuditLocks(25),
     ])
       .then(
         ([
@@ -347,6 +359,8 @@ export default function SaasAdminPage() {
           p7hLocks,
           p7eLiveRead,
           p7eLiveAttempts,
+          p7iRead,
+          p7iLocks,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -392,6 +406,8 @@ export default function SaasAdminPage() {
           setRazorpayCourierExecutionEvidenceLocks(p7hLocks);
           setPhase7eLiveInternalSendReadiness(p7eLiveRead);
           setPhase7eLiveInternalSendAttempts(p7eLiveAttempts);
+          setPhase7iFinalAuditLockReadiness(p7iRead);
+          setPhase7iFinalAuditLocks(p7iLocks);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -5080,6 +5096,152 @@ export default function SaasAdminPage() {
             CLI command and requires three structured Director
             sign-off conditions + the allow-list recipient + the
             structured UTC window.
+          </div>
+        </section>
+      )}
+
+      {(phase7iFinalAuditLockReadiness || phase7iFinalAuditLocks) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase7i-final-audit-lock-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 7I Final Audit Lock
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 7I — <strong>lock-only meta-audit</strong> over
+                the full controlled Phase 7 chain: Phase 7D Razorpay
+                TEST execution + Phase 7E-Live-A internal allowed-list
+                WhatsApp one-shot send + Phase 7G Delhivery TEST/MOCK
+                courier execution + Phase 7H courier execution
+                evidence lock. Approval flips status to{" "}
+                <code>locked</code> and freezes the composite snapshot.
+                Phase 7I NEVER calls Razorpay / Meta Cloud /
+                Delhivery / Vapi, NEVER sends or queues WhatsApp,
+                NEVER creates a <code>Shipment</code> / AWB / payment
+                link, NEVER captures, NEVER refunds, NEVER sends a
+                customer notification, NEVER mutates real{" "}
+                <code>Order</code> / <code>Payment</code> /{" "}
+                <code>Customer</code> / <code>Lead</code> /{" "}
+                <code>DiscountOfferLog</code> rows, NEVER edits any{" "}
+                <code>.env*</code> file. Review state changes are
+                CLI-only. Phase 7E-Live-B (real customer WhatsApp
+                send) and Phase 7G-Live (real customer courier
+                execution) remain <strong>not approved</strong>.
+              </p>
+            </div>
+            {phase7iFinalAuditLockReadiness && (
+              <div data-testid="phase7i-status-badge">
+                <StatusPill
+                  tone={
+                    phase7iFinalAuditLockReadiness.killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {phase7iFinalAuditLockReadiness.killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+          {phase7iFinalAuditLockReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={phase7iFinalAuditLockReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={phase7iFinalAuditLockReadiness.status}
+              />
+              <KeyValue
+                label="Eligible 7H locks"
+                value={String(
+                  phase7iFinalAuditLockReadiness.eligiblePhase7HEvidenceLockCount,
+                )}
+              />
+              <KeyValue
+                label="Eligible 7E-Live attempts"
+                value={String(
+                  phase7iFinalAuditLockReadiness.eligiblePhase7ELiveAttemptCount,
+                )}
+              />
+              <KeyValue
+                label="Eligible 7G attempts"
+                value={String(
+                  phase7iFinalAuditLockReadiness.eligiblePhase7GAttemptCount,
+                )}
+              />
+              <KeyValue label="Calls Razorpay" value="No" />
+              <KeyValue label="Calls Meta Cloud" value="No" />
+              <KeyValue label="Calls Delhivery" value="No" />
+              <KeyValue label="Sends WhatsApp" value="No" />
+              <KeyValue label="Creates AWB" value="No" />
+              <KeyValue label="Creates Shipment row" value="No" />
+              <KeyValue
+                label="Customer notification"
+                value="No"
+              />
+              <KeyValue label="Business mutation" value="No" />
+              <KeyValue
+                label="Phase 7E-Live-B approved"
+                value="No"
+              />
+              <KeyValue label="Phase 7G-Live approved" value="No" />
+            </div>
+          )}
+          {phase7iFinalAuditLocks &&
+            phase7iFinalAuditLocks.items.length > 0 && (
+              <div className="border-t border-border px-6 py-4 text-xs">
+                {phase7iFinalAuditLocks.items.map((lock) => (
+                  <div
+                    key={lock.id}
+                    className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6 py-1 border-b border-border last:border-0"
+                  >
+                    <span>
+                      id=<strong>{lock.id}</strong>
+                    </span>
+                    <span>status={lock.status}</span>
+                    <span>
+                      7D={lock.sourcePhase7DAttemptId}
+                    </span>
+                    <span>
+                      7E-Live={lock.sourcePhase7ELiveSendAttemptId}
+                    </span>
+                    <span>
+                      7G={lock.sourcePhase7GAttemptId}
+                    </span>
+                    <span>
+                      7H={lock.sourcePhase7HEvidenceLockId}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          {phase7iFinalAuditLockReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {phase7iFinalAuditLockReadiness.nextAction}
+              </code>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7i-cli-only-banner"
+          >
+            <strong>Lock-only · CLI-only Review.</strong> No "Lock
+            Final Audit" / "Approve Lock" / "Reject Lock" / "Archive
+            Lock" / "Execute" / "Send WhatsApp" / "Call Razorpay" /
+            "Call Delhivery" / "Notify" / "Refund" / "Capture" /
+            "Apply Mutation" / "Go Live" / "Edit .env" buttons exist
+            on this page. Phase 7I approval is a status transition
+            only — it does NOT enable any provider call.
           </div>
         </section>
       )}

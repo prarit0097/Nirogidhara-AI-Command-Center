@@ -4,6 +4,22 @@
 > this doc and `nd.md` disagree, `nd.md` wins; this doc must be
 > updated to match.
 >
+> **Phase 7I — Final Phase 7 Payment + WhatsApp + Courier Audit
+> Lock — SHIPPED (lock-only meta-audit over Phase 7D + Phase
+> 7E-Live-A + Phase 7G + Phase 7H).** New
+> `payments.RazorpayPhase7FinalAuditLock` model + migration
+> `payments.0018`. 7 audit kinds
+> (`phase7i.final_audit.{readiness_inspected,previewed,prepared,
+> locked,rejected,archived,blocked}`). 6 strictly-CLI commands. 4
+> read-only auth-protected GET endpoints under
+> `/api/v1/saas/phase7/final-audit-lock-{readiness,locks,locks/<pk>,
+> preview}/`. Phase 7I NEVER calls Razorpay / Meta Cloud /
+> Delhivery / Vapi, NEVER sends WhatsApp, NEVER creates a
+> `Shipment` / AWB / payment link, NEVER captures, NEVER refunds,
+> NEVER mutates business rows, NEVER edits any `.env*` file.
+> Approval flips status to `locked` only — Phase 7G-Live and
+> Phase 7E-Live-B remain NOT approved.
+>
 > **Phase 7H — Final audit/evidence lock for the completed Phase
 > 7G TEST/MOCK execution — SHIPPED.** New
 > `payments.RazorpayCourierExecutionEvidenceLock` model +

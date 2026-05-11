@@ -173,6 +173,8 @@ import type {
   SaasRazorpayCourierExecutionEvidenceLocksResponse,
   SaasPhase7ELiveInternalSendReadiness,
   SaasPhase7ELiveInternalSendAttemptsResponse,
+  SaasPhase7IFinalAuditLockReadiness,
+  SaasPhase7IFinalAuditLocksResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -1663,6 +1665,21 @@ export const api = {
       `/v1/saas/whatsapp/internal-send-attempts/?limit=${limit}`,
       () =>
         M.SAAS_PHASE7E_LIVE_INTERNAL_SEND_ATTEMPTS as SaasPhase7ELiveInternalSendAttemptsResponse,
+    ),
+
+  // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
+
+  getSaasPhase7IFinalAuditLockReadiness: () =>
+    safeFetch<SaasPhase7IFinalAuditLockReadiness>(
+      "/v1/saas/phase7/final-audit-lock-readiness/",
+      () =>
+        M.SAAS_PHASE7I_FINAL_AUDIT_LOCK_READINESS as SaasPhase7IFinalAuditLockReadiness,
+    ),
+  getSaasPhase7IFinalAuditLocks: (limit: number = 25) =>
+    safeFetch<SaasPhase7IFinalAuditLocksResponse>(
+      `/v1/saas/phase7/final-audit-locks/?limit=${limit}`,
+      () =>
+        M.SAAS_PHASE7I_FINAL_AUDIT_LOCKS as SaasPhase7IFinalAuditLocksResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

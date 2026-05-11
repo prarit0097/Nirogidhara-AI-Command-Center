@@ -5078,3 +5078,144 @@ export interface SaasPhase7ELiveInternalSendAttemptsResponse {
   phase7ELiveCustomerNotification: false;
   phase7ELiveSupportsFreeformMedicalText: false;
 }
+
+// ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
+
+export type SaasPhase7IFinalAuditLockStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "locked"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasPhase7IFinalAuditLockDto {
+  id: number;
+  status: SaasPhase7IFinalAuditLockStatus;
+  sourcePhase7DAttemptId: number | null;
+  sourcePhase7ELiveSendAttemptId: number | null;
+  sourcePhase7GAttemptId: number | null;
+  sourcePhase7HEvidenceLockId: number | null;
+  sourcePhase6TLockId: number | null;
+  // Phase 7D snapshot
+  phase7DAttemptStatusSnapshot: string;
+  phase7DProviderObjectIdSnapshot: string;
+  phase7DBusinessMutationWasMadeSnapshot: boolean;
+  phase7DCustomerNotificationSentSnapshot: boolean;
+  // Phase 7E-Live-A snapshot
+  phase7ELiveAttemptStatusSnapshot: string;
+  phase7ELiveProviderMessageIdSnapshot: string;
+  phase7ELiveProviderStatusSnapshot: string;
+  phase7ELiveTemplateNameSnapshot: string;
+  phase7ELiveTemplateLanguageSnapshot: string;
+  phase7ELiveAllowedRecipientLast4Snapshot: string;
+  phase7ELiveRecipientScopeSnapshot: string;
+  phase7ELiveWhatsAppMessageCreatedSnapshot: boolean;
+  phase7ELiveWhatsAppMessageQueuedSnapshot: boolean;
+  phase7ELiveCustomerNotificationSentSnapshot: boolean;
+  phase7ELiveBusinessMutationWasMadeSnapshot: boolean;
+  phase7ELiveRealCustomerPhoneUsedSnapshot: boolean;
+  phase7ELiveClaimVaultGroundedSnapshot: boolean;
+  phase7ELiveRecordedSignoffWindowValidSnapshot: boolean | null;
+  // Phase 7G snapshot
+  phase7GAttemptStatusSnapshot: string;
+  phase7GProviderObjectIdSnapshot: string;
+  phase7GProviderStatusSnapshot: string;
+  phase7GRollbackStatusSnapshot: string;
+  phase7GAwbCreatedSnapshot: boolean;
+  phase7GShipmentCreatedSnapshot: boolean;
+  phase7GBusinessMutationWasMadeSnapshot: boolean;
+  phase7GCustomerNotificationSentSnapshot: boolean;
+  phase7GRecordedSignoffWindowValidSnapshot: boolean | null;
+  // Phase 7H snapshot
+  phase7HEvidenceLockStatusSnapshot: string;
+  phase7HProviderObjectIdSnapshot: string;
+  phase7HShipmentCreatedSnapshot: boolean;
+  phase7HBusinessMutationWasMadeSnapshot: boolean;
+  phase7HCustomerNotificationSentSnapshot: boolean;
+  evidenceJson: Record<string, unknown>;
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lockedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasPhase7IFinalAuditLockCounts {
+  draft: number;
+  pending_manual_review: number;
+  locked: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasPhase7IFinalAuditLockReadiness {
+  phase: "7I";
+  status: "final_phase7_audit_lock_only";
+  latestCompletedPhase: "7H";
+  nextPhase: "phase7i_locked_or_phase7_live_not_approved";
+  killSwitch: { enabled: boolean; model: string; id?: number };
+  eligiblePhase7HEvidenceLockCount: number;
+  eligiblePhase7ELiveAttemptCount: number;
+  eligiblePhase7GAttemptCount: number;
+  phase7ILockCounts: SaasPhase7IFinalAuditLockCounts;
+  items: SaasPhase7IFinalAuditLockDto[];
+  phase7ICallsRazorpay: false;
+  phase7ICallsMetaCloud: false;
+  phase7ICallsDelhivery: false;
+  phase7ICallsVapi: false;
+  phase7ISendsWhatsApp: false;
+  phase7IQueuesWhatsApp: false;
+  phase7ICreatesShipmentRow: false;
+  phase7ICreatesAwb: false;
+  phase7ICreatesPaymentLink: false;
+  phase7ICapturesPayment: false;
+  phase7IRefundsPayment: false;
+  phase7ISendsCustomerNotification: false;
+  phase7IMutatesBusinessRow: false;
+  phase7ELiveBApproved: false;
+  phase7GLiveApproved: false;
+  executionPath: "lock_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasPhase7IFinalAuditLocksResponse {
+  phase: "7I";
+  limit: number;
+  counts: SaasPhase7IFinalAuditLockCounts;
+  items: SaasPhase7IFinalAuditLockDto[];
+  executionPath: "lock_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase7ICallsRazorpay: false;
+  phase7ICallsMetaCloud: false;
+  phase7ICallsDelhivery: false;
+  phase7ICallsVapi: false;
+  phase7ISendsWhatsApp: false;
+  phase7IQueuesWhatsApp: false;
+  phase7ICreatesShipmentRow: false;
+  phase7ICreatesAwb: false;
+  phase7ICreatesPaymentLink: false;
+  phase7ICapturesPayment: false;
+  phase7IRefundsPayment: false;
+  phase7ISendsCustomerNotification: false;
+  phase7IMutatesBusinessRow: false;
+  phase7ELiveBApproved: false;
+  phase7GLiveApproved: false;
+}
