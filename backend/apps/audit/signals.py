@@ -401,6 +401,7 @@ ICON_BY_KIND: dict[str, str] = {
     "razorpay.courier_execution.invariant_violation": "shield-off",
     "razorpay.courier_execution.delhivery_mode_blocked": "shield-off",
     "razorpay.courier_execution.duplicate_blocked": "shield-off",
+    "razorpay.courier_execution.retry_prepared": "rotate-cw",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

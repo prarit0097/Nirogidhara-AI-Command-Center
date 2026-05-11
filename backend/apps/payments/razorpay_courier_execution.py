@@ -134,6 +134,7 @@ AUDIT_KIND_INVARIANT_VIOLATION = (
 )
 AUDIT_KIND_MODE_BLOCKED = "razorpay.courier_execution.delhivery_mode_blocked"
 AUDIT_KIND_DUPLICATE_BLOCKED = "razorpay.courier_execution.duplicate_blocked"
+AUDIT_KIND_RETRY_PREPARED = "razorpay.courier_execution.retry_prepared"
 
 
 PHASE_7G_FORBIDDEN_ACTIONS: tuple[str, ...] = (
@@ -1165,12 +1166,92 @@ def preview_phase7g_courier_execution_attempt(
 # ---------------------------------------------------------------------------
 
 
-def _idempotency_key(gate: RazorpayCourierReadinessGate) -> str:
-    return f"phase7g::courier_execution::phase7f_gate::{gate.pk}"
+def _idempotency_key(
+    gate: RazorpayCourierReadinessGate,
+    *,
+    retry_sequence: int = 1,
+) -> str:
+    """Compose the idempotency key for a Phase 7G attempt.
+
+    The first attempt against a Phase 7F gate uses the original key
+    shape ``phase7g::courier_execution::phase7f_gate::<gate_id>``.
+    Subsequent retries (Phase 7G-Hotfix-2 — only allowed after the
+    previous attempt is terminal **AND** no provider call happened)
+    add a ``::retry::<N>`` suffix so the original attempt row stays
+    immutable and the unique constraint on ``idempotency_key`` is
+    preserved.
+    """
+    base = f"phase7g::courier_execution::phase7f_gate::{gate.pk}"
+    if retry_sequence <= 1:
+        return base
+    return f"{base}::retry::{retry_sequence}"
 
 
 def _synthetic_order_id(gate_id: int, attempt_id: int) -> str:
     return f"phase7g::courier::gate::{gate_id}::attempt::{attempt_id}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 7G-Hotfix-2: safe-retry eligibility
+# ---------------------------------------------------------------------------
+
+
+def _retry_eligible(
+    attempt: RazorpayCourierExecutionAttempt,
+) -> bool:
+    """Decide whether ``attempt`` is eligible for a safe Phase 7G
+    retry.
+
+    Eligible only when the attempt is terminal in the
+    ``ROLLED_BACK_RECORDED`` state, was blocked **before** any
+    provider call (every provider / business / send boolean is
+    False), and never reached ``executed_at`` set. Failed / executed
+    / archived / rejected / blocked / pending / approved attempts
+    are NEVER auto-retried — those require manual review.
+
+    Pure: no DB writes, no provider calls, no audit emission.
+    """
+    if (
+        attempt.status
+        != RazorpayCourierExecutionAttempt.Status.ROLLED_BACK_RECORDED
+    ):
+        return False
+    if attempt.executed_at is not None:
+        return False
+    if attempt.provider_call_attempted:
+        return False
+    if attempt.delhivery_call_attempted:
+        return False
+    if attempt.awb_created:
+        return False
+    if attempt.shipment_created:
+        return False
+    if attempt.business_mutation_was_made:
+        return False
+    if attempt.real_order_mutation_was_made:
+        return False
+    if attempt.real_payment_mutation_was_made:
+        return False
+    if attempt.real_shipment_mutation_was_made:
+        return False
+    if attempt.customer_notification_sent:
+        return False
+    return True
+
+
+def _next_retry_sequence(
+    gate: RazorpayCourierReadinessGate,
+) -> int:
+    """Count attempts already attached to this gate and return the
+    next retry sequence number. First retry is ``2`` (the original
+    attempt is sequence ``1``).
+    """
+    existing = (
+        RazorpayCourierExecutionAttempt.objects.filter(
+            source_phase7f_gate=gate
+        ).count()
+    )
+    return existing + 1
 
 
 def prepare_phase7g_courier_execution_attempt(
@@ -1220,7 +1301,6 @@ def prepare_phase7g_courier_execution_attempt(
         }
 
     gate = eligibility.phase7f_gate
-    idempotency = _idempotency_key(gate)
     before = _business_row_counts()
     snapshot = _capture_env_flag_snapshot()
     kill_state = _kill_switch_state()
@@ -1228,23 +1308,72 @@ def prepare_phase7g_courier_execution_attempt(
     invariants = build_phase7g_courier_execution_contract()
 
     with transaction.atomic():
-        existing = (
+        # Look at the most recent attempt against this gate (any
+        # idempotency-key shape) — original, hotfix-2 retry, or older
+        # row — so we can decide between reuse / retry / refuse.
+        latest_for_gate = (
             RazorpayCourierExecutionAttempt.objects.filter(
-                idempotency_key=idempotency
+                source_phase7f_gate=gate
             )
             .select_for_update()
+            .order_by("-created_at")
             .first()
         )
-        if existing is not None:
-            return {
-                "phase": "7G",
-                "created": False,
-                "reused": True,
-                "attempt": serialize_phase7g_attempt(existing),
-                "blockers": [],
-                "warnings": [PHASE_7G_WARNING],
-                "nextAction": "phase7g_attempt_pending_director_signoff",
+
+        if latest_for_gate is not None:
+            # Reuse a still-actionable attempt rather than minting
+            # extra rows. "Actionable" = anything not terminal.
+            non_terminal_statuses = {
+                RazorpayCourierExecutionAttempt.Status.DRAFT,
+                RazorpayCourierExecutionAttempt.Status.PENDING_DIRECTOR_SIGNOFF,
+                RazorpayCourierExecutionAttempt.Status.APPROVED_FOR_ONE_SHOT_RUN,
+                RazorpayCourierExecutionAttempt.Status.BLOCKED,
             }
+            if latest_for_gate.status in non_terminal_statuses:
+                return {
+                    "phase": "7G",
+                    "created": False,
+                    "reused": True,
+                    "attempt": serialize_phase7g_attempt(
+                        latest_for_gate
+                    ),
+                    "blockers": [],
+                    "warnings": [PHASE_7G_WARNING],
+                    "nextAction": (
+                        "phase7g_attempt_pending_director_signoff"
+                    ),
+                }
+            # Terminal but provider WAS touched / business state
+            # changed -> manual review required, do NOT auto-retry.
+            if not _retry_eligible(latest_for_gate):
+                return {
+                    "phase": "7G",
+                    "created": False,
+                    "reused": True,
+                    "attempt": serialize_phase7g_attempt(
+                        latest_for_gate
+                    ),
+                    "blockers": [],
+                    "warnings": [PHASE_7G_WARNING],
+                    "nextAction": (
+                        "phase7g_attempt_terminal_manual_review_required"
+                    ),
+                }
+            # Phase 7G-Hotfix-2: latest attempt is rolled_back_recorded
+            # AND no provider call ever happened. Mint a fresh retry
+            # with a new idempotency key; original row stays
+            # immutable.
+            retry_sequence = _next_retry_sequence(gate)
+            idempotency = _idempotency_key(
+                gate, retry_sequence=retry_sequence
+            )
+            is_retry = True
+            previous_attempt_id = latest_for_gate.pk
+        else:
+            retry_sequence = 1
+            idempotency = _idempotency_key(gate)
+            is_retry = False
+            previous_attempt_id = None
 
         attempt = RazorpayCourierExecutionAttempt(
             source_phase7f_gate=gate,
@@ -1358,19 +1487,42 @@ def prepare_phase7g_courier_execution_attempt(
             ]
         )
 
-    write_event(
-        kind=AUDIT_KIND_PREPARED,
-        text=(
+    audit_kind = (
+        AUDIT_KIND_RETRY_PREPARED if is_retry else AUDIT_KIND_PREPARED
+    )
+    audit_text = (
+        f"Phase 7G retry attempt prepared attempt_id={attempt.pk} "
+        f"phase7f_gate_id={gate.pk} retry_sequence={retry_sequence} "
+        f"previous_attempt_id={previous_attempt_id}"
+        if is_retry
+        else (
             f"Phase 7G attempt prepared attempt_id={attempt.pk} "
             f"phase7f_gate_id={gate.pk}"
-        ),
+        )
+    )
+    write_event(
+        kind=audit_kind,
+        text=audit_text,
         tone=AuditEvent.Tone.INFO,
-        payload=_audit_attempt_payload(attempt),
+        payload=_audit_attempt_payload(
+            attempt,
+            extra=(
+                {
+                    "retry_sequence": retry_sequence,
+                    "previous_attempt_id": previous_attempt_id,
+                }
+                if is_retry
+                else None
+            ),
+        ),
     )
     return {
         "phase": "7G",
         "created": True,
         "reused": False,
+        "retry": is_retry,
+        "retrySequence": retry_sequence,
+        "previousAttemptId": previous_attempt_id,
         "attempt": serialize_phase7g_attempt(attempt),
         "blockers": [],
         "warnings": [PHASE_7G_WARNING],
@@ -2367,6 +2519,7 @@ __all__ = (
     "AUDIT_KIND_INVARIANT_VIOLATION",
     "AUDIT_KIND_MODE_BLOCKED",
     "AUDIT_KIND_DUPLICATE_BLOCKED",
+    "AUDIT_KIND_RETRY_PREPARED",
     "Phase7GEligibility",
     "Phase7GExecutionError",
     "build_phase7g_courier_execution_contract",

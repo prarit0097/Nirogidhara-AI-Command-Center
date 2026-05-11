@@ -44,6 +44,7 @@ from apps.payments.razorpay_courier_execution import (
     AUDIT_KIND_PREVIEWED,
     AUDIT_KIND_READINESS,
     AUDIT_KIND_REJECTED,
+    AUDIT_KIND_RETRY_PREPARED,
     AUDIT_KIND_ROLLED_BACK,
     PHASE_7G_ALLOWED_DELHIVERY_MODES,
     PHASE_7G_FORBIDDEN_ACTIONS,
@@ -2161,4 +2162,427 @@ def test_hotfix1_command_help_text_mentions_begin_utc_end_utc() -> None:
     assert "END_UTC" in text
     assert "15 minutes" in text or "15-minute" in text or (
         "<= 15" in text
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 7G-Hotfix-2 - Safe Retry after Pre-Window Block
+#
+# When `execute_delhivery_courier_one_shot` refuses an attempt
+# before the lazy Delhivery wrapper runs (e.g. Hotfix-1 window
+# guard hit, kill switch off, mode mismatch), the attempt ends up
+# in `rolled_back_recorded` state but every provider / business /
+# send boolean stayed False. Hotfix-2 lets the operator
+# `prepare_delhivery_courier_execution_attempt --gate-id <ID>`
+# again and get a FRESH retry attempt row instead of the original
+# terminal row.
+#
+# Any attempt that actually called Delhivery (provider_call_attempted
+# = True) - even if it failed - is NEVER auto-retried; manual
+# review is required so the on-call operator can decide whether
+# the AWB landed.
+# ---------------------------------------------------------------------------
+
+
+def _force_into_rolled_back_pre_window_state(
+    attempt: RazorpayCourierExecutionAttempt,
+) -> None:
+    """Drop the attempt into the post-Hotfix-1 pre-window-blocked
+    terminal state: `rolled_back_recorded` with every provider /
+    business / send boolean still False and `executed_at` unset.
+    Mirrors Phase 7G VPS attempt id 1 exactly.
+    """
+    attempt.status = (
+        RazorpayCourierExecutionAttempt.Status.ROLLED_BACK_RECORDED
+    )
+    attempt.rollback_status = (
+        RazorpayCourierExecutionAttempt.RollbackStatus.RECORDED_ONLY_NO_PROVIDER_CANCEL
+    )
+    attempt.executed_at = None
+    attempt.provider_call_attempted = False
+    attempt.delhivery_call_attempted = False
+    attempt.awb_created = False
+    attempt.shipment_created = False
+    attempt.business_mutation_was_made = False
+    attempt.real_order_mutation_was_made = False
+    attempt.real_payment_mutation_was_made = False
+    attempt.real_shipment_mutation_was_made = False
+    attempt.customer_notification_sent = False
+    attempt.save()
+
+
+@pytest.mark.django_db
+def test_hotfix2_retry_eligible_terminal_creates_fresh_attempt() -> None:
+    """Latest attempt rolled_back_recorded + zero provider/business
+    impact -> prepare returns a NEW attempt with a retry-suffixed
+    idempotency key. Original row stays immutable."""
+    phase7f_gate = _make_approved_phase7f_gate(
+        source_event_id="evt_phase7g_hf2_retry_ok"
+    )
+    AuditEvent.objects.filter(
+        kind=AUDIT_KIND_RETRY_PREPARED
+    ).delete()
+    with _phase7g_test_settings():
+        first = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    assert first["created"] is True
+    original_id = first["attempt"]["id"]
+    original_row = RazorpayCourierExecutionAttempt.objects.get(
+        pk=original_id
+    )
+    _force_into_rolled_back_pre_window_state(original_row)
+    original_idem = original_row.idempotency_key
+
+    before = _row_counts()
+    with _phase7g_test_settings():
+        retry = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    after = _row_counts()
+
+    assert retry["created"] is True
+    assert retry["reused"] is False
+    assert retry["retry"] is True
+    assert retry["retrySequence"] == 2
+    assert retry["previousAttemptId"] == original_id
+
+    retry_id = retry["attempt"]["id"]
+    assert retry_id != original_id
+    retry_row = RazorpayCourierExecutionAttempt.objects.get(
+        pk=retry_id
+    )
+    assert (
+        retry_row.idempotency_key
+        == f"phase7g::courier_execution::phase7f_gate::{phase7f_gate.pk}::retry::2"
+    )
+    assert retry_row.idempotency_key != original_idem
+    assert (
+        retry_row.status
+        == RazorpayCourierExecutionAttempt.Status.PENDING_DIRECTOR_SIGNOFF
+    )
+
+    # Original row is untouched.
+    refreshed_original = RazorpayCourierExecutionAttempt.objects.get(
+        pk=original_id
+    )
+    assert (
+        refreshed_original.status
+        == RazorpayCourierExecutionAttempt.Status.ROLLED_BACK_RECORDED
+    )
+    assert refreshed_original.idempotency_key == original_idem
+
+    # Phase 7G safety invariants: no Delhivery call, no AWB, no
+    # Shipment / WorkflowStep / RescueAttempt / WhatsApp row, no
+    # business mutation.
+    assert before == after
+    assert retry_row.provider_call_attempted is False
+    assert retry_row.delhivery_call_attempted is False
+    assert retry_row.awb_created is False
+    assert retry_row.shipment_created is False
+    assert retry_row.business_mutation_was_made is False
+    assert retry_row.real_order_mutation_was_made is False
+    assert retry_row.real_payment_mutation_was_made is False
+    assert retry_row.real_shipment_mutation_was_made is False
+    assert retry_row.customer_notification_sent is False
+
+    # Hotfix-2 emits `retry_prepared` (not the original
+    # `attempt_prepared`).
+    assert AuditEvent.objects.filter(
+        kind=AUDIT_KIND_RETRY_PREPARED
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_hotfix2_retry_prepared_audit_kind_within_length_budget() -> None:
+    """`razorpay.courier_execution.retry_prepared` must respect the
+    Phase 6T-hotfix audit-kind length budget."""
+    assert AUDIT_KIND_RETRY_PREPARED.startswith(
+        "razorpay.courier_execution."
+    )
+    assert len(AUDIT_KIND_RETRY_PREPARED) <= 64
+
+
+@pytest.mark.django_db
+def test_hotfix2_terminal_attempt_with_provider_call_does_not_auto_retry() -> (
+    None
+):
+    """If `provider_call_attempted=True` on the terminal row, prepare
+    MUST NOT mint a new retry attempt - the original row is reused and
+    flagged for manual review."""
+    phase7f_gate = _make_approved_phase7f_gate(
+        source_event_id="evt_phase7g_hf2_provider_touched"
+    )
+    with _phase7g_test_settings():
+        first = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    original_id = first["attempt"]["id"]
+    original = RazorpayCourierExecutionAttempt.objects.get(
+        pk=original_id
+    )
+    # Simulate a real Hotfix-1 *post*-wrapper failure: provider call
+    # WAS made, then attempt was rolled back.
+    original.status = (
+        RazorpayCourierExecutionAttempt.Status.ROLLED_BACK_RECORDED
+    )
+    original.rollback_status = (
+        RazorpayCourierExecutionAttempt.RollbackStatus.RECORDED_ONLY_NO_PROVIDER_CANCEL
+    )
+    original.provider_call_attempted = True
+    original.delhivery_call_attempted = True
+    original.executed_at = None
+    original.save()
+
+    with _phase7g_test_settings():
+        out = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert out["attempt"]["id"] == original_id
+    assert (
+        out["nextAction"]
+        == "phase7g_attempt_terminal_manual_review_required"
+    )
+    # Exactly one attempt row exists for this gate.
+    assert (
+        RazorpayCourierExecutionAttempt.objects.filter(
+            source_phase7f_gate=phase7f_gate
+        ).count()
+        == 1
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix2_executed_attempt_does_not_auto_retry() -> None:
+    """Successfully executed attempts never auto-retry."""
+    phase7f_gate = _make_approved_phase7f_gate(
+        source_event_id="evt_phase7g_hf2_executed_no_retry"
+    )
+    with _phase7g_test_settings():
+        first = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    original_id = first["attempt"]["id"]
+    original = RazorpayCourierExecutionAttempt.objects.get(
+        pk=original_id
+    )
+    original.status = (
+        RazorpayCourierExecutionAttempt.Status.EXECUTED
+    )
+    original.provider_call_attempted = True
+    original.delhivery_call_attempted = True
+    original.awb_created = True
+    original.executed_at = mock.MagicMock()  # any truthy datetime-like
+    # Use a real datetime to keep ORM happy.
+    from datetime import datetime, timezone as _tz
+
+    original.executed_at = datetime.now(tz=_tz.utc)
+    original.save()
+
+    with _phase7g_test_settings():
+        out = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert out["attempt"]["id"] == original_id
+    assert (
+        out["nextAction"]
+        == "phase7g_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix2_failed_attempt_is_safe_and_not_auto_retried() -> None:
+    """`failed` attempts (post-wrapper failure path) are terminal but
+    were already past the wrapper - manual review only."""
+    phase7f_gate = _make_approved_phase7f_gate(
+        source_event_id="evt_phase7g_hf2_failed_no_retry"
+    )
+    with _phase7g_test_settings():
+        first = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    original_id = first["attempt"]["id"]
+    original = RazorpayCourierExecutionAttempt.objects.get(
+        pk=original_id
+    )
+    original.status = (
+        RazorpayCourierExecutionAttempt.Status.FAILED
+    )
+    original.provider_call_attempted = True
+    original.delhivery_call_attempted = True
+    original.save()
+
+    with _phase7g_test_settings():
+        out = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert out["attempt"]["id"] == original_id
+    assert (
+        out["nextAction"]
+        == "phase7g_attempt_terminal_manual_review_required"
+    )
+    # Confirm Phase 7G never silently flipped any safety boolean.
+    refreshed = RazorpayCourierExecutionAttempt.objects.get(
+        pk=original_id
+    )
+    assert refreshed.shipment_created is False
+    assert refreshed.business_mutation_was_made is False
+    assert refreshed.customer_notification_sent is False
+
+
+@pytest.mark.django_db
+def test_hotfix2_retry_does_not_call_delhivery_wrapper() -> None:
+    """The retry path is a database-only operation. The lazy
+    `_create_awb_via_dedicated_wrapper` must NEVER be called by
+    prepare - asserted with a `MagicMock.assert_not_called` spy."""
+    phase7f_gate = _make_approved_phase7f_gate(
+        source_event_id="evt_phase7g_hf2_no_wrapper"
+    )
+    with _phase7g_test_settings():
+        first = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    original = RazorpayCourierExecutionAttempt.objects.get(
+        pk=first["attempt"]["id"]
+    )
+    _force_into_rolled_back_pre_window_state(original)
+
+    with _phase7g_test_settings(), mock.patch(
+        "apps.payments.razorpay_courier_execution._create_awb_via_dedicated_wrapper"
+    ) as patched:
+        retry = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    patched.assert_not_called()
+    assert retry["retry"] is True
+    assert retry["retrySequence"] == 2
+
+
+@pytest.mark.django_db
+def test_hotfix2_pending_attempt_is_reused_not_retried() -> None:
+    """A pending-director-signoff attempt is still actionable, so
+    prepare reuses it instead of minting a new retry."""
+    phase7f_gate = _make_approved_phase7f_gate(
+        source_event_id="evt_phase7g_hf2_pending_reuse"
+    )
+    with _phase7g_test_settings():
+        first = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+        second = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    assert first["created"] is True
+    assert second["created"] is False
+    assert second["reused"] is True
+    assert (
+        second["attempt"]["id"] == first["attempt"]["id"]
+    )
+    assert "retry" not in second or second.get("retry") is not True
+
+
+@pytest.mark.django_db
+def test_hotfix2_retry_sequence_increments_when_retry_blocked_again() -> (
+    None
+):
+    """A chain of pre-window-blocked retries keeps incrementing the
+    retry sequence (2, 3, ...). Every row stays immutable. The
+    third retry uses ``::retry::3``."""
+    phase7f_gate = _make_approved_phase7f_gate(
+        source_event_id="evt_phase7g_hf2_chain"
+    )
+    with _phase7g_test_settings():
+        original_out = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    original = RazorpayCourierExecutionAttempt.objects.get(
+        pk=original_out["attempt"]["id"]
+    )
+    _force_into_rolled_back_pre_window_state(original)
+
+    with _phase7g_test_settings():
+        retry_1 = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    assert retry_1["retrySequence"] == 2
+    retry_1_row = RazorpayCourierExecutionAttempt.objects.get(
+        pk=retry_1["attempt"]["id"]
+    )
+    _force_into_rolled_back_pre_window_state(retry_1_row)
+
+    with _phase7g_test_settings():
+        retry_2 = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    assert retry_2["retrySequence"] == 3
+    retry_2_row = RazorpayCourierExecutionAttempt.objects.get(
+        pk=retry_2["attempt"]["id"]
+    )
+    assert (
+        retry_2_row.idempotency_key
+        == f"phase7g::courier_execution::phase7f_gate::{phase7f_gate.pk}::retry::3"
+    )
+    assert (
+        RazorpayCourierExecutionAttempt.objects.filter(
+            source_phase7f_gate=phase7f_gate
+        ).count()
+        == 3
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix2_retry_attempt_emits_safe_audit_payload_only() -> None:
+    """The `retry_prepared` audit payload must NEVER carry tokens /
+    phones / addresses / raw secrets."""
+    phase7f_gate = _make_approved_phase7f_gate(
+        source_event_id="evt_phase7g_hf2_audit_payload"
+    )
+    with _phase7g_test_settings():
+        first = prepare_phase7g_courier_execution_attempt(
+            phase7f_gate.pk
+        )
+    _force_into_rolled_back_pre_window_state(
+        RazorpayCourierExecutionAttempt.objects.get(
+            pk=first["attempt"]["id"]
+        )
+    )
+    AuditEvent.objects.filter(
+        kind=AUDIT_KIND_RETRY_PREPARED
+    ).delete()
+    with _phase7g_test_settings():
+        prepare_phase7g_courier_execution_attempt(phase7f_gate.pk)
+
+    forbidden_keys = (
+        "token",
+        "phone",
+        "customer_phone",
+        "address",
+        "address_line",
+        "pincode",
+        "DELHIVERY_API_TOKEN",
+        "META_WA_TOKEN",
+        "RAZORPAY_KEY_SECRET",
+        "raw_payload",
+        "raw_signature",
+        "raw_secret",
+    )
+    evt = AuditEvent.objects.filter(
+        kind=AUDIT_KIND_RETRY_PREPARED
+    ).first()
+    assert evt is not None
+    for key in forbidden_keys:
+        assert key not in (evt.payload or {}), (
+            f"retry_prepared audit carried forbidden key {key}"
+        )
+    # Retry-specific diagnostics are present.
+    assert (evt.payload or {}).get("retry_sequence") == 2
+    assert (
+        (evt.payload or {}).get("previous_attempt_id")
+        == first["attempt"]["id"]
     )

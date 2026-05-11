@@ -3029,6 +3029,22 @@ python manage.py prepare_delhivery_courier_execution_attempt \
 # Idempotent on the source Phase 7F gate id.
 # Refuses if DELHIVERY_MODE=live, kill switch off, or any
 # WhatsApp / Phase 7D / Phase 6K execute flag is on.
+#
+# Phase 7G-Hotfix-2 (safe retry after pre-window block): if the
+# LATEST attempt for this gate is `rolled_back_recorded` AND
+# every provider / business / send boolean is False AND
+# `executed_at is None` (e.g. the previous attempt was blocked by
+# the Hotfix-1 structured UTC window guard before the Delhivery
+# wrapper ran), re-running prepare mints a FRESH retry row with
+# idempotency key
+# `phase7g::courier_execution::phase7f_gate::<gate>::retry::<N>`
+# instead of returning the terminal row. The original attempt is
+# never mutated. Terminal attempts that DID touch the provider
+# (`executed`, `failed`, or `rolled_back_recorded` with any
+# provider/business boolean True) refuse auto-retry with
+# `nextAction=phase7g_attempt_terminal_manual_review_required` -
+# manual operator review is required so the on-call human can
+# decide whether an AWB landed.
 
 # 4. Approve the attempt (status -> approved_for_one_shot_courier_test_or_live_review)
 # - Reason MUST be non-empty.

@@ -4,6 +4,25 @@
 > this doc and `nd.md` disagree, `nd.md` wins; this doc must be
 > updated to match.
 >
+> **Phase 7G-Hotfix-2 — Safe retry after pre-window blocked
+> non-provider attempt — SHIPPED.**
+> `prepare_phase7g_courier_execution_attempt` now selects the
+> latest attempt against the source Phase 7F gate. When that
+> latest attempt is `rolled_back_recorded` AND every provider /
+> business / send boolean is False AND `executed_at is None`
+> (i.e. blocked before the lazy Delhivery wrapper ran — typically
+> by the Hotfix-1 structured UTC window guard), prepare mints a
+> fresh retry attempt with idempotency key
+> `phase7g::courier_execution::phase7f_gate::<gate>::retry::<N>`.
+> The original row is never mutated. Terminal attempts that did
+> touch the provider (`executed`, `failed`, or
+> `rolled_back_recorded` with any provider/business boolean True)
+> refuse auto-retry with
+> `nextAction=phase7g_attempt_terminal_manual_review_required`.
+> New audit kind `razorpay.courier_execution.retry_prepared`
+> (≤ 64 chars). Hotfix-2 does NOT call Delhivery, does NOT create
+> a Shipment / AWB row, does NOT mutate business rows.
+>
 > **Phase 7G-Hotfix-1 — Structured UTC Window Guard for Delhivery
 > execute command — SHIPPED.** `execute_phase7g_courier_one_shot`
 > (and the `execute_delhivery_courier_one_shot` CLI) now refuse to
