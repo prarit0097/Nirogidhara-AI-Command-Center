@@ -3204,6 +3204,21 @@ python manage.py prepare_phase7e_live_internal_whatsapp_send \
 # `nextAction=phase7e_live_attempt_terminal_manual_review_required`
 # - manual operator review is required so the on-call human can
 # decide whether a real WhatsApp landed.
+#
+# Phase 7E-Live-A-Hotfix-3 (safe retry after no-provider manual
+# rollback before execution): if the LATEST attempt for this gate
+# is `rollback_recorded` AND `provider_call_attempted=False` AND
+# `meta_cloud_call_attempted=False` AND `executed_at is None` AND
+# `failed_at is None` AND the locked-False contract still holds
+# (every Meta-side / business-side boolean still False,
+# `provider_message_id` / `provider_status` empty), re-running
+# prepare ALSO mints a fresh retry row (sequence increments to 3
+# when both attempt 1 = wrapper-failure and attempt 2 = no-provider
+# rollback already exist). Uses the same
+# `phase7e.internal_send.retry_prepared` audit kind as Hotfix-2.
+# `provider_call_attempted=True`, `meta_cloud_call_attempted=True`,
+# `executed_at is not None`, or `failed_at is not None` with an
+# unknown failure reason still refuse auto-retry.
 
 # 4. Approve (state transition only; requires reason + signoff)
 python manage.py approve_phase7e_live_internal_whatsapp_send \

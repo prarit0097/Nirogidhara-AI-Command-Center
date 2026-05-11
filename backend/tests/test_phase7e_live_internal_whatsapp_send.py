@@ -1433,3 +1433,522 @@ def test_hotfix2_retry_audit_payload_carries_retry_metadata_safely() -> (
         assert forbidden not in payload, (
             f"retry_prepared audit carried forbidden key {forbidden}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 7E-Live-A-Hotfix-3 — Safe retry after no-provider manual rollback
+#
+# This is the on-VPS state of attempt 2 after Hotfix-2 shipped: the
+# operator prepared an attempt against the gate, never approved or
+# executed it, then manually rolled it back via
+# rollback_phase7e_live_internal_whatsapp_send. The row landed in
+# rollback_recorded with:
+#   - provider_call_attempted=false
+#   - meta_cloud_call_attempted=false
+#   - provider_message_id=""
+#   - provider_status=""
+#   - all locked-False booleans still false
+#   - executed_at=None
+#   - failed_at=None
+#   - warnings list does NOT contain the wrapper-method marker
+#
+# Hotfix-2 alone refused to auto-retry this case because it required
+# the wrapper-method marker. Hotfix-3 adds a strictly-safer path:
+# rollback_recorded + no provider call + no Meta call + no
+# executed_at/failed_at -> retry-eligible.
+# ---------------------------------------------------------------------------
+
+
+def _force_into_no_provider_rolled_back_state(
+    attempt: RazorpayWhatsAppInternalSendAttempt,
+) -> None:
+    """Drop the attempt into the on-VPS-attempt-2 state: rolled back
+    BEFORE execute ever ran. No wrapper call, no Meta call, no
+    warning marker, no executed_at, no failed_at."""
+    attempt.status = (
+        RazorpayWhatsAppInternalSendAttempt.Status.ROLLBACK_RECORDED
+    )
+    attempt.provider_call_attempted = False
+    attempt.meta_cloud_call_attempted = False
+    attempt.provider_message_id = ""
+    attempt.provider_status = ""
+    attempt.whatsapp_message_created = False
+    attempt.whatsapp_message_queued = False
+    attempt.customer_notification_sent = False
+    attempt.business_mutation_was_made = False
+    attempt.real_customer_allowed = False
+    attempt.real_customer_phone_used = False
+    attempt.executed_at = None
+    attempt.failed_at = None
+    # Warnings list intentionally clear of the wrapper-method
+    # marker -> exercises the Hotfix-3 path, NOT Hotfix-2.
+    attempt.warnings = list(
+        w for w in (attempt.warnings or [])
+        if "Meta Cloud client does not expose send_template_message"
+        not in str(w)
+    )
+    attempt.rollback_reason = (
+        "Operator rolled back before execute ran"
+    )
+    attempt.save()
+
+
+@pytest.mark.django_db
+def test_hotfix3_no_provider_rollback_creates_fresh_retry() -> None:
+    """The exact VPS-attempt-2 state (rollback_recorded + no provider
+    call + no Meta call + executed_at/failed_at both None) MUST
+    re-prepare into a NEW retry row with sequence 2 and idempotency
+    key `phase7e_live::internal_send::phase7e_gate::<gate>::retry::2`.
+    Original row stays immutable."""
+    first = _make_prepared_attempt()
+    original_id = first.pk
+    original_idem = first.idempotency_key
+    gate_id = first.source_phase7e_gate_id
+    _force_into_no_provider_rolled_back_state(first)
+
+    AuditEvent.objects.filter(
+        kind=AUDIT_KIND_RETRY_PREPARED
+    ).delete()
+    before = _row_counts()
+    with _phase7e_live_test_settings():
+        retry = prepare_phase7e_live_internal_send(
+            gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    after = _row_counts()
+
+    assert retry["created"] is True
+    assert retry["reused"] is False
+    assert retry["retry"] is True
+    assert retry["retrySequence"] == 2
+    assert retry["previousAttemptId"] == original_id
+
+    retry_id = retry["attempt"]["id"]
+    assert retry_id != original_id
+    retry_row = RazorpayWhatsAppInternalSendAttempt.objects.get(
+        pk=retry_id
+    )
+    assert (
+        retry_row.idempotency_key
+        == f"phase7e_live::internal_send::phase7e_gate::{gate_id}::retry::2"
+    )
+    assert retry_row.idempotency_key != original_idem
+    assert (
+        retry_row.status
+        == RazorpayWhatsAppInternalSendAttempt.Status.PENDING_DIRECTOR_SIGNOFF
+    )
+
+    # Original row stays immutable.
+    refreshed = RazorpayWhatsAppInternalSendAttempt.objects.get(
+        pk=original_id
+    )
+    assert (
+        refreshed.status
+        == RazorpayWhatsAppInternalSendAttempt.Status.ROLLBACK_RECORDED
+    )
+    assert refreshed.idempotency_key == original_idem
+    # Original row's locked-False contract is still intact.
+    assert refreshed.provider_call_attempted is False
+    assert refreshed.meta_cloud_call_attempted is False
+    assert refreshed.executed_at is None
+    assert refreshed.failed_at is None
+
+    # No business mutation, no real-customer touch, no customer
+    # notification, no broad automation.
+    assert before == after
+    assert retry_row.provider_call_attempted is False
+    assert retry_row.meta_cloud_call_attempted is False
+    assert retry_row.whatsapp_message_created is False
+    assert retry_row.whatsapp_message_queued is False
+    assert retry_row.customer_notification_sent is False
+    assert retry_row.business_mutation_was_made is False
+    assert retry_row.real_customer_allowed is False
+    assert retry_row.real_customer_phone_used is False
+
+    # Retry emits `retry_prepared`, not `prepared`.
+    assert AuditEvent.objects.filter(
+        kind=AUDIT_KIND_RETRY_PREPARED
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_hotfix3_retry_sequence_increments_when_two_attempts_exist() -> (
+    None
+):
+    """When attempt 1 (Hotfix-2 wrapper failure) AND attempt 2
+    (Hotfix-3 no-provider rollback) both exist on the same gate,
+    a third prepare call yields ``::retry::3`` — matching the
+    on-VPS sequence after Hotfix-2 shipped."""
+    first = _make_prepared_attempt()
+    gate_id = first.source_phase7e_gate_id
+
+    # Attempt 1: pre-hotfix wrapper failure (Hotfix-2 path).
+    _force_into_pre_hotfix_wrapper_failure_state(first)
+    with _phase7e_live_test_settings():
+        retry_1 = prepare_phase7e_live_internal_send(
+            gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert retry_1["retrySequence"] == 2
+    retry_1_row = RazorpayWhatsAppInternalSendAttempt.objects.get(
+        pk=retry_1["attempt"]["id"]
+    )
+
+    # Attempt 2: rolled back BEFORE execute ran (Hotfix-3 path).
+    _force_into_no_provider_rolled_back_state(retry_1_row)
+    with _phase7e_live_test_settings():
+        retry_2 = prepare_phase7e_live_internal_send(
+            gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert retry_2["retrySequence"] == 3
+    retry_2_row = RazorpayWhatsAppInternalSendAttempt.objects.get(
+        pk=retry_2["attempt"]["id"]
+    )
+    assert (
+        retry_2_row.idempotency_key
+        == f"phase7e_live::internal_send::phase7e_gate::{gate_id}::retry::3"
+    )
+    assert (
+        RazorpayWhatsAppInternalSendAttempt.objects.filter(
+            source_phase7e_gate_id=gate_id
+        ).count()
+        == 3
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_provider_call_attempted_blocks_retry() -> (
+    None
+):
+    """If `provider_call_attempted=True` on the rollback_recorded
+    attempt, Hotfix-3 path refuses (provider was reached; manual
+    review required so the human can verify the wrapper outcome)."""
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.provider_call_attempted = True
+    first.save(update_fields=["provider_call_attempted"])
+
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_meta_cloud_call_attempted_blocks_retry() -> (
+    None
+):
+    """meta_cloud_call_attempted=True means the wrapper ran; Hotfix-3
+    path refuses."""
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.meta_cloud_call_attempted = True
+    first.save(update_fields=["meta_cloud_call_attempted"])
+
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_executed_at_set_blocks_retry() -> None:
+    """`executed_at is not None` means execute ran past the wrapper;
+    Hotfix-3 path refuses."""
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.executed_at = datetime.now(tz=timezone.utc)
+    first.save(update_fields=["executed_at"])
+
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_failed_at_and_unknown_reason_blocks_retry() -> (
+    None
+):
+    """`failed_at` is set AND no known wrapper-method marker present
+    -> manual review only. Neither Hotfix-2 nor Hotfix-3 should
+    qualify."""
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.status = (
+        RazorpayWhatsAppInternalSendAttempt.Status.FAILED
+    )
+    first.failed_at = datetime.now(tz=timezone.utc)
+    first.warnings = [
+        "phase7e_live_execute_failed:opaque_remote_error",
+    ]
+    first.save()
+
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_provider_message_id_blocks_retry() -> (
+    None
+):
+    """A Meta-side message id means a real WhatsApp landed. Hotfix-3
+    must refuse regardless of the call-attempted flags."""
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.provider_message_id = "wamid.real_meta_send_xyz"
+    first.save(update_fields=["provider_message_id"])
+
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_whatsapp_message_created_blocks_retry() -> (
+    None
+):
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.whatsapp_message_created = True
+    first.save(update_fields=["whatsapp_message_created"])
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_real_customer_phone_used_blocks_retry() -> (
+    None
+):
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.real_customer_phone_used = True
+    first.save(update_fields=["real_customer_phone_used"])
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_customer_notification_blocks_retry() -> (
+    None
+):
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.customer_notification_sent = True
+    first.save(update_fields=["customer_notification_sent"])
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_terminal_with_business_mutation_blocks_retry() -> None:
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    first.business_mutation_was_made = True
+    first.save(update_fields=["business_mutation_was_made"])
+    with _phase7e_live_test_settings():
+        out = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert out["created"] is False
+    assert out["reused"] is True
+    assert (
+        out["nextAction"]
+        == "phase7e_live_attempt_terminal_manual_review_required"
+    )
+
+
+@pytest.mark.django_db
+def test_hotfix3_retry_does_not_call_meta_cloud_wrapper() -> None:
+    """The Hotfix-3 retry path is a database-only operation. The
+    lazy ``_send_internal_template_via_meta_cloud`` wrapper MUST
+    NEVER be invoked by `prepare`. Asserted with a
+    ``MagicMock.assert_not_called`` spy."""
+    first = _make_prepared_attempt()
+    _force_into_no_provider_rolled_back_state(first)
+    with _phase7e_live_test_settings(), mock.patch(
+        "apps.payments.razorpay_whatsapp_internal_send._send_internal_template_via_meta_cloud"
+    ) as patched:
+        retry = prepare_phase7e_live_internal_send(
+            first.source_phase7e_gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    patched.assert_not_called()
+    assert retry["retry"] is True
+    assert retry["retrySequence"] == 2
+
+
+@pytest.mark.django_db
+def test_hotfix3_vps_attempt_2_state_mirror_creates_retry_3() -> None:
+    """End-to-end: mirror the on-VPS state — attempt 1 is a
+    pre-hotfix wrapper failure, attempt 2 is a no-provider rollback
+    — and confirm prepare mints a fresh ``::retry::3`` row instead
+    of reusing attempt 2."""
+    first = _make_prepared_attempt()
+    gate_id = first.source_phase7e_gate_id
+    # Attempt 1: Hotfix-2 path.
+    _force_into_pre_hotfix_wrapper_failure_state(first)
+    with _phase7e_live_test_settings():
+        retry_1 = prepare_phase7e_live_internal_send(
+            gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    assert retry_1["retrySequence"] == 2
+
+    # Attempt 2: no-provider manual rollback (mirrors VPS attempt 2).
+    retry_1_row = RazorpayWhatsAppInternalSendAttempt.objects.get(
+        pk=retry_1["attempt"]["id"]
+    )
+    _force_into_no_provider_rolled_back_state(retry_1_row)
+
+    AuditEvent.objects.filter(
+        kind=AUDIT_KIND_RETRY_PREPARED
+    ).delete()
+    before = _row_counts()
+    with _phase7e_live_test_settings(), mock.patch(
+        "apps.payments.razorpay_whatsapp_internal_send._send_internal_template_via_meta_cloud"
+    ) as patched:
+        retry_2 = prepare_phase7e_live_internal_send(
+            gate_id,
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            allowed_recipient_last4=_ALLOWED_LAST4,
+        )
+    after = _row_counts()
+
+    # Wrapper was never called.
+    patched.assert_not_called()
+    assert retry_2["created"] is True
+    assert retry_2["retry"] is True
+    assert retry_2["retrySequence"] == 3
+    assert retry_2["previousAttemptId"] == retry_1["attempt"]["id"]
+    new_row = RazorpayWhatsAppInternalSendAttempt.objects.get(
+        pk=retry_2["attempt"]["id"]
+    )
+    assert (
+        new_row.idempotency_key
+        == f"phase7e_live::internal_send::phase7e_gate::{gate_id}::retry::3"
+    )
+    assert (
+        new_row.status
+        == RazorpayWhatsAppInternalSendAttempt.Status.PENDING_DIRECTOR_SIGNOFF
+    )
+    # No business mutation, no real customer phone, no customer
+    # notification, no broad automation flag flipped.
+    assert before == after
+    assert new_row.provider_call_attempted is False
+    assert new_row.meta_cloud_call_attempted is False
+    assert new_row.whatsapp_message_created is False
+    assert new_row.whatsapp_message_queued is False
+    assert new_row.customer_notification_sent is False
+    assert new_row.business_mutation_was_made is False
+    assert new_row.real_customer_allowed is False
+    assert new_row.real_customer_phone_used is False
+    # Original attempts untouched.
+    assert (
+        RazorpayWhatsAppInternalSendAttempt.objects.get(
+            pk=first.pk
+        ).status
+        == RazorpayWhatsAppInternalSendAttempt.Status.ROLLBACK_RECORDED
+    )
+    assert (
+        RazorpayWhatsAppInternalSendAttempt.objects.get(
+            pk=retry_1_row.pk
+        ).status
+        == RazorpayWhatsAppInternalSendAttempt.Status.ROLLBACK_RECORDED
+    )

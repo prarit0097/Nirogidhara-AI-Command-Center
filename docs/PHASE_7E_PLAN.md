@@ -4,6 +4,21 @@
 > doc and `nd.md` disagree, `nd.md` wins; this doc must be updated to
 > match.
 >
+> **Phase 7E-Live-A-Hotfix-3 — Safe retry after no-provider manual
+> rollback before execution — SHIPPED.** Extends the
+> `_retry_eligible` predicate with a second path: an attempt is
+> also retry-eligible when `status=rollback_recorded` AND
+> `provider_call_attempted=False` AND `meta_cloud_call_attempted=False`
+> AND `executed_at is None` AND `failed_at is None` AND the
+> shared locked-False contract holds (every Meta-side / business-
+> side boolean False, provider_message_id/status empty). Both
+> Hotfix-2 and Hotfix-3 paths share the existing
+> `phase7e.internal_send.retry_prepared` audit kind. Any other
+> terminal shape (provider call attempted but unknown failure
+> reason, executed_at set, real customer touched, message
+> created/queued, customer notification sent, business mutation)
+> still refuses auto-retry with manual review required.
+>
 > **Phase 7E-Live-A-Hotfix-2 — Safe retry after old wrapper-method
 > failed attempt — SHIPPED.**
 > `prepare_phase7e_live_internal_send` now selects the latest

@@ -812,31 +812,18 @@ def _failure_reason_matches_known_pre_hotfix_marker(
     return False
 
 
-def _retry_eligible(
+def _no_meta_side_effect(
     attempt: RazorpayWhatsAppInternalSendAttempt,
 ) -> bool:
-    """Decide whether ``attempt`` is eligible for a safe Phase
-    7E-Live-A retry.
+    """Shared locked-False contract: every Meta-side / business-side
+    boolean is False AND no provider message id / status was ever
+    recorded.
 
-    Eligible only when:
-      - status in ``{rollback_recorded, failed}``,
-      - ``provider_message_id`` is empty (no Meta-side message id),
-      - ``provider_status`` is empty (no Meta-side status),
-      - ``whatsapp_message_created`` and ``whatsapp_message_queued``
-        are both False,
-      - ``customer_notification_sent`` / ``business_mutation_was_made``
-        / ``real_customer_allowed`` / ``real_customer_phone_used`` are
-        all False (locked-False contract),
-      - and the recorded failure reason matches a known pre-hotfix
-        wrapper-method marker.
-
-    Pure: no DB writes, no provider calls, no audit emission.
+    Returns False the moment any signal of a real Meta-side effect
+    is found, so callers can treat a True return as "this attempt is
+    safe to retry from a side-effect perspective; still need to
+    decide *why* it's terminal".
     """
-    if attempt.status not in {
-        RazorpayWhatsAppInternalSendAttempt.Status.ROLLBACK_RECORDED,
-        RazorpayWhatsAppInternalSendAttempt.Status.FAILED,
-    }:
-        return False
     if (attempt.provider_message_id or "").strip():
         return False
     if (attempt.provider_status or "").strip():
@@ -853,6 +840,57 @@ def _retry_eligible(
         return False
     if attempt.real_customer_phone_used:
         return False
+    return True
+
+
+def _retry_eligible(
+    attempt: RazorpayWhatsAppInternalSendAttempt,
+) -> bool:
+    """Decide whether ``attempt`` is eligible for a safe Phase
+    7E-Live-A retry.
+
+    Two paths qualify (both require the shared locked-False
+    contract via :func:`_no_meta_side_effect` to hold):
+
+    **Hotfix-2 path** — pre-hotfix wrapper-method failure
+      - status in ``{rollback_recorded, failed}``,
+      - ``provider_call_attempted=True`` AND
+        ``meta_cloud_call_attempted=True`` (the wrapper was reached
+        and raised before any HTTP I/O),
+      - the failure reason matches the known pre-hotfix wrapper
+        marker (``Meta Cloud client does not expose
+        send_template_message``).
+
+    **Hotfix-3 path** — manual rollback before execution ever ran
+      - status == ``rollback_recorded``,
+      - ``provider_call_attempted=False`` AND
+        ``meta_cloud_call_attempted=False``,
+      - ``executed_at`` and ``failed_at`` are both ``None``.
+
+    Every other terminal shape (real Meta-side send, unknown
+    failure reason, partial success, real customer phone touched,
+    customer notification sent, business mutation, ...) requires
+    manual operator review — never auto-retried.
+
+    Pure: no DB writes, no provider calls, no audit emission.
+    """
+    Status = RazorpayWhatsAppInternalSendAttempt.Status
+    if attempt.status not in {Status.ROLLBACK_RECORDED, Status.FAILED}:
+        return False
+    if not _no_meta_side_effect(attempt):
+        return False
+
+    # Hotfix-3: rollback_recorded before any wrapper call.
+    if (
+        attempt.status == Status.ROLLBACK_RECORDED
+        and not attempt.provider_call_attempted
+        and not attempt.meta_cloud_call_attempted
+        and attempt.executed_at is None
+        and attempt.failed_at is None
+    ):
+        return True
+
+    # Hotfix-2: wrapper-method failure marker present.
     return _failure_reason_matches_known_pre_hotfix_marker(attempt)
 
 
