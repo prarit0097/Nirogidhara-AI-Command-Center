@@ -4,6 +4,27 @@
 > doc and `nd.md` disagree, `nd.md` wins; this doc must be updated to
 > match.
 >
+> **Phase 7E-Live-A-Hotfix-2 — Safe retry after old wrapper-method
+> failed attempt — SHIPPED.**
+> `prepare_phase7e_live_internal_send` now selects the latest
+> attempt against the source Phase 7E gate. When that latest
+> attempt is `rollback_recorded` / `failed` AND `provider_message_id`
+> + `provider_status` are empty AND every Meta-side boolean is
+> False AND the warnings list contains the known pre-hotfix
+> wrapper-method marker (`Meta Cloud client does not expose
+> send_template_message`), prepare mints a fresh retry row with
+> idempotency key `phase7e_live::internal_send::phase7e_gate::
+> <gate>::retry::<N>`. Original row stays immutable. Terminal
+> attempts with ANY Meta-side effect (provider_message_id set,
+> whatsapp_message_created/queued True, real_customer_phone_used
+> True, customer_notification_sent True, business_mutation_was_made
+> True) OR with an unknown failure reason refuse auto-retry with
+> `nextAction=phase7e_live_attempt_terminal_manual_review_required`.
+> New audit kind `phase7e.internal_send.retry_prepared` (≤ 64 chars)
+> carries `retry_sequence` + `previous_attempt_id`. Hotfix-2 does
+> NOT call Meta Cloud, does NOT send WhatsApp, does NOT touch a
+> real customer phone, does NOT mutate business rows.
+>
 > **Phase 7E-Live-A — Internal allowed-list WhatsApp one-shot send
 > gate — SHIPPED (CLI-only execute path; locked-OFF; never run on the
 > VPS; never sends to a real customer phone).** New

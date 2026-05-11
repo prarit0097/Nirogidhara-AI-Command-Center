@@ -3187,6 +3187,23 @@ python manage.py prepare_phase7e_live_internal_whatsapp_send \
     --template-language "en" \
     --allowed-recipient-last4 NNNN \
     --json
+#
+# Phase 7E-Live-A-Hotfix-2 (safe retry after pre-hotfix wrapper
+# failure): if the LATEST attempt for this gate is
+# `rollback_recorded` / `failed` AND `provider_message_id` is empty
+# AND every Meta-side boolean is False AND the warnings list
+# contains the known pre-hotfix marker
+# `Meta Cloud client does not expose send_template_message`,
+# re-running prepare mints a FRESH retry row with idempotency key
+# `phase7e_live::internal_send::phase7e_gate::<gate>::retry::<N>`
+# instead of returning the terminal row. The original attempt is
+# never mutated. Terminal attempts that DID create / queue a
+# WhatsApp message, that DID touch a real customer phone, that
+# carry a `provider_message_id`, or that failed with any other
+# reason refuse auto-retry with
+# `nextAction=phase7e_live_attempt_terminal_manual_review_required`
+# - manual operator review is required so the on-call human can
+# decide whether a real WhatsApp landed.
 
 # 4. Approve (state transition only; requires reason + signoff)
 python manage.py approve_phase7e_live_internal_whatsapp_send \

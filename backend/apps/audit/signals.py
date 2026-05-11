@@ -425,6 +425,7 @@ ICON_BY_KIND: dict[str, str] = {
     "phase7e.internal_send.rollback_recorded": "rotate-ccw",
     "phase7e.internal_send.rejected": "x-circle",
     "phase7e.internal_send.blocked": "ban",
+    "phase7e.internal_send.retry_prepared": "rotate-cw",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

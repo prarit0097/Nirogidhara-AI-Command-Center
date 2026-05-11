@@ -111,6 +111,17 @@ AUDIT_KIND_ROLLBACK_RECORDED = (
 )
 AUDIT_KIND_REJECTED = "phase7e.internal_send.rejected"
 AUDIT_KIND_BLOCKED = "phase7e.internal_send.blocked"
+AUDIT_KIND_RETRY_PREPARED = "phase7e.internal_send.retry_prepared"
+
+
+# Phase 7E-Live-A-Hotfix-2: retry is only allowed for the known
+# pre-hotfix wrapper-method failure ("Meta Cloud client does not
+# expose send_template_message"). Any other failure reason requires
+# manual operator review so the on-call human can decide whether a
+# WhatsApp message actually landed (idempotency safety).
+_RETRY_ELIGIBLE_FAILURE_MARKERS: tuple[str, ...] = (
+    "Meta Cloud client does not expose send_template_message",
+)
 
 
 PHASE_7E_LIVE_FORBIDDEN_PAYLOAD_KEYS: tuple[str, ...] = (
@@ -751,8 +762,113 @@ def preview_phase7e_live_internal_send(
 _TEMPLATE_NAME_RE = re.compile(r"^[a-z][a-z0-9_.]{2,119}$")
 
 
-def _idempotency_key(gate_id: int) -> str:
-    return f"phase7e_live::internal_send::phase7e_gate::{gate_id}"
+def _idempotency_key(gate_id: int, *, retry_sequence: int = 1) -> str:
+    """Compose the idempotency key for a Phase 7E-Live-A attempt.
+
+    The first attempt against a Phase 7E gate uses the original key
+    shape ``phase7e_live::internal_send::phase7e_gate::<gate_id>``.
+    Subsequent safe retries (Phase 7E-Live-A-Hotfix-2 — only allowed
+    when the previous attempt failed before any WhatsApp landed and
+    the failure reason matches a known pre-hotfix marker) add a
+    ``::retry::<N>`` suffix so the original attempt row stays
+    immutable and the unique constraint on ``idempotency_key`` holds.
+    """
+    base = f"phase7e_live::internal_send::phase7e_gate::{gate_id}"
+    if retry_sequence <= 1:
+        return base
+    return f"{base}::retry::{retry_sequence}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 7E-Live-A-Hotfix-2: safe-retry eligibility
+# ---------------------------------------------------------------------------
+
+
+def _failure_reason_matches_known_pre_hotfix_marker(
+    attempt: RazorpayWhatsAppInternalSendAttempt,
+) -> bool:
+    """Return True iff the attempt's warnings list (or rollback /
+    reject reason free-text fields) contains a known pre-hotfix
+    wrapper-method failure marker.
+
+    The wrapper-method failure could not have reached the Meta Cloud
+    HTTP path — the old wrapper raised
+    ``Phase7ELiveExecutionError("Meta Cloud client does not expose
+    send_template_message.")`` before any network I/O. That's the
+    *only* failure shape we auto-retry; every other failure requires
+    a human to verify whether a real Meta send happened.
+    """
+    haystacks: list[str] = []
+    for warn in attempt.warnings or []:
+        if isinstance(warn, str):
+            haystacks.append(warn)
+    haystacks.append(attempt.rollback_reason or "")
+    haystacks.append(attempt.reject_reason or "")
+    haystacks.append(attempt.archive_reason or "")
+    for needle in _RETRY_ELIGIBLE_FAILURE_MARKERS:
+        for haystack in haystacks:
+            if needle in haystack:
+                return True
+    return False
+
+
+def _retry_eligible(
+    attempt: RazorpayWhatsAppInternalSendAttempt,
+) -> bool:
+    """Decide whether ``attempt`` is eligible for a safe Phase
+    7E-Live-A retry.
+
+    Eligible only when:
+      - status in ``{rollback_recorded, failed}``,
+      - ``provider_message_id`` is empty (no Meta-side message id),
+      - ``provider_status`` is empty (no Meta-side status),
+      - ``whatsapp_message_created`` and ``whatsapp_message_queued``
+        are both False,
+      - ``customer_notification_sent`` / ``business_mutation_was_made``
+        / ``real_customer_allowed`` / ``real_customer_phone_used`` are
+        all False (locked-False contract),
+      - and the recorded failure reason matches a known pre-hotfix
+        wrapper-method marker.
+
+    Pure: no DB writes, no provider calls, no audit emission.
+    """
+    if attempt.status not in {
+        RazorpayWhatsAppInternalSendAttempt.Status.ROLLBACK_RECORDED,
+        RazorpayWhatsAppInternalSendAttempt.Status.FAILED,
+    }:
+        return False
+    if (attempt.provider_message_id or "").strip():
+        return False
+    if (attempt.provider_status or "").strip():
+        return False
+    if attempt.whatsapp_message_created:
+        return False
+    if attempt.whatsapp_message_queued:
+        return False
+    if attempt.customer_notification_sent:
+        return False
+    if attempt.business_mutation_was_made:
+        return False
+    if attempt.real_customer_allowed:
+        return False
+    if attempt.real_customer_phone_used:
+        return False
+    return _failure_reason_matches_known_pre_hotfix_marker(attempt)
+
+
+def _next_retry_sequence(
+    gate: RazorpayWhatsAppInternalNotificationGate,
+) -> int:
+    """Count attempts already attached to this gate and return the
+    next retry sequence number. First retry is ``2`` (the original
+    attempt is sequence ``1``).
+    """
+    existing = (
+        RazorpayWhatsAppInternalSendAttempt.objects.filter(
+            source_phase7e_gate=gate
+        ).count()
+    )
+    return existing + 1
 
 
 def prepare_phase7e_live_internal_send(
@@ -824,32 +940,80 @@ def prepare_phase7e_live_internal_send(
 
     before = _business_row_counts()
     snapshot = _capture_env_flag_snapshot()
-    idempotency = _idempotency_key(gate.pk)
 
     with transaction.atomic():
-        existing = (
+        # Look at the most recent attempt against this gate (any
+        # idempotency-key shape) so we can decide between reuse /
+        # safe-retry / refuse.
+        latest_for_gate = (
             RazorpayWhatsAppInternalSendAttempt.objects.filter(
-                idempotency_key=idempotency
+                source_phase7e_gate=gate
             )
             .select_for_update()
+            .order_by("-created_at")
             .first()
         )
-        if existing is not None:
-            return {
-                "phase": "7E-Live-A",
-                "created": False,
-                "reused": True,
-                "attempt": (
-                    serialize_phase7e_live_internal_send_attempt(
-                        existing
-                    )
-                ),
-                "blockers": [],
-                "warnings": [PHASE_7E_LIVE_WARNING],
-                "nextAction": (
-                    "phase7e_live_attempt_pending_director_signoff"
-                ),
+
+        if latest_for_gate is not None:
+            # Reuse any still-actionable attempt instead of minting a
+            # new row. "Actionable" = anything not terminal.
+            non_terminal_statuses = {
+                RazorpayWhatsAppInternalSendAttempt.Status.DRAFT,
+                RazorpayWhatsAppInternalSendAttempt.Status.PENDING_DIRECTOR_SIGNOFF,
+                RazorpayWhatsAppInternalSendAttempt.Status.APPROVED_FOR_INTERNAL_ONE_SHOT_SEND,
+                RazorpayWhatsAppInternalSendAttempt.Status.BLOCKED,
             }
+            if latest_for_gate.status in non_terminal_statuses:
+                return {
+                    "phase": "7E-Live-A",
+                    "created": False,
+                    "reused": True,
+                    "attempt": (
+                        serialize_phase7e_live_internal_send_attempt(
+                            latest_for_gate
+                        )
+                    ),
+                    "blockers": [],
+                    "warnings": [PHASE_7E_LIVE_WARNING],
+                    "nextAction": (
+                        "phase7e_live_attempt_pending_director_signoff"
+                    ),
+                }
+            # Terminal with a real Meta-side effect OR with an
+            # unknown failure reason -> manual review required, never
+            # auto-retry.
+            if not _retry_eligible(latest_for_gate):
+                return {
+                    "phase": "7E-Live-A",
+                    "created": False,
+                    "reused": True,
+                    "attempt": (
+                        serialize_phase7e_live_internal_send_attempt(
+                            latest_for_gate
+                        )
+                    ),
+                    "blockers": [],
+                    "warnings": [PHASE_7E_LIVE_WARNING],
+                    "nextAction": (
+                        "phase7e_live_attempt_terminal_manual_review_required"
+                    ),
+                }
+            # Phase 7E-Live-A-Hotfix-2: the previous attempt failed
+            # with the known pre-hotfix wrapper-method marker before
+            # any Meta-side effect could have happened. Mint a fresh
+            # retry row with a retry-suffixed idempotency key; the
+            # original row stays immutable.
+            retry_sequence = _next_retry_sequence(gate)
+            idempotency = _idempotency_key(
+                gate.pk, retry_sequence=retry_sequence
+            )
+            is_retry = True
+            previous_attempt_id = latest_for_gate.pk
+        else:
+            retry_sequence = 1
+            idempotency = _idempotency_key(gate.pk)
+            is_retry = False
+            previous_attempt_id = None
 
         attempt = RazorpayWhatsAppInternalSendAttempt(
             source_phase7e_gate=gate,
@@ -937,19 +1101,42 @@ def prepare_phase7e_live_internal_send(
                 ),
             }
 
-    write_event(
-        kind=AUDIT_KIND_PREPARED,
-        text=(
+    audit_kind = (
+        AUDIT_KIND_RETRY_PREPARED if is_retry else AUDIT_KIND_PREPARED
+    )
+    audit_text = (
+        f"Phase 7E-Live retry attempt prepared attempt_id="
+        f"{attempt.pk} phase7e_gate_id={gate.pk} retry_sequence="
+        f"{retry_sequence} previous_attempt_id={previous_attempt_id}"
+        if is_retry
+        else (
             f"Phase 7E-Live attempt prepared attempt_id={attempt.pk} "
             f"phase7e_gate_id={gate.pk}"
-        ),
+        )
+    )
+    write_event(
+        kind=audit_kind,
+        text=audit_text,
         tone=AuditEvent.Tone.INFO,
-        payload=_audit_attempt_payload(attempt),
+        payload=_audit_attempt_payload(
+            attempt,
+            extra=(
+                {
+                    "retry_sequence": retry_sequence,
+                    "previous_attempt_id": previous_attempt_id,
+                }
+                if is_retry
+                else None
+            ),
+        ),
     )
     return {
         "phase": "7E-Live-A",
         "created": True,
         "reused": False,
+        "retry": is_retry,
+        "retrySequence": retry_sequence,
+        "previousAttemptId": previous_attempt_id,
         "attempt": (
             serialize_phase7e_live_internal_send_attempt(attempt)
         ),
@@ -1759,6 +1946,7 @@ __all__ = (
     "AUDIT_KIND_ROLLBACK_RECORDED",
     "AUDIT_KIND_REJECTED",
     "AUDIT_KIND_BLOCKED",
+    "AUDIT_KIND_RETRY_PREPARED",
     "Phase7ELiveExecutionError",
     "assert_phase7e_live_no_business_mutation",
     "preview_phase7e_live_internal_send",
