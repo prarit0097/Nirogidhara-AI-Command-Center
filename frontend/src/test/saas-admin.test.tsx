@@ -1979,4 +1979,57 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
       expect(body).not.toMatch(/\+91\d{10}/);
     },
   );
+
+  it(
+    "renders the Phase 8A Payment → Order Mutation Sandbox Gate " +
+      "section in read-only / sandbox-only safe state",
+    async () => {
+      render(<SaasAdminPage />);
+      expect(
+        await screen.findByText(
+          /Phase 8A Payment.*Order Mutation Sandbox Gate/i,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(
+          "phase8a-payment-order-mutation-sandbox-section",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase8a-cli-only-banner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(/Sandbox-only.*CLI-only Review/i).length,
+      ).toBeGreaterThan(0);
+
+      const phase8aForbiddenButtons = [
+        /^approve gate$/i,
+        /^reject gate$/i,
+        /^archive gate$/i,
+        /^execute dry-run$/i,
+        /^apply mutation$/i,
+        /^mark paid$/i,
+        /^confirm order$/i,
+        /^send whatsapp$/i,
+        /^call razorpay$/i,
+        /^call delhivery$/i,
+        /^notify customer$/i,
+        /^refund$/i,
+        /^capture$/i,
+        /^go live$/i,
+        /^edit \.env$/i,
+      ];
+      for (const pattern of phase8aForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      const body = document.body.textContent ?? "";
+      expect(body).not.toContain("rzp_live_");
+      expect(body).not.toContain("DELHIVERY_API_TOKEN=");
+      expect(body).not.toContain("META_WA_TOKEN");
+      expect(body).not.toMatch(/\+91\d{10}/);
+    },
+  );
 });

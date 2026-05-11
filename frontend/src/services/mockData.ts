@@ -4936,6 +4936,117 @@ export const SAAS_PHASE7I_FINAL_AUDIT_LOCKS: Record<
   phase7GLiveApproved: false,
 };
 
+// ---------- Phase 8A - Payment -> Order Mutation Sandbox Gate ----------
+
+const PHASE_8A_GATE_COUNTS = {
+  draft: 0,
+  pending_manual_review: 0,
+  dry_run_passed: 0,
+  approved_for_future_phase8b_review: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+};
+
+export const SAAS_PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "8A",
+  status: "payment_order_mutation_sandbox_only",
+  latestCompletedPhase: "7I",
+  nextPhase: "phase8b_planning_or_real_mutation_not_approved",
+  killSwitch: { enabled: true, model: "RuntimeKillSwitch" },
+  phase8APaymentOrderMutationSandboxEnabled: false,
+  eligiblePhase7ILockCount: 0,
+  phase8AGateCounts: PHASE_8A_GATE_COUNTS,
+  items: [],
+  phase8ACallsRazorpay: false,
+  phase8ACallsMetaCloud: false,
+  phase8ACallsDelhivery: false,
+  phase8ACallsVapi: false,
+  phase8ASendsWhatsApp: false,
+  phase8AQueuesWhatsApp: false,
+  phase8ACreatesShipmentRow: false,
+  phase8ACreatesAwb: false,
+  phase8ACreatesPaymentLink: false,
+  phase8ACapturesPayment: false,
+  phase8ARefundsPayment: false,
+  phase8ASendsCustomerNotification: false,
+  phase8AMutatesBusinessRow: false,
+  phase8AMutatesRealOrder: false,
+  phase8AMutatesRealPayment: false,
+  phase8ARealCustomerAutomationApproved: false,
+  phase7ELiveBApproved: false,
+  phase7GLiveApproved: false,
+  executionPath: "sandbox_dry_run_only_cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  blockers: [],
+  warnings: [
+    "Phase 8A is the Payment -> Order Mutation Sandbox Gate. Sandbox / dry-run only against synthetic-only references (phase8a::sandbox::...). NEVER mutates real Order / Payment / Shipment / Customer / Lead rows; NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi; NEVER sends a customer notification. Phase 8B (real payment-to-order mutation) remains NOT approved.",
+  ],
+  nextAction: "enable_phase8a_payment_order_mutation_sandbox_flag",
+  forbiddenActions: [
+    "call_razorpay_api",
+    "call_meta_cloud_api",
+    "call_delhivery_api",
+    "call_vapi_api",
+    "send_whatsapp_template",
+    "send_whatsapp_freeform",
+    "queue_whatsapp_outbound",
+    "create_awb",
+    "create_shipment_row",
+    "create_payment_link",
+    "capture_razorpay_payment",
+    "refund_razorpay_payment",
+    "send_customer_notification",
+    "mutate_real_order_status",
+    "mutate_real_payment_status",
+    "mutate_real_shipment_status",
+    "mutate_real_customer",
+    "mutate_real_lead",
+    "mutate_real_discount_offer_log",
+    "approve_via_api_endpoint",
+    "reject_via_api_endpoint",
+    "execute_via_api_endpoint",
+    "archive_via_api_endpoint",
+    "dry_run_via_api_endpoint",
+    "edit_dotenv_any",
+  ],
+};
+
+export const SAAS_PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_GATES: Record<
+  string,
+  unknown
+> = {
+  phase: "8A",
+  limit: 25,
+  counts: PHASE_8A_GATE_COUNTS,
+  items: [],
+  executionPath: "sandbox_dry_run_only_cli_only",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  phase8ACallsRazorpay: false,
+  phase8ACallsMetaCloud: false,
+  phase8ACallsDelhivery: false,
+  phase8ACallsVapi: false,
+  phase8ASendsWhatsApp: false,
+  phase8AQueuesWhatsApp: false,
+  phase8ACreatesShipmentRow: false,
+  phase8ACreatesAwb: false,
+  phase8ACreatesPaymentLink: false,
+  phase8ACapturesPayment: false,
+  phase8ARefundsPayment: false,
+  phase8ASendsCustomerNotification: false,
+  phase8AMutatesBusinessRow: false,
+  phase8AMutatesRealOrder: false,
+  phase8AMutatesRealPayment: false,
+  phase8ARealCustomerAutomationApproved: false,
+};
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 const PHASE_7D_ATTEMPT_COUNTS = {

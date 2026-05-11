@@ -3453,3 +3453,212 @@ class RazorpayPhase7FinalAuditLock(models.Model):
             f"phase7h_lock={self.source_phase7h_evidence_lock_id} "
             f"status={self.status}]"
         )
+
+
+class RazorpayPaymentOrderMutationSandboxGate(models.Model):
+    """Phase 8A - Payment -> Order Mutation Sandbox Gate.
+
+    Phase 8A is **sandbox / dry-run only**. It designs and
+    dry-runs how a verified Razorpay paid/test evidence could map
+    to a synthetic/test Order status change in *future* phases.
+    Phase 8A NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi,
+    NEVER sends or queues WhatsApp, NEVER creates a `Shipment` /
+    AWB / payment link, NEVER captures / refunds, NEVER sends a
+    customer notification, NEVER mutates real `Order` /
+    `Payment` / `Customer` / `Lead` / `Shipment` /
+    `DiscountOfferLog` rows, NEVER edits any `.env*` file. Review
+    state changes are CLI-only.
+
+    Status flow:
+        draft -> pending_manual_review -> dry_run_passed ->
+        approved_for_future_phase8b_review / rejected / archived
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        DRY_RUN_PASSED = "dry_run_passed", "Dry-run passed"
+        APPROVED_FOR_FUTURE_PHASE8B_REVIEW = (
+            "approved_for_future_phase8b_review",
+            "Approved for future Phase 8B review",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    source_phase7i_lock = models.ForeignKey(
+        RazorpayPhase7FinalAuditLock,
+        on_delete=models.PROTECT,
+        related_name="phase8a_payment_order_mutation_sandbox_gates",
+    )
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8a_payment_order_mutation_sandbox_gates",
+    )
+
+    status = models.CharField(
+        max_length=40,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Hard contract: every flag below stays True/False as declared.
+    sandbox_only = models.BooleanField(default=True)
+    real_business_mutation_allowed = models.BooleanField(default=False)
+    real_order_mutation_allowed = models.BooleanField(default=False)
+    real_payment_mutation_allowed = models.BooleanField(default=False)
+    customer_notification_allowed = models.BooleanField(default=False)
+    whatsapp_allowed = models.BooleanField(default=False)
+    courier_allowed = models.BooleanField(default=False)
+    synthetic_order_required = models.BooleanField(default=True)
+    manual_review_required = models.BooleanField(default=True)
+    claim_vault_not_required_for_payment_status = models.BooleanField(
+        default=True
+    )
+
+    reviewed_by_username = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8a_payment_order_mutation_sandbox_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.TextField(blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+    evidence_json = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8a_payment_order_mutation_sandbox_gates",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8a_payment_order_mutation_sandbox_gates",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(
+                fields=("source_phase7i_lock", "-created_at")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8A-PaymentOrderMutationSandboxGate[id={self.pk} "
+            f"phase7i_lock={self.source_phase7i_lock_id} "
+            f"status={self.status}]"
+        )
+
+
+class RazorpayPaymentOrderMutationDryRun(models.Model):
+    """Phase 8A dry-run record.
+
+    Records a proposed (but never executed) Razorpay paid evidence
+    -> synthetic/test Order status mapping. Every `would_*` boolean
+    stays False; before/after row counts must be identical. The
+    record itself is the only DB write the dry-run produces; no
+    other DB row is created or mutated.
+    """
+
+    gate = models.ForeignKey(
+        RazorpayPaymentOrderMutationSandboxGate,
+        on_delete=models.CASCADE,
+        related_name="dry_runs",
+    )
+    source_phase7i_lock = models.ForeignKey(
+        RazorpayPhase7FinalAuditLock,
+        on_delete=models.PROTECT,
+        related_name="phase8a_payment_order_mutation_dry_runs",
+    )
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8a_payment_order_mutation_dry_runs",
+    )
+
+    proposed_source_payment_reference = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    proposed_target_order_reference = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    proposed_target_order_is_synthetic = models.BooleanField(
+        default=True
+    )
+    proposed_old_order_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_new_order_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_old_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_new_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+
+    # Hard contract: every `would_*` boolean stays False at all times.
+    would_mutate_order = models.BooleanField(default=False)
+    would_mutate_payment = models.BooleanField(default=False)
+    would_send_customer_notification = models.BooleanField(default=False)
+    would_send_whatsapp = models.BooleanField(default=False)
+    would_call_courier = models.BooleanField(default=False)
+
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    count_deltas = models.JSONField(default=dict, blank=True)
+
+    passed = models.BooleanField(default=False, db_index=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    rollback_reason = models.TextField(blank=True, default="")
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "-created_at")),
+            models.Index(fields=("passed", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8A-PaymentOrderMutationDryRun[id={self.pk} "
+            f"gate={self.gate_id} passed={self.passed}]"
+        )

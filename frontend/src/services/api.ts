@@ -175,6 +175,8 @@ import type {
   SaasPhase7ELiveInternalSendAttemptsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
+  SaasPhase8APaymentOrderMutationSandboxReadiness,
+  SaasPhase8APaymentOrderMutationSandboxGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -1680,6 +1682,21 @@ export const api = {
       `/v1/saas/phase7/final-audit-locks/?limit=${limit}`,
       () =>
         M.SAAS_PHASE7I_FINAL_AUDIT_LOCKS as SaasPhase7IFinalAuditLocksResponse,
+    ),
+
+  // ---------- Phase 8A - Payment -> Order Mutation Sandbox Gate ----------
+
+  getSaasPhase8APaymentOrderMutationSandboxReadiness: () =>
+    safeFetch<SaasPhase8APaymentOrderMutationSandboxReadiness>(
+      "/v1/saas/phase8/payment-order-mutation-sandbox-readiness/",
+      () =>
+        M.SAAS_PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_READINESS as SaasPhase8APaymentOrderMutationSandboxReadiness,
+    ),
+  getSaasPhase8APaymentOrderMutationSandboxGates: (limit: number = 25) =>
+    safeFetch<SaasPhase8APaymentOrderMutationSandboxGatesResponse>(
+      `/v1/saas/phase8/payment-order-mutation-sandbox-gates/?limit=${limit}`,
+      () =>
+        M.SAAS_PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_GATES as SaasPhase8APaymentOrderMutationSandboxGatesResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

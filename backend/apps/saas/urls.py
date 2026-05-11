@@ -55,6 +55,11 @@ from .views import (
     Phase7IFinalAuditLockPreviewView,
     Phase7IFinalAuditLockReadinessView,
     Phase7IFinalAuditLocksListView,
+    Phase8APaymentOrderMutationSandboxDryRunsView,
+    Phase8APaymentOrderMutationSandboxGateDetailView,
+    Phase8APaymentOrderMutationSandboxGatesListView,
+    Phase8APaymentOrderMutationSandboxPreviewView,
+    Phase8APaymentOrderMutationSandboxReadinessView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -735,5 +740,34 @@ urlpatterns = [
         "phase7/final-audit-lock-preview/",
         Phase7IFinalAuditLockPreviewView.as_view(),
         name="saas-phase7i-final-audit-lock-preview",
+    ),
+    # Phase 8A - Payment -> Order Mutation Sandbox Gate (sandbox-only;
+    # read-only API; CLI-only state changes; NEVER mutates real
+    # Order / Payment / Shipment / Customer / Lead rows; NEVER calls
+    # Razorpay / Meta Cloud / Delhivery / Vapi).
+    path(
+        "phase8/payment-order-mutation-sandbox-readiness/",
+        Phase8APaymentOrderMutationSandboxReadinessView.as_view(),
+        name="saas-phase8a-payment-order-mutation-sandbox-readiness",
+    ),
+    path(
+        "phase8/payment-order-mutation-sandbox-gates/",
+        Phase8APaymentOrderMutationSandboxGatesListView.as_view(),
+        name="saas-phase8a-payment-order-mutation-sandbox-gates",
+    ),
+    path(
+        "phase8/payment-order-mutation-sandbox-gates/<int:pk>/",
+        Phase8APaymentOrderMutationSandboxGateDetailView.as_view(),
+        name="saas-phase8a-payment-order-mutation-sandbox-gate-detail",
+    ),
+    path(
+        "phase8/payment-order-mutation-sandbox-preview/",
+        Phase8APaymentOrderMutationSandboxPreviewView.as_view(),
+        name="saas-phase8a-payment-order-mutation-sandbox-preview",
+    ),
+    path(
+        "phase8/payment-order-mutation-sandbox-dry-runs/<int:gate_id>/",
+        Phase8APaymentOrderMutationSandboxDryRunsView.as_view(),
+        name="saas-phase8a-payment-order-mutation-sandbox-dry-runs",
     ),
 ]

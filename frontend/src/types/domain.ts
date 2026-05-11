@@ -5219,3 +5219,149 @@ export interface SaasPhase7IFinalAuditLocksResponse {
   phase7ELiveBApproved: false;
   phase7GLiveApproved: false;
 }
+
+// ---------- Phase 8A - Payment -> Order Mutation Sandbox Gate ----------
+
+export type SaasPhase8APaymentOrderMutationSandboxGateStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "dry_run_passed"
+  | "approved_for_future_phase8b_review"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasPhase8APaymentOrderMutationSandboxGateDto {
+  id: number;
+  status: SaasPhase8APaymentOrderMutationSandboxGateStatus;
+  sourcePhase7ILockId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  sandboxOnly: true;
+  realBusinessMutationAllowed: false;
+  realOrderMutationAllowed: false;
+  realPaymentMutationAllowed: false;
+  customerNotificationAllowed: false;
+  whatsAppAllowed: false;
+  courierAllowed: false;
+  syntheticOrderRequired: true;
+  manualReviewRequired: true;
+  claimVaultNotRequiredForPaymentStatus: true;
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  evidenceJson: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasPhase8APaymentOrderMutationDryRunDto {
+  id: number;
+  gateId: number;
+  sourcePhase7ILockId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  proposedSourcePaymentReference: string;
+  proposedTargetOrderReference: string;
+  proposedTargetOrderIsSynthetic: boolean;
+  proposedOldOrderStatus: string;
+  proposedNewOrderStatus: string;
+  proposedOldPaymentStatus: string;
+  proposedNewPaymentStatus: string;
+  wouldMutateOrder: false;
+  wouldMutatePayment: false;
+  wouldSendCustomerNotification: false;
+  wouldSendWhatsApp: false;
+  wouldCallCourier: false;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  passed: boolean;
+  blockers: string[];
+  warnings: string[];
+  rollbackReasonPresent: boolean;
+  rolledBackAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SaasPhase8APaymentOrderMutationSandboxGateCounts {
+  draft: number;
+  pending_manual_review: number;
+  dry_run_passed: number;
+  approved_for_future_phase8b_review: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasPhase8APaymentOrderMutationSandboxReadiness {
+  phase: "8A";
+  status: "payment_order_mutation_sandbox_only";
+  latestCompletedPhase: "7I";
+  nextPhase: string;
+  killSwitch: { enabled: boolean; model: string; id?: number };
+  phase8APaymentOrderMutationSandboxEnabled: boolean;
+  eligiblePhase7ILockCount: number;
+  phase8AGateCounts: SaasPhase8APaymentOrderMutationSandboxGateCounts;
+  items: SaasPhase8APaymentOrderMutationSandboxGateDto[];
+  phase8ACallsRazorpay: false;
+  phase8ACallsMetaCloud: false;
+  phase8ACallsDelhivery: false;
+  phase8ACallsVapi: false;
+  phase8ASendsWhatsApp: false;
+  phase8AQueuesWhatsApp: false;
+  phase8ACreatesShipmentRow: false;
+  phase8ACreatesAwb: false;
+  phase8ACreatesPaymentLink: false;
+  phase8ACapturesPayment: false;
+  phase8ARefundsPayment: false;
+  phase8ASendsCustomerNotification: false;
+  phase8AMutatesBusinessRow: false;
+  phase8AMutatesRealOrder: false;
+  phase8AMutatesRealPayment: false;
+  phase8ARealCustomerAutomationApproved: false;
+  phase7ELiveBApproved: false;
+  phase7GLiveApproved: false;
+  executionPath: "sandbox_dry_run_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasPhase8APaymentOrderMutationSandboxGatesResponse {
+  phase: "8A";
+  limit: number;
+  counts: SaasPhase8APaymentOrderMutationSandboxGateCounts;
+  items: SaasPhase8APaymentOrderMutationSandboxGateDto[];
+  executionPath: "sandbox_dry_run_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase8ACallsRazorpay: false;
+  phase8ACallsMetaCloud: false;
+  phase8ACallsDelhivery: false;
+  phase8ACallsVapi: false;
+  phase8ASendsWhatsApp: false;
+  phase8AQueuesWhatsApp: false;
+  phase8ACreatesShipmentRow: false;
+  phase8ACreatesAwb: false;
+  phase8ACreatesPaymentLink: false;
+  phase8ACapturesPayment: false;
+  phase8ARefundsPayment: false;
+  phase8ASendsCustomerNotification: false;
+  phase8AMutatesBusinessRow: false;
+  phase8AMutatesRealOrder: false;
+  phase8AMutatesRealPayment: false;
+  phase8ARealCustomerAutomationApproved: false;
+}

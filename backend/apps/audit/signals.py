@@ -437,6 +437,19 @@ ICON_BY_KIND: dict[str, str] = {
     "phase7i.final_audit.rejected": "x-circle",
     "phase7i.final_audit.archived": "archive",
     "phase7i.final_audit.blocked": "ban",
+    # Phase 8A - Payment -> Order Mutation Sandbox Gate (sandbox /
+    # dry-run only; never calls provider; never mutates business
+    # rows; never edits any .env file).
+    "phase8a.payment_order.readiness_inspected": "eye",
+    "phase8a.payment_order.previewed": "eye",
+    "phase8a.payment_order.prepared": "file-plus",
+    "phase8a.payment_order.dry_run_passed": "check-circle",
+    "phase8a.payment_order.dry_run_failed": "shield-off",
+    "phase8a.payment_order.rollback_recorded": "rotate-ccw",
+    "phase8a.payment_order.approved": "check-circle",
+    "phase8a.payment_order.rejected": "x-circle",
+    "phase8a.payment_order.archived": "archive",
+    "phase8a.payment_order.blocked": "ban",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

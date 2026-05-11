@@ -40,6 +40,8 @@ import type {
   SaasPhase7ELiveInternalSendAttemptsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
+  SaasPhase8APaymentOrderMutationSandboxReadiness,
+  SaasPhase8APaymentOrderMutationSandboxGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -261,6 +263,14 @@ export default function SaasAdminPage() {
     phase7iFinalAuditLocks,
     setPhase7iFinalAuditLocks,
   ] = useState<SaasPhase7IFinalAuditLocksResponse | null>(null);
+  const [
+    phase8aPaymentOrderMutationSandboxReadiness,
+    setPhase8aPaymentOrderMutationSandboxReadiness,
+  ] = useState<SaasPhase8APaymentOrderMutationSandboxReadiness | null>(null);
+  const [
+    phase8aPaymentOrderMutationSandboxGates,
+    setPhase8aPaymentOrderMutationSandboxGates,
+  ] = useState<SaasPhase8APaymentOrderMutationSandboxGatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -312,6 +322,8 @@ export default function SaasAdminPage() {
       api.getSaasPhase7ELiveInternalSendAttempts(25),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
+      api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
+      api.getSaasPhase8APaymentOrderMutationSandboxGates(25),
     ])
       .then(
         ([
@@ -361,6 +373,8 @@ export default function SaasAdminPage() {
           p7eLiveAttempts,
           p7iRead,
           p7iLocks,
+          p8aRead,
+          p8aGates,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -408,6 +422,8 @@ export default function SaasAdminPage() {
           setPhase7eLiveInternalSendAttempts(p7eLiveAttempts);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
+          setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
+          setPhase8aPaymentOrderMutationSandboxGates(p8aGates);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -5242,6 +5258,166 @@ export default function SaasAdminPage() {
             "Apply Mutation" / "Go Live" / "Edit .env" buttons exist
             on this page. Phase 7I approval is a status transition
             only — it does NOT enable any provider call.
+          </div>
+        </section>
+      )}
+
+      {(phase8aPaymentOrderMutationSandboxReadiness ||
+        phase8aPaymentOrderMutationSandboxGates) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase8a-payment-order-mutation-sandbox-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 8A Payment → Order Mutation Sandbox Gate
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 8A — <strong>sandbox-only dry-runs</strong>{" "}
+                against synthetic-only references (
+                <code>phase8a::sandbox::...</code> /{" "}
+                <code>phase8a-sandbox-...</code> /{" "}
+                <code>sandbox::...</code>). Designs how a Razorpay
+                paid event could map to a synthetic{" "}
+                <code>Order</code> status change in a future phase.
+                Phase 8A NEVER mutates real <code>Order</code> /{" "}
+                <code>Payment</code> / <code>Shipment</code> /{" "}
+                <code>Customer</code> / <code>Lead</code> /{" "}
+                <code>DiscountOfferLog</code> rows, NEVER calls
+                Razorpay / Meta Cloud / Delhivery / Vapi, NEVER sends
+                or queues WhatsApp, NEVER creates a payment link,
+                NEVER captures, NEVER refunds, NEVER sends a customer
+                notification, NEVER edits any <code>.env*</code>{" "}
+                file. Review state changes are CLI-only. Approval
+                only unlocks a future Phase 8B review — it does NOT
+                enable any real mutation. Phase 8B (real
+                payment-to-order mutation) remains{" "}
+                <strong>not approved</strong>.
+              </p>
+            </div>
+            {phase8aPaymentOrderMutationSandboxReadiness && (
+              <div data-testid="phase8a-status-badge">
+                <StatusPill
+                  tone={
+                    phase8aPaymentOrderMutationSandboxReadiness
+                      .killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {phase8aPaymentOrderMutationSandboxReadiness
+                    .killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+          {phase8aPaymentOrderMutationSandboxReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={phase8aPaymentOrderMutationSandboxReadiness.phase}
+              />
+              <KeyValue
+                label="Status"
+                value={phase8aPaymentOrderMutationSandboxReadiness.status}
+              />
+              <KeyValue
+                label="Phase 8A flag"
+                value={
+                  phase8aPaymentOrderMutationSandboxReadiness
+                    .phase8APaymentOrderMutationSandboxEnabled
+                    ? "Enabled"
+                    : "Disabled (safe)"
+                }
+              />
+              <KeyValue
+                label="Eligible 7I locks"
+                value={String(
+                  phase8aPaymentOrderMutationSandboxReadiness
+                    .eligiblePhase7ILockCount,
+                )}
+              />
+              <KeyValue label="Mutates Order" value="No" />
+              <KeyValue label="Mutates Payment" value="No" />
+              <KeyValue label="Mutates Shipment" value="No" />
+              <KeyValue label="Sends WhatsApp" value="No" />
+              <KeyValue
+                label="Customer notification"
+                value="No"
+              />
+              <KeyValue label="Calls Razorpay" value="No" />
+              <KeyValue label="Calls Meta Cloud" value="No" />
+              <KeyValue label="Calls Delhivery" value="No" />
+              <KeyValue
+                label="Synthetic order required"
+                value="Yes"
+              />
+              <KeyValue label="Manual review" value="Yes" />
+              <KeyValue
+                label="Frontend can execute"
+                value="No"
+              />
+              <KeyValue
+                label="API can execute"
+                value="No"
+              />
+            </div>
+          )}
+          {phase8aPaymentOrderMutationSandboxGates &&
+            phase8aPaymentOrderMutationSandboxGates.items.length > 0 && (
+              <div className="border-t border-border px-6 py-4 text-xs">
+                {phase8aPaymentOrderMutationSandboxGates.items.map(
+                  (gate) => (
+                    <div
+                      key={gate.id}
+                      className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5 py-1 border-b border-border last:border-0"
+                    >
+                      <span>
+                        id=<strong>{gate.id}</strong>
+                      </span>
+                      <span>status={gate.status}</span>
+                      <span>
+                        7I={gate.sourcePhase7ILockId}
+                      </span>
+                      <span>
+                        7D={gate.sourcePhase7DAttemptId}
+                      </span>
+                      <span>
+                        sandboxOnly=
+                        {gate.sandboxOnly ? "yes" : "no"}
+                      </span>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+          {phase8aPaymentOrderMutationSandboxReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {
+                  phase8aPaymentOrderMutationSandboxReadiness
+                    .nextAction
+                }
+              </code>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase8a-cli-only-banner"
+          >
+            <strong>Sandbox-only · CLI-only Review.</strong> No
+            "Approve Gate" / "Reject Gate" / "Archive Gate" /
+            "Execute Dry-Run" / "Apply Mutation" / "Mark Paid" /
+            "Confirm Order" / "Send WhatsApp" / "Call Razorpay" /
+            "Call Delhivery" / "Notify Customer" / "Refund" /
+            "Capture" / "Go Live" / "Edit .env" buttons exist on this
+            page. Phase 8A approval is a status transition only — it
+            does NOT enable any real mutation.
           </div>
         </section>
       )}

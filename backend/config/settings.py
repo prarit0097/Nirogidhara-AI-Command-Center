@@ -406,6 +406,18 @@ PHASE7G_ALLOW_DELHIVERY_TEST_AWB = _razorpay_webhook_bool(
 PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED = _razorpay_webhook_bool(
     "PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED"
 )
+# `PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_ENABLED` controls the
+# Phase 8A Payment -> Order Mutation Sandbox Gate. Defaults LOCKED
+# OFF. Phase 8A is sandbox / dry-run ONLY: it never mutates real
+# Order / Payment / Customer / Lead / Shipment /
+# DiscountOfferLog rows, never calls Razorpay / Meta Cloud /
+# Delhivery / Vapi, never sends WhatsApp, never sends a customer
+# notification, never edits any .env file. Approval flips status
+# to `approved_for_future_phase8b_review` only - it does NOT
+# authorize any real mutation.
+PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_ENABLED = _razorpay_webhook_bool(
+    "PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_ENABLED"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )
