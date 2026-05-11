@@ -769,3 +769,267 @@ def test_phase7e_live_inspect_readiness_safe_off_by_default() -> None:
     assert out["safeToRunPhase7ELiveSend"] is False
     assert out["phase7ELiveSendsToRealCustomer"] is False
     assert out["phase7ELiveMutatesBusinessRow"] is False
+
+
+# ---------------------------------------------------------------------------
+# Meta Cloud wrapper method-binding tests
+#
+# Regression: the previous wrapper looked for a module-level
+# ``send_template_message`` function on ``meta_cloud_client`` and
+# raised "Meta Cloud client does not expose send_template_message"
+# at runtime because the real entry point is the
+# :meth:`MetaCloudProvider.send_template_message` *method*. These
+# tests pin the wrapper to the actual production method and assert
+# the ``ProviderSendResult`` dataclass return is summarised safely.
+# Every test patches the provider class so NO real Meta HTTP call
+# is made.
+# ---------------------------------------------------------------------------
+
+
+def test_wrapper_binds_to_meta_cloud_provider_send_template_method() -> None:
+    """The Phase 7E-Live wrapper must instantiate ``MetaCloudProvider``
+    and call its ``send_template_message`` method - not look up a
+    module-level function on the package."""
+    from apps.whatsapp.integrations.whatsapp.meta_cloud_client import (
+        MetaCloudProvider,
+    )
+
+    assert callable(
+        getattr(MetaCloudProvider, "send_template_message", None)
+    ), (
+        "MetaCloudProvider.send_template_message must remain a "
+        "callable method - Phase 7E-Live-A wrapper depends on it."
+    )
+
+
+@pytest.mark.django_db
+def test_wrapper_invokes_meta_cloud_provider_with_production_kwargs() -> (
+    None
+):
+    """Patch the imported ``MetaCloudProvider`` class to spy on the
+    instance method; assert the wrapper calls it with
+    ``to_phone`` / ``template_name`` / ``language`` / ``components``
+    / ``idempotency_key`` (the production signature). Asserts NO real
+    Meta HTTP send happened.
+    """
+    from apps.payments.razorpay_whatsapp_internal_send import (
+        _send_internal_template_via_meta_cloud,
+    )
+    from apps.whatsapp.integrations.whatsapp.base import (
+        ProviderSendResult,
+    )
+
+    spy = mock.MagicMock(
+        return_value=ProviderSendResult(
+            provider="meta_cloud",
+            provider_message_id="wamid.unit_test_001",
+            status="sent",
+        )
+    )
+    fake_provider = mock.MagicMock()
+    fake_provider.send_template_message = spy
+
+    fake_provider_cls = mock.MagicMock(return_value=fake_provider)
+    with mock.patch(
+        "apps.whatsapp.integrations.whatsapp.meta_cloud_client.MetaCloudProvider",
+        fake_provider_cls,
+    ):
+        out = _send_internal_template_via_meta_cloud(
+            to_e164="+919999990001",
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            attempt_id=42,
+        )
+
+    fake_provider_cls.assert_called_once_with()
+    spy.assert_called_once()
+    call_kwargs = spy.call_args.kwargs
+    assert call_kwargs["to_phone"] == "+919999990001"
+    assert call_kwargs["template_name"] == "nrg_internal_test_intro"
+    assert call_kwargs["language"] == "en"
+    assert call_kwargs["components"] == []
+    assert (
+        call_kwargs["idempotency_key"]
+        == "phase7e_live::internal_send::attempt::42"
+    )
+
+    # ProviderSendResult dataclass is reduced to the safe summary
+    # shape. Raw request / response payloads are NEVER returned.
+    assert out == {
+        "message_id": "wamid.unit_test_001",
+        "status": "sent",
+    }
+
+
+@pytest.mark.django_db
+def test_wrapper_does_not_raise_missing_method_anymore() -> None:
+    """Regression: the wrapper must not raise the
+    "Meta Cloud client does not expose send_template_message" error.
+    Even if the provider returns a dict (test shape) or the
+    dataclass (production shape), the wrapper completes successfully.
+    """
+    from apps.payments.razorpay_whatsapp_internal_send import (
+        Phase7ELiveExecutionError,
+        _send_internal_template_via_meta_cloud,
+    )
+
+    fake_provider = mock.MagicMock()
+    fake_provider.send_template_message = mock.MagicMock(
+        return_value={
+            "message_id": "wamid.dict_shape_001",
+            "status": "queued",
+        }
+    )
+    with mock.patch(
+        "apps.whatsapp.integrations.whatsapp.meta_cloud_client.MetaCloudProvider",
+        mock.MagicMock(return_value=fake_provider),
+    ):
+        out = _send_internal_template_via_meta_cloud(
+            to_e164="+919999990001",
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            attempt_id=99,
+        )
+    assert out == {
+        "message_id": "wamid.dict_shape_001",
+        "status": "queued",
+    }
+    # Sanity check: no Phase7ELiveExecutionError raised. (Reach this
+    # line proves it.)
+    assert issubclass(Phase7ELiveExecutionError, Exception)
+
+
+@pytest.mark.django_db
+def test_wrapper_summary_drops_raw_meta_response_fields() -> None:
+    """The wrapper must summarise to ``{message_id, status}`` only —
+    no raw request payload, no raw response body, no token, no
+    error_code, no latency."""
+    from apps.payments.razorpay_whatsapp_internal_send import (
+        _send_internal_template_via_meta_cloud,
+    )
+    from apps.whatsapp.integrations.whatsapp.base import (
+        ProviderSendResult,
+    )
+
+    fake_provider = mock.MagicMock()
+    fake_provider.send_template_message = mock.MagicMock(
+        return_value=ProviderSendResult(
+            provider="meta_cloud",
+            provider_message_id="wamid.scrub_001",
+            status="sent",
+            request_payload={
+                "messaging_product": "whatsapp",
+                "to": "+919999990001",  # MUST NOT appear in summary
+            },
+            response_status=200,
+            response_payload={
+                "messages": [{"id": "wamid.scrub_001"}],
+                "secret_token": "should_not_leak",
+            },
+            latency_ms=87,
+        )
+    )
+    with mock.patch(
+        "apps.whatsapp.integrations.whatsapp.meta_cloud_client.MetaCloudProvider",
+        mock.MagicMock(return_value=fake_provider),
+    ):
+        out = _send_internal_template_via_meta_cloud(
+            to_e164="+919999990001",
+            template_name="nrg_internal_test_intro",
+            template_language="en",
+            attempt_id=1,
+        )
+    assert set(out.keys()) == {"message_id", "status"}
+    assert out["message_id"] == "wamid.scrub_001"
+    assert out["status"] == "sent"
+    # No raw fields leak.
+    for forbidden in (
+        "request_payload",
+        "response_payload",
+        "response_status",
+        "latency_ms",
+        "error_code",
+        "secret_token",
+        "to",
+    ):
+        assert forbidden not in out
+
+
+@pytest.mark.django_db
+def test_execute_full_path_uses_real_wrapper_with_patched_provider() -> (
+    None
+):
+    """End-to-end: don't patch the wrapper directly. Instead patch
+    only the underlying ``MetaCloudProvider`` so the real wrapper
+    runs, proving the wrapper-method binding works through the whole
+    execute path. No real Meta HTTP call. No business mutation. No
+    customer notification."""
+    from apps.whatsapp.integrations.whatsapp.base import (
+        ProviderSendResult,
+    )
+
+    attempt = _make_approved_attempt()
+    before = _row_counts()
+
+    fake_provider = mock.MagicMock()
+    fake_provider.send_template_message = mock.MagicMock(
+        return_value=ProviderSendResult(
+            provider="meta_cloud",
+            provider_message_id="wamid.e2e_real_wrapper_001",
+            status="sent",
+        )
+    )
+    with _phase7e_live_test_settings(), mock.patch(
+        "apps.whatsapp.integrations.whatsapp.meta_cloud_client.MetaCloudProvider",
+        mock.MagicMock(return_value=fake_provider),
+    ):
+        out = execute_phase7e_live_internal_send(
+            attempt.pk,
+            director_signoff=_structured_signoff(),
+            operator_name="Prarit Sidana",
+            confirm_internal_whatsapp_send=True,
+        )
+    after = _row_counts()
+
+    assert out["ok"] is True, out.get("blockers")
+    # The "missing method" failure mode would have surfaced as a
+    # Phase7ELiveExecutionError blocker on `out["blockers"]`.
+    assert not any(
+        "send_template_message" in b for b in (out.get("blockers") or [])
+    )
+
+    row = RazorpayWhatsAppInternalSendAttempt.objects.get(pk=attempt.pk)
+    assert (
+        row.status
+        == RazorpayWhatsAppInternalSendAttempt.Status.EXECUTED
+    )
+    assert row.provider_message_id == "wamid.e2e_real_wrapper_001"
+    assert row.provider_status == "sent"
+    assert row.whatsapp_message_created is True
+    # The real wrapper was called once with production kwargs;
+    # to_phone is the resolved allow-list E.164, NOT a real customer
+    # phone.
+    fake_provider.send_template_message.assert_called_once()
+    call_kwargs = fake_provider.send_template_message.call_args.kwargs
+    assert call_kwargs["to_phone"] == _ALLOWED_NUMBER
+    assert call_kwargs["template_name"] == "nrg_internal_test_intro"
+    assert call_kwargs["language"] == "en"
+    assert call_kwargs["components"] == []
+    assert call_kwargs["idempotency_key"].startswith(
+        "phase7e_live::internal_send::attempt::"
+    )
+
+    # No business mutation, no customer notification, no real
+    # customer phone, no broad automation. Only the WhatsApp
+    # outbound row is allowed to grow.
+    for key, count_before in before.items():
+        count_after = after.get(key, count_before)
+        if key == "whatsapp_message":
+            continue
+        assert count_after == count_before, (
+            f"Unexpected mutation on {key}"
+        )
+    assert row.real_customer_allowed is False
+    assert row.real_customer_phone_used is False
+    assert row.customer_notification_sent is False
+    assert row.business_mutation_was_made is False

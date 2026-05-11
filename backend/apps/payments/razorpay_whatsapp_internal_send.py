@@ -622,48 +622,81 @@ def _send_internal_template_via_meta_cloud(
     send is made here, once, after every gate in
     :func:`execute_phase7e_live_internal_send` is green. Tests
     ``mock.patch`` this function so the real network is never hit.
+
+    The Meta Cloud client exposes the send entry point as
+    :meth:`MetaCloudProvider.send_template_message` (a method on the
+    class, not a module-level function). The wrapper instantiates the
+    provider, calls the method with the production-aligned keyword
+    arguments
+    (``to_phone`` / ``template_name`` / ``language`` /
+    ``components`` / ``idempotency_key``), and reduces the returned
+    :class:`apps.whatsapp.integrations.whatsapp.base.ProviderSendResult`
+    dataclass to the Phase 7E-Live-A safe summary shape
+    ``{"message_id": str, "status": str}`` so the rest of the
+    service code path is unchanged.
     """
     try:
-        from apps.whatsapp.integrations.whatsapp import (
-            meta_cloud_client,
+        from apps.whatsapp.integrations.whatsapp.meta_cloud_client import (
+            MetaCloudProvider,
         )
     except ImportError as exc:  # pragma: no cover
         raise Phase7ELiveExecutionError(
             "Meta Cloud client is not importable."
         ) from exc
 
-    sender = getattr(meta_cloud_client, "send_template_message", None)
-    if sender is None:  # pragma: no cover - depends on installed module
-        raise Phase7ELiveExecutionError(
-            "Meta Cloud client does not expose send_template_message."
-        )
-
+    provider = MetaCloudProvider()
+    idempotency_key = (
+        f"phase7e_live::internal_send::attempt::{attempt_id}"
+    )
     try:
-        return sender(
-            to=to_e164,
+        result = provider.send_template_message(
+            to_phone=to_e164,
             template_name=template_name,
-            language=template_language,
+            language=template_language or "en",
             components=[],
-            internal_test_only=True,
-            attempt_id=attempt_id,
+            idempotency_key=idempotency_key,
         )
+    except Phase7ELiveExecutionError:
+        raise
     except Exception as exc:  # pragma: no cover - real network only
         raise Phase7ELiveExecutionError(
             f"Meta Cloud send error: {exc.__class__.__name__}"
         ) from exc
+    return _summarize_meta_send_result(result)
 
 
-def _summarize_meta_response(response: Any) -> dict[str, Any]:
-    """Reduce the Meta Cloud response to a Phase 7E-Live-A safe summary.
+def _summarize_meta_send_result(result: Any) -> dict[str, Any]:
+    """Reduce a Meta Cloud send result to the Phase 7E-Live-A safe
+    summary shape ``{"message_id": str, "status": str}``.
 
-    Keeps only ``message_id`` / ``status``. NEVER stores the raw
-    provider body."""
-    if not isinstance(response, dict):
+    Accepts either a
+    :class:`apps.whatsapp.integrations.whatsapp.base.ProviderSendResult`
+    dataclass (the production return type) or a plain dict (the test
+    return type used by ``mock.patch`` callers). Never stores the raw
+    Meta Graph API response body; ``request_payload`` /
+    ``response_payload`` / ``response_status`` / ``error_code`` /
+    ``latency_ms`` are deliberately dropped.
+    """
+    if result is None:
         return {"message_id": "", "status": ""}
+    if isinstance(result, dict):
+        return {
+            "message_id": str(result.get("message_id") or "")[:64],
+            "status": str(result.get("status") or "")[:64],
+        }
     return {
-        "message_id": str(response.get("message_id") or "")[:64],
-        "status": str(response.get("status") or "")[:64],
+        "message_id": str(
+            getattr(result, "provider_message_id", "") or ""
+        )[:64],
+        "status": str(getattr(result, "status", "") or "")[:64],
     }
+
+
+# Backwards-compatible alias for any existing call site / test that
+# still references the old summary helper. The previous helper only
+# accepted a dict; the new helper also handles the production
+# ``ProviderSendResult`` dataclass.
+_summarize_meta_response = _summarize_meta_send_result
 
 
 # ---------------------------------------------------------------------------
