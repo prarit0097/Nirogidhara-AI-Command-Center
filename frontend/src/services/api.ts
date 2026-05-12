@@ -181,6 +181,8 @@ import type {
   SaasPhase8BPaymentOrderMutationReviewGatesResponse,
   SaasPhase8CPaymentOrderControlledMutationReadiness,
   SaasPhase8CPaymentOrderControlledMutationGatesResponse,
+  SaasPhase8DControlledMutationEvidenceLockReadiness,
+  SaasPhase8DControlledMutationEvidenceLocksResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -1733,6 +1735,23 @@ export const api = {
       `/v1/saas/phase8/payment-order-controlled-mutation-gates/?limit=${limit}`,
       () =>
         M.SAAS_PHASE8C_PAYMENT_ORDER_CONTROLLED_MUTATION_GATES as SaasPhase8CPaymentOrderControlledMutationGatesResponse,
+    ),
+
+  // ---------- Phase 8D - Controlled Mutation Evidence Lock ----------
+
+  getSaasPhase8DControlledMutationEvidenceLockReadiness: () =>
+    safeFetch<SaasPhase8DControlledMutationEvidenceLockReadiness>(
+      "/v1/saas/phase8/controlled-mutation-evidence-lock-readiness/",
+      () =>
+        M.SAAS_PHASE8D_CONTROLLED_MUTATION_EVIDENCE_LOCK_READINESS as SaasPhase8DControlledMutationEvidenceLockReadiness,
+    ),
+  getSaasPhase8DControlledMutationEvidenceLocks: (
+    limit: number = 25,
+  ) =>
+    safeFetch<SaasPhase8DControlledMutationEvidenceLocksResponse>(
+      `/v1/saas/phase8/controlled-mutation-evidence-locks/?limit=${limit}`,
+      () =>
+        M.SAAS_PHASE8D_CONTROLLED_MUTATION_EVIDENCE_LOCKS as SaasPhase8DControlledMutationEvidenceLocksResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

@@ -3548,3 +3548,75 @@ python manage.py archive_phase8c_payment_order_controlled_mutation \
 **Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
 (real customer courier execution), and broad customer automation
 all remain NOT approved.**
+
+### Phase 8D — Phase 8C Controlled Mutation Evidence Lock
+
+Phase 8D is the **lock-only meta-audit** over the completed Phase
+8C executed + rolled_back chain. It snapshots the full status
+timeline (Pending → Paid → Pending), the target Order + Payment
+ids, the Director sign-off window validity, the rollback restore
+state, and every locked-False contract boolean into a single
+immutable evidence row. Approval flips status to `locked` only —
+it does NOT execute Phase 8C again, NEVER rolls back Phase 8C
+again. Phase 8D NEVER calls Razorpay / Meta Cloud / Delhivery /
+Vapi, NEVER sends or queues WhatsApp, NEVER creates a `Shipment` /
+AWB / payment link, NEVER captures / refunds, NEVER sends a
+customer notification, NEVER mutates real `Order` / `Payment` /
+`Customer` / `Lead` / `Shipment` / `DiscountOfferLog` /
+`WhatsAppMessage` rows.
+
+```bash
+# 1. Read-only readiness composition.
+python manage.py inspect_phase8d_controlled_mutation_evidence_lock \
+    --json --no-audit
+
+# 2. Read-only preview from a Phase 8C rolled_back gate.
+python manage.py preview_phase8d_controlled_mutation_evidence_lock \
+    --phase8c-gate-id <PHASE8C_GATE_ID> --json
+
+# 3. Prepare a Phase 8D evidence lock row (one per Phase 8C gate;
+#    idempotent).
+python manage.py prepare_phase8d_controlled_mutation_evidence_lock \
+    --phase8c-gate-id <PHASE8C_GATE_ID> --json
+
+# 4. Lock the Phase 8D row (status -> locked). Mandatory non-empty
+#    reason. Revalidates eligibility at lock time so a tampered
+#    Phase 8C chain refuses to be locked. No provider call, no
+#    business mutation, no live execution enabled.
+python manage.py lock_phase8d_controlled_mutation_evidence_lock \
+    --lock-id <ID> \
+    --reason "Director Phase 8D controlled mutation evidence lock" --json
+
+# 5. Reject (only from draft / pending_manual_review / blocked).
+python manage.py reject_phase8d_controlled_mutation_evidence_lock \
+    --lock-id <ID> \
+    --reason "Director paused review" --json
+
+# 6. Archive (after locked / rejected).
+python manage.py archive_phase8d_controlled_mutation_evidence_lock \
+    --lock-id <ID> --reason "Director archive" --json
+```
+
+**Phase 8D refuses to prepare unless:**
+- Phase 8C gate is in `status=rolled_back` AND `dry_run_passed=True`.
+- Phase 8C attempt is in `status=rolled_back` with `executed_at`
+  present AND `recorded_signoff_window_valid=True` AND
+  `order_mutation_was_made=True` AND `payment_mutation_was_made=True`
+  AND `business_mutation_was_made=True`.
+- Phase 8C attempt's `customer_notification_sent` /
+  `whatsapp_sent` / `courier_called` / `provider_call_attempted` /
+  `shipment_created` are all still False.
+- A `RazorpayPaymentOrderControlledMutationRollback` row exists
+  with `status=rollback_recorded` AND `rollback_was_made=True`
+  AND its `customer_notification_sent` / `whatsapp_sent` /
+  `courier_called` / `provider_call_attempted` are all False.
+- The current target `Order.payment_status == "Pending"` AND
+  target `Payment.status == "Pending"` (post-rollback state
+  has not been tampered with).
+- The runtime kill switch is enabled.
+- Phase 7E-Live-B, Phase 7G-Live, and broad customer automation
+  all remain not-approved.
+
+**Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
+(real customer courier execution), and broad customer automation
+all remain NOT approved.**

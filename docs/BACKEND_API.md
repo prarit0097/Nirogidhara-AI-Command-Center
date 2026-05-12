@@ -1141,3 +1141,30 @@ customer notification, never mutates real `Customer` / `Lead` /
 7E-Live-B (real customer WhatsApp send), Phase 7G-Live (real
 customer courier execution), and broad customer automation all
 remain NOT approved.**
+
+### Phase 8D — Controlled Mutation Evidence Lock (lock-only meta-audit)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/phase8/controlled-mutation-evidence-lock-readiness/` | admin/staff | Read-only readiness composition (eligibility counters + locked-False safety contract). |
+| GET | `/api/v1/saas/phase8/controlled-mutation-evidence-locks/?limit=N` | admin/staff | Phase 8D lock listing with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/phase8/controlled-mutation-evidence-locks/<int:pk>/` | admin/staff | Read-only lock detail (whitelist serializer; never returns raw token / full phone / raw provider response / Director sign-off text). |
+| GET | `/api/v1/saas/phase8/controlled-mutation-evidence-lock-preview/?phase8c_gate_id=N` | admin/staff | Read-only preview from a Phase 8C rolled_back gate. Never creates rows. |
+
+POST/PATCH/DELETE on every Phase 8D endpoint return 405. **No POST
+endpoint dispatches lock state changes** — every transition is
+CLI-only via the 6 management commands
+(`inspect_phase8d_controlled_mutation_evidence_lock`, `preview_…`,
+`prepare_…`, `lock_…_lock --reason`, `reject_…_lock --reason`,
+`archive_…_lock --reason`). Phase 8D approval flips status to
+`locked` only — it does NOT execute Phase 8C again and does NOT
+authorise any provider call. Phase 8D never executes Phase 8C
+again, never rolls back Phase 8C again, never calls Razorpay /
+Meta Cloud / Delhivery / Vapi, never sends or queues WhatsApp,
+never creates a `Shipment` / AWB / payment link, never captures /
+refunds, never sends a customer notification, never mutates real
+`Order` / `Payment` / `Customer` / `Lead` / `Shipment` /
+`DiscountOfferLog` / `WhatsAppMessage` rows. **Phase 7E-Live-B
+(real customer WhatsApp send), Phase 7G-Live (real customer
+courier execution), and broad customer automation all remain NOT
+approved.**

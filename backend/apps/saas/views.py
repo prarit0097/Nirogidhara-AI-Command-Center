@@ -3641,6 +3641,138 @@ class Phase8CPaymentOrderControlledMutationAttemptsView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 8D - Controlled Mutation Evidence Lock
+# ---------------------------------------------------------------------------
+
+
+from apps.payments.phase8d_controlled_mutation_evidence_lock import (  # noqa: E402
+    inspect_phase8d_controlled_mutation_evidence_lock_readiness as _inspect_phase8d_readiness,
+    preview_phase8d_controlled_mutation_evidence_lock as _preview_phase8d_lock,
+    serialize_phase8d_lock as _serialize_phase8d_lock,
+    summarize_phase8d_locks as _summarize_phase8d_locks,
+)
+from apps.payments.models import (  # noqa: E402
+    RazorpayPaymentOrderControlledMutationEvidenceLock,
+)
+
+
+class Phase8DControlledMutationEvidenceLockReadinessView(APIView):
+    """``GET /api/v1/saas/phase8/controlled-mutation-evidence-lock-readiness/``.
+
+    Phase 8D read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. Lock-only meta-audit; NEVER
+    executes Phase 8C again; NEVER calls a provider; NEVER mutates
+    business rows; NEVER edits any ``.env*`` file.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(_inspect_phase8d_readiness())
+
+
+class Phase8DControlledMutationEvidenceLocksListView(APIView):
+    """``GET /api/v1/saas/phase8/controlled-mutation-evidence-locks/``.
+
+    Phase 8D read-only list of evidence locks.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = _summarize_phase8d_locks(limit=limit)
+        return Response(
+            {
+                "phase": "8D",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "lock_only_cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase8DExecutesPhase8CAgain": False,
+                "phase8DRollsBackPhase8CAgain": False,
+                "phase8DCallsRazorpay": False,
+                "phase8DCallsMetaCloud": False,
+                "phase8DCallsDelhivery": False,
+                "phase8DSendsWhatsApp": False,
+                "phase8DSendsCustomerNotification": False,
+                "phase8DCreatesShipmentRow": False,
+                "phase8DCreatesAwb": False,
+                "phase8DCapturesPayment": False,
+                "phase8DRefundsPayment": False,
+                "phase8DMutatesOrder": False,
+                "phase8DMutatesPayment": False,
+                "phase8DMutatesCustomer": False,
+                "phase8DMutatesLead": False,
+            }
+        )
+
+
+class Phase8DControlledMutationEvidenceLockDetailView(APIView):
+    """``GET /api/v1/saas/phase8/controlled-mutation-evidence-locks/<pk>/``.
+
+    Phase 8D read-only lock detail.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayPaymentOrderControlledMutationEvidenceLock.objects.filter(
+                pk=pk
+            ).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8D controlled mutation evidence "
+                        "lock not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase8d_lock(row))
+
+
+class Phase8DControlledMutationEvidenceLockPreviewView(APIView):
+    """``GET /api/v1/saas/phase8/controlled-mutation-evidence-lock-preview/``.
+
+    Phase 8D read-only preview composed from a Phase 8C rolled_back
+    gate id. NEVER mutates the database; NEVER calls any provider.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        raw = request.query_params.get("phase8c_gate_id")
+        try:
+            gate_id = int(raw or 0)
+        except (TypeError, ValueError):
+            gate_id = 0
+        if gate_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "phase8c_gate_id query param must be a "
+                        "positive integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            _preview_phase8d_lock(phase8c_gate_id=gate_id)
+        )
+
+
 class Phase8CPaymentOrderControlledMutationRollbacksView(APIView):
     """``GET /api/v1/saas/phase8/payment-order-controlled-mutation-rollbacks/<attempt_id>/``.
 
@@ -3823,4 +3955,8 @@ __all__ = (
     "Phase8CPaymentOrderControlledMutationPreviewView",
     "Phase8CPaymentOrderControlledMutationAttemptsView",
     "Phase8CPaymentOrderControlledMutationRollbacksView",
+    "Phase8DControlledMutationEvidenceLockReadinessView",
+    "Phase8DControlledMutationEvidenceLocksListView",
+    "Phase8DControlledMutationEvidenceLockDetailView",
+    "Phase8DControlledMutationEvidenceLockPreviewView",
 )

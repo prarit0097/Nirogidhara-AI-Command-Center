@@ -71,6 +71,10 @@ from .views import (
     Phase8CPaymentOrderControlledMutationPreviewView,
     Phase8CPaymentOrderControlledMutationReadinessView,
     Phase8CPaymentOrderControlledMutationRollbacksView,
+    Phase8DControlledMutationEvidenceLockDetailView,
+    Phase8DControlledMutationEvidenceLockPreviewView,
+    Phase8DControlledMutationEvidenceLockReadinessView,
+    Phase8DControlledMutationEvidenceLocksListView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -849,6 +853,35 @@ urlpatterns = [
         Phase8CPaymentOrderControlledMutationRollbacksView.as_view(),
         name=(
             "saas-phase8c-payment-order-controlled-mutation-rollbacks"
+        ),
+    ),
+    # Phase 8D - Phase 8C Controlled Mutation Evidence Lock
+    # (lock-only meta-audit; read-only API; CLI-only state changes;
+    # NEVER executes Phase 8C again; NEVER calls Razorpay / Meta
+    # Cloud / Delhivery / Vapi; NEVER sends WhatsApp; NEVER mutates
+    # business rows).
+    path(
+        "phase8/controlled-mutation-evidence-lock-readiness/",
+        Phase8DControlledMutationEvidenceLockReadinessView.as_view(),
+        name="saas-phase8d-controlled-mutation-evidence-lock-readiness",
+    ),
+    path(
+        "phase8/controlled-mutation-evidence-locks/",
+        Phase8DControlledMutationEvidenceLocksListView.as_view(),
+        name="saas-phase8d-controlled-mutation-evidence-locks",
+    ),
+    path(
+        "phase8/controlled-mutation-evidence-locks/<int:pk>/",
+        Phase8DControlledMutationEvidenceLockDetailView.as_view(),
+        name=(
+            "saas-phase8d-controlled-mutation-evidence-lock-detail"
+        ),
+    ),
+    path(
+        "phase8/controlled-mutation-evidence-lock-preview/",
+        Phase8DControlledMutationEvidenceLockPreviewView.as_view(),
+        name=(
+            "saas-phase8d-controlled-mutation-evidence-lock-preview"
         ),
     ),
 ]

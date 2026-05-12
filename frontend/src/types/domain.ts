@@ -5742,3 +5742,147 @@ export interface SaasPhase8CPaymentOrderControlledMutationGatesResponse {
   phase8CMutatesDiscountOfferLog: false;
   phase8CApprovesRealCustomerAutomation: false;
 }
+
+// ---------- Phase 8D - Controlled Mutation Evidence Lock ----------
+
+export type SaasPhase8DControlledMutationEvidenceLockStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "locked"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasPhase8DControlledMutationEvidenceLockDto {
+  id: number;
+  status: SaasPhase8DControlledMutationEvidenceLockStatus;
+  sourcePhase8CGateId: number | null;
+  sourcePhase8CAttemptId: number | null;
+  sourcePhase8BGateId: number | null;
+  sourcePhase8AGateId: number | null;
+  sourcePhase7ILockId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  phase8CGateStatusSnapshot: string;
+  phase8CAttemptStatusSnapshot: string;
+  phase8CAttemptExecutedAtSnapshot: string | null;
+  recordedSignoffWindowValidSnapshot: boolean;
+  targetOrderIdSnapshot: string;
+  targetPaymentIdSnapshot: string;
+  targetOrderReferenceSnapshot: string;
+  targetPaymentReferenceSnapshot: string;
+  oldOrderStatusSnapshot: string;
+  executedOrderStatusSnapshot: string;
+  finalOrderStatusSnapshot: string;
+  oldPaymentStatusSnapshot: string;
+  executedPaymentStatusSnapshot: string;
+  finalPaymentStatusSnapshot: string;
+  orderMutationWasMadeSnapshot: boolean;
+  paymentMutationWasMadeSnapshot: boolean;
+  businessMutationWasMadeSnapshot: boolean;
+  rollbackCompletedSnapshot: boolean;
+  finalDbRestoredSnapshot: boolean;
+  phase8DCallsRazorpaySnapshot: false;
+  phase8DCallsMetaCloudSnapshot: false;
+  phase8DCallsDelhiverySnapshot: false;
+  phase8DSendsWhatsAppSnapshot: false;
+  phase8DSendsCustomerNotificationSnapshot: false;
+  phase8DCreatesShipmentSnapshot: false;
+  phase8DCapturesPaymentSnapshot: false;
+  phase8DRefundsPaymentSnapshot: false;
+  beforeCountsSnapshot: Record<string, number>;
+  afterExecuteCountsSnapshot: Record<string, number>;
+  afterRollbackCountsSnapshot: Record<string, number>;
+  countDeltasSnapshot: Record<string, number>;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  evidenceJson: Record<string, unknown>;
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lockedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasPhase8DControlledMutationEvidenceLockCounts {
+  draft: number;
+  pending_manual_review: number;
+  locked: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasPhase8DControlledMutationEvidenceLockReadiness {
+  phase: "8D";
+  status: "controlled_mutation_evidence_lock_only";
+  latestCompletedPhase: "8C";
+  nextPhase: string;
+  killSwitch: { enabled: boolean; model: string; id?: number };
+  eligiblePhase8CGateCount: number;
+  phase8DLockCounts: SaasPhase8DControlledMutationEvidenceLockCounts;
+  items: SaasPhase8DControlledMutationEvidenceLockDto[];
+  phase8DExecutesPhase8CAgain: false;
+  phase8DRollsBackPhase8CAgain: false;
+  phase8DCallsRazorpay: false;
+  phase8DCallsMetaCloud: false;
+  phase8DCallsDelhivery: false;
+  phase8DCallsVapi: false;
+  phase8DSendsWhatsApp: false;
+  phase8DQueuesWhatsApp: false;
+  phase8DCreatesShipmentRow: false;
+  phase8DCreatesAwb: false;
+  phase8DCreatesPaymentLink: false;
+  phase8DCapturesPayment: false;
+  phase8DRefundsPayment: false;
+  phase8DSendsCustomerNotification: false;
+  phase8DMutatesOrder: false;
+  phase8DMutatesPayment: false;
+  phase8DMutatesCustomer: false;
+  phase8DMutatesLead: false;
+  phase8DMutatesShipment: false;
+  phase8DMutatesDiscountOfferLog: false;
+  phase8DMutatesWhatsAppMessage: false;
+  phase8DApprovesRealCustomerAutomation: false;
+  phase7ELiveBApproved: false;
+  phase7GLiveApproved: false;
+  executionPath: "lock_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasPhase8DControlledMutationEvidenceLocksResponse {
+  phase: "8D";
+  limit: number;
+  counts: SaasPhase8DControlledMutationEvidenceLockCounts;
+  items: SaasPhase8DControlledMutationEvidenceLockDto[];
+  executionPath: "lock_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase8DExecutesPhase8CAgain: false;
+  phase8DRollsBackPhase8CAgain: false;
+  phase8DCallsRazorpay: false;
+  phase8DCallsMetaCloud: false;
+  phase8DCallsDelhivery: false;
+  phase8DSendsWhatsApp: false;
+  phase8DSendsCustomerNotification: false;
+  phase8DCreatesShipmentRow: false;
+  phase8DCreatesAwb: false;
+  phase8DCapturesPayment: false;
+  phase8DRefundsPayment: false;
+  phase8DMutatesOrder: false;
+  phase8DMutatesPayment: false;
+  phase8DMutatesCustomer: false;
+  phase8DMutatesLead: false;
+}

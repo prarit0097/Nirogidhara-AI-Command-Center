@@ -4291,3 +4291,244 @@ class RazorpayPaymentOrderControlledMutationRollback(models.Model):
             f"Phase8C-PaymentOrderControlledMutationRollback[id={self.pk} "
             f"attempt={self.attempt_id} status={self.status}]"
         )
+
+
+class RazorpayPaymentOrderControlledMutationEvidenceLock(models.Model):
+    """Phase 8D - Phase 8C Controlled Mutation Evidence Lock.
+
+    Phase 8D is a **lock-only meta-audit** over the full completed
+    Phase 8C controlled mutation chain (Phase 8B → 8A → 7I → 7D +
+    Phase 8C gate / attempt / rollback). It snapshots every field
+    that matters for evidence — the original target Order +
+    Payment status (Pending), the executed mutation status (Paid),
+    the rollback-restored status (Pending), the recorded Director
+    sign-off window, and every locked-False contract boolean — and
+    freezes them into a single immutable row.
+
+    Phase 8D NEVER executes Phase 8C again, NEVER rolls back Phase
+    8C again, NEVER mutates real ``Order`` / ``Payment`` /
+    ``Customer`` / ``Lead`` / ``Shipment`` / ``DiscountOfferLog``
+    rows, NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi,
+    NEVER sends or queues WhatsApp, NEVER creates a ``Shipment`` /
+    AWB / payment link, NEVER captures / refunds, NEVER sends a
+    customer notification, NEVER edits any ``.env*`` file. Review
+    state changes are CLI-only.
+
+    Status flow:
+        draft -> pending_manual_review -> locked / rejected /
+        archived
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        LOCKED = "locked", "Locked"
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    source_phase8c_gate = models.ForeignKey(
+        RazorpayPaymentOrderControlledMutationGate,
+        on_delete=models.PROTECT,
+        related_name="phase8d_evidence_locks",
+    )
+    source_phase8c_attempt = models.ForeignKey(
+        RazorpayPaymentOrderControlledMutationAttempt,
+        on_delete=models.PROTECT,
+        related_name="phase8d_evidence_locks",
+    )
+    source_phase8b_gate = models.ForeignKey(
+        RazorpayPaymentOrderMutationReviewGate,
+        on_delete=models.PROTECT,
+        related_name="phase8d_evidence_locks",
+    )
+    source_phase8a_gate = models.ForeignKey(
+        RazorpayPaymentOrderMutationSandboxGate,
+        on_delete=models.PROTECT,
+        related_name="phase8d_evidence_locks",
+    )
+    source_phase7i_lock = models.ForeignKey(
+        RazorpayPhase7FinalAuditLock,
+        on_delete=models.PROTECT,
+        related_name="phase8d_evidence_locks",
+    )
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8d_evidence_locks",
+    )
+
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Snapshot fields off the Phase 8C gate + attempt.
+    phase8c_gate_status_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    phase8c_attempt_status_snapshot = models.CharField(
+        max_length=40, blank=True, default=""
+    )
+    phase8c_attempt_executed_at_snapshot = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_valid_snapshot = models.BooleanField(
+        default=False
+    )
+
+    # Target Order + Payment snapshots.
+    target_order_id_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    target_payment_id_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    target_order_reference_snapshot = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    target_payment_reference_snapshot = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+
+    # Status timeline: old (pre-execute) -> executed -> final
+    # (after rollback).
+    old_order_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    executed_order_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    final_order_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    old_payment_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    executed_payment_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    final_payment_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+
+    # Phase 8C contract snapshots.
+    order_mutation_was_made_snapshot = models.BooleanField(
+        default=False
+    )
+    payment_mutation_was_made_snapshot = models.BooleanField(
+        default=False
+    )
+    business_mutation_was_made_snapshot = models.BooleanField(
+        default=False
+    )
+    rollback_completed_snapshot = models.BooleanField(default=False)
+    final_db_restored_snapshot = models.BooleanField(default=False)
+
+    # Hard contract: every flag below is locked False at the model
+    # default and the defensive guard refuses to write True.
+    phase8d_calls_razorpay_snapshot = models.BooleanField(
+        default=False
+    )
+    phase8d_calls_meta_cloud_snapshot = models.BooleanField(
+        default=False
+    )
+    phase8d_calls_delhivery_snapshot = models.BooleanField(
+        default=False
+    )
+    phase8d_sends_whatsapp_snapshot = models.BooleanField(
+        default=False
+    )
+    phase8d_sends_customer_notification_snapshot = models.BooleanField(
+        default=False
+    )
+    phase8d_creates_shipment_snapshot = models.BooleanField(
+        default=False
+    )
+    phase8d_captures_payment_snapshot = models.BooleanField(
+        default=False
+    )
+    phase8d_refunds_payment_snapshot = models.BooleanField(
+        default=False
+    )
+
+    # Count snapshots across the full lifecycle.
+    before_counts_snapshot = models.JSONField(
+        default=dict, blank=True
+    )
+    after_execute_counts_snapshot = models.JSONField(
+        default=dict, blank=True
+    )
+    after_rollback_counts_snapshot = models.JSONField(
+        default=dict, blank=True
+    )
+    count_deltas_snapshot = models.JSONField(
+        default=dict, blank=True
+    )
+
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+    evidence_json = models.JSONField(default=dict, blank=True)
+
+    reviewed_by_username = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8d_controlled_mutation_evidence_lock_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.TextField(blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8d_controlled_mutation_evidence_locks",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8d_controlled_mutation_evidence_locks",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(
+                fields=("source_phase8c_gate", "-created_at")
+            ),
+            models.Index(
+                fields=("source_phase8c_attempt", "-created_at")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8D-ControlledMutationEvidenceLock[id={self.pk} "
+            f"phase8c_gate={self.source_phase8c_gate_id} "
+            f"status={self.status}]"
+        )

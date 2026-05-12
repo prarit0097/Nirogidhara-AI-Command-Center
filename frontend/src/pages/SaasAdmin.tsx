@@ -46,6 +46,8 @@ import type {
   SaasPhase8BPaymentOrderMutationReviewGatesResponse,
   SaasPhase8CPaymentOrderControlledMutationReadiness,
   SaasPhase8CPaymentOrderControlledMutationGatesResponse,
+  SaasPhase8DControlledMutationEvidenceLockReadiness,
+  SaasPhase8DControlledMutationEvidenceLocksResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -295,6 +297,18 @@ export default function SaasAdminPage() {
   ] = useState<SaasPhase8CPaymentOrderControlledMutationGatesResponse | null>(
     null,
   );
+  const [
+    phase8dControlledMutationEvidenceLockReadiness,
+    setPhase8dControlledMutationEvidenceLockReadiness,
+  ] = useState<SaasPhase8DControlledMutationEvidenceLockReadiness | null>(
+    null,
+  );
+  const [
+    phase8dControlledMutationEvidenceLocks,
+    setPhase8dControlledMutationEvidenceLocks,
+  ] = useState<SaasPhase8DControlledMutationEvidenceLocksResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -352,6 +366,8 @@ export default function SaasAdminPage() {
       api.getSaasPhase8BPaymentOrderMutationReviewGates(25),
       api.getSaasPhase8CPaymentOrderControlledMutationReadiness(),
       api.getSaasPhase8CPaymentOrderControlledMutationGates(25),
+      api.getSaasPhase8DControlledMutationEvidenceLockReadiness(),
+      api.getSaasPhase8DControlledMutationEvidenceLocks(25),
     ])
       .then(
         ([
@@ -407,6 +423,8 @@ export default function SaasAdminPage() {
           p8bGates,
           p8cRead,
           p8cGates,
+          p8dRead,
+          p8dLocks,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -460,6 +478,8 @@ export default function SaasAdminPage() {
           setPhase8bPaymentOrderMutationReviewGates(p8bGates);
           setPhase8cPaymentOrderControlledMutationReadiness(p8cRead);
           setPhase8cPaymentOrderControlledMutationGates(p8cGates);
+          setPhase8dControlledMutationEvidenceLockReadiness(p8dRead);
+          setPhase8dControlledMutationEvidenceLocks(p8dLocks);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -5827,6 +5847,184 @@ export default function SaasAdminPage() {
             Live" / "Edit .env" buttons exist on this page. Phase 8C
             execute is CLI-only and refuses unless every safety gate
             is satisfied.
+          </div>
+        </section>
+      )}
+
+      {(phase8dControlledMutationEvidenceLockReadiness ||
+        phase8dControlledMutationEvidenceLocks) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase8d-controlled-mutation-evidence-lock-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 8D Controlled Mutation Evidence Lock
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 8D — <strong>lock-only meta-audit</strong>{" "}
+                over the completed Phase 8C executed +{" "}
+                <code>rolled_back</code> chain. Freezes the full
+                status timeline (Pending → Paid → Pending), the
+                target Order + Payment ids, the Director sign-off
+                window validity, and every locked-False contract
+                boolean into a single immutable evidence row.
+                Approval flips status to <code>locked</code> only
+                — it does <strong>NOT</strong> execute Phase 8C
+                again, NEVER rolls back Phase 8C again. Phase 8D
+                NEVER calls Razorpay / Meta Cloud / Delhivery /
+                Vapi, NEVER sends or queues WhatsApp, NEVER
+                creates a <code>Shipment</code> / AWB / payment
+                link, NEVER captures / refunds, NEVER sends a
+                customer notification, NEVER mutates real{" "}
+                <code>Order</code> / <code>Payment</code> /{" "}
+                <code>Customer</code> / <code>Lead</code> /{" "}
+                <code>Shipment</code> /{" "}
+                <code>DiscountOfferLog</code> /{" "}
+                <code>WhatsAppMessage</code> rows, NEVER edits
+                any <code>.env*</code> file. Review state changes
+                are CLI-only.
+              </p>
+            </div>
+            {phase8dControlledMutationEvidenceLockReadiness && (
+              <div data-testid="phase8d-status-badge">
+                <StatusPill
+                  tone={
+                    phase8dControlledMutationEvidenceLockReadiness
+                      .killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {phase8dControlledMutationEvidenceLockReadiness
+                    .killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+          {phase8dControlledMutationEvidenceLockReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={
+                  phase8dControlledMutationEvidenceLockReadiness.phase
+                }
+              />
+              <KeyValue
+                label="Status"
+                value={
+                  phase8dControlledMutationEvidenceLockReadiness.status
+                }
+              />
+              <KeyValue
+                label="Eligible 8C gates"
+                value={String(
+                  phase8dControlledMutationEvidenceLockReadiness
+                    .eligiblePhase8CGateCount,
+                )}
+              />
+              <KeyValue
+                label="Executes Phase 8C again"
+                value="No"
+              />
+              <KeyValue
+                label="Rolls back Phase 8C again"
+                value="No"
+              />
+              <KeyValue label="Calls Razorpay" value="No" />
+              <KeyValue label="Calls Meta Cloud" value="No" />
+              <KeyValue label="Calls Delhivery" value="No" />
+              <KeyValue label="Sends WhatsApp" value="No" />
+              <KeyValue
+                label="Customer notification"
+                value="No"
+              />
+              <KeyValue label="Creates Shipment" value="No" />
+              <KeyValue label="Captures payment" value="No" />
+              <KeyValue label="Refunds payment" value="No" />
+              <KeyValue label="Mutates Order" value="No" />
+              <KeyValue label="Mutates Payment" value="No" />
+              <KeyValue
+                label="Mutates Customer/Lead"
+                value="No"
+              />
+              <KeyValue
+                label="Frontend can execute"
+                value="No"
+              />
+              <KeyValue
+                label="API can execute"
+                value="No"
+              />
+            </div>
+          )}
+          {phase8dControlledMutationEvidenceLocks &&
+            phase8dControlledMutationEvidenceLocks.items.length > 0 && (
+              <div className="border-t border-border px-6 py-4 text-xs">
+                {phase8dControlledMutationEvidenceLocks.items.map(
+                  (lock) => (
+                    <div
+                      key={lock.id}
+                      className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6 py-1 border-b border-border last:border-0"
+                      data-testid="phase8d-lock-row"
+                    >
+                      <span>
+                        id=<strong>{lock.id}</strong>
+                      </span>
+                      <span>status={lock.status}</span>
+                      <span>
+                        8C={lock.sourcePhase8CGateId}
+                      </span>
+                      <span>
+                        attempt={lock.sourcePhase8CAttemptId}
+                      </span>
+                      <span>
+                        timeline=
+                        {lock.oldOrderStatusSnapshot}
+                        {" → "}
+                        {lock.executedOrderStatusSnapshot}
+                        {" → "}
+                        {lock.finalOrderStatusSnapshot}
+                      </span>
+                      <span>
+                        rollback=
+                        {lock.rollbackCompletedSnapshot
+                          ? "completed"
+                          : "missing"}
+                      </span>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+          {phase8dControlledMutationEvidenceLockReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {
+                  phase8dControlledMutationEvidenceLockReadiness
+                    .nextAction
+                }
+              </code>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase8d-cli-only-banner"
+          >
+            <strong>Lock-only · CLI-only Review.</strong> No "Lock
+            Evidence" / "Reject Lock" / "Archive Lock" / "Re-execute
+            Phase 8C" / "Re-rollback Phase 8C" / "Apply Mutation" /
+            "Mark Paid" / "Send WhatsApp" / "Create Shipment" /
+            "Capture" / "Refund" / "Notify Customer" / "Call
+            Razorpay" / "Call Delhivery" / "Go Live" / "Edit .env"
+            buttons exist on this page. Phase 8D approval is a
+            status transition only — it does NOT execute Phase 8C
+            again and does NOT authorise any provider call.
           </div>
         </section>
       )}

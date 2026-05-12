@@ -485,6 +485,18 @@ ICON_BY_KIND: dict[str, str] = {
     "phase8c.fixture.seeded": "file-plus",
     "phase8c.fixture.dry_run": "eye",
     "phase8c.fixture.blocked": "ban",
+    # Phase 8D - Phase 8C Controlled Mutation Evidence Lock
+    # (lock-only meta-audit over the completed Phase 8C
+    # executed+rolled_back chain; never executes / rolls back
+    # Phase 8C; never calls a provider; never mutates business
+    # rows; never edits any .env file).
+    "phase8d.evidence.readiness_inspected": "eye",
+    "phase8d.evidence.previewed": "eye",
+    "phase8d.evidence.prepared": "file-plus",
+    "phase8d.evidence.locked": "lock",
+    "phase8d.evidence.rejected": "x-circle",
+    "phase8d.evidence.archived": "archive",
+    "phase8d.evidence.blocked": "ban",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",
