@@ -450,6 +450,19 @@ ICON_BY_KIND: dict[str, str] = {
     "phase8a.payment_order.rejected": "x-circle",
     "phase8a.payment_order.archived": "archive",
     "phase8a.payment_order.blocked": "ban",
+    # Phase 8B - Payment -> Order Mutation Review Gate (review /
+    # dry-run only; never calls provider; never mutates business
+    # rows; never edits any .env file).
+    "phase8b.payment_order.readiness_inspected": "eye",
+    "phase8b.payment_order.previewed": "eye",
+    "phase8b.payment_order.prepared": "file-plus",
+    "phase8b.payment_order.dry_run_passed": "check-circle",
+    "phase8b.payment_order.dry_run_failed": "shield-off",
+    "phase8b.payment_order.rollback_recorded": "rotate-ccw",
+    "phase8b.payment_order.approved": "check-circle",
+    "phase8b.payment_order.rejected": "x-circle",
+    "phase8b.payment_order.archived": "archive",
+    "phase8b.payment_order.blocked": "ban",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

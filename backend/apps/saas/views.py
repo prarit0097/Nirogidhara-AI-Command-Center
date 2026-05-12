@@ -3268,6 +3268,192 @@ class Phase8APaymentOrderMutationSandboxDryRunsView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 8B - Payment -> Order Mutation Review Gate
+# ---------------------------------------------------------------------------
+
+
+from apps.payments.phase8b_payment_order_mutation_review import (  # noqa: E402
+    inspect_phase8b_payment_order_mutation_review_readiness as _inspect_phase8b_readiness,
+    preview_phase8b_payment_order_mutation_review_gate as _preview_phase8b_gate,
+    serialize_phase8b_dry_run as _serialize_phase8b_dry_run,
+    serialize_phase8b_gate as _serialize_phase8b_gate,
+    summarize_phase8b_gates as _summarize_phase8b_gates,
+)
+from apps.payments.models import (  # noqa: E402
+    RazorpayPaymentOrderMutationReviewDryRun,
+    RazorpayPaymentOrderMutationReviewGate,
+)
+
+
+class Phase8BPaymentOrderMutationReviewReadinessView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-mutation-review-readiness/``.
+
+    Phase 8B read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER mutates real ``Order`` /
+    ``Payment`` / ``Shipment`` / ``Customer`` / ``Lead`` rows;
+    NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi; NEVER
+    sends a customer notification; NEVER edits any ``.env*`` file.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(_inspect_phase8b_readiness())
+
+
+class Phase8BPaymentOrderMutationReviewGatesListView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-mutation-review-gates/``.
+
+    Phase 8B read-only list of review gates.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = _summarize_phase8b_gates(limit=limit)
+        return Response(
+            {
+                "phase": "8B",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": "review_dry_run_only_cli_only",
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase8BCallsRazorpay": False,
+                "phase8BCallsMetaCloud": False,
+                "phase8BCallsDelhivery": False,
+                "phase8BCallsVapi": False,
+                "phase8BSendsWhatsApp": False,
+                "phase8BQueuesWhatsApp": False,
+                "phase8BCreatesShipmentRow": False,
+                "phase8BCreatesAwb": False,
+                "phase8BCreatesPaymentLink": False,
+                "phase8BCapturesPayment": False,
+                "phase8BRefundsPayment": False,
+                "phase8BSendsCustomerNotification": False,
+                "phase8BMutatesBusinessRow": False,
+                "phase8BMutatesRealOrder": False,
+                "phase8BMutatesRealPayment": False,
+                "phase8BApprovesPhase8C": False,
+                "phase8BApprovesRealCustomerAutomation": False,
+            }
+        )
+
+
+class Phase8BPaymentOrderMutationReviewGateDetailView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-mutation-review-gates/<pk>/``.
+
+    Phase 8B read-only gate detail.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayPaymentOrderMutationReviewGate.objects.filter(
+                pk=pk
+            ).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8B payment order mutation review "
+                        "gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase8b_gate(row))
+
+
+class Phase8BPaymentOrderMutationReviewPreviewView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-mutation-review-preview/``.
+
+    Phase 8B read-only preview composed from a Phase 8A sandbox gate
+    id. NEVER mutates the database; NEVER calls any provider.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        raw = request.query_params.get("phase8a_gate_id")
+        try:
+            gate_id = int(raw or 0)
+        except (TypeError, ValueError):
+            gate_id = 0
+        if gate_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "phase8a_gate_id query param must be a "
+                        "positive integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            _preview_phase8b_gate(phase8a_gate_id=gate_id)
+        )
+
+
+class Phase8BPaymentOrderMutationReviewDryRunsView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-mutation-review-dry-runs/<gate_id>/``.
+
+    Phase 8B read-only list of dry-run records for one review gate.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayPaymentOrderMutationReviewGate.objects.filter(
+                pk=gate_id
+            ).exists()
+        )
+        if not gate_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8B payment order mutation review "
+                        "gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayPaymentOrderMutationReviewDryRun.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "8B",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase8b_dry_run(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "phase8BMutatesBusinessRow": False,
+                "phase8BCallsRazorpay": False,
+                "phase8BCallsMetaCloud": False,
+                "phase8BCallsDelhivery": False,
+                "phase8BSendsWhatsApp": False,
+                "phase8BSendsCustomerNotification": False,
+            }
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -3391,4 +3577,9 @@ __all__ = (
     "Phase8APaymentOrderMutationSandboxGateDetailView",
     "Phase8APaymentOrderMutationSandboxPreviewView",
     "Phase8APaymentOrderMutationSandboxDryRunsView",
+    "Phase8BPaymentOrderMutationReviewReadinessView",
+    "Phase8BPaymentOrderMutationReviewGatesListView",
+    "Phase8BPaymentOrderMutationReviewGateDetailView",
+    "Phase8BPaymentOrderMutationReviewPreviewView",
+    "Phase8BPaymentOrderMutationReviewDryRunsView",
 )

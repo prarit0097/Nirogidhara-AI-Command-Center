@@ -3321,3 +3321,115 @@ python manage.py archive_phase7i_final_audit_lock \
 
 **Phase 7G-Live (real customer courier execution) and Phase 7E-Live-B
 (real customer WhatsApp send) remain NOT approved.**
+
+### Phase 8A — Payment → Order Mutation Sandbox Gate
+
+Phase 8A is **sandbox / dry-run only**. It designs how a verified
+Razorpay paid evidence (Phase 7I locked audit + Phase 7D rolled-back
+attempt) could map to a synthetic / test `Order` status change in
+future phases. Approval flips status to
+`approved_for_future_phase8b_review` only — it does NOT authorize
+any real mutation. Phase 8A NEVER calls Razorpay / Meta Cloud /
+Delhivery / Vapi, NEVER sends or queues WhatsApp, NEVER creates a
+`Shipment` / AWB / payment link, NEVER captures / refunds, NEVER
+sends a customer notification, NEVER mutates real business rows.
+
+```bash
+# 0. Enable the sandbox-only env flag (defaults locked OFF).
+export PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_ENABLED=true
+
+# 1. Read-only readiness composition.
+python manage.py inspect_phase8a_payment_order_mutation_sandbox \
+    --json --no-audit
+
+# 2. Read-only preview from a locked Phase 7I lock.
+python manage.py preview_phase8a_payment_order_mutation_sandbox \
+    --phase7i-lock-id <PHASE7I_LOCK_ID> --json
+
+# 3. Prepare a Phase 8A gate row (one per Phase 7I lock; idempotent).
+python manage.py prepare_phase8a_payment_order_mutation_sandbox \
+    --phase7i-lock-id <PHASE7I_LOCK_ID> --json
+
+# 4. Run a sandbox dry-run with a synthetic-only reference (one of
+#    `phase8a::sandbox::...` / `phase8a-sandbox-...` / `sandbox::...`).
+python manage.py dry_run_phase8a_payment_order_mutation_sandbox \
+    --gate-id <ID> \
+    --synthetic-order-reference "phase8a::sandbox::ord_test_001" --json
+
+# 5. Approve (only from dry_run_passed). Mandatory non-empty reason.
+python manage.py approve_phase8a_payment_order_mutation_sandbox \
+    --gate-id <ID> --reason "Director Phase 8A approve" --json
+```
+
+### Phase 8B — Payment → Order Mutation Review Gate
+
+Phase 8B is **review / dry-run only**. It converts an approved
+Phase 8A sandbox gate into a review-only contract for a future
+Phase 8C controlled-mutation phase. Approval flips status to
+`approved_for_future_phase8c_controlled_mutation_review` only — it
+does NOT authorize any real mutation. Phase 8B NEVER calls
+Razorpay / Meta Cloud / Delhivery / Vapi, NEVER sends or queues
+WhatsApp, NEVER creates a `Shipment` / AWB / payment link, NEVER
+captures / refunds, NEVER sends a customer notification, NEVER
+mutates real business rows.
+
+```bash
+# 0. Enable the review-only env flag (defaults locked OFF).
+export PHASE8B_PAYMENT_ORDER_MUTATION_REVIEW_GATE_ENABLED=true
+
+# 1. Read-only readiness composition.
+python manage.py inspect_phase8b_payment_order_mutation_review_gate \
+    --json --no-audit
+
+# 2. Read-only preview from an approved Phase 8A sandbox gate.
+python manage.py preview_phase8b_payment_order_mutation_review_gate \
+    --phase8a-gate-id <PHASE8A_GATE_ID> --json
+
+# 3. Prepare a Phase 8B review gate row (one per Phase 8A gate;
+#    idempotent).
+python manage.py prepare_phase8b_payment_order_mutation_review_gate \
+    --phase8a-gate-id <PHASE8A_GATE_ID> --json
+
+# 4. Run a review dry-run with a review-only reference (one of
+#    `phase8b::review::order::...` / `phase8b-review-...` /
+#    `review::phase8b::...`).
+python manage.py dry_run_phase8b_payment_order_mutation_review_gate \
+    --gate-id <ID> \
+    --target-order-reference "phase8b::review::order::001" --json
+
+# 5. Record a rollback against the passed dry-run (mandatory reason).
+python manage.py rollback_dry_run_phase8b_payment_order_mutation_review_gate \
+    --dry-run-id <ID> --reason "Director rollback dry-run" --json
+
+# 6. Approve (only from dry_run_passed). Mandatory non-empty reason.
+#    Requires at least one passed dry-run AND a recorded rollback
+#    dry-run.
+python manage.py approve_phase8b_payment_order_mutation_review_gate \
+    --gate-id <ID> --reason "Director Phase 8B approve" --json
+
+# 7. Reject (only from draft / pending_manual_review / dry_run_passed
+#    / blocked).
+python manage.py reject_phase8b_payment_order_mutation_review_gate \
+    --gate-id <ID> --reason "Director paused review" --json
+
+# 8. Archive.
+python manage.py archive_phase8b_payment_order_mutation_review_gate \
+    --gate-id <ID> --reason "Director archive" --json
+```
+
+**Phase 8B refuses to prepare unless:**
+- Phase 8A gate is in
+  `status=approved_for_future_phase8b_review` AND every locked-False
+  contract field (`real_business_mutation_allowed` /
+  `real_order_mutation_allowed` / `real_payment_mutation_allowed` /
+  `customer_notification_allowed` / `whatsapp_allowed` /
+  `courier_allowed`) is still False.
+- Phase 7I lock is in `status=locked`.
+- Phase 7D attempt is in `status=rolled_back` with
+  `business_mutation_was_made=False` AND
+  `customer_notification_sent=False`.
+- The runtime kill switch is enabled.
+- `PHASE8B_PAYMENT_ORDER_MUTATION_REVIEW_GATE_ENABLED=true`.
+- Phase 8C, Phase 7E-Live-B, and Phase 7G-Live remain not-approved.
+
+**Phase 8C (controlled real mutation) remains NOT approved.**

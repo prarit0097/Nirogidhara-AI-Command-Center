@@ -1056,3 +1056,52 @@ refunds, never sends a customer notification, never mutates real
 business rows. **Phase 7G-Live (real customer courier execution)
 and Phase 7E-Live-B (real customer WhatsApp send) remain NOT
 approved.**
+
+### Phase 8A — Payment → Order Mutation Sandbox Gate (sandbox-only)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-sandbox-readiness/` | admin/staff | Read-only readiness composition (eligibility counters + sandbox-only safety contract). |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-sandbox-gates/?limit=N` | admin/staff | Phase 8A gate listing with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-sandbox-gates/<int:pk>/` | admin/staff | Read-only gate detail (whitelist serializer; never returns raw token / full phone / raw provider response). |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-sandbox-preview/?phase7i_lock_id=N` | admin/staff | Read-only preview from a locked Phase 7I final audit lock. Never creates rows. |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-sandbox-dry-runs/<int:gate_id>/` | admin/staff | Read-only list of dry-run records for one Phase 8A gate. |
+
+POST/PATCH/DELETE on every Phase 8A endpoint return 405. **No POST
+endpoint dispatches state changes** — every transition is CLI-only
+via the 8 management commands. Phase 8A approval flips status to
+`approved_for_future_phase8b_review` only — it does NOT authorize
+any real mutation. Phase 8A never calls Razorpay / Meta Cloud /
+Delhivery / Vapi, never sends or queues WhatsApp, never creates a
+`Shipment` / AWB / payment link, never captures / refunds, never
+sends a customer notification, never mutates real business rows.
+**Phase 8B (real payment-order mutation) is review-only; Phase 8C
+(controlled real mutation) remains NOT approved.**
+
+### Phase 8B — Payment → Order Mutation Review Gate (review-only)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-review-readiness/` | admin/staff | Read-only readiness composition (eligibility counters + review-only safety contract). |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-review-gates/?limit=N` | admin/staff | Phase 8B gate listing with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-review-gates/<int:pk>/` | admin/staff | Read-only gate detail (whitelist serializer; never returns raw token / full phone / raw provider response). |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-review-preview/?phase8a_gate_id=N` | admin/staff | Read-only preview from an approved Phase 8A sandbox gate. Never creates rows. |
+| GET | `/api/v1/saas/phase8/payment-order-mutation-review-dry-runs/<int:gate_id>/` | admin/staff | Read-only list of dry-run records for one Phase 8B gate. |
+
+POST/PATCH/DELETE on every Phase 8B endpoint return 405. **No POST
+endpoint dispatches state changes** — every transition is CLI-only
+via the 8 management commands
+(`inspect_phase8b_payment_order_mutation_review_gate`, `preview_…`,
+`prepare_…`, `dry_run_…`, `rollback_dry_run_… --reason`,
+`approve_…_gate --reason`, `reject_…_gate --reason`,
+`archive_…_gate --reason`). Phase 8B approval flips status to
+`approved_for_future_phase8c_controlled_mutation_review` only — it
+does NOT authorize any real mutation. Phase 8B never calls Razorpay
+/ Meta Cloud / Delhivery / Vapi, never sends or queues WhatsApp,
+never creates a `Shipment` / AWB / payment link, never captures /
+refunds, never sends a customer notification, never mutates real
+`Order` / `Payment` / `Shipment` / `DiscountOfferLog` / `Customer` /
+`Lead` / `WhatsAppMessage` / `WhatsAppLifecycleEvent` /
+`WhatsAppHandoffToCall` rows. **Phase 8C (controlled real
+mutation), Phase 7E-Live-B (real customer WhatsApp send) and Phase
+7G-Live (real customer courier execution) remain NOT approved.**

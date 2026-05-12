@@ -3662,3 +3662,263 @@ class RazorpayPaymentOrderMutationDryRun(models.Model):
             f"Phase8A-PaymentOrderMutationDryRun[id={self.pk} "
             f"gate={self.gate_id} passed={self.passed}]"
         )
+
+
+class RazorpayPaymentOrderMutationReviewGate(models.Model):
+    """Phase 8B - Payment -> Order Mutation Review Gate.
+
+    Phase 8B is **review / dry-run only**. It converts an approved
+    Phase 8A sandbox gate into a review-only contract for a future
+    Phase 8C controlled mutation phase. Phase 8B NEVER calls
+    Razorpay / Meta Cloud / Delhivery / Vapi, NEVER sends or queues
+    WhatsApp, NEVER creates a `Shipment` / AWB / payment link,
+    NEVER captures / refunds, NEVER sends a customer notification,
+    NEVER mutates real `Order` / `Payment` / `Customer` / `Lead` /
+    `Shipment` / `DiscountOfferLog` rows, NEVER edits any
+    `.env*` file. Review state changes are CLI-only.
+
+    Status flow:
+        draft -> pending_manual_review -> dry_run_passed ->
+        approved_for_future_phase8c_controlled_mutation_review /
+        rejected / archived
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        DRY_RUN_PASSED = "dry_run_passed", "Dry-run passed"
+        APPROVED_FOR_FUTURE_PHASE8C_CONTROLLED_MUTATION_REVIEW = (
+            "approved_for_future_phase8c_controlled_mutation_review",
+            "Approved for future Phase 8C controlled mutation review",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    source_phase8a_gate = models.ForeignKey(
+        RazorpayPaymentOrderMutationSandboxGate,
+        on_delete=models.PROTECT,
+        related_name="phase8b_payment_order_mutation_review_gates",
+    )
+    source_phase7i_lock = models.ForeignKey(
+        RazorpayPhase7FinalAuditLock,
+        on_delete=models.PROTECT,
+        related_name="phase8b_payment_order_mutation_review_gates",
+    )
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8b_payment_order_mutation_review_gates",
+    )
+
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Hard contract: every flag below stays True/False as declared.
+    review_only = models.BooleanField(default=True)
+    real_mutation_allowed = models.BooleanField(default=False)
+    real_order_mutation_allowed = models.BooleanField(default=False)
+    real_payment_mutation_allowed = models.BooleanField(default=False)
+    customer_notification_allowed = models.BooleanField(default=False)
+    whatsapp_allowed = models.BooleanField(default=False)
+    courier_allowed = models.BooleanField(default=False)
+    phase8c_required = models.BooleanField(default=True)
+    manual_review_required = models.BooleanField(default=True)
+
+    # Snapshot fields (review-only; no real lookup performed).
+    payment_reference_snapshot = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    order_reference_strategy_snapshot = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    synthetic_order_reference_snapshot = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    proposed_real_order_matching_strategy = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    proposed_payment_to_order_mapping_json = models.JSONField(
+        default=dict, blank=True
+    )
+
+    dry_run_passed = models.BooleanField(default=False)
+    rollback_dry_run_passed = models.BooleanField(default=False)
+
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    count_deltas = models.JSONField(default=dict, blank=True)
+
+    reviewed_by_username = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8b_payment_order_mutation_review_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.TextField(blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+    evidence_json = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8b_payment_order_mutation_review_gates",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8b_payment_order_mutation_review_gates",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(
+                fields=("source_phase8a_gate", "-created_at")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8B-PaymentOrderMutationReviewGate[id={self.pk} "
+            f"phase8a_gate={self.source_phase8a_gate_id} "
+            f"status={self.status}]"
+        )
+
+
+class RazorpayPaymentOrderMutationReviewDryRun(models.Model):
+    """Phase 8B dry-run record.
+
+    Records a proposed (but never executed) Razorpay paid evidence
+    -> review-only Order status mapping. Every ``would_*`` boolean
+    stays False; before/after row counts must be identical. The
+    record itself is the only DB write the dry-run produces; no
+    other DB row is created or mutated.
+    """
+
+    class TargetOrderMatchType(models.TextChoices):
+        SYNTHETIC_REFERENCE_ONLY = (
+            "synthetic_reference_only",
+            "Synthetic reference only",
+        )
+        FUTURE_REAL_ORDER_LOOKUP_NOT_EXECUTED = (
+            "future_real_order_lookup_not_executed",
+            "Future real order lookup not executed",
+        )
+
+    gate = models.ForeignKey(
+        RazorpayPaymentOrderMutationReviewGate,
+        on_delete=models.CASCADE,
+        related_name="dry_runs",
+    )
+    source_phase8a_gate = models.ForeignKey(
+        RazorpayPaymentOrderMutationSandboxGate,
+        on_delete=models.PROTECT,
+        related_name="phase8b_payment_order_mutation_review_dry_runs",
+    )
+    source_phase7i_lock = models.ForeignKey(
+        RazorpayPhase7FinalAuditLock,
+        on_delete=models.PROTECT,
+        related_name="phase8b_payment_order_mutation_review_dry_runs",
+    )
+    source_phase7d_attempt = models.ForeignKey(
+        RazorpayControlledPilotExecutionAttempt,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8b_payment_order_mutation_review_dry_runs",
+    )
+
+    payment_reference = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    payment_status_snapshot = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    target_order_reference = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    target_order_match_type = models.CharField(
+        max_length=64,
+        choices=TargetOrderMatchType.choices,
+        default=TargetOrderMatchType.SYNTHETIC_REFERENCE_ONLY,
+    )
+    proposed_old_order_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_new_order_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_old_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    proposed_new_payment_status = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+
+    # Hard contract: every `would_*` boolean stays False at all times.
+    would_mutate_order = models.BooleanField(default=False)
+    would_mutate_payment = models.BooleanField(default=False)
+    would_notify_customer = models.BooleanField(default=False)
+    would_send_whatsapp = models.BooleanField(default=False)
+    would_call_courier = models.BooleanField(default=False)
+    would_create_shipment = models.BooleanField(default=False)
+
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    count_deltas = models.JSONField(default=dict, blank=True)
+
+    passed = models.BooleanField(default=False, db_index=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    rollback_recorded = models.BooleanField(default=False, db_index=True)
+    rollback_reason = models.TextField(blank=True, default="")
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "-created_at")),
+            models.Index(fields=("passed", "-created_at")),
+            models.Index(
+                fields=("rollback_recorded", "-created_at")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8B-PaymentOrderMutationReviewDryRun[id={self.pk} "
+            f"gate={self.gate_id} passed={self.passed}]"
+        )

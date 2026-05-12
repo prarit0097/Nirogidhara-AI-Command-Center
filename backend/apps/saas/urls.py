@@ -60,6 +60,11 @@ from .views import (
     Phase8APaymentOrderMutationSandboxGatesListView,
     Phase8APaymentOrderMutationSandboxPreviewView,
     Phase8APaymentOrderMutationSandboxReadinessView,
+    Phase8BPaymentOrderMutationReviewDryRunsView,
+    Phase8BPaymentOrderMutationReviewGateDetailView,
+    Phase8BPaymentOrderMutationReviewGatesListView,
+    Phase8BPaymentOrderMutationReviewPreviewView,
+    Phase8BPaymentOrderMutationReviewReadinessView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -769,5 +774,34 @@ urlpatterns = [
         "phase8/payment-order-mutation-sandbox-dry-runs/<int:gate_id>/",
         Phase8APaymentOrderMutationSandboxDryRunsView.as_view(),
         name="saas-phase8a-payment-order-mutation-sandbox-dry-runs",
+    ),
+    # Phase 8B - Payment -> Order Mutation Review Gate (review /
+    # dry-run only; read-only API; CLI-only state changes; NEVER
+    # mutates real Order / Payment / Shipment / Customer / Lead
+    # rows; NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi).
+    path(
+        "phase8/payment-order-mutation-review-readiness/",
+        Phase8BPaymentOrderMutationReviewReadinessView.as_view(),
+        name="saas-phase8b-payment-order-mutation-review-readiness",
+    ),
+    path(
+        "phase8/payment-order-mutation-review-gates/",
+        Phase8BPaymentOrderMutationReviewGatesListView.as_view(),
+        name="saas-phase8b-payment-order-mutation-review-gates",
+    ),
+    path(
+        "phase8/payment-order-mutation-review-gates/<int:pk>/",
+        Phase8BPaymentOrderMutationReviewGateDetailView.as_view(),
+        name="saas-phase8b-payment-order-mutation-review-gate-detail",
+    ),
+    path(
+        "phase8/payment-order-mutation-review-preview/",
+        Phase8BPaymentOrderMutationReviewPreviewView.as_view(),
+        name="saas-phase8b-payment-order-mutation-review-preview",
+    ),
+    path(
+        "phase8/payment-order-mutation-review-dry-runs/<int:gate_id>/",
+        Phase8BPaymentOrderMutationReviewDryRunsView.as_view(),
+        name="saas-phase8b-payment-order-mutation-review-dry-runs",
     ),
 ]

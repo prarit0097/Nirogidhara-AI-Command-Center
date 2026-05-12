@@ -5365,3 +5365,167 @@ export interface SaasPhase8APaymentOrderMutationSandboxGatesResponse {
   phase8AMutatesRealPayment: false;
   phase8ARealCustomerAutomationApproved: false;
 }
+
+// ---------- Phase 8B - Payment -> Order Mutation Review Gate ----------
+
+export type SaasPhase8BPaymentOrderMutationReviewGateStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "dry_run_passed"
+  | "approved_for_future_phase8c_controlled_mutation_review"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasPhase8BPaymentOrderMutationReviewGateDto {
+  id: number;
+  status: SaasPhase8BPaymentOrderMutationReviewGateStatus;
+  sourcePhase8AGateId: number | null;
+  sourcePhase7ILockId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  reviewOnly: true;
+  realMutationAllowed: false;
+  realOrderMutationAllowed: false;
+  realPaymentMutationAllowed: false;
+  customerNotificationAllowed: false;
+  whatsAppAllowed: false;
+  courierAllowed: false;
+  phase8CRequired: true;
+  manualReviewRequired: true;
+  paymentReferenceSnapshot: string;
+  orderReferenceStrategySnapshot: string;
+  syntheticOrderReferenceSnapshot: string;
+  proposedRealOrderMatchingStrategy: string;
+  proposedPaymentToOrderMappingJson: Record<string, unknown>;
+  dryRunPassed: boolean;
+  rollbackDryRunPassed: boolean;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  evidenceJson: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasPhase8BPaymentOrderMutationReviewDryRunDto {
+  id: number;
+  gateId: number;
+  sourcePhase8AGateId: number | null;
+  sourcePhase7ILockId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  paymentReference: string;
+  paymentStatusSnapshot: string;
+  targetOrderReference: string;
+  targetOrderMatchType:
+    | "synthetic_reference_only"
+    | "future_real_order_lookup_not_executed";
+  proposedOldOrderStatus: string;
+  proposedNewOrderStatus: string;
+  proposedOldPaymentStatus: string;
+  proposedNewPaymentStatus: string;
+  wouldMutateOrder: false;
+  wouldMutatePayment: false;
+  wouldNotifyCustomer: false;
+  wouldSendWhatsApp: false;
+  wouldCallCourier: false;
+  wouldCreateShipment: false;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  passed: boolean;
+  blockers: string[];
+  warnings: string[];
+  rollbackRecorded: boolean;
+  rollbackReasonPresent: boolean;
+  rolledBackAt: string | null;
+  createdAt: string | null;
+}
+
+export interface SaasPhase8BPaymentOrderMutationReviewGateCounts {
+  draft: number;
+  pending_manual_review: number;
+  dry_run_passed: number;
+  approved_for_future_phase8c_controlled_mutation_review: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasPhase8BPaymentOrderMutationReviewReadiness {
+  phase: "8B";
+  status: "payment_order_mutation_review_gate_only";
+  latestCompletedPhase: "8A";
+  nextPhase: string;
+  killSwitch: { enabled: boolean; model: string; id?: number };
+  phase8BPaymentOrderMutationReviewGateEnabled: boolean;
+  eligiblePhase8AGateCount: number;
+  phase8BGateCounts: SaasPhase8BPaymentOrderMutationReviewGateCounts;
+  items: SaasPhase8BPaymentOrderMutationReviewGateDto[];
+  phase8BCallsRazorpay: false;
+  phase8BCallsMetaCloud: false;
+  phase8BCallsDelhivery: false;
+  phase8BCallsVapi: false;
+  phase8BSendsWhatsApp: false;
+  phase8BQueuesWhatsApp: false;
+  phase8BCreatesShipmentRow: false;
+  phase8BCreatesAwb: false;
+  phase8BCreatesPaymentLink: false;
+  phase8BCapturesPayment: false;
+  phase8BRefundsPayment: false;
+  phase8BSendsCustomerNotification: false;
+  phase8BMutatesBusinessRow: false;
+  phase8BMutatesRealOrder: false;
+  phase8BMutatesRealPayment: false;
+  phase8BApprovesPhase8C: false;
+  phase8BApprovesRealCustomerAutomation: false;
+  phase8CApproved: false;
+  phase7ELiveBApproved: false;
+  phase7GLiveApproved: false;
+  executionPath: "review_dry_run_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasPhase8BPaymentOrderMutationReviewGatesResponse {
+  phase: "8B";
+  limit: number;
+  counts: SaasPhase8BPaymentOrderMutationReviewGateCounts;
+  items: SaasPhase8BPaymentOrderMutationReviewGateDto[];
+  executionPath: "review_dry_run_only_cli_only";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase8BCallsRazorpay: false;
+  phase8BCallsMetaCloud: false;
+  phase8BCallsDelhivery: false;
+  phase8BCallsVapi: false;
+  phase8BSendsWhatsApp: false;
+  phase8BQueuesWhatsApp: false;
+  phase8BCreatesShipmentRow: false;
+  phase8BCreatesAwb: false;
+  phase8BCreatesPaymentLink: false;
+  phase8BCapturesPayment: false;
+  phase8BRefundsPayment: false;
+  phase8BSendsCustomerNotification: false;
+  phase8BMutatesBusinessRow: false;
+  phase8BMutatesRealOrder: false;
+  phase8BMutatesRealPayment: false;
+  phase8BApprovesPhase8C: false;
+  phase8BApprovesRealCustomerAutomation: false;
+}
