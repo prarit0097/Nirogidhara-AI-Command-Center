@@ -3432,4 +3432,108 @@ python manage.py archive_phase8b_payment_order_mutation_review_gate \
 - `PHASE8B_PAYMENT_ORDER_MUTATION_REVIEW_GATE_ENABLED=true`.
 - Phase 8C, Phase 7E-Live-B, and Phase 7G-Live remain not-approved.
 
-**Phase 8C (controlled real mutation) remains NOT approved.**
+### Phase 8C — Controlled Real Payment → Order Mutation
+
+Phase 8C is the **CLI-only one-shot controlled mutation** framework
+against a single explicitly selected internal / sandbox / test
+`Order` + `Payment` pair. Execute requires three env flags ALL
+true, the kill switch enabled, a structured Director sign-off UTC
+window (≤ 15 min), AND runtime safety proof that the target rows
+are not real customer data. The only mutation performed is writing
+the target `Order.payment_status` and `Payment.status` to `"Paid"`.
+Phase 8C NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi,
+NEVER sends or queues WhatsApp, NEVER creates a `Shipment` / AWB /
+payment link, NEVER captures / refunds, NEVER sends a customer
+notification, NEVER mutates real `Customer` / `Lead` / `Shipment` /
+`DiscountOfferLog` rows.
+
+**Important:** the VPS should run **inspect / preview / prepare /
+dry-run / approve only** unless the Director separately authorises
+the execute step. The execute command is implemented but must NOT
+be run against production data without explicit Director approval.
+
+```bash
+# 0. Enable the controlled-mutation gate env flag (defaults locked
+#    OFF). DO NOT enable the other two flags until the Director
+#    explicitly approves the one-shot execution.
+export PHASE8C_PAYMENT_ORDER_CONTROLLED_MUTATION_GATE_ENABLED=true
+
+# 1. Read-only readiness composition.
+python manage.py inspect_phase8c_payment_order_controlled_mutation \
+    --json --no-audit
+
+# 2. Read-only preview from an approved Phase 8B review gate.
+python manage.py preview_phase8c_payment_order_controlled_mutation \
+    --phase8b-gate-id <PHASE8B_GATE_ID> --json
+
+# 3. Prepare a Phase 8C controlled-mutation gate row (one per
+#    Phase 8B gate; idempotent).
+python manage.py prepare_phase8c_payment_order_controlled_mutation \
+    --phase8b-gate-id <PHASE8B_GATE_ID> --json
+
+# 4. Run a controlled-mutation dry-run against a proven
+#    internal/sandbox target Order + Payment pair (references must
+#    start with `phase8c::controlled::order::` / `phase8c::
+#    controlled::payment::` or the `phase8c-controlled-*` variant).
+python manage.py dry_run_phase8c_payment_order_controlled_mutation \
+    --gate-id <ID> \
+    --target-order-id <Order.id> \
+    --target-payment-id <Payment.id> \
+    --target-order-reference "phase8c::controlled::order::001" \
+    --target-payment-reference "phase8c::controlled::payment::001" \
+    --json
+
+# 5. Approve (only from dry_run_passed). Mandatory non-empty reason.
+#    Requires at least one passed dry-run AND a pending-director-
+#    signoff attempt. Approval does NOT execute the mutation.
+python manage.py approve_phase8c_payment_order_controlled_mutation \
+    --gate-id <ID> --reason "Director Phase 8C approve" --json
+
+# 6. Execute. CLI-only one-shot. Refuses unless every safety gate
+#    is satisfied. DO NOT run on the VPS unless the Director has
+#    separately approved this exact one-shot execution.
+export PHASE8C_DIRECTOR_APPROVED_ONE_SHOT_MUTATION=true
+export PHASE8C_ALLOW_INTERNAL_ORDER_PAYMENT_MUTATION=true
+python manage.py execute_phase8c_payment_order_controlled_mutation \
+    --attempt-id <ID> \
+    --confirm-one-shot-mutation \
+    --director-signoff "phase8c_attempt_id_<ID> phase8b_gate_id_<ID> BEGIN_UTC=2026-05-12T12:00:00Z END_UTC=2026-05-12T12:10:00Z" \
+    --operator-name "Director Prarit Sidana" --json
+
+# 7. Rollback (record-only restore of the original statuses).
+python manage.py rollback_phase8c_payment_order_controlled_mutation \
+    --attempt-id <ID> --reason "Director rollback" --json
+
+# 8. Reject / archive (any time).
+python manage.py reject_phase8c_payment_order_controlled_mutation \
+    --gate-id <ID> --reason "Director paused review" --json
+python manage.py archive_phase8c_payment_order_controlled_mutation \
+    --gate-id <ID> --reason "Director archive" --json
+```
+
+**Phase 8C refuses to execute unless:**
+- `PHASE8C_PAYMENT_ORDER_CONTROLLED_MUTATION_GATE_ENABLED=true`
+- `PHASE8C_DIRECTOR_APPROVED_ONE_SHOT_MUTATION=true`
+- `PHASE8C_ALLOW_INTERNAL_ORDER_PAYMENT_MUTATION=true`
+- The runtime kill switch is enabled.
+- `--confirm-one-shot-mutation` is supplied.
+- `--operator-name` is non-empty.
+- `--director-signoff` body contains `phase8c_attempt_id_<ID>`,
+  `phase8b_gate_id_<ID>`, `BEGIN_UTC=<ISO-Z>`, `END_UTC=<ISO-Z>`.
+- The parsed window is ≤ 15 min, fresh (≤ 24h old), and `now` is
+  within it.
+- The gate is in `status=approved_for_one_shot_controlled_mutation`
+  and the attempt is in `approved_for_one_shot_mutation`.
+- The gate has no prior `executed` attempt.
+- The target Order + Payment pair STILL passes the internal /
+  sandbox / test safety proof (`id` / `confirmation_notes` /
+  `gateway_reference_id` contains one of `phase8c::controlled::` /
+  `phase8c-controlled-` / `internal-test` / `sandbox`, OR
+  `Order.confirmation_checklist["phase8c_sandbox"]==True`, OR
+  `Payment.raw_response["phase8c_sandbox"]==True`).
+- Phase 7E-Live-B, Phase 7G-Live, and broad customer automation
+  remain NOT approved.
+
+**Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
+(real customer courier execution), and broad customer automation
+all remain NOT approved.**

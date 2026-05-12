@@ -65,6 +65,12 @@ from .views import (
     Phase8BPaymentOrderMutationReviewGatesListView,
     Phase8BPaymentOrderMutationReviewPreviewView,
     Phase8BPaymentOrderMutationReviewReadinessView,
+    Phase8CPaymentOrderControlledMutationAttemptsView,
+    Phase8CPaymentOrderControlledMutationGateDetailView,
+    Phase8CPaymentOrderControlledMutationGatesListView,
+    Phase8CPaymentOrderControlledMutationPreviewView,
+    Phase8CPaymentOrderControlledMutationReadinessView,
+    Phase8CPaymentOrderControlledMutationRollbacksView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -803,5 +809,46 @@ urlpatterns = [
         "phase8/payment-order-mutation-review-dry-runs/<int:gate_id>/",
         Phase8BPaymentOrderMutationReviewDryRunsView.as_view(),
         name="saas-phase8b-payment-order-mutation-review-dry-runs",
+    ),
+    # Phase 8C - Controlled Real Payment -> Order Mutation
+    # (CLI-only one-shot mutation; read-only API; NEVER calls
+    # Razorpay / Meta Cloud / Delhivery / Vapi; NEVER sends
+    # WhatsApp; NEVER mutates Customer / Lead / Shipment /
+    # DiscountOfferLog rows).
+    path(
+        "phase8/payment-order-controlled-mutation-readiness/",
+        Phase8CPaymentOrderControlledMutationReadinessView.as_view(),
+        name="saas-phase8c-payment-order-controlled-mutation-readiness",
+    ),
+    path(
+        "phase8/payment-order-controlled-mutation-gates/",
+        Phase8CPaymentOrderControlledMutationGatesListView.as_view(),
+        name="saas-phase8c-payment-order-controlled-mutation-gates",
+    ),
+    path(
+        "phase8/payment-order-controlled-mutation-gates/<int:pk>/",
+        Phase8CPaymentOrderControlledMutationGateDetailView.as_view(),
+        name=(
+            "saas-phase8c-payment-order-controlled-mutation-gate-detail"
+        ),
+    ),
+    path(
+        "phase8/payment-order-controlled-mutation-preview/",
+        Phase8CPaymentOrderControlledMutationPreviewView.as_view(),
+        name="saas-phase8c-payment-order-controlled-mutation-preview",
+    ),
+    path(
+        "phase8/payment-order-controlled-mutation-attempts/<int:gate_id>/",
+        Phase8CPaymentOrderControlledMutationAttemptsView.as_view(),
+        name=(
+            "saas-phase8c-payment-order-controlled-mutation-attempts"
+        ),
+    ),
+    path(
+        "phase8/payment-order-controlled-mutation-rollbacks/<int:attempt_id>/",
+        Phase8CPaymentOrderControlledMutationRollbacksView.as_view(),
+        name=(
+            "saas-phase8c-payment-order-controlled-mutation-rollbacks"
+        ),
     ),
 ]

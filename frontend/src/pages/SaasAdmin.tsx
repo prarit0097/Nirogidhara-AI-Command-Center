@@ -44,6 +44,8 @@ import type {
   SaasPhase8APaymentOrderMutationSandboxGatesResponse,
   SaasPhase8BPaymentOrderMutationReviewReadiness,
   SaasPhase8BPaymentOrderMutationReviewGatesResponse,
+  SaasPhase8CPaymentOrderControlledMutationReadiness,
+  SaasPhase8CPaymentOrderControlledMutationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -281,6 +283,18 @@ export default function SaasAdminPage() {
     phase8bPaymentOrderMutationReviewGates,
     setPhase8bPaymentOrderMutationReviewGates,
   ] = useState<SaasPhase8BPaymentOrderMutationReviewGatesResponse | null>(null);
+  const [
+    phase8cPaymentOrderControlledMutationReadiness,
+    setPhase8cPaymentOrderControlledMutationReadiness,
+  ] = useState<SaasPhase8CPaymentOrderControlledMutationReadiness | null>(
+    null,
+  );
+  const [
+    phase8cPaymentOrderControlledMutationGates,
+    setPhase8cPaymentOrderControlledMutationGates,
+  ] = useState<SaasPhase8CPaymentOrderControlledMutationGatesResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -336,6 +350,8 @@ export default function SaasAdminPage() {
       api.getSaasPhase8APaymentOrderMutationSandboxGates(25),
       api.getSaasPhase8BPaymentOrderMutationReviewReadiness(),
       api.getSaasPhase8BPaymentOrderMutationReviewGates(25),
+      api.getSaasPhase8CPaymentOrderControlledMutationReadiness(),
+      api.getSaasPhase8CPaymentOrderControlledMutationGates(25),
     ])
       .then(
         ([
@@ -389,6 +405,8 @@ export default function SaasAdminPage() {
           p8aGates,
           p8bRead,
           p8bGates,
+          p8cRead,
+          p8cGates,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -440,6 +458,8 @@ export default function SaasAdminPage() {
           setPhase8aPaymentOrderMutationSandboxGates(p8aGates);
           setPhase8bPaymentOrderMutationReviewReadiness(p8bRead);
           setPhase8bPaymentOrderMutationReviewGates(p8bGates);
+          setPhase8cPaymentOrderControlledMutationReadiness(p8cRead);
+          setPhase8cPaymentOrderControlledMutationGates(p8cGates);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -5618,6 +5638,195 @@ export default function SaasAdminPage() {
             buttons exist on this page. Phase 8B approval is a
             status transition only — it does NOT enable any real
             mutation.
+          </div>
+        </section>
+      )}
+
+      {(phase8cPaymentOrderControlledMutationReadiness ||
+        phase8cPaymentOrderControlledMutationGates) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase8c-payment-order-controlled-mutation-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 8C Controlled Payment → Order Mutation
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 8C — <strong>CLI-only one-shot</strong>{" "}
+                controlled mutation against a single explicitly
+                selected internal / sandbox / test{" "}
+                <code>Order</code> + <code>Payment</code> pair.
+                Execute requires three env flags ALL true, the kill
+                switch enabled, a structured Director sign-off UTC
+                window (<code>BEGIN_UTC=</code> / <code>END_UTC=</code>,
+                ≤ 15 min), and runtime proof that the target rows
+                are not real customer data (reference / id /{" "}
+                <code>raw_response.phase8c_sandbox</code> markers).
+                The only mutation performed is writing the target{" "}
+                <code>Order.payment_status</code> and{" "}
+                <code>Payment.status</code> to <code>Paid</code>.
+                Phase 8C NEVER calls Razorpay / Meta Cloud /
+                Delhivery / Vapi, NEVER sends or queues WhatsApp,
+                NEVER creates a <code>Shipment</code> / AWB /
+                payment link, NEVER captures / refunds, NEVER sends
+                a customer notification, NEVER mutates real{" "}
+                <code>Customer</code> / <code>Lead</code> /{" "}
+                <code>Shipment</code> /{" "}
+                <code>DiscountOfferLog</code> rows, NEVER edits any{" "}
+                <code>.env*</code> file. Review state changes are
+                CLI-only. Phase 7E-Live-B / 7G-Live / broad customer
+                automation remain <strong>not approved</strong>.
+              </p>
+            </div>
+            {phase8cPaymentOrderControlledMutationReadiness && (
+              <div data-testid="phase8c-status-badge">
+                <StatusPill
+                  tone={
+                    phase8cPaymentOrderControlledMutationReadiness
+                      .killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {phase8cPaymentOrderControlledMutationReadiness
+                    .killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+          {phase8cPaymentOrderControlledMutationReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={
+                  phase8cPaymentOrderControlledMutationReadiness.phase
+                }
+              />
+              <KeyValue
+                label="Status"
+                value={
+                  phase8cPaymentOrderControlledMutationReadiness.status
+                }
+              />
+              <KeyValue
+                label="Phase 8C gate flag"
+                value={
+                  phase8cPaymentOrderControlledMutationReadiness.phase8CGateEnabled
+                    ? "Enabled"
+                    : "Disabled (safe)"
+                }
+              />
+              <KeyValue
+                label="Director approved"
+                value={
+                  phase8cPaymentOrderControlledMutationReadiness.phase8CDirectorApproved
+                    ? "Approved"
+                    : "Not approved (safe)"
+                }
+              />
+              <KeyValue
+                label="Allow internal mutation"
+                value={
+                  phase8cPaymentOrderControlledMutationReadiness.phase8CAllowInternalMutation
+                    ? "Allowed"
+                    : "Locked off (safe)"
+                }
+              />
+              <KeyValue
+                label="Eligible 8B gates"
+                value={String(
+                  phase8cPaymentOrderControlledMutationReadiness
+                    .eligiblePhase8BGateCount,
+                )}
+              />
+              <KeyValue label="Calls Razorpay" value="No" />
+              <KeyValue label="Calls Meta Cloud" value="No" />
+              <KeyValue label="Calls Delhivery" value="No" />
+              <KeyValue label="Sends WhatsApp" value="No" />
+              <KeyValue
+                label="Customer notification"
+                value="No"
+              />
+              <KeyValue label="Creates Shipment" value="No" />
+              <KeyValue label="Creates AWB" value="No" />
+              <KeyValue label="Captures payment" value="No" />
+              <KeyValue label="Refunds payment" value="No" />
+              <KeyValue
+                label="Real customer automation"
+                value="Not approved"
+              />
+              <KeyValue
+                label="Frontend can execute"
+                value="No"
+              />
+              <KeyValue
+                label="API can execute"
+                value="No"
+              />
+            </div>
+          )}
+          {phase8cPaymentOrderControlledMutationGates &&
+            phase8cPaymentOrderControlledMutationGates.items.length > 0 && (
+              <div className="border-t border-border px-6 py-4 text-xs">
+                {phase8cPaymentOrderControlledMutationGates.items.map(
+                  (gate) => (
+                    <div
+                      key={gate.id}
+                      className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6 py-1 border-b border-border last:border-0"
+                    >
+                      <span>
+                        id=<strong>{gate.id}</strong>
+                      </span>
+                      <span>status={gate.status}</span>
+                      <span>
+                        8B={gate.sourcePhase8BGateId}
+                      </span>
+                      <span>
+                        7I={gate.sourcePhase7ILockId}
+                      </span>
+                      <span>
+                        dryRun=
+                        {gate.dryRunPassed ? "passed" : "pending"}
+                      </span>
+                      <span>
+                        old/new=
+                        {gate.proposedOldOrderStatus.slice(0, 18)}
+                        {" → "}
+                        {gate.proposedNewOrderStatus.slice(0, 18)}
+                      </span>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+          {phase8cPaymentOrderControlledMutationReadiness?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {
+                  phase8cPaymentOrderControlledMutationReadiness
+                    .nextAction
+                }
+              </code>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase8c-cli-only-banner"
+          >
+            <strong>CLI-only One-shot Controlled Mutation.</strong>{" "}
+            No "Execute" / "Mark Paid" / "Apply Mutation" /
+            "Rollback" / "Send WhatsApp" / "Create Shipment" /
+            "Capture" / "Refund" / "Notify Customer" / "Call
+            Razorpay" / "Call Delhivery" / "Approve Phase 8C" / "Go
+            Live" / "Edit .env" buttons exist on this page. Phase 8C
+            execute is CLI-only and refuses unless every safety gate
+            is satisfied.
           </div>
         </section>
       )}

@@ -3454,6 +3454,241 @@ class Phase8BPaymentOrderMutationReviewDryRunsView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 8C - Controlled Real Payment -> Order Mutation
+# ---------------------------------------------------------------------------
+
+
+from apps.payments.phase8c_payment_order_controlled_mutation import (  # noqa: E402
+    inspect_phase8c_payment_order_controlled_mutation_readiness as _inspect_phase8c_readiness,
+    preview_phase8c_payment_order_controlled_mutation as _preview_phase8c_gate,
+    serialize_phase8c_attempt as _serialize_phase8c_attempt,
+    serialize_phase8c_gate as _serialize_phase8c_gate,
+    serialize_phase8c_rollback as _serialize_phase8c_rollback,
+    summarize_phase8c_gates as _summarize_phase8c_gates,
+)
+from apps.payments.models import (  # noqa: E402
+    RazorpayPaymentOrderControlledMutationAttempt,
+    RazorpayPaymentOrderControlledMutationGate,
+    RazorpayPaymentOrderControlledMutationRollback,
+)
+
+
+class Phase8CPaymentOrderControlledMutationReadinessView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-controlled-mutation-readiness/``.
+
+    Phase 8C read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER calls Razorpay / Meta Cloud
+    / Delhivery / Vapi; NEVER sends WhatsApp; NEVER sends a
+    customer notification; NEVER mutates business rows; NEVER edits
+    any ``.env*`` file.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(_inspect_phase8c_readiness())
+
+
+class Phase8CPaymentOrderControlledMutationGatesListView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-controlled-mutation-gates/``.
+
+    Phase 8C read-only list of controlled-mutation gates.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = _summarize_phase8c_gates(limit=limit)
+        return Response(
+            {
+                "phase": "8C",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": (
+                    "cli_only_one_shot_controlled_mutation"
+                ),
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase8CCallsRazorpay": False,
+                "phase8CCallsMetaCloud": False,
+                "phase8CCallsDelhivery": False,
+                "phase8CCallsVapi": False,
+                "phase8CSendsWhatsApp": False,
+                "phase8CQueuesWhatsApp": False,
+                "phase8CCreatesShipmentRow": False,
+                "phase8CCreatesAwb": False,
+                "phase8CCreatesPaymentLink": False,
+                "phase8CCapturesPayment": False,
+                "phase8CRefundsPayment": False,
+                "phase8CSendsCustomerNotification": False,
+                "phase8CMutatesCustomer": False,
+                "phase8CMutatesLead": False,
+                "phase8CMutatesShipment": False,
+                "phase8CMutatesDiscountOfferLog": False,
+                "phase8CApprovesRealCustomerAutomation": False,
+            }
+        )
+
+
+class Phase8CPaymentOrderControlledMutationGateDetailView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-controlled-mutation-gates/<pk>/``.
+
+    Phase 8C read-only gate detail.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayPaymentOrderControlledMutationGate.objects.filter(
+                pk=pk
+            ).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8C payment order controlled "
+                        "mutation gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase8c_gate(row))
+
+
+class Phase8CPaymentOrderControlledMutationPreviewView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-controlled-mutation-preview/``.
+
+    Phase 8C read-only preview composed from a Phase 8B review gate
+    id. NEVER mutates the database; NEVER calls any provider.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        raw = request.query_params.get("phase8b_gate_id")
+        try:
+            gate_id = int(raw or 0)
+        except (TypeError, ValueError):
+            gate_id = 0
+        if gate_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "phase8b_gate_id query param must be a "
+                        "positive integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(_preview_phase8c_gate(phase8b_gate_id=gate_id))
+
+
+class Phase8CPaymentOrderControlledMutationAttemptsView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-controlled-mutation-attempts/<gate_id>/``.
+
+    Phase 8C read-only list of attempt rows for one gate.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayPaymentOrderControlledMutationGate.objects.filter(
+                pk=gate_id
+            ).exists()
+        )
+        if not gate_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8C payment order controlled "
+                        "mutation gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayPaymentOrderControlledMutationAttempt.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "8C",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase8c_attempt(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "phase8CCallsRazorpay": False,
+                "phase8CCallsMetaCloud": False,
+                "phase8CCallsDelhivery": False,
+                "phase8CSendsWhatsApp": False,
+                "phase8CSendsCustomerNotification": False,
+            }
+        )
+
+
+class Phase8CPaymentOrderControlledMutationRollbacksView(APIView):
+    """``GET /api/v1/saas/phase8/payment-order-controlled-mutation-rollbacks/<attempt_id>/``.
+
+    Phase 8C read-only list of rollback rows for one attempt.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, attempt_id: int):
+        attempt_exists = (
+            RazorpayPaymentOrderControlledMutationAttempt.objects.filter(
+                pk=attempt_id
+            ).exists()
+        )
+        if not attempt_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8C payment order controlled "
+                        "mutation attempt not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayPaymentOrderControlledMutationRollback.objects.filter(
+                attempt_id=attempt_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "8C",
+                "attemptId": attempt_id,
+                "items": [
+                    _serialize_phase8c_rollback(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "phase8CCallsRazorpay": False,
+                "phase8CCallsMetaCloud": False,
+                "phase8CCallsDelhivery": False,
+                "phase8CSendsWhatsApp": False,
+                "phase8CSendsCustomerNotification": False,
+            }
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -3582,4 +3817,10 @@ __all__ = (
     "Phase8BPaymentOrderMutationReviewGateDetailView",
     "Phase8BPaymentOrderMutationReviewPreviewView",
     "Phase8BPaymentOrderMutationReviewDryRunsView",
+    "Phase8CPaymentOrderControlledMutationReadinessView",
+    "Phase8CPaymentOrderControlledMutationGatesListView",
+    "Phase8CPaymentOrderControlledMutationGateDetailView",
+    "Phase8CPaymentOrderControlledMutationPreviewView",
+    "Phase8CPaymentOrderControlledMutationAttemptsView",
+    "Phase8CPaymentOrderControlledMutationRollbacksView",
 )

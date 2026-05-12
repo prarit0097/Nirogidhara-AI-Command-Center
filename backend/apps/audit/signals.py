@@ -463,6 +463,22 @@ ICON_BY_KIND: dict[str, str] = {
     "phase8b.payment_order.rejected": "x-circle",
     "phase8b.payment_order.archived": "archive",
     "phase8b.payment_order.blocked": "ban",
+    # Phase 8C - Controlled Real Payment -> Order Mutation Gate
+    # (CLI-only one-shot mutation against an internal/sandbox/test
+    # target; never calls provider; never mutates Customer/Lead/
+    # Shipment/DiscountOfferLog rows; never edits any .env file).
+    "phase8c.payment_order.readiness_inspected": "eye",
+    "phase8c.payment_order.previewed": "eye",
+    "phase8c.payment_order.prepared": "file-plus",
+    "phase8c.payment_order.dry_run_passed": "check-circle",
+    "phase8c.payment_order.dry_run_failed": "shield-off",
+    "phase8c.payment_order.approved": "check-circle",
+    "phase8c.payment_order.executed": "send",
+    "phase8c.payment_order.rollback_recorded": "rotate-ccw",
+    "phase8c.payment_order.rejected": "x-circle",
+    "phase8c.payment_order.archived": "archive",
+    "phase8c.payment_order.blocked": "ban",
+    "phase8c.payment_order.failed": "shield-off",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

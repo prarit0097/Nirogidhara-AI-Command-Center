@@ -430,6 +430,28 @@ PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_ENABLED = _razorpay_webhook_bool(
 PHASE8B_PAYMENT_ORDER_MUTATION_REVIEW_GATE_ENABLED = _razorpay_webhook_bool(
     "PHASE8B_PAYMENT_ORDER_MUTATION_REVIEW_GATE_ENABLED"
 )
+# `PHASE8C_PAYMENT_ORDER_CONTROLLED_MUTATION_GATE_ENABLED` controls
+# the Phase 8C Controlled Real Payment -> Order Mutation framework.
+# Defaults LOCKED OFF. Phase 8C is a CLI-only one-shot mutation
+# path against a single, explicitly selected internal/sandbox/test
+# Order + Payment pair. Execute requires three env flags ALL true,
+# a structured Director sign-off UTC window (<= 15 min), the kill
+# switch enabled, and a runtime safety proof that the target rows
+# are NOT real customer data. Phase 8C NEVER calls Razorpay / Meta
+# Cloud / Delhivery / Vapi, NEVER sends WhatsApp, NEVER sends a
+# customer notification, NEVER creates a Shipment / AWB / payment
+# link, NEVER captures / refunds, NEVER edits any .env file.
+PHASE8C_PAYMENT_ORDER_CONTROLLED_MUTATION_GATE_ENABLED = (
+    _razorpay_webhook_bool(
+        "PHASE8C_PAYMENT_ORDER_CONTROLLED_MUTATION_GATE_ENABLED"
+    )
+)
+PHASE8C_DIRECTOR_APPROVED_ONE_SHOT_MUTATION = _razorpay_webhook_bool(
+    "PHASE8C_DIRECTOR_APPROVED_ONE_SHOT_MUTATION"
+)
+PHASE8C_ALLOW_INTERNAL_ORDER_PAYMENT_MUTATION = _razorpay_webhook_bool(
+    "PHASE8C_ALLOW_INTERNAL_ORDER_PAYMENT_MUTATION"
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

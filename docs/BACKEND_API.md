@@ -1105,3 +1105,39 @@ refunds, never sends a customer notification, never mutates real
 `WhatsAppHandoffToCall` rows. **Phase 8C (controlled real
 mutation), Phase 7E-Live-B (real customer WhatsApp send) and Phase
 7G-Live (real customer courier execution) remain NOT approved.**
+
+### Phase 8C — Controlled Real Payment → Order Mutation (CLI-only one-shot)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/phase8/payment-order-controlled-mutation-readiness/` | admin/staff | Read-only readiness composition (3 env flag states + eligibility counters + locked-False safety contract). |
+| GET | `/api/v1/saas/phase8/payment-order-controlled-mutation-gates/?limit=N` | admin/staff | Phase 8C gate listing with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/phase8/payment-order-controlled-mutation-gates/<int:pk>/` | admin/staff | Read-only gate detail (whitelist serializer; never returns raw token / full phone / raw Director sign-off — only a SHA-256 hash hint). |
+| GET | `/api/v1/saas/phase8/payment-order-controlled-mutation-preview/?phase8b_gate_id=N` | admin/staff | Read-only preview from an approved Phase 8B review gate. Never creates rows. |
+| GET | `/api/v1/saas/phase8/payment-order-controlled-mutation-attempts/<int:gate_id>/` | admin/staff | Read-only list of attempt rows for one Phase 8C gate. |
+| GET | `/api/v1/saas/phase8/payment-order-controlled-mutation-rollbacks/<int:attempt_id>/` | admin/staff | Read-only list of rollback rows for one Phase 8C attempt. |
+
+POST/PATCH/DELETE on every Phase 8C endpoint return 405. **No POST
+endpoint dispatches state changes or execute** — both review state
+transitions AND the one-shot execute are CLI-only via the 9
+management commands
+(`inspect_phase8c_payment_order_controlled_mutation`, `preview_…`,
+`prepare_…`, `dry_run_…` with target ids + references,
+`approve_…_gate --reason`, `execute_… --confirm-one-shot-mutation
+--director-signoff … --operator-name …`, `rollback_… --reason`,
+`reject_…_gate --reason`, `archive_…_gate --reason`). Phase 8C
+approval flips status to `approved_for_one_shot_controlled_mutation`
+only — it does NOT execute the mutation. Phase 8C execute is
+strictly CLI-only, refuses unless three env flags are true + kill
+switch enabled + structured 15-min Director UTC window + target
+safety proof intact + no prior execution; the only mutation
+performed is writing `Order.payment_status` and `Payment.status` to
+`"Paid"`. Phase 8C never calls Razorpay / Meta Cloud / Delhivery /
+Vapi, never sends or queues WhatsApp, never creates a `Shipment` /
+AWB / payment link, never captures / refunds, never sends a
+customer notification, never mutates real `Customer` / `Lead` /
+`Shipment` / `DiscountOfferLog` / `WhatsAppMessage` /
+`WhatsAppLifecycleEvent` / `WhatsAppHandoffToCall` rows. **Phase
+7E-Live-B (real customer WhatsApp send), Phase 7G-Live (real
+customer courier execution), and broad customer automation all
+remain NOT approved.**

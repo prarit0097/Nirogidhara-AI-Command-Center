@@ -5529,3 +5529,216 @@ export interface SaasPhase8BPaymentOrderMutationReviewGatesResponse {
   phase8BApprovesPhase8C: false;
   phase8BApprovesRealCustomerAutomation: false;
 }
+
+// ---------- Phase 8C - Controlled Real Payment -> Order Mutation ----------
+
+export type SaasPhase8CPaymentOrderControlledMutationGateStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "dry_run_passed"
+  | "approved_for_one_shot_controlled_mutation"
+  | "executed"
+  | "rolled_back"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export type SaasPhase8CPaymentOrderControlledMutationAttemptStatus =
+  | "draft"
+  | "pending_director_signoff"
+  | "approved_for_one_shot_mutation"
+  | "executed"
+  | "rolled_back"
+  | "failed"
+  | "blocked"
+  | "rejected";
+
+export type SaasPhase8CPaymentOrderControlledMutationRollbackStatus =
+  | "draft"
+  | "rollback_recorded"
+  | "rollback_failed"
+  | "blocked";
+
+export interface SaasPhase8CPaymentOrderControlledMutationGateDto {
+  id: number;
+  status: SaasPhase8CPaymentOrderControlledMutationGateStatus;
+  sourcePhase8BGateId: number | null;
+  sourcePhase8AGateId: number | null;
+  sourcePhase7ILockId: number | null;
+  sourcePhase7DAttemptId: number | null;
+  controlledMutationOnly: true;
+  realCustomerAllowed: false;
+  customerNotificationAllowed: false;
+  whatsAppAllowed: false;
+  courierAllowed: false;
+  providerCallAllowed: false;
+  shipmentCreationAllowed: false;
+  paymentCaptureAllowed: false;
+  refundAllowed: false;
+  rollbackRequired: true;
+  directorSignoffRequired: true;
+  structuredUtcWindowRequired: true;
+  sourcePaymentReferenceSnapshot: string;
+  targetOrderReferenceSnapshot: string;
+  targetPaymentReferenceSnapshot: string;
+  proposedOldOrderStatus: string;
+  proposedNewOrderStatus: string;
+  proposedOldPaymentStatus: string;
+  proposedNewPaymentStatus: string;
+  dryRunPassed: boolean;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  evidenceJson: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasPhase8CPaymentOrderControlledMutationAttemptDto {
+  id: number;
+  gateId: number;
+  sourcePhase8BGateId: number | null;
+  targetOrderId: string;
+  targetPaymentId: string;
+  targetOrderReference: string;
+  targetPaymentReference: string;
+  paymentReferenceSnapshot: string;
+  status: SaasPhase8CPaymentOrderControlledMutationAttemptStatus;
+  oldOrderStatus: string;
+  newOrderStatus: string;
+  oldPaymentStatus: string;
+  newPaymentStatus: string;
+  orderMutationWasMade: boolean;
+  paymentMutationWasMade: boolean;
+  businessMutationWasMade: boolean;
+  customerNotificationSent: false;
+  whatsAppSent: false;
+  courierCalled: false;
+  providerCallAttempted: false;
+  shipmentCreated: false;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  blockers: string[];
+  warnings: string[];
+  directorSignoffTextHashPresent: boolean;
+  recordedSignoffWindowStartUtc: string | null;
+  recordedSignoffWindowEndUtc: string | null;
+  recordedSignoffWindowValid: boolean;
+  operatorNamePresent: boolean;
+  executedAt: string | null;
+  failedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SaasPhase8CPaymentOrderControlledMutationRollbackDto {
+  id: number;
+  attemptId: number;
+  status: SaasPhase8CPaymentOrderControlledMutationRollbackStatus;
+  restoredOrderStatus: string;
+  restoredPaymentStatus: string;
+  rollbackWasMade: boolean;
+  customerNotificationSent: false;
+  whatsAppSent: false;
+  courierCalled: false;
+  providerCallAttempted: false;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  reasonPresent: boolean;
+  rolledBackAt: string | null;
+  createdAt: string | null;
+}
+
+export interface SaasPhase8CPaymentOrderControlledMutationGateCounts {
+  draft: number;
+  pending_manual_review: number;
+  dry_run_passed: number;
+  approved_for_one_shot_controlled_mutation: number;
+  executed: number;
+  rolled_back: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasPhase8CPaymentOrderControlledMutationReadiness {
+  phase: "8C";
+  status: "payment_order_controlled_mutation_only";
+  latestCompletedPhase: "8B";
+  nextPhase: string;
+  phase8CGateEnabled: boolean;
+  phase8CDirectorApproved: boolean;
+  phase8CAllowInternalMutation: boolean;
+  killSwitch: { enabled: boolean; model: string; id?: number };
+  eligiblePhase8BGateCount: number;
+  phase8CGateCounts: SaasPhase8CPaymentOrderControlledMutationGateCounts;
+  items: SaasPhase8CPaymentOrderControlledMutationGateDto[];
+  phase8CCallsRazorpay: false;
+  phase8CCallsMetaCloud: false;
+  phase8CCallsDelhivery: false;
+  phase8CCallsVapi: false;
+  phase8CSendsWhatsApp: false;
+  phase8CQueuesWhatsApp: false;
+  phase8CCreatesShipmentRow: false;
+  phase8CCreatesAwb: false;
+  phase8CCreatesPaymentLink: false;
+  phase8CCapturesPayment: false;
+  phase8CRefundsPayment: false;
+  phase8CSendsCustomerNotification: false;
+  phase8CMutatesCustomer: false;
+  phase8CMutatesLead: false;
+  phase8CMutatesShipment: false;
+  phase8CMutatesDiscountOfferLog: false;
+  phase8CApprovesRealCustomerAutomation: false;
+  phase7ELiveBApproved: false;
+  phase7GLiveApproved: false;
+  executionPath: "cli_only_one_shot_controlled_mutation";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasPhase8CPaymentOrderControlledMutationGatesResponse {
+  phase: "8C";
+  limit: number;
+  counts: SaasPhase8CPaymentOrderControlledMutationGateCounts;
+  items: SaasPhase8CPaymentOrderControlledMutationGateDto[];
+  executionPath: "cli_only_one_shot_controlled_mutation";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase8CCallsRazorpay: false;
+  phase8CCallsMetaCloud: false;
+  phase8CCallsDelhivery: false;
+  phase8CCallsVapi: false;
+  phase8CSendsWhatsApp: false;
+  phase8CQueuesWhatsApp: false;
+  phase8CCreatesShipmentRow: false;
+  phase8CCreatesAwb: false;
+  phase8CCreatesPaymentLink: false;
+  phase8CCapturesPayment: false;
+  phase8CRefundsPayment: false;
+  phase8CSendsCustomerNotification: false;
+  phase8CMutatesCustomer: false;
+  phase8CMutatesLead: false;
+  phase8CMutatesShipment: false;
+  phase8CMutatesDiscountOfferLog: false;
+  phase8CApprovesRealCustomerAutomation: false;
+}
