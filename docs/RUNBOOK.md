@@ -3453,9 +3453,19 @@ the execute step. The execute command is implemented but must NOT
 be run against production data without explicit Director approval.
 
 ```bash
-# 0. Enable the controlled-mutation gate env flag (defaults locked
-#    OFF). DO NOT enable the other two flags until the Director
-#    explicitly approves the one-shot execution.
+# 0a. Seed exactly ONE safe internal sandbox Order + Payment pair
+#     for the dry-run / execute target (CLI-only, idempotent,
+#     audit-logged). Defaults to dry-run; pass --apply to actually
+#     create the rows. Creates Order.id=phase8c-controlled-order-001
+#     and Payment.id=phase8c-controlled-payment-001 with
+#     raw_response.phase8c_sandbox=true. No provider call, no
+#     WhatsApp, no customer notification, no Shipment / AWB.
+python manage.py seed_phase8c_internal_controlled_mutation_fixture \
+    --apply --json
+
+# 0b. Enable the controlled-mutation gate env flag (defaults locked
+#     OFF). DO NOT enable the other two flags until the Director
+#     explicitly approves the one-shot execution.
 export PHASE8C_PAYMENT_ORDER_CONTROLLED_MUTATION_GATE_ENABLED=true
 
 # 1. Read-only readiness composition.
@@ -3475,10 +3485,11 @@ python manage.py prepare_phase8c_payment_order_controlled_mutation \
 #    internal/sandbox target Order + Payment pair (references must
 #    start with `phase8c::controlled::order::` / `phase8c::
 #    controlled::payment::` or the `phase8c-controlled-*` variant).
+#    Use the Phase 8C-Hotfix-1 seeded sandbox pair:
 python manage.py dry_run_phase8c_payment_order_controlled_mutation \
     --gate-id <ID> \
-    --target-order-id <Order.id> \
-    --target-payment-id <Payment.id> \
+    --target-order-id phase8c-controlled-order-001 \
+    --target-payment-id phase8c-controlled-payment-001 \
     --target-order-reference "phase8c::controlled::order::001" \
     --target-payment-reference "phase8c::controlled::payment::001" \
     --json

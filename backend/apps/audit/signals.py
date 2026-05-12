@@ -479,6 +479,12 @@ ICON_BY_KIND: dict[str, str] = {
     "phase8c.payment_order.archived": "archive",
     "phase8c.payment_order.blocked": "ban",
     "phase8c.payment_order.failed": "shield-off",
+    # Phase 8C-Hotfix-1 - safe internal sandbox Order + Payment
+    # fixture seed (CLI-only; idempotent; never calls a provider;
+    # never sends WhatsApp; never edits any .env file).
+    "phase8c.fixture.seeded": "file-plus",
+    "phase8c.fixture.dry_run": "eye",
+    "phase8c.fixture.blocked": "ban",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",
