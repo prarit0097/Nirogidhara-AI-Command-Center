@@ -308,14 +308,13 @@ def _validate_phase8c_attempt(
     if attempt is None:
         blockers.append("phase8d_source_phase8c_attempt_not_found")
         return blockers
-    if (
-        attempt.status
-        != RazorpayPaymentOrderControlledMutationAttempt.Status.ROLLED_BACK
-    ):
-        blockers.append(
-            "phase8d_source_phase8c_attempt_status_must_be_rolled_back_was_"
-            f"{attempt.status}"
-        )
+    # Phase 8D-Hotfix-1: we deliberately do NOT check
+    # `attempt.status == ROLLED_BACK`. A later blocked re-run may
+    # have flipped attempt.status="blocked" AFTER execute+rollback
+    # had already completed; the executed_at + rollback_recorded
+    # evidence is still the real proof. The evidence checks below
+    # (executed_at, recorded_signoff_window_valid, mutation flags
+    # True, side-effect flags False) are what must hold.
     if attempt.executed_at is None:
         blockers.append(
             "phase8d_source_phase8c_attempt_executed_at_must_be_set"
@@ -353,31 +352,92 @@ def _validate_phase8c_attempt(
     return blockers
 
 
-def _validate_phase8c_rollback(
-    attempt: Optional[RazorpayPaymentOrderControlledMutationAttempt],
+def _resolve_phase8c_evidence_via_rollback(
+    phase8c_gate: Optional[RazorpayPaymentOrderControlledMutationGate],
 ) -> tuple[
-    list[str],
+    Optional[RazorpayPaymentOrderControlledMutationAttempt],
     Optional[RazorpayPaymentOrderControlledMutationRollback],
 ]:
-    blockers: list[str] = []
-    if attempt is None:
-        return blockers, None
+    """Phase 8D-Hotfix-1: resolve the Phase 8C source attempt via
+    the rollback record, not via ``attempt.status``.
+
+    A later blocked re-run may have flipped ``attempt.status="blocked"``
+    AFTER execute + rollback had already completed; the rollback
+    record is the strongest single source of truth for "Phase 8C
+    executed and rolled back". We pick the rollback record with
+    ``status=rollback_recorded``, ``rollback_was_made=True``, and
+    ``restored_order_status="Pending"``/``restored_payment_status="Pending"``,
+    then return ``rollback.attempt`` -- ignoring whatever the
+    current attempt.status happens to be.
+    """
+    if phase8c_gate is None:
+        return None, None
     rollback = (
         RazorpayPaymentOrderControlledMutationRollback.objects.filter(
-            attempt=attempt,
+            attempt__gate=phase8c_gate,
             status=(
                 RazorpayPaymentOrderControlledMutationRollback.Status.ROLLBACK_RECORDED
             ),
+            rollback_was_made=True,
+            restored_order_status=_ALLOWED_FINAL_ORDER_PAYMENT_STATUS,
+            restored_payment_status=_ALLOWED_FINAL_PAYMENT_STATUS,
         )
-        .order_by("-created_at")
+        .select_related("attempt")
+        .order_by("-rolled_back_at", "-created_at")
         .first()
     )
     if rollback is None:
-        blockers.append("phase8d_source_phase8c_rollback_not_recorded")
-        return blockers, None
+        return None, None
+    return rollback.attempt, rollback
+
+
+def _validate_phase8c_rollback_record(
+    rollback: Optional[
+        RazorpayPaymentOrderControlledMutationRollback
+    ],
+) -> list[str]:
+    """Validate a rollback record found via
+    :func:`_resolve_phase8c_evidence_via_rollback`. The resolver
+    already pre-filters on ``status=rollback_recorded`` /
+    ``rollback_was_made=True`` / ``restored_*=Pending``, so a
+    missing rollback here means **no rollback record exists that
+    satisfies the Phase 8D evidence contract** -- which is the
+    primary diagnostic. The defensive recheck below catches any
+    drift between the resolver filter and the field-level
+    semantics (e.g. if the resolver is loosened in the future)."""
+    blockers: list[str] = []
+    if rollback is None:
+        blockers.append(
+            "phase8d_source_phase8c_rollback_not_recorded"
+        )
+        return blockers
+    if (
+        rollback.status
+        != RazorpayPaymentOrderControlledMutationRollback.Status.ROLLBACK_RECORDED
+    ):
+        blockers.append(
+            "phase8d_source_phase8c_rollback_status_must_be_rollback_recorded_was_"
+            f"{rollback.status}"
+        )
     if not bool(rollback.rollback_was_made):
         blockers.append(
             "phase8d_source_phase8c_rollback_was_made_must_be_true"
+        )
+    if (
+        rollback.restored_order_status
+        != _ALLOWED_FINAL_ORDER_PAYMENT_STATUS
+    ):
+        blockers.append(
+            "phase8d_source_phase8c_rollback_restored_order_status_must_be_pending_was_"
+            f"{rollback.restored_order_status}"
+        )
+    if (
+        rollback.restored_payment_status
+        != _ALLOWED_FINAL_PAYMENT_STATUS
+    ):
+        blockers.append(
+            "phase8d_source_phase8c_rollback_restored_payment_status_must_be_pending_was_"
+            f"{rollback.restored_payment_status}"
         )
     for field in (
         "customer_notification_sent",
@@ -389,7 +449,27 @@ def _validate_phase8c_rollback(
             blockers.append(
                 f"phase8d_source_phase8c_rollback_{field}_must_stay_false"
             )
-    return blockers, rollback
+    return blockers
+
+
+# Backwards-compatible alias for any callers that still import the
+# old name. The old name took (attempt) and returned (blockers,
+# rollback) -- which is no longer the right shape now that the
+# rollback is the source of truth. We keep the alias as a no-op
+# wrapper around the new resolver+validator so external callers
+# (if any) keep working.
+def _validate_phase8c_rollback(
+    attempt: Optional[RazorpayPaymentOrderControlledMutationAttempt],
+) -> tuple[
+    list[str],
+    Optional[RazorpayPaymentOrderControlledMutationRollback],
+]:
+    if attempt is None:
+        return [], None
+    _, rollback = _resolve_phase8c_evidence_via_rollback(
+        attempt.gate
+    )
+    return _validate_phase8c_rollback_record(rollback), rollback
 
 
 def _validate_final_target_state(
@@ -421,6 +501,18 @@ def _validate_final_target_state(
             "phase8d_target_payment_final_status_must_be_pending_was_"
             f"{target_payment.status}"
         )
+    # Phase 8D-Hotfix-1: confirm the target Payment still carries
+    # the explicit sandbox marker in raw_response (the same proof
+    # Phase 8C's safety guard relies on at execute / rollback time).
+    if target_payment is not None:
+        raw = target_payment.raw_response or {}
+        if (
+            not isinstance(raw, dict)
+            or raw.get("phase8c_sandbox") is not True
+        ):
+            blockers.append(
+                "phase8d_target_payment_raw_response_phase8c_sandbox_must_be_true"
+            )
     return blockers, target_order, target_payment
 
 
@@ -455,25 +547,17 @@ def _validate_eligibility(
         )
     blockers += _validate_phase8c_gate(phase8c_gate)
 
-    phase8c_attempt: Optional[
-        RazorpayPaymentOrderControlledMutationAttempt
-    ] = None
-    if phase8c_gate is not None:
-        phase8c_attempt = (
-            phase8c_gate.attempts.filter(
-                status=(
-                    RazorpayPaymentOrderControlledMutationAttempt.Status.ROLLED_BACK
-                )
-            )
-            .order_by("-executed_at", "-created_at")
-            .first()
-        )
-    blockers += _validate_phase8c_attempt(phase8c_attempt)
-
-    rollback_blockers, rollback = _validate_phase8c_rollback(
-        phase8c_attempt
+    # Phase 8D-Hotfix-1: resolve the Phase 8C attempt via the
+    # rollback record, not via attempt.status. The rollback record
+    # is the strongest single source of truth for "Phase 8C
+    # executed and rolled back" -- a later blocked re-run may have
+    # flipped attempt.status="blocked" but the execute + rollback
+    # evidence is still valid.
+    phase8c_attempt, rollback = (
+        _resolve_phase8c_evidence_via_rollback(phase8c_gate)
     )
-    blockers += rollback_blockers
+    blockers += _validate_phase8c_attempt(phase8c_attempt)
+    blockers += _validate_phase8c_rollback_record(rollback)
 
     final_blockers, target_order, target_payment = (
         _validate_final_target_state(phase8c_attempt)
@@ -691,8 +775,57 @@ def _build_evidence_json(
     phase7d = eligibility["phase7d"]
     target_order = eligibility["target_order"]
     target_payment = eligibility["target_payment"]
+    final_db_restored = bool(
+        target_order is not None
+        and target_payment is not None
+        and target_order.payment_status
+        == _ALLOWED_FINAL_ORDER_PAYMENT_STATUS
+        and target_payment.status == _ALLOWED_FINAL_PAYMENT_STATUS
+    )
+    # Phase 8D-Hotfix-1: normalized top-level evidence keys. These
+    # are the canonical signals downstream readers should consume
+    # instead of inspecting nested fields.
+    execution_evidence_valid = bool(
+        phase8c_attempt is not None
+        and phase8c_attempt.executed_at is not None
+        and phase8c_attempt.recorded_signoff_window_valid
+        and phase8c_attempt.order_mutation_was_made
+        and phase8c_attempt.payment_mutation_was_made
+        and phase8c_attempt.business_mutation_was_made
+        and not phase8c_attempt.provider_call_attempted
+        and not phase8c_attempt.customer_notification_sent
+        and not phase8c_attempt.whatsapp_sent
+        and not phase8c_attempt.courier_called
+        and not phase8c_attempt.shipment_created
+    )
+    rollback_evidence_valid = bool(
+        phase8c_rollback is not None
+        and phase8c_rollback.rollback_was_made
+        and phase8c_rollback.status
+        == RazorpayPaymentOrderControlledMutationRollback.Status.ROLLBACK_RECORDED
+        and phase8c_rollback.restored_order_status
+        == _ALLOWED_FINAL_ORDER_PAYMENT_STATUS
+        and phase8c_rollback.restored_payment_status
+        == _ALLOWED_FINAL_PAYMENT_STATUS
+        and not phase8c_rollback.provider_call_attempted
+        and not phase8c_rollback.customer_notification_sent
+        and not phase8c_rollback.whatsapp_sent
+        and not phase8c_rollback.courier_called
+    )
     return {
         "phase": "8D",
+        # Phase 8D-Hotfix-1 normalized fields:
+        "executionEvidenceValid": execution_evidence_valid,
+        "rollbackEvidenceValid": rollback_evidence_valid,
+        "attemptStatusAtEvidenceLock": (
+            phase8c_attempt.status if phase8c_attempt is not None else ""
+        ),
+        "rollbackStatus": (
+            phase8c_rollback.status
+            if phase8c_rollback is not None
+            else ""
+        ),
+        "finalDbRestored": final_db_restored,
         "phase8c": {
             "gateId": phase8c_gate.pk,
             "gateStatus": phase8c_gate.status,
@@ -1431,13 +1564,32 @@ def inspect_phase8d_controlled_mutation_evidence_lock_readiness() -> (
     counts = summary["counts"]
     kill = _kill_switch_state()
 
+    # Phase 8D-Hotfix-1: a gate is "eligible" only if it both
+    # carries `status=rolled_back` AND has at least one attempt
+    # whose rollback record satisfies the evidence contract
+    # (status=rollback_recorded, rollback_was_made=True,
+    # restored_*=Pending). This makes the readiness signal accurate
+    # for the post-rollback scenario where attempt.status may be
+    # "blocked" after a later re-run.
     eligible_phase8c_gates = (
         RazorpayPaymentOrderControlledMutationGate.objects.filter(
             status=(
                 RazorpayPaymentOrderControlledMutationGate.Status.ROLLED_BACK
             ),
             dry_run_passed=True,
-        ).count()
+            attempts__rollbacks__status=(
+                RazorpayPaymentOrderControlledMutationRollback.Status.ROLLBACK_RECORDED
+            ),
+            attempts__rollbacks__rollback_was_made=True,
+            attempts__rollbacks__restored_order_status=(
+                _ALLOWED_FINAL_ORDER_PAYMENT_STATUS
+            ),
+            attempts__rollbacks__restored_payment_status=(
+                _ALLOWED_FINAL_PAYMENT_STATUS
+            ),
+        )
+        .distinct()
+        .count()
     )
 
     blockers: list[str] = []

@@ -765,3 +765,298 @@ def test_phase8d_lock_detail_returns_404_when_missing(
         kwargs={"pk": 9999},
     )
     assert admin_client.get(url).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Phase 8D-Hotfix-1 - resolve evidence via rollback record (not attempt.status)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_preview_succeeds_when_attempt_status_blocked_but_rollback_evidence_valid() -> None:
+    """A later blocked re-run flipped attempt.status='blocked'
+    AFTER execute+rollback had already completed. The rollback
+    record evidence is still valid -> Phase 8D preview must
+    succeed and snapshot the current attempt.status as 'blocked'."""
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_preview"
+    )
+    attempt.status = (
+        RazorpayPaymentOrderControlledMutationAttempt.Status.BLOCKED
+    )
+    attempt.save(update_fields=["status"])
+
+    before = _row_counts()
+    out = preview_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    after = _row_counts()
+    assert before == after
+    assert out["eligible"] is True, out["blockers"]
+    assert out["found"] is True
+    assert out["sourcePhase8CAttemptId"] == attempt.pk
+    evidence = out["evidence"]
+    assert evidence["executionEvidenceValid"] is True
+    assert evidence["rollbackEvidenceValid"] is True
+    assert evidence["attemptStatusAtEvidenceLock"] == "blocked"
+    assert evidence["rollbackStatus"] == "rollback_recorded"
+    assert evidence["finalDbRestored"] is True
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_prepare_succeeds_when_attempt_status_blocked() -> None:
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_prepare"
+    )
+    attempt.status = (
+        RazorpayPaymentOrderControlledMutationAttempt.Status.BLOCKED
+    )
+    attempt.save(update_fields=["status"])
+
+    before = _row_counts()
+    out = prepare_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    after = _row_counts()
+    assert out["created"] is True
+    assert before == after
+    lock = (
+        RazorpayPaymentOrderControlledMutationEvidenceLock.objects.get(
+            pk=out["lock"]["id"]
+        )
+    )
+    assert lock.phase8c_attempt_status_snapshot == "blocked"
+    assert lock.order_mutation_was_made_snapshot is True
+    assert lock.payment_mutation_was_made_snapshot is True
+    assert lock.business_mutation_was_made_snapshot is True
+    assert lock.rollback_completed_snapshot is True
+    assert lock.final_db_restored_snapshot is True
+    assert lock.recorded_signoff_window_valid_snapshot is True
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_lock_succeeds_when_attempt_status_blocked() -> None:
+    """Full prepare → lock lifecycle succeeds even when the
+    underlying Phase 8C attempt has been flipped to 'blocked' by a
+    later re-run, as long as the rollback record evidence remains
+    valid."""
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_lock"
+    )
+    attempt.status = (
+        RazorpayPaymentOrderControlledMutationAttempt.Status.BLOCKED
+    )
+    attempt.save(update_fields=["status"])
+
+    prepared = prepare_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    before = _row_counts()
+    out = lock_phase8d_controlled_mutation_evidence_lock(
+        prepared["lock"]["id"],
+        reviewed_by=None,
+        reason=(
+            "Director Phase 8D-Hotfix-1 lock against recovered "
+            "evidence (attempt.status='blocked' after re-run)."
+        ),
+    )
+    after = _row_counts()
+    assert out["ok"] is True
+    assert before == after
+    lock = (
+        RazorpayPaymentOrderControlledMutationEvidenceLock.objects.get(
+            pk=prepared["lock"]["id"]
+        )
+    )
+    assert (
+        lock.status
+        == RazorpayPaymentOrderControlledMutationEvidenceLock.Status.LOCKED
+    )
+    assert lock.phase8c_attempt_status_snapshot == "blocked"
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_blocks_if_rollback_restored_order_status_not_pending() -> None:
+    """Tamper rollback.restored_order_status away from Pending.
+    The strict rollback resolver must refuse to surface this
+    rollback as evidence -> prepare blocks with
+    `phase8d_source_phase8c_rollback_not_recorded`."""
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_bad_restored_order"
+    )
+    rollback = (
+        RazorpayPaymentOrderControlledMutationRollback.objects.get(
+            attempt=attempt
+        )
+    )
+    rollback.restored_order_status = "Paid"
+    rollback.save(update_fields=["restored_order_status"])
+
+    out = prepare_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    assert out["created"] is False
+    assert any(
+        "phase8d_source_phase8c_rollback_not_recorded" in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_blocks_if_payment_raw_response_phase8c_sandbox_not_true() -> None:
+    """Tamper the target Payment's raw_response.phase8c_sandbox
+    away from True. Phase 8D must refuse to lock because the
+    explicit sandbox proof on the live Payment row is no longer
+    present."""
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_sandbox_proof_missing"
+    )
+    payment = Payment.objects.get(pk=attempt.target_payment_id)
+    payment.raw_response = {"phase8c_sandbox": False}
+    payment.save(update_fields=["raw_response"])
+
+    out = prepare_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    assert out["created"] is False
+    assert any(
+        "phase8d_target_payment_raw_response_phase8c_sandbox_must_be_true"
+        in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_blocks_if_payment_raw_response_phase8c_sandbox_missing() -> None:
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_sandbox_proof_empty"
+    )
+    payment = Payment.objects.get(pk=attempt.target_payment_id)
+    payment.raw_response = {}
+    payment.save(update_fields=["raw_response"])
+
+    out = prepare_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    assert out["created"] is False
+    assert any(
+        "phase8d_target_payment_raw_response_phase8c_sandbox_must_be_true"
+        in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_resolver_returns_none_when_no_rollback_record() -> None:
+    """When the rollback record is deleted, the resolver must
+    return (None, None) and the eligibility blocker chain must
+    include the rollback-not-recorded marker (regardless of
+    whatever attempt.status currently is)."""
+    from apps.payments.phase8d_controlled_mutation_evidence_lock import (
+        _resolve_phase8c_evidence_via_rollback,
+    )
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_no_rollback"
+    )
+    RazorpayPaymentOrderControlledMutationRollback.objects.filter(
+        attempt=attempt
+    ).delete()
+    resolved_attempt, resolved_rollback = (
+        _resolve_phase8c_evidence_via_rollback(gate)
+    )
+    assert resolved_attempt is None
+    assert resolved_rollback is None
+    out = prepare_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    assert out["created"] is False
+    assert any(
+        "phase8d_source_phase8c_rollback_not_recorded" in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_evidence_json_normalized_keys_present_on_lock_row() -> None:
+    """The evidence_json persisted on the lock row carries the
+    Phase 8D-Hotfix-1 normalized keys -- so downstream readers can
+    consume them without re-deriving from the nested phase8c
+    snapshot."""
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_evidence_keys"
+    )
+    attempt.status = (
+        RazorpayPaymentOrderControlledMutationAttempt.Status.BLOCKED
+    )
+    attempt.save(update_fields=["status"])
+    out = prepare_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    lock = (
+        RazorpayPaymentOrderControlledMutationEvidenceLock.objects.get(
+            pk=out["lock"]["id"]
+        )
+    )
+    evidence = lock.evidence_json or {}
+    assert evidence.get("executionEvidenceValid") is True
+    assert evidence.get("rollbackEvidenceValid") is True
+    assert evidence.get("attemptStatusAtEvidenceLock") == "blocked"
+    assert evidence.get("rollbackStatus") == "rollback_recorded"
+    assert evidence.get("finalDbRestored") is True
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_readiness_counts_only_gates_with_valid_rollback() -> None:
+    """A Phase 8C gate that is `status=rolled_back` but has no
+    valid rollback record must NOT be counted in
+    `eligiblePhase8CGateCount`. The Phase 8D-Hotfix-1 readiness
+    selector joins through `attempts__rollbacks`."""
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_readiness"
+    )
+    out_with_rollback = (
+        inspect_phase8d_controlled_mutation_evidence_lock_readiness()
+    )
+    assert out_with_rollback["eligiblePhase8CGateCount"] >= 1
+    # Drop the rollback record -> the gate should no longer be
+    # counted as eligible.
+    RazorpayPaymentOrderControlledMutationRollback.objects.filter(
+        attempt=attempt
+    ).delete()
+    out_without_rollback = (
+        inspect_phase8d_controlled_mutation_evidence_lock_readiness()
+    )
+    assert out_without_rollback["eligiblePhase8CGateCount"] == 0
+
+
+@pytest.mark.django_db
+def test_phase8d_hotfix1_blocked_attempt_does_not_call_providers_or_send() -> None:
+    """End-to-end: prepare + lock against an attempt.status='blocked'
+    evidence chain MUST NOT mutate Order / Payment row counts and
+    MUST NOT send WhatsApp / customer notification / create shipment.
+    The whole flow is record-only."""
+    gate, attempt = _make_phase8c_chain_in_rolled_back_state(
+        source_event_id="phase8d_hotfix1_no_side_effects"
+    )
+    attempt.status = (
+        RazorpayPaymentOrderControlledMutationAttempt.Status.BLOCKED
+    )
+    attempt.save(update_fields=["status"])
+
+    before = _row_counts()
+    prepared = prepare_phase8d_controlled_mutation_evidence_lock(
+        phase8c_gate_id=gate.pk
+    )
+    snap_after_prepare = _row_counts()
+    lock_phase8d_controlled_mutation_evidence_lock(
+        prepared["lock"]["id"],
+        reviewed_by=None,
+        reason="Director hotfix-1 no-side-effects assertion.",
+    )
+    snap_after_lock = _row_counts()
+    assert before == snap_after_prepare == snap_after_lock
+    # The target rows themselves remained Pending.
+    order = Order.objects.get(pk=attempt.target_order_id)
+    payment = Payment.objects.get(pk=attempt.target_payment_id)
+    assert order.payment_status == "Pending"
+    assert payment.status == "Pending"

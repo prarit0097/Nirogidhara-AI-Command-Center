@@ -3599,23 +3599,45 @@ python manage.py archive_phase8d_controlled_mutation_evidence_lock \
 
 **Phase 8D refuses to prepare unless:**
 - Phase 8C gate is in `status=rolled_back` AND `dry_run_passed=True`.
-- Phase 8C attempt is in `status=rolled_back` with `executed_at`
-  present AND `recorded_signoff_window_valid=True` AND
-  `order_mutation_was_made=True` AND `payment_mutation_was_made=True`
-  AND `business_mutation_was_made=True`.
-- Phase 8C attempt's `customer_notification_sent` /
-  `whatsapp_sent` / `courier_called` / `provider_call_attempted` /
-  `shipment_created` are all still False.
 - A `RazorpayPaymentOrderControlledMutationRollback` row exists
-  with `status=rollback_recorded` AND `rollback_was_made=True`
-  AND its `customer_notification_sent` / `whatsapp_sent` /
-  `courier_called` / `provider_call_attempted` are all False.
+  for an attempt of that gate with `status=rollback_recorded` AND
+  `rollback_was_made=True` AND `restored_order_status="Pending"`
+  AND `restored_payment_status="Pending"` AND its
+  `customer_notification_sent` / `whatsapp_sent` / `courier_called`
+  / `provider_call_attempted` all False. **Phase 8D-Hotfix-1: the
+  Phase 8C source attempt is resolved via this rollback record,
+  not via `attempt.status`** — so a later blocked re-run that
+  flipped `attempt.status="blocked"` after execute + rollback had
+  already completed does NOT block evidence locking, as long as
+  the rollback record's evidence remains intact.
+- The Phase 8C attempt that the rollback points at has
+  `executed_at` present AND `recorded_signoff_window_valid=True`
+  AND `order_mutation_was_made=True` AND
+  `payment_mutation_was_made=True` AND
+  `business_mutation_was_made=True` AND every
+  `customer_notification_sent` / `whatsapp_sent` /
+  `courier_called` / `provider_call_attempted` / `shipment_created`
+  is still False. The current `attempt.status` value (which may
+  be `rolled_back`, `executed`, or `blocked`) is snapshotted onto
+  the lock row's `phase8c_attempt_status_snapshot` for evidence
+  but does not gate the lock.
 - The current target `Order.payment_status == "Pending"` AND
   target `Payment.status == "Pending"` (post-rollback state
   has not been tampered with).
+- The current target `Payment.raw_response["phase8c_sandbox"]`
+  is still `True` (the live Payment row still carries the explicit
+  sandbox proof Phase 8C used at execute time).
 - The runtime kill switch is enabled.
 - Phase 7E-Live-B, Phase 7G-Live, and broad customer automation
   all remain not-approved.
+
+The `evidence_json` persisted on every Phase 8D lock row carries
+the Phase 8D-Hotfix-1 normalized top-level fields
+`executionEvidenceValid` / `rollbackEvidenceValid` /
+`attemptStatusAtEvidenceLock` / `rollbackStatus` /
+`finalDbRestored` — downstream readers should consume these
+canonical signals instead of re-deriving from the nested
+`phase8c` snapshot.
 
 **Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
 (real customer courier execution), and broad customer automation
