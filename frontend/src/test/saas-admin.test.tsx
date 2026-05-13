@@ -2096,6 +2096,71 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
   );
 
   it(
+    "renders the Phase 8F Controlled Real Customer Payment → " +
+      "Order Mutation section in read-only / CLI-only safe state",
+    async () => {
+      expect(
+        typeof api.getSaasPhase8FRealCustomerControlledMutationReadiness,
+      ).toBe("function");
+      expect(
+        typeof api.getSaasPhase8FRealCustomerControlledMutationGates,
+      ).toBe("function");
+
+      render(<SaasAdminPage />);
+      expect(
+        await screen.findByText(
+          /Phase 8F Controlled Real Customer Payment.*Order Mutation/i,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(
+          "phase8f-real-customer-controlled-mutation-section",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phase8f-cli-only-banner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(/CLI-only one-shot controlled mutation/i)
+          .length,
+      ).toBeGreaterThan(0);
+
+      const phase8fForbiddenButtons = [
+        /^approve gate$/i,
+        /^reject gate$/i,
+        /^archive gate$/i,
+        /^execute$/i,
+        /^apply mutation$/i,
+        /^mark paid$/i,
+        /^confirm order$/i,
+        /^send whatsapp$/i,
+        /^queue whatsapp$/i,
+        /^call razorpay$/i,
+        /^call meta$/i,
+        /^call delhivery$/i,
+        /^notify customer$/i,
+        /^refund$/i,
+        /^capture$/i,
+        /^create shipment$/i,
+        /^create awb$/i,
+        /^go live$/i,
+        /^edit \.env$/i,
+      ];
+      for (const pattern of phase8fForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      const body = document.body.textContent ?? "";
+      expect(body).not.toContain("rzp_live_");
+      expect(body).not.toContain("DELHIVERY_API_TOKEN=");
+      expect(body).not.toContain("META_WA_TOKEN");
+      expect(body).not.toMatch(/\+91\d{10}/);
+    },
+  );
+
+  it(
     "renders the Phase 8D Controlled Mutation Evidence Lock " +
       "section in read-only / lock-only safe state",
     async () => {

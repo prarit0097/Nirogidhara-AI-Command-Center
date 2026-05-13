@@ -1227,3 +1227,49 @@ mutates real `Order.payment_status` / `Order.state` /
 `Payment.status` / `Customer` / `Lead` / `Shipment` /
 `DiscountOfferLog` / `WhatsAppMessage` rows. 1 new audit kind
 (`phase8e.pilot.pool_inspected`, 28 chars).
+
+### Phase 8F — Controlled Real Customer Payment → Order Mutation (CLI-only one-shot)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/phase8/real-customer-controlled-mutation-readiness/` | admin/staff | Read-only readiness composition (Phase 8F env flag map, eligible Phase 8E gate count, gate status counts, locked-False safety contract). |
+| GET | `/api/v1/saas/phase8/real-customer-controlled-mutation-gates/?limit=N` | admin/staff | Phase 8F gate listing with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/phase8/real-customer-controlled-mutation-gates/<int:pk>/` | admin/staff | Read-only gate detail (whitelist serializer; raw provider payloads / customer names / addresses / Director sign-off text NEVER returned). |
+| GET | `/api/v1/saas/phase8/real-customer-controlled-mutation-preview/?phase8e_gate_id=N` | admin/staff | Read-only preview from an approved Phase 8E pilot gate. Never creates rows. |
+| GET | `/api/v1/saas/phase8/real-customer-controlled-mutation-attempts/<int:gate_id>/` | admin/staff | Read-only list of attempt rows for one Phase 8F gate. |
+| GET | `/api/v1/saas/phase8/real-customer-controlled-mutation-rollbacks/<int:attempt_id>/` | admin/staff | Read-only list of rollback rows for one Phase 8F attempt. |
+
+POST/PATCH/DELETE on every Phase 8F endpoint return 405. **No POST
+endpoint dispatches state changes or executes the mutation** —
+every transition is CLI-only via the 8 management commands
+(`inspect_phase8f_real_customer_controlled_mutation`,
+`preview_phase8f_real_customer_controlled_mutation --phase8e-gate-id`,
+`prepare_phase8f_real_customer_controlled_mutation --phase8e-gate-id`,
+`approve_phase8f_real_customer_controlled_mutation --gate-id --reason`,
+`execute_phase8f_real_customer_controlled_mutation --attempt-id --director-signoff --operator-name --confirm-one-shot-real-mutation`,
+`rollback_phase8f_real_customer_controlled_mutation --attempt-id --reason`,
+`reject_phase8f_real_customer_controlled_mutation --gate-id --reason`,
+`archive_phase8f_real_customer_controlled_mutation --gate-id --reason`).
+Phase 8F approval flips status to
+`approved_for_one_shot_real_customer_mutation` only — it does NOT
+execute the mutation. Phase 8F execute is exclusively CLI-driven
+and requires three Phase 8F env flags ALL true, a structured 15-min
+Director sign-off UTC window (via
+`apps.saas.utc_window.validate_within_director_window`), the kill
+switch enabled, `--confirm-one-shot-real-mutation`, non-empty
+`--operator-name`, and a Director sign-off body that literally
+references `phase8f_attempt_id_<ID>`, `phase8f_gate_id_<ID>`,
+`phase8e_gate_id_<ID>`, `target_order_<ORDER_ID>`,
+`target_payment_<PAYMENT_ID>`. Execute mutates ONLY
+`Order.payment_status` and `Payment.status` to `"Paid"` on the
+named target rows. `Order.state` is NEVER mutated. Phase 8F never
+calls Razorpay / Meta Cloud / Delhivery / Vapi, never sends or
+queues WhatsApp, never creates a `Shipment` / AWB / payment link,
+never captures / refunds, never sends a customer notification,
+never mutates real `Customer` / `Lead` / `Shipment` /
+`DiscountOfferLog` / `WhatsAppMessage` rows. 10 new audit kinds
+(`phase8f.real_mutation.{readiness_inspected,previewed,prepared,
+approved,executed,rollback_recorded,rejected,archived,blocked,
+failed}`, each ≤ 64 chars). **Phase 7E-Live-B (real customer
+WhatsApp send) and Phase 7G-Live (real customer courier execution)
+remain NOT approved.**

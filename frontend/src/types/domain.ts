@@ -6130,3 +6130,189 @@ export interface SaasPhase8ERealCustomerCandidatePoolResponse {
   nextAction: string;
   forbiddenActions: string[];
 }
+
+// ---------- Phase 8F - Controlled Real Customer Payment -> Order Mutation ----------
+
+export type SaasPhase8FRealCustomerControlledMutationGateStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "approved_for_one_shot_real_customer_mutation"
+  | "executed"
+  | "rolled_back"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasPhase8FRealCustomerControlledMutationGateDto {
+  id: number;
+  phase: "8F";
+  status: SaasPhase8FRealCustomerControlledMutationGateStatus;
+  sourcePhase8EGateId: number | null;
+  sourcePhase8DLockId: number | null;
+  sourcePhase8CGateId: number | null;
+  realCustomerControlledMutationOnly: true;
+  realCustomerMutationAllowed: false;
+  customerNotificationAllowed: false;
+  whatsappAllowed: false;
+  courierAllowed: false;
+  providerCallAllowed: false;
+  shipmentCreationAllowed: false;
+  paymentCaptureAllowed: false;
+  refundAllowed: false;
+  rollbackRequired: true;
+  directorSignoffRequired: true;
+  structuredUtcWindowRequired: true;
+  selectedOrderIdSnapshot: string;
+  selectedPaymentIdSnapshot: string;
+  selectedOrderPaymentStatusSnapshot: string;
+  selectedPaymentStatusSnapshot: string;
+  proposedOrderPaymentStatusSnapshot: string;
+  proposedPaymentStatusSnapshot: string;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReason: string;
+  rejectReason: string;
+  archiveReason: string;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  evidenceJson: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasPhase8FRealCustomerControlledMutationAttemptDto {
+  id: number;
+  phase: "8F";
+  gateId: number;
+  status:
+    | "draft"
+    | "pending_director_signoff"
+    | "approved_for_one_shot_real_mutation"
+    | "executed"
+    | "rolled_back"
+    | "failed"
+    | "blocked"
+    | "rejected";
+  targetOrderId: string;
+  targetPaymentId: string;
+  oldOrderPaymentStatus: string;
+  newOrderPaymentStatus: string;
+  oldPaymentStatus: string;
+  newPaymentStatus: string;
+  orderMutationWasMade: boolean;
+  paymentMutationWasMade: boolean;
+  businessMutationWasMade: boolean;
+  customerNotificationSent: false;
+  whatsappSent: false;
+  courierCalled: false;
+  providerCallAttempted: false;
+  shipmentCreated: false;
+  directorSignoffTextHashPresent: boolean;
+  recordedSignoffWindowStartUtc: string | null;
+  recordedSignoffWindowEndUtc: string | null;
+  recordedSignoffWindowValid: boolean;
+  operatorNamePresent: boolean;
+  executedAt: string | null;
+  failedAt: string | null;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  blockers: string[];
+  warnings: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasPhase8FRealCustomerControlledMutationRollbackDto {
+  id: number;
+  phase: "8F";
+  attemptId: number;
+  status: "draft" | "rollback_recorded" | "rollback_failed" | "blocked";
+  restoredOrderPaymentStatus: string;
+  restoredPaymentStatus: string;
+  rollbackWasMade: boolean;
+  customerNotificationSent: false;
+  whatsappSent: false;
+  courierCalled: false;
+  providerCallAttempted: false;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  reason: string;
+  rolledBackAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaasPhase8FRealCustomerControlledMutationReadiness {
+  phase: "8F";
+  status: "ready" | "blocked";
+  killSwitch: Record<string, unknown>;
+  phase8FFlags: {
+    PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED: boolean;
+    PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION: boolean;
+    PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION: boolean;
+  };
+  eligiblePhase8EGateCount: number;
+  phase8FGateCounts: Record<string, number>;
+  phase8FMutatesOrderState: false;
+  phase8FMutatesCustomer: false;
+  phase8FMutatesLead: false;
+  phase8FMutatesShipment: false;
+  phase8FMutatesDiscountOfferLog: false;
+  phase8FMutatesWhatsAppMessage: false;
+  phase8FCallsRazorpay: false;
+  phase8FCallsMetaCloud: false;
+  phase8FCallsDelhivery: false;
+  phase8FCallsVapi: false;
+  phase8FSendsWhatsApp: false;
+  phase8FSendsCustomerNotification: false;
+  phase8FCreatesShipment: false;
+  phase8FCreatesAwb: false;
+  phase8FCreatesPaymentLink: false;
+  phase8FCapturesPayment: false;
+  phase8FRefundsPayment: false;
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  executionPath: "cli_only_one_shot_controlled_mutation_no_provider_no_send_no_notify";
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasPhase8FRealCustomerControlledMutationGatesResponse {
+  phase: "8F";
+  limit: number;
+  counts: Record<string, number>;
+  items: SaasPhase8FRealCustomerControlledMutationGateDto[];
+  executionPath: "cli_only_one_shot_controlled_mutation_no_provider_no_send_no_notify";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase8FCallsRazorpay: false;
+  phase8FCallsMetaCloud: false;
+  phase8FCallsDelhivery: false;
+  phase8FCallsVapi: false;
+  phase8FSendsWhatsApp: false;
+  phase8FSendsCustomerNotification: false;
+  phase8FCreatesShipment: false;
+  phase8FCreatesAwb: false;
+  phase8FCreatesPaymentLink: false;
+  phase8FCapturesPayment: false;
+  phase8FRefundsPayment: false;
+  phase8FMutatesOrderState: false;
+  phase8FMutatesCustomer: false;
+  phase8FMutatesLead: false;
+  phase8FMutatesShipment: false;
+  phase8FMutatesDiscountOfferLog: false;
+  phase8FMutatesWhatsAppMessage: false;
+}

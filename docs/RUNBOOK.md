@@ -3821,3 +3821,110 @@ creates** a `Shipment` / AWB / payment link, **NEVER captures**,
 **NEVER refunds**, **NEVER sends a customer notification**.
 Approval still only flips status to
 `approved_for_future_phase8f_real_customer_controlled_mutation`.
+
+### Phase 8F — Controlled Real Customer Payment → Order Mutation
+
+Phase 8F is the **CLI-only one-shot controlled mutation** path for
+the ONE Phase 8E-approved real customer `Order` + `Payment`
+candidate. Execute mutates ONLY `Order.payment_status` AND
+`Payment.status` to `"Paid"` on the named target rows.
+`Order.state` is **NEVER** mutated. Phase 8F NEVER calls Razorpay
+/ Meta Cloud / Delhivery / Vapi, NEVER sends or queues WhatsApp,
+NEVER creates a `Shipment` / AWB / payment link, NEVER captures /
+refunds, NEVER sends a customer notification, NEVER mutates
+`Customer` / `Lead` / `Shipment` / `DiscountOfferLog` /
+`WhatsAppMessage` rows. Approval ALONE does NOT execute — the
+execute CLI command is the ONLY path that may write the model
+fields.
+
+```bash
+# 1. Read-only readiness.
+python manage.py inspect_phase8f_real_customer_controlled_mutation \
+    --json --no-audit
+
+# 2. Read-only preview from an approved Phase 8E pilot gate.
+python manage.py preview_phase8f_real_customer_controlled_mutation \
+    --phase8e-gate-id <PHASE8E_GATE_ID> --json
+
+# 3. Prepare a Phase 8F gate row (one per Phase 8E gate; idempotent).
+#    Refuses unless PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED=true.
+python manage.py prepare_phase8f_real_customer_controlled_mutation \
+    --phase8e-gate-id <PHASE8E_GATE_ID> --json
+
+# 4. Approve the gate (mints a matching attempt). require_reason=True.
+python manage.py approve_phase8f_real_customer_controlled_mutation \
+    --gate-id <PHASE8F_GATE_ID> \
+    --reason "Director Phase 8F approve" --json
+
+# 5. CLI-only one-shot execute. Refuses unless:
+#      - PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED=true
+#      - PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION=true
+#      - PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION=true
+#      - --confirm-one-shot-real-mutation
+#      - non-empty --operator-name
+#      - structured 15-min Director sign-off UTC window that names
+#        phase8f_attempt_id_<ID> AND phase8f_gate_id_<ID> AND
+#        phase8e_gate_id_<ID> AND target_order_<ORDER_ID> AND
+#        target_payment_<PAYMENT_ID>
+#      - kill switch enabled, no prior executed attempt on this gate,
+#        current Order.payment_status ∈ {Pending, Partial} AND
+#        Payment.status=Pending AND Payment.order_id==Order.id.
+#
+# DO NOT run this on the VPS until Director approves it separately.
+python manage.py execute_phase8f_real_customer_controlled_mutation \
+    --attempt-id <ATTEMPT_ID> \
+    --operator-name "Operator Prarit" \
+    --confirm-one-shot-real-mutation \
+    --director-signoff "Director sign-off Phase 8F controlled real customer mutation. phase8f_attempt_id_<A> phase8f_gate_id_<G> phase8e_gate_id_<E> target_order_<NRG-20435> target_payment_<PAY-30125> BEGIN_UTC=<ISO-Z> END_UTC=<ISO-Z>" \
+    --json
+
+# 6. Rollback (record-only restore of old_* snapshots). require_reason=True.
+python manage.py rollback_phase8f_real_customer_controlled_mutation \
+    --attempt-id <ATTEMPT_ID> --reason "Director rollback" --json
+
+# 7. Reject (only from draft / pending_manual_review / blocked).
+python manage.py reject_phase8f_real_customer_controlled_mutation \
+    --gate-id <PHASE8F_GATE_ID> --reason "Director paused" --json
+
+# 8. Archive (after executed / rolled_back / rejected).
+python manage.py archive_phase8f_real_customer_controlled_mutation \
+    --gate-id <PHASE8F_GATE_ID> --reason "Director archive" --json
+```
+
+**Phase 8F refuses to execute unless:**
+
+- All three Phase 8F env flags are `true` at runtime.
+- The runtime kill switch is enabled.
+- The Phase 8F gate is in `approved_for_one_shot_real_customer_mutation`
+  status AND the Phase 8F attempt is in
+  `approved_for_one_shot_real_mutation` status.
+- No prior `executed` attempt exists on the same gate.
+- The Director sign-off body literally contains `phase8f_attempt_id_<ID>`
+  AND `phase8f_gate_id_<ID>` AND `phase8e_gate_id_<ID>` AND
+  `target_order_<ORDER_ID>` AND `target_payment_<PAYMENT_ID>` AND
+  `BEGIN_UTC=<ISO-Z>` AND `END_UTC=<ISO-Z>` markers, the window is
+  ≤ 15 min, fresh, and `now ∈ [BEGIN_UTC, END_UTC]`.
+- `--confirm-one-shot-real-mutation` is set AND `--operator-name`
+  is non-empty.
+- The current `Order.payment_status` is still `"Pending"` or
+  `"Partial"` AND the current `Payment.status` is still `"Pending"`
+  AND `Payment.order_id == Order.id`.
+- Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
+  (real customer courier execution), and broad customer automation
+  all remain NOT approved.
+
+**Phase 8F execute mutates ONLY** `Order.payment_status` and
+`Payment.status` on the named target rows. `Order.state` is NEVER
+written. No row is created or deleted in any business table
+(`Customer` / `Lead` / `Shipment` / `DiscountOfferLog` /
+`WhatsAppMessage` / `WhatsAppLifecycleEvent` /
+`WhatsAppHandoffToCall` all stay at 0-delta).
+
+**Phase 8F rollback** restores the original
+`Order.payment_status` + `Payment.status` from the attempt's
+`old_*` snapshots. No provider call, no notification, no WhatsApp,
+no business-row count drift.
+
+**Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
+(real customer courier execution), and broad customer automation
+all remain NOT approved.**

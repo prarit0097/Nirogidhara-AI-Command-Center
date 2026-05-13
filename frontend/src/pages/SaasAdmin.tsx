@@ -52,6 +52,8 @@ import type {
   SaasPhase8ERealCustomerPaymentOrderPilotGatesResponse,
   SaasPhase8ERealCustomerCandidatePoolResponse,
   SaasPhase8ERealCustomerCandidatePoolRow,
+  SaasPhase8FRealCustomerControlledMutationReadiness,
+  SaasPhase8FRealCustomerControlledMutationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -329,6 +331,18 @@ export default function SaasAdminPage() {
     phase8eRealCustomerCandidatePool,
     setPhase8eRealCustomerCandidatePool,
   ] = useState<SaasPhase8ERealCustomerCandidatePoolResponse | null>(null);
+  const [
+    phase8fRealCustomerControlledMutationReadiness,
+    setPhase8fRealCustomerControlledMutationReadiness,
+  ] = useState<SaasPhase8FRealCustomerControlledMutationReadiness | null>(
+    null,
+  );
+  const [
+    phase8fRealCustomerControlledMutationGates,
+    setPhase8fRealCustomerControlledMutationGates,
+  ] = useState<SaasPhase8FRealCustomerControlledMutationGatesResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -391,6 +405,8 @@ export default function SaasAdminPage() {
       api.getSaasPhase8ERealCustomerPaymentOrderPilotReadiness(),
       api.getSaasPhase8ERealCustomerPaymentOrderPilotGates(25),
       api.getSaasPhase8ERealCustomerCandidatePool(50, false),
+      api.getSaasPhase8FRealCustomerControlledMutationReadiness(),
+      api.getSaasPhase8FRealCustomerControlledMutationGates(25),
     ])
       .then(
         ([
@@ -451,6 +467,8 @@ export default function SaasAdminPage() {
           p8eRead,
           p8eGates,
           p8ePool,
+          p8fRead,
+          p8fGates,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -509,6 +527,8 @@ export default function SaasAdminPage() {
           setPhase8eRealCustomerPaymentOrderPilotReadiness(p8eRead);
           setPhase8eRealCustomerPaymentOrderPilotGates(p8eGates);
           setPhase8eRealCustomerCandidatePool(p8ePool);
+          setPhase8fRealCustomerControlledMutationReadiness(p8fRead);
+          setPhase8fRealCustomerControlledMutationGates(p8fGates);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -6372,6 +6392,214 @@ export default function SaasAdminPage() {
             page. Phase 8E approval is a status transition only —
             it does NOT execute any mutation and does NOT
             authorise any provider call.
+          </div>
+        </section>
+      )}
+
+      {(phase8fRealCustomerControlledMutationReadiness ||
+        phase8fRealCustomerControlledMutationGates) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase8f-real-customer-controlled-mutation-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 8F Controlled Real Customer Payment → Order
+                Mutation
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Phase 8F is the{" "}
+                <strong>CLI-only one-shot controlled mutation</strong>{" "}
+                path for the ONE Phase 8E-approved real customer{" "}
+                <code>Order</code> + <code>Payment</code> candidate.
+                Execute requires three Phase 8F env flags ALL true, a
+                structured 15-min Director sign-off UTC window, the
+                kill switch enabled,{" "}
+                <code>--confirm-one-shot-real-mutation</code>, non-empty{" "}
+                <code>--operator-name</code>. Approval alone does{" "}
+                <strong>NOT</strong> execute. Phase 8F NEVER calls
+                Razorpay / Meta Cloud / Delhivery / Vapi, NEVER sends
+                or queues WhatsApp, NEVER creates a{" "}
+                <code>Shipment</code> / AWB / payment link, NEVER
+                captures / refunds, NEVER sends a customer
+                notification, NEVER mutates <code>Customer</code> /{" "}
+                <code>Lead</code> / <code>Shipment</code> /{" "}
+                <code>DiscountOfferLog</code> /{" "}
+                <code>WhatsAppMessage</code> rows, NEVER mutates{" "}
+                <code>Order.state</code>, NEVER edits any{" "}
+                <code>.env*</code> file. The only mutation is writing{" "}
+                <code>Order.payment_status</code> +{" "}
+                <code>Payment.status</code> to <code>Paid</code> on
+                the named target rows.
+              </p>
+            </div>
+            {phase8fRealCustomerControlledMutationReadiness && (
+              <div data-testid="phase8f-status-badge">
+                <StatusPill
+                  tone={
+                    phase8fRealCustomerControlledMutationReadiness
+                      .killSwitch.enabled
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {phase8fRealCustomerControlledMutationReadiness
+                    .killSwitch.enabled
+                    ? "Kill switch active"
+                    : "Kill switch DISABLED"}
+                </StatusPill>
+              </div>
+            )}
+          </div>
+          {phase8fRealCustomerControlledMutationReadiness && (
+            <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KeyValue
+                label="Phase"
+                value={
+                  phase8fRealCustomerControlledMutationReadiness.phase
+                }
+              />
+              <KeyValue
+                label="Status"
+                value={
+                  phase8fRealCustomerControlledMutationReadiness.status
+                }
+              />
+              <KeyValue
+                label="Phase 8F gate flag"
+                value={
+                  phase8fRealCustomerControlledMutationReadiness
+                    .phase8FFlags
+                    .PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED
+                    ? "Enabled"
+                    : "Disabled (safe)"
+                }
+              />
+              <KeyValue
+                label="Director approved flag"
+                value={
+                  phase8fRealCustomerControlledMutationReadiness
+                    .phase8FFlags
+                    .PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION
+                    ? "True"
+                    : "False (safe)"
+                }
+              />
+              <KeyValue
+                label="Allow real mutation flag"
+                value={
+                  phase8fRealCustomerControlledMutationReadiness
+                    .phase8FFlags
+                    .PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION
+                    ? "True"
+                    : "False (safe)"
+                }
+              />
+              <KeyValue
+                label="Eligible 8E gates"
+                value={String(
+                  phase8fRealCustomerControlledMutationReadiness
+                    .eligiblePhase8EGateCount,
+                )}
+              />
+              <KeyValue
+                label="Real customer mutation"
+                value="Allowed only via CLI execute"
+              />
+              <KeyValue label="Mutates Order.state" value="No" />
+              <KeyValue label="WhatsApp allowed" value="No" />
+              <KeyValue label="Courier allowed" value="No" />
+              <KeyValue
+                label="Customer notification"
+                value="No"
+              />
+              <KeyValue label="Calls Razorpay" value="No" />
+              <KeyValue label="Calls Meta Cloud" value="No" />
+              <KeyValue label="Calls Delhivery" value="No" />
+              <KeyValue label="Creates Shipment" value="No" />
+              <KeyValue label="Creates AWB" value="No" />
+              <KeyValue
+                label="Frontend can execute"
+                value="No"
+              />
+              <KeyValue
+                label="API can execute"
+                value="No"
+              />
+            </div>
+          )}
+          {phase8fRealCustomerControlledMutationGates &&
+            phase8fRealCustomerControlledMutationGates.items.length >
+              0 && (
+              <div className="border-t border-border px-6 py-4 text-xs">
+                {phase8fRealCustomerControlledMutationGates.items.map(
+                  (gate) => (
+                    <div
+                      key={gate.id}
+                      className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6 py-1 border-b border-border last:border-0"
+                    >
+                      <span>
+                        id=<strong>{gate.id}</strong>
+                      </span>
+                      <span>status={gate.status}</span>
+                      <span>
+                        8E={gate.sourcePhase8EGateId}
+                      </span>
+                      <span>
+                        order=
+                        {gate.selectedOrderIdSnapshot || "—"}
+                      </span>
+                      <span>
+                        payment=
+                        {gate.selectedPaymentIdSnapshot || "—"}
+                      </span>
+                      <span>
+                        {gate.selectedOrderPaymentStatusSnapshot ||
+                          "—"}{" "}
+                        →{" "}
+                        {gate.proposedOrderPaymentStatusSnapshot ||
+                          "—"}
+                      </span>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+          {phase8fRealCustomerControlledMutationReadiness
+            ?.nextAction && (
+            <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <strong>nextAction:</strong>{" "}
+              <code>
+                {
+                  phase8fRealCustomerControlledMutationReadiness
+                    .nextAction
+                }
+              </code>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase8f-cli-only-banner"
+          >
+            <strong>
+              CLI-only one-shot controlled mutation.
+            </strong>{" "}
+            No "Approve Gate" / "Reject Gate" / "Archive Gate" /
+            "Execute" / "Apply Mutation" / "Mark Paid" / "Confirm
+            Order" / "Send WhatsApp" / "Queue WhatsApp" / "Call
+            Razorpay" / "Call Meta" / "Call Delhivery" / "Notify
+            Customer" / "Refund" / "Capture" / "Create Shipment" /
+            "Create AWB" / "Go Live" / "Edit .env" buttons exist on
+            this page. Phase 8F execute is exclusively driven via
+            the CLI command{" "}
+            <code>
+              execute_phase8f_real_customer_controlled_mutation
+            </code>
+            , which itself refuses unless three env flags are true,
+            a structured 15-min Director UTC window is provided,
+            and the kill switch is enabled.
           </div>
         </section>
       )}

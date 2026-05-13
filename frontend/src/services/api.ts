@@ -186,6 +186,8 @@ import type {
   SaasPhase8ERealCustomerPaymentOrderPilotReadiness,
   SaasPhase8ERealCustomerPaymentOrderPilotGatesResponse,
   SaasPhase8ERealCustomerCandidatePoolResponse,
+  SaasPhase8FRealCustomerControlledMutationReadiness,
+  SaasPhase8FRealCustomerControlledMutationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -1781,6 +1783,23 @@ export const api = {
       `/v1/saas/phase8/real-customer-payment-order-pilot-candidate-pool/?limit=${limit}&include_blocked=${includeBlocked}`,
       () =>
         M.SAAS_PHASE8E_REAL_CUSTOMER_CANDIDATE_POOL as SaasPhase8ERealCustomerCandidatePoolResponse,
+    ),
+
+  // ---------- Phase 8F - Controlled Real Customer Payment -> Order Mutation ----------
+
+  getSaasPhase8FRealCustomerControlledMutationReadiness: () =>
+    safeFetch<SaasPhase8FRealCustomerControlledMutationReadiness>(
+      "/v1/saas/phase8/real-customer-controlled-mutation-readiness/",
+      () =>
+        M.SAAS_PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_READINESS as SaasPhase8FRealCustomerControlledMutationReadiness,
+    ),
+  getSaasPhase8FRealCustomerControlledMutationGates: (
+    limit: number = 25,
+  ) =>
+    safeFetch<SaasPhase8FRealCustomerControlledMutationGatesResponse>(
+      `/v1/saas/phase8/real-customer-controlled-mutation-gates/?limit=${limit}`,
+      () =>
+        M.SAAS_PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATES as SaasPhase8FRealCustomerControlledMutationGatesResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

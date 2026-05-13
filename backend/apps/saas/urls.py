@@ -82,6 +82,12 @@ from .views import (
     Phase8ERealCustomerPaymentOrderPilotGatesListView,
     Phase8ERealCustomerPaymentOrderPilotPreviewView,
     Phase8ERealCustomerPaymentOrderPilotReadinessView,
+    Phase8FRealCustomerControlledMutationAttemptsView,
+    Phase8FRealCustomerControlledMutationGateDetailView,
+    Phase8FRealCustomerControlledMutationGatesListView,
+    Phase8FRealCustomerControlledMutationPreviewView,
+    Phase8FRealCustomerControlledMutationReadinessView,
+    Phase8FRealCustomerControlledMutationRollbacksView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -944,6 +950,52 @@ urlpatterns = [
         Phase8ERealCustomerPaymentOrderPilotCandidatePoolView.as_view(),
         name=(
             "saas-phase8e-real-customer-payment-order-pilot-candidate-pool"
+        ),
+    ),
+    # Phase 8F - Controlled Real Customer Payment -> Order Mutation
+    # gate (CLI-only one-shot mutation against the ONE Phase 8E-approved
+    # real customer Order + Payment candidate; read-only API; NEVER
+    # exposes a POST execute / approve / reject / archive endpoint;
+    # NEVER calls a provider; NEVER sends WhatsApp; NEVER sends a
+    # customer notification; NEVER mutates Customer / Lead / Shipment
+    # / DiscountOfferLog / WhatsAppMessage / Order.state rows;
+    # NEVER edits any .env file).
+    path(
+        "phase8/real-customer-controlled-mutation-readiness/",
+        Phase8FRealCustomerControlledMutationReadinessView.as_view(),
+        name="saas-phase8f-real-customer-controlled-mutation-readiness",
+    ),
+    path(
+        "phase8/real-customer-controlled-mutation-gates/",
+        Phase8FRealCustomerControlledMutationGatesListView.as_view(),
+        name="saas-phase8f-real-customer-controlled-mutation-gates",
+    ),
+    path(
+        "phase8/real-customer-controlled-mutation-gates/<int:pk>/",
+        Phase8FRealCustomerControlledMutationGateDetailView.as_view(),
+        name=(
+            "saas-phase8f-real-customer-controlled-mutation-gate-detail"
+        ),
+    ),
+    path(
+        "phase8/real-customer-controlled-mutation-preview/",
+        Phase8FRealCustomerControlledMutationPreviewView.as_view(),
+        name=(
+            "saas-phase8f-real-customer-controlled-mutation-preview"
+        ),
+    ),
+    path(
+        "phase8/real-customer-controlled-mutation-attempts/<int:gate_id>/",
+        Phase8FRealCustomerControlledMutationAttemptsView.as_view(),
+        name=(
+            "saas-phase8f-real-customer-controlled-mutation-attempts"
+        ),
+    ),
+    path(
+        "phase8/real-customer-controlled-mutation-rollbacks/<int:attempt_id>/",
+        Phase8FRealCustomerControlledMutationRollbacksView.as_view(),
+        name=(
+            "saas-phase8f-real-customer-controlled-mutation-rollbacks"
         ),
     ),
 ]

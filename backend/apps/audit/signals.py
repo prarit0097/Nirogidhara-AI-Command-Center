@@ -513,6 +513,21 @@ ICON_BY_KIND: dict[str, str] = {
     "phase8e.pilot.archived": "archive",
     "phase8e.pilot.blocked": "ban",
     "phase8e.pilot.pool_inspected": "eye",
+    # Phase 8F - Controlled Real Customer Payment -> Order Mutation
+    # Gate (CLI-only one-shot mutation against the ONE Phase 8E-approved
+    # real customer Order + Payment candidate; never calls a provider;
+    # never sends WhatsApp; never mutates business rows beyond Order.payment_status
+    # + Payment.status on the explicit target pair; never edits .env files).
+    "phase8f.real_mutation.readiness_inspected": "eye",
+    "phase8f.real_mutation.previewed": "eye",
+    "phase8f.real_mutation.prepared": "file-plus",
+    "phase8f.real_mutation.approved": "check-circle",
+    "phase8f.real_mutation.executed": "alert-triangle",
+    "phase8f.real_mutation.rollback_recorded": "rotate-ccw",
+    "phase8f.real_mutation.rejected": "x-circle",
+    "phase8f.real_mutation.archived": "archive",
+    "phase8f.real_mutation.blocked": "ban",
+    "phase8f.real_mutation.failed": "alert-triangle",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

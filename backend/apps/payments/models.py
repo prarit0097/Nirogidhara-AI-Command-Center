@@ -4867,3 +4867,359 @@ class RazorpayRealCustomerPaymentOrderMutationPilotDryRun(models.Model):
             f"Phase8E-RealCustomerPilotDryRun[id={self.pk} "
             f"gate={self.gate_id} passed={self.passed}]"
         )
+
+
+class RazorpayRealCustomerPaymentOrderControlledMutationGate(models.Model):
+    """Phase 8F - Controlled Real Customer Payment -> Order Mutation Gate.
+
+    Phase 8F is the **CLI-only one-shot controlled mutation** path
+    for the ONE real-customer ``Order`` + ``Payment`` candidate that
+    Phase 8E approved for future-Phase-8F review. Execute requires
+    three Phase 8F env flags ALL true, a structured Director
+    sign-off UTC window (<= 15 min) that names the Phase 8F gate
+    id + attempt id + source Phase 8E gate id + the explicit
+    target Order id + target Payment id, the kill switch enabled,
+    and the candidate must still satisfy its Partial+Pending /
+    Pending+Pending contract at execute time.
+
+    Phase 8F NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi,
+    NEVER sends or queues WhatsApp, NEVER creates a ``Shipment`` /
+    AWB / payment link, NEVER captures / refunds, NEVER sends a
+    customer notification, NEVER mutates ``Customer`` / ``Lead`` /
+    ``Shipment`` / ``DiscountOfferLog`` / ``WhatsAppMessage`` rows,
+    NEVER mutates ``Order.state``, NEVER edits any ``.env*`` file.
+    Approval alone does NOT execute.
+
+    Status flow:
+        draft -> pending_manual_review ->
+        approved_for_one_shot_real_customer_mutation -> executed /
+        rolled_back / rejected / archived
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        APPROVED_FOR_ONE_SHOT_REAL_CUSTOMER_MUTATION = (
+            "approved_for_one_shot_real_customer_mutation",
+            "Approved for one-shot real customer mutation",
+        )
+        EXECUTED = "executed", "Executed"
+        ROLLED_BACK = "rolled_back", "Rolled back"
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    source_phase8e_gate = models.ForeignKey(
+        RazorpayRealCustomerPaymentOrderMutationPilotGate,
+        on_delete=models.PROTECT,
+        related_name="phase8f_controlled_mutation_gates",
+    )
+    source_phase8d_lock = models.ForeignKey(
+        RazorpayPaymentOrderControlledMutationEvidenceLock,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8f_controlled_mutation_gates",
+    )
+    source_phase8c_gate = models.ForeignKey(
+        RazorpayPaymentOrderControlledMutationGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8f_controlled_mutation_gates",
+    )
+
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Locked-contract booleans. `real_customer_controlled_mutation_only`
+    # is a permanent True flag declaring this gate exists ONLY for the
+    # controlled real-customer mutation path. Every other flag below
+    # stays False unless documented otherwise.
+    real_customer_controlled_mutation_only = models.BooleanField(default=True)
+    real_customer_mutation_allowed = models.BooleanField(default=False)
+    customer_notification_allowed = models.BooleanField(default=False)
+    whatsapp_allowed = models.BooleanField(default=False)
+    courier_allowed = models.BooleanField(default=False)
+    provider_call_allowed = models.BooleanField(default=False)
+    shipment_creation_allowed = models.BooleanField(default=False)
+    payment_capture_allowed = models.BooleanField(default=False)
+    refund_allowed = models.BooleanField(default=False)
+    rollback_required = models.BooleanField(default=True)
+    director_signoff_required = models.BooleanField(default=True)
+    structured_utc_window_required = models.BooleanField(default=True)
+
+    # Candidate snapshot (frozen at prepare time).
+    selected_order_id_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    selected_payment_id_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    selected_order_payment_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    selected_payment_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    proposed_order_payment_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    proposed_payment_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    count_deltas = models.JSONField(default=dict, blank=True)
+
+    reviewed_by_username = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8f_controlled_mutation_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.TextField(blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+    evidence_json = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8f_controlled_mutation_gates",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8f_controlled_mutation_gates",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(
+                fields=("source_phase8e_gate", "-created_at")
+            ),
+            models.Index(
+                fields=(
+                    "selected_order_id_snapshot",
+                    "selected_payment_id_snapshot",
+                )
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8F-RealCustomerControlledMutationGate[id={self.pk} "
+            f"phase8e_gate={self.source_phase8e_gate_id} "
+            f"status={self.status}]"
+        )
+
+
+class RazorpayRealCustomerPaymentOrderControlledMutationAttempt(models.Model):
+    """Phase 8F attempt row.
+
+    Records the approved / executed / rolled-back / failed state of
+    a single Phase 8F one-shot controlled real-customer mutation
+    against the chosen target Order + Payment pair. Every
+    locked-False boolean must stay False across the full lifecycle
+    except for the explicit ``order_mutation_was_made`` /
+    ``payment_mutation_was_made`` / ``business_mutation_was_made``
+    trio which may flip True only inside the execute path (after
+    the model status fields are actually written).
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_DIRECTOR_SIGNOFF = (
+            "pending_director_signoff",
+            "Pending Director sign-off",
+        )
+        APPROVED_FOR_ONE_SHOT_REAL_MUTATION = (
+            "approved_for_one_shot_real_mutation",
+            "Approved for one-shot real mutation",
+        )
+        EXECUTED = "executed", "Executed"
+        ROLLED_BACK = "rolled_back", "Rolled back"
+        FAILED = "failed", "Failed"
+        BLOCKED = "blocked", "Blocked"
+        REJECTED = "rejected", "Rejected"
+
+    gate = models.ForeignKey(
+        RazorpayRealCustomerPaymentOrderControlledMutationGate,
+        on_delete=models.CASCADE,
+        related_name="attempts",
+    )
+
+    target_order_id = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    target_payment_id = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+
+    status = models.CharField(
+        max_length=40,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    old_order_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    new_order_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    old_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    new_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+
+    order_mutation_was_made = models.BooleanField(default=False)
+    payment_mutation_was_made = models.BooleanField(default=False)
+    business_mutation_was_made = models.BooleanField(default=False)
+    customer_notification_sent = models.BooleanField(default=False)
+    whatsapp_sent = models.BooleanField(default=False)
+    courier_called = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+    shipment_created = models.BooleanField(default=False)
+
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    count_deltas = models.JSONField(default=dict, blank=True)
+
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+
+    director_signoff_text_hash = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    recorded_signoff_window_start_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_end_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_valid = models.BooleanField(default=False)
+    operator_name = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+
+    executed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "-created_at")),
+            models.Index(fields=("status", "-created_at")),
+            models.Index(
+                fields=("target_order_id", "target_payment_id")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8F-RealCustomerControlledMutationAttempt[id={self.pk} "
+            f"gate={self.gate_id} status={self.status}]"
+        )
+
+
+class RazorpayRealCustomerPaymentOrderControlledMutationRollback(models.Model):
+    """Phase 8F rollback row.
+
+    Records the rollback state for an executed Phase 8F attempt.
+    The rollback restores the original
+    ``Order.payment_status`` and ``Payment.status`` values on the
+    originally mutated rows. Every locked-False boolean must stay
+    False.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ROLLBACK_RECORDED = (
+            "rollback_recorded",
+            "Rollback recorded",
+        )
+        ROLLBACK_FAILED = "rollback_failed", "Rollback failed"
+        BLOCKED = "blocked", "Blocked"
+
+    attempt = models.ForeignKey(
+        RazorpayRealCustomerPaymentOrderControlledMutationAttempt,
+        on_delete=models.CASCADE,
+        related_name="rollbacks",
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    restored_order_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    restored_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+
+    rollback_was_made = models.BooleanField(default=False)
+    customer_notification_sent = models.BooleanField(default=False)
+    whatsapp_sent = models.BooleanField(default=False)
+    courier_called = models.BooleanField(default=False)
+    provider_call_attempted = models.BooleanField(default=False)
+
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    count_deltas = models.JSONField(default=dict, blank=True)
+
+    reason = models.TextField(blank=True, default="")
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("attempt", "-created_at")),
+            models.Index(fields=("status", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8F-RealCustomerControlledMutationRollback[id={self.pk} "
+            f"attempt={self.attempt_id} status={self.status}]"
+        )

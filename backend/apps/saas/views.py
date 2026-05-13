@@ -4096,6 +4096,204 @@ class Phase8ERealCustomerPaymentOrderPilotCandidatePoolView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 8F - Controlled Real Customer Payment -> Order Mutation
+# ---------------------------------------------------------------------------
+
+
+from apps.payments.phase8f_real_customer_controlled_mutation import (  # noqa: E402
+    inspect_phase8f_real_customer_controlled_mutation_readiness as _inspect_phase8f_readiness,
+    preview_phase8f_real_customer_controlled_mutation as _preview_phase8f,
+    serialize_phase8f_attempt as _serialize_phase8f_attempt,
+    serialize_phase8f_gate as _serialize_phase8f_gate,
+    serialize_phase8f_rollback as _serialize_phase8f_rollback,
+    summarize_phase8f_gates as _summarize_phase8f_gates,
+)
+from apps.payments.models import (  # noqa: E402
+    RazorpayRealCustomerPaymentOrderControlledMutationAttempt,
+    RazorpayRealCustomerPaymentOrderControlledMutationGate,
+    RazorpayRealCustomerPaymentOrderControlledMutationRollback,
+)
+
+
+class Phase8FRealCustomerControlledMutationReadinessView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-controlled-mutation-readiness/``.
+
+    Phase 8F read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER mutates business rows;
+    NEVER calls a provider; NEVER sends WhatsApp; NEVER sends a
+    customer notification.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(_inspect_phase8f_readiness())
+
+
+class Phase8FRealCustomerControlledMutationGatesListView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-controlled-mutation-gates/?limit=N``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        return Response(_summarize_phase8f_gates(limit=limit))
+
+
+class Phase8FRealCustomerControlledMutationGateDetailView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-controlled-mutation-gates/<int:pk>/``."""
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.filter(
+                pk=pk
+            ).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8F controlled real customer payment-"
+                        "order mutation gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase8f_gate(row))
+
+
+class Phase8FRealCustomerControlledMutationPreviewView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-controlled-mutation-preview/?phase8e_gate_id=<ID>``.
+
+    Read-only preview from an approved Phase 8E pilot gate. NEVER
+    creates rows.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            phase8e_gate_id = int(
+                request.query_params.get("phase8e_gate_id") or 0
+            )
+        except (TypeError, ValueError):
+            phase8e_gate_id = 0
+        if phase8e_gate_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "phase8e_gate_id query parameter required."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            _preview_phase8f(phase8e_gate_id=phase8e_gate_id)
+        )
+
+
+class Phase8FRealCustomerControlledMutationAttemptsView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-controlled-mutation-attempts/<gate_id>/``.
+
+    Phase 8F read-only list of attempts for one gate.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.filter(
+                pk=gate_id
+            ).exists()
+        )
+        if not gate_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8F controlled real customer payment-"
+                        "order mutation gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayRealCustomerPaymentOrderControlledMutationAttempt.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "8F",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase8f_attempt(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "phase8FCallsRazorpay": False,
+                "phase8FCallsMetaCloud": False,
+                "phase8FCallsDelhivery": False,
+                "phase8FSendsWhatsApp": False,
+                "phase8FSendsCustomerNotification": False,
+            }
+        )
+
+
+class Phase8FRealCustomerControlledMutationRollbacksView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-controlled-mutation-rollbacks/<attempt_id>/``.
+
+    Phase 8F read-only list of rollback records for one attempt.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, attempt_id: int):
+        attempt_exists = (
+            RazorpayRealCustomerPaymentOrderControlledMutationAttempt.objects.filter(
+                pk=attempt_id
+            ).exists()
+        )
+        if not attempt_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8F controlled real customer payment-"
+                        "order mutation attempt not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayRealCustomerPaymentOrderControlledMutationRollback.objects.filter(
+                attempt_id=attempt_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "8F",
+                "attemptId": attempt_id,
+                "items": [
+                    _serialize_phase8f_rollback(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "phase8FCallsRazorpay": False,
+                "phase8FCallsMetaCloud": False,
+                "phase8FCallsDelhivery": False,
+                "phase8FSendsWhatsApp": False,
+                "phase8FSendsCustomerNotification": False,
+            }
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -4241,4 +4439,10 @@ __all__ = (
     "Phase8ERealCustomerPaymentOrderPilotCandidatesView",
     "Phase8ERealCustomerPaymentOrderPilotDryRunsView",
     "Phase8ERealCustomerPaymentOrderPilotCandidatePoolView",
+    "Phase8FRealCustomerControlledMutationReadinessView",
+    "Phase8FRealCustomerControlledMutationGatesListView",
+    "Phase8FRealCustomerControlledMutationGateDetailView",
+    "Phase8FRealCustomerControlledMutationPreviewView",
+    "Phase8FRealCustomerControlledMutationAttemptsView",
+    "Phase8FRealCustomerControlledMutationRollbacksView",
 )

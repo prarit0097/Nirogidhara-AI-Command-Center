@@ -468,6 +468,34 @@ PHASE8E_REAL_CUSTOMER_PAYMENT_ORDER_PILOT_ENABLED = (
         "PHASE8E_REAL_CUSTOMER_PAYMENT_ORDER_PILOT_ENABLED"
     )
 )
+# `PHASE8F_*` flags gate the Phase 8F Controlled Real Customer
+# Payment -> Order Mutation execute path. All three must be true
+# at runtime AND the Director sign-off must include a structured
+# UTC window (<= 15 min) AND the kill switch must be enabled
+# before any execute call is allowed to mutate the chosen
+# real-customer Order.payment_status + Payment.status fields.
+# Approval alone does NOT execute. Defaults LOCKED OFF. Phase 8F
+# never calls Razorpay / Meta Cloud / Delhivery / Vapi, never
+# sends or queues WhatsApp, never creates a Shipment / AWB /
+# payment link, never captures / refunds, never sends a customer
+# notification, never mutates Customer / Lead / Shipment /
+# DiscountOfferLog / WhatsAppMessage rows, never mutates
+# Order.state, never edits any .env file.
+PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED = (
+    _razorpay_webhook_bool(
+        "PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED"
+    )
+)
+PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION = (
+    _razorpay_webhook_bool(
+        "PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION"
+    )
+)
+PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION = (
+    _razorpay_webhook_bool(
+        "PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION"
+    )
+)
 RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY = _razorpay_webhook_bool(
     "RAZORPAY_WEBHOOK_ALLOW_TEST_EVENTS_ONLY", default="true"
 )

@@ -5557,6 +5557,95 @@ export const SAAS_PHASE8E_REAL_CUSTOMER_CANDIDATE_POOL: Record<
   forbiddenActions: [],
 };
 
+// ---------- Phase 8F - Controlled Real Customer Payment -> Order Mutation ----------
+
+const PHASE_8F_GATE_COUNTS = {
+  draft: 0,
+  pending_manual_review: 0,
+  approved_for_one_shot_real_customer_mutation: 0,
+  executed: 0,
+  rolled_back: 0,
+  rejected: 0,
+  archived: 0,
+  blocked: 0,
+};
+
+export const SAAS_PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_READINESS: Record<
+  string,
+  unknown
+> = {
+  phase: "8F",
+  status: "blocked",
+  killSwitch: { enabled: true },
+  phase8FFlags: {
+    PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED: false,
+    PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION: false,
+    PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION: false,
+  },
+  eligiblePhase8EGateCount: 0,
+  phase8FGateCounts: PHASE_8F_GATE_COUNTS,
+  phase8FMutatesOrderState: false,
+  phase8FMutatesCustomer: false,
+  phase8FMutatesLead: false,
+  phase8FMutatesShipment: false,
+  phase8FMutatesDiscountOfferLog: false,
+  phase8FMutatesWhatsAppMessage: false,
+  phase8FCallsRazorpay: false,
+  phase8FCallsMetaCloud: false,
+  phase8FCallsDelhivery: false,
+  phase8FCallsVapi: false,
+  phase8FSendsWhatsApp: false,
+  phase8FSendsCustomerNotification: false,
+  phase8FCreatesShipment: false,
+  phase8FCreatesAwb: false,
+  phase8FCreatesPaymentLink: false,
+  phase8FCapturesPayment: false,
+  phase8FRefundsPayment: false,
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  executionPath:
+    "cli_only_one_shot_controlled_mutation_no_provider_no_send_no_notify",
+  blockers: [
+    "PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true_to_prepare",
+  ],
+  warnings: [],
+  nextAction: "fix_phase8f_readiness_blockers",
+  forbiddenActions: [],
+};
+
+export const SAAS_PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATES: Record<
+  string,
+  unknown
+> = {
+  phase: "8F",
+  limit: 25,
+  counts: PHASE_8F_GATE_COUNTS,
+  items: [],
+  executionPath:
+    "cli_only_one_shot_controlled_mutation_no_provider_no_send_no_notify",
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+  phase8FCallsRazorpay: false,
+  phase8FCallsMetaCloud: false,
+  phase8FCallsDelhivery: false,
+  phase8FCallsVapi: false,
+  phase8FSendsWhatsApp: false,
+  phase8FSendsCustomerNotification: false,
+  phase8FCreatesShipment: false,
+  phase8FCreatesAwb: false,
+  phase8FCreatesPaymentLink: false,
+  phase8FCapturesPayment: false,
+  phase8FRefundsPayment: false,
+  phase8FMutatesOrderState: false,
+  phase8FMutatesCustomer: false,
+  phase8FMutatesLead: false,
+  phase8FMutatesShipment: false,
+  phase8FMutatesDiscountOfferLog: false,
+  phase8FMutatesWhatsAppMessage: false,
+};
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 const PHASE_7D_ATTEMPT_COUNTS = {
