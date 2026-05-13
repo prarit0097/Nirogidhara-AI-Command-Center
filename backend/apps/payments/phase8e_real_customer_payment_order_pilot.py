@@ -97,6 +97,7 @@ AUDIT_KIND_DRY_RUN_FAILED = "phase8e.pilot.dry_run_failed"
 AUDIT_KIND_APPROVED = "phase8e.pilot.approved"
 AUDIT_KIND_REJECTED = "phase8e.pilot.rejected"
 AUDIT_KIND_ARCHIVED = "phase8e.pilot.archived"
+AUDIT_KIND_POOL_INSPECTED = "phase8e.pilot.pool_inspected"
 AUDIT_KIND_BLOCKED = "phase8e.pilot.blocked"
 
 
@@ -226,6 +227,18 @@ _TERMINAL_PAYMENT_STATUSES: tuple[str, ...] = (
     Payment.Status.CANCELLED.value,
     Payment.Status.EXPIRED.value,
     Payment.Status.FAILED.value,
+)
+
+
+# Phase 8E-Hotfix-1: real business data ships orders whose
+# Order.payment_status is "Partial" (advance captured, balance
+# outstanding) with Payment.status still "Pending". Phase 8E now
+# accepts Partial + Pending as a REVIEW-ONLY candidate; this does
+# NOT authorise any mutation. The strict Pending + Pending path
+# remains the canonical happy path.
+_ACCEPTED_ORDER_PAYMENT_STATUSES: tuple[str, ...] = (
+    Order.PaymentStatus.PENDING.value,
+    Order.PaymentStatus.PARTIAL.value,
 )
 
 
@@ -1096,11 +1109,22 @@ def _validate_candidate_pair(
         )
     if (
         order is not None
-        and order.payment_status != Order.PaymentStatus.PENDING.value
+        and order.payment_status not in _ACCEPTED_ORDER_PAYMENT_STATUSES
     ):
         blockers.append(
-            "phase8e_candidate_order_payment_status_must_be_pending_was_"
+            "phase8e_candidate_order_payment_status_must_be_pending_or_partial_was_"
             f"{order.payment_status}"
+        )
+    if (
+        order is not None
+        and order.payment_status == Order.PaymentStatus.PARTIAL.value
+    ):
+        # Phase 8E-Hotfix-1: Partial + Pending is acceptable as a
+        # review-only candidate, but the operator must see that
+        # explicitly. This is NOT mutation approval; Phase 8F still
+        # remains not-approved.
+        warnings.append(
+            "phase8e_candidate_partial_order_pending_payment_review_only"
         )
     if (
         payment is not None
@@ -1988,6 +2012,211 @@ def emit_readiness_inspected_audit(report: dict[str, Any]) -> None:
                 ),
                 "gate_counts": (
                     report.get("phase8EGateCounts") or {}
+                ),
+                "next_action": report.get("nextAction") or "",
+                "kill_switch_state_at_emit": _kill_switch_state(),
+            }
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 8E-Hotfix-1: candidate pool inspector
+# ---------------------------------------------------------------------------
+
+POOL_RECOMMENDATION_STRICT = "strict_pending_pending"
+POOL_RECOMMENDATION_PARTIAL_REVIEW_ONLY = "partial_pending_review_only"
+
+POOL_REASON_TERMINAL_STAGE = "blocked_terminal_stage"
+POOL_REASON_PAYMENT_NOT_PENDING = "blocked_payment_not_pending"
+POOL_REASON_ORDER_PAYMENT_STATUS = (
+    "blocked_order_status_not_pending_or_partial"
+)
+POOL_REASON_ORDER_PAYMENT_MISMATCH = (
+    "blocked_order_payment_mismatch"
+)
+POOL_REASON_PHASE8C_SANDBOX = "blocked_phase8c_sandbox"
+POOL_REASON_MISSING_DATA = "blocked_missing_required_data"
+
+
+def _classify_candidate_pool_row(
+    order: Order, payment: Payment
+) -> tuple[str, list[str]]:
+    """Pure classifier. Returns ``(reason, warnings)`` for one
+    Order + Payment row pair. NEVER mutates either row."""
+    warnings: list[str] = []
+    if not order or not payment:
+        return POOL_REASON_MISSING_DATA, warnings
+    if (payment.order_id or "") != (order.id or ""):
+        return POOL_REASON_ORDER_PAYMENT_MISMATCH, warnings
+    if _looks_like_phase8c_sandbox(order, payment):
+        return POOL_REASON_PHASE8C_SANDBOX, warnings
+    if order.stage in _TERMINAL_ORDER_STAGES:
+        return POOL_REASON_TERMINAL_STAGE, warnings
+    if payment.status != Payment.Status.PENDING.value:
+        return POOL_REASON_PAYMENT_NOT_PENDING, warnings
+    if order.payment_status not in _ACCEPTED_ORDER_PAYMENT_STATUSES:
+        return POOL_REASON_ORDER_PAYMENT_STATUS, warnings
+    if order.payment_status == Order.PaymentStatus.PARTIAL.value:
+        warnings.append(
+            "phase8e_candidate_partial_order_pending_payment_review_only"
+        )
+        return POOL_RECOMMENDATION_PARTIAL_REVIEW_ONLY, warnings
+    return POOL_RECOMMENDATION_STRICT, warnings
+
+
+def inspect_phase8e_real_customer_candidate_pool(
+    *,
+    limit: int = 50,
+    include_blocked: bool = False,
+) -> dict[str, Any]:
+    """Read-only inspector that classifies every ``Order`` +
+    ``Payment`` pair currently in the system by Phase 8E
+    eligibility reason. NEVER mutates a row, NEVER calls a
+    provider, NEVER sends WhatsApp, NEVER touches Customer / Lead
+    / Shipment / DiscountOfferLog / WhatsAppMessage.
+
+    Output is **masked**: phone numbers are last-4 only; customer
+    names are first-letter-of-each-word + asterisks; raw
+    `Payment.raw_response` / full `gateway_reference_id` / full
+    payment URLs / Razorpay payload NEVER appear in the response.
+    """
+    limit = max(1, min(int(limit or 50), 500))
+    payments = (
+        Payment.objects.exclude(order_id__isnull=True)
+        .exclude(order_id="")
+        .order_by("-created_at")[:limit]
+    )
+
+    eligible_strict: list[dict[str, Any]] = []
+    eligible_partial: list[dict[str, Any]] = []
+    blocked_rows: list[dict[str, Any]] = []
+    blocked_counts: dict[str, int] = {}
+    total_linked_pairs = 0
+
+    for payment in payments:
+        order = (
+            Order.objects.filter(pk=payment.order_id).first()
+            if (payment.order_id or "").strip()
+            else None
+        )
+        if order is None:
+            reason = POOL_REASON_MISSING_DATA
+            warnings: list[str] = []
+        else:
+            total_linked_pairs += 1
+            reason, warnings = _classify_candidate_pool_row(
+                order, payment
+            )
+
+        masked = {
+            "orderId": (order.id if order is not None else ""),
+            "paymentId": payment.id,
+            "orderPaymentStatus": (
+                order.payment_status if order is not None else ""
+            ),
+            "paymentStatus": payment.status,
+            "stage": order.stage if order is not None else "",
+            "state": order.state if order is not None else "",
+            "phoneLast4": _mask_phone_last4(
+                getattr(order, "phone", "") if order is not None else ""
+            ),
+            "customerNameMasked": _mask_customer_name(
+                getattr(order, "customer_name", "")
+                if order is not None
+                else ""
+            ),
+            "amount": int(getattr(payment, "amount", 0) or 0),
+            "gateway": getattr(payment, "gateway", "") or "",
+            "paymentReferencePrefix": (
+                getattr(payment, "gateway_reference_id", "") or ""
+            )[:8],
+            "recommendation": reason,
+            "warnings": warnings,
+        }
+
+        if reason == POOL_RECOMMENDATION_STRICT:
+            eligible_strict.append(masked)
+        elif reason == POOL_RECOMMENDATION_PARTIAL_REVIEW_ONLY:
+            eligible_partial.append(masked)
+        else:
+            blocked_counts[reason] = blocked_counts.get(reason, 0) + 1
+            if include_blocked:
+                blocked_rows.append(masked)
+
+    recommended = list(eligible_strict) + list(eligible_partial)
+    if recommended:
+        next_action = "select_phase8e_real_customer_candidate"
+    else:
+        next_action = "no_eligible_real_customer_candidate_review_pool"
+
+    pool_warnings: list[str] = [PHASE_8E_WARNING]
+    if not eligible_strict and eligible_partial:
+        pool_warnings.append(
+            "phase8e_candidate_pool_only_partial_pending_review_only"
+        )
+    if not recommended:
+        pool_warnings.append(
+            "phase8e_candidate_pool_no_real_customer_candidate_found"
+        )
+
+    return {
+        "phase": "8E",
+        "phase8EPaymentOrderPilotEnabled": _flag_phase8e_enabled(),
+        "killSwitch": _kill_switch_state(),
+        "totalLinkedPairs": total_linked_pairs,
+        "eligibleStrictPendingPendingCount": len(eligible_strict),
+        "eligiblePartialPendingReviewOnlyCount": len(
+            eligible_partial
+        ),
+        "blockedCountsByReason": blocked_counts,
+        "recommendedCandidates": recommended,
+        "blockedCandidates": blocked_rows,
+        "phase8EMutatesOrder": False,
+        "phase8EMutatesPayment": False,
+        "phase8EMutatesCustomer": False,
+        "phase8EMutatesLead": False,
+        "phase8EMutatesShipment": False,
+        "phase8EMutatesDiscountOfferLog": False,
+        "phase8EMutatesWhatsAppMessage": False,
+        "phase8ECallsRazorpay": False,
+        "phase8ECallsMetaCloud": False,
+        "phase8ECallsDelhivery": False,
+        "phase8ESendsWhatsApp": False,
+        "phase8ESendsCustomerNotification": False,
+        "frontendCanExecute": False,
+        "apiEndpointCanExecute": False,
+        "warnings": pool_warnings,
+        "nextAction": next_action,
+        "forbiddenActions": list(PHASE_8E_FORBIDDEN_ACTIONS),
+    }
+
+
+def emit_pool_inspected_audit(report: dict[str, Any]) -> None:
+    write_event(
+        kind=AUDIT_KIND_POOL_INSPECTED,
+        text=(
+            "Phase 8E real customer payment-order pilot candidate "
+            "pool inspected"
+        ),
+        tone=AuditEvent.Tone.INFO,
+        payload=_safe_audit_payload(
+            {
+                "total_linked_pairs": int(
+                    report.get("totalLinkedPairs") or 0
+                ),
+                "eligible_strict_pending_pending_count": int(
+                    report.get("eligibleStrictPendingPendingCount")
+                    or 0
+                ),
+                "eligible_partial_pending_review_only_count": int(
+                    report.get(
+                        "eligiblePartialPendingReviewOnlyCount"
+                    )
+                    or 0
+                ),
+                "blocked_counts_by_reason": (
+                    report.get("blockedCountsByReason") or {}
                 ),
                 "next_action": report.get("nextAction") or "",
                 "kill_switch_state_at_emit": _kill_switch_state(),

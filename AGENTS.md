@@ -274,13 +274,13 @@ python manage.py migrate
 python manage.py seed_demo_data --reset
 python manage.py runserver 0.0.0.0:8000
 python manage.py makemigrations --check --dry-run  # MUST report "No changes detected"
-python -m pytest -q                 # 2139 tests today
+python -m pytest -q                 # 2148 tests today
 
 # Frontend
 cd frontend
 npm install
 npm run dev                         # http://localhost:8080
-npm test                            # 80 tests today
+npm test                            # 81 tests today
 npm run lint                        # 0 errors expected
 npm run build                       # production build
 ```

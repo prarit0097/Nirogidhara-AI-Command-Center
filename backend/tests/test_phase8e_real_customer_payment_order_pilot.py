@@ -38,18 +38,22 @@ from apps.payments.phase8e_real_customer_payment_order_pilot import (
     AUDIT_KIND_CANDIDATE_SELECTED,
     AUDIT_KIND_DRY_RUN_FAILED,
     AUDIT_KIND_DRY_RUN_PASSED,
+    AUDIT_KIND_POOL_INSPECTED,
     AUDIT_KIND_PREPARED,
     AUDIT_KIND_PREVIEWED,
     AUDIT_KIND_READINESS,
     AUDIT_KIND_REJECTED,
     PHASE_8E_FORBIDDEN_ACTIONS,
     PHASE_8E_FORBIDDEN_PAYLOAD_KEYS,
+    POOL_RECOMMENDATION_PARTIAL_REVIEW_ONLY,
+    POOL_RECOMMENDATION_STRICT,
     _mask_customer_name,
     _mask_phone_last4,
     approve_phase8e_real_customer_payment_order_pilot,
     archive_phase8e_real_customer_payment_order_pilot,
     assert_phase8e_no_business_mutation,
     dry_run_phase8e_real_customer_payment_order_pilot,
+    inspect_phase8e_real_customer_candidate_pool,
     inspect_phase8e_real_customer_payment_order_pilot_readiness,
     prepare_phase8e_real_customer_payment_order_pilot,
     preview_phase8e_real_customer_payment_order_pilot,
@@ -926,3 +930,346 @@ def test_phase8e_gate_detail_candidates_dry_runs_return_404_when_missing(
     assert admin_client.get(detail).status_code == 404
     assert admin_client.get(cands).status_code == 404
     assert admin_client.get(drs).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Phase 8E-Hotfix-1: Partial + Pending review-only candidate +
+# candidate pool inspector
+# ---------------------------------------------------------------------------
+
+
+def _make_partial_real_customer_pair(
+    *, suffix: str
+) -> tuple[Order, Payment]:
+    """Real-customer pair where Order.payment_status="Partial" and
+    Payment.status="Pending" (advance captured, balance still
+    outstanding). Used to assert Phase 8E-Hotfix-1 accepts this
+    as a REVIEW-ONLY candidate."""
+    order_id = f"order_real_partial_{suffix}"[:32]
+    payment_id = f"pay_real_partial_{suffix}"[:32]
+    order = Order.objects.create(
+        id=order_id,
+        customer_name="Partial Customer",
+        phone="+918111122223",
+        product="Nirogidhara Weight Management",
+        quantity=1,
+        amount=3000,
+        payment_status=Order.PaymentStatus.PARTIAL,
+        state="MH",
+        city="Pune",
+        stage=Order.Stage.CONFIRMED,
+        confirmation_notes="",
+    )
+    payment = Payment.objects.create(
+        id=payment_id,
+        order_id=order.id,
+        customer="Partial Customer",
+        customer_phone="+918111122223",
+        amount=499,
+        gateway=Payment.Gateway.RAZORPAY,
+        status=Payment.Status.PENDING,
+        type=Payment.Type.FULL,
+        gateway_reference_id="plink_PartialReviewOnly",
+        raw_response={"secret": "leaky"},
+    )
+    return order, payment
+
+
+@pytest.mark.django_db
+def test_phase8e_hotfix1_audit_kind_within_length_budget() -> None:
+    assert len(AUDIT_KIND_POOL_INSPECTED) <= 64
+    assert AUDIT_KIND_POOL_INSPECTED == "phase8e.pilot.pool_inspected"
+
+
+@pytest.mark.django_db
+def test_phase8e_hotfix1_candidate_selection_accepts_partial_pending_with_warning() -> None:
+    """A non-terminal Order.payment_status=Partial +
+    Payment.status=Pending real-customer pair must pass candidate
+    validation AND carry the explicit review-only warning."""
+    lock = _make_locked_phase8d(
+        source_event_id="phase8e_hf1_partial_ok"
+    )
+    order, payment = _make_partial_real_customer_pair(
+        suffix="hf1_ok"
+    )
+    with _phase8e_enabled():
+        prep = prepare_phase8e_real_customer_payment_order_pilot(
+            phase8d_lock_id=lock.pk
+        )
+        out = select_phase8e_real_customer_candidate(
+            prep["gate"]["id"],
+            order_id=order.id,
+            payment_id=payment.id,
+        )
+    assert out["ok"] is True
+    assert out["candidate"]["candidateValidationPassed"] is True
+    assert (
+        "phase8e_candidate_partial_order_pending_payment_review_only"
+        in out["candidate"]["candidateValidationWarnings"]
+    )
+    # The mutation contract is unchanged: NO real mutation
+    # authorised. Target rows still at their original status.
+    order.refresh_from_db()
+    payment.refresh_from_db()
+    assert order.payment_status == Order.PaymentStatus.PARTIAL
+    assert payment.status == Payment.Status.PENDING
+
+
+@pytest.mark.django_db
+def test_phase8e_hotfix1_partial_pending_full_lifecycle_review_only() -> None:
+    """End-to-end Phase 8E lifecycle on a Partial+Pending candidate:
+    prepare -> select -> dry-run -> approve. Approval must flip to
+    `approved_for_future_phase8f_real_customer_controlled_mutation`
+    only; Phase 8F stays not-approved; no business row is mutated."""
+    lock = _make_locked_phase8d(
+        source_event_id="phase8e_hf1_partial_lc"
+    )
+    order, payment = _make_partial_real_customer_pair(
+        suffix="hf1_lc"
+    )
+    with _phase8e_enabled():
+        before = _row_counts()
+        prep = prepare_phase8e_real_customer_payment_order_pilot(
+            phase8d_lock_id=lock.pk
+        )
+        sel = select_phase8e_real_customer_candidate(
+            prep["gate"]["id"],
+            order_id=order.id,
+            payment_id=payment.id,
+        )
+        dry = dry_run_phase8e_real_customer_payment_order_pilot(
+            prep["gate"]["id"],
+            candidate_id=sel["candidate"]["id"],
+        )
+        appr = approve_phase8e_real_customer_payment_order_pilot(
+            prep["gate"]["id"],
+            reason=(
+                "Director Phase 8E approve (Partial+Pending "
+                "review-only)."
+            ),
+        )
+        after = _row_counts()
+    assert sel["ok"] is True
+    assert dry["ok"] is True
+    assert dry["dryRun"]["passed"] is True
+    assert dry["dryRun"]["wouldMutateOrder"] is False
+    assert dry["dryRun"]["wouldMutatePayment"] is False
+    assert dry["dryRun"]["wouldSendCustomerNotification"] is False
+    assert dry["dryRun"]["wouldSendWhatsApp"] is False
+    assert dry["dryRun"]["wouldCallCourier"] is False
+    assert dry["dryRun"]["wouldCallProvider"] is False
+    assert appr["ok"] is True
+    gate = (
+        RazorpayRealCustomerPaymentOrderMutationPilotGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    assert (
+        gate.status
+        == "approved_for_future_phase8f_real_customer_controlled_mutation"
+    )
+    # Target rows still Partial/Pending; no business mutation
+    # anywhere.
+    order.refresh_from_db()
+    payment.refresh_from_db()
+    assert order.payment_status == Order.PaymentStatus.PARTIAL
+    assert payment.status == Payment.Status.PENDING
+    assert before == after
+
+
+@pytest.mark.django_db
+def test_phase8e_hotfix1_pool_inspector_classifies_partial_review_only() -> None:
+    """Pool inspector must surface the Partial+Pending row as a
+    `partial_pending_review_only` recommendation with the
+    review-only warning. Phones masked to last-4; raw provider
+    payload never exposed."""
+    _make_locked_phase8d(source_event_id="phase8e_hf1_pool_partial")
+    order, payment = _make_partial_real_customer_pair(
+        suffix="hf1_pool"
+    )
+    report = inspect_phase8e_real_customer_candidate_pool(
+        limit=200, include_blocked=False
+    )
+    assert report["phase"] == "8E"
+    assert report["frontendCanExecute"] is False
+    assert report["apiEndpointCanExecute"] is False
+    assert report["phase8EMutatesOrder"] is False
+    assert report["phase8EMutatesPayment"] is False
+    assert report["phase8ECallsRazorpay"] is False
+    assert report["phase8ESendsWhatsApp"] is False
+    assert report["phase8ESendsCustomerNotification"] is False
+    # Our seeded partial pair must appear in the recommended list.
+    matched = [
+        r
+        for r in report["recommendedCandidates"]
+        if r["orderId"] == order.id
+    ]
+    assert len(matched) == 1
+    row = matched[0]
+    assert row["recommendation"] == POOL_RECOMMENDATION_PARTIAL_REVIEW_ONLY
+    assert (
+        "phase8e_candidate_partial_order_pending_payment_review_only"
+        in row["warnings"]
+    )
+    # PII strictly masked: phone last-4 only, no full phone or
+    # email anywhere in the row.
+    assert row["phoneLast4"] == "2223"
+    serialized = json.dumps(report, default=str)
+    assert "+918111122223" not in serialized
+    assert "8111122223" not in serialized
+    assert "Partial Customer" not in serialized  # full name absent
+    # No raw provider payload / secret / full gateway reference.
+    assert "raw_response" not in serialized
+    assert "secret" not in serialized
+    assert "leaky" not in serialized
+    assert "plink_PartialReviewOnly" not in serialized
+    # The 8-char prefix is what's allowed.
+    assert "plink_Pa" in serialized
+    assert (
+        report["nextAction"] == "select_phase8e_real_customer_candidate"
+    )
+
+
+@pytest.mark.django_db
+def test_phase8e_hotfix1_pool_inspector_classifies_blocked_reasons() -> None:
+    """Pool inspector reports blocked rows by typed reason, never
+    promotes them to recommendedCandidates."""
+    _make_locked_phase8d(source_event_id="hf1blk")
+    # 1) Phase 8C sandbox row (distinct suffix from the chain
+    #    builder above — the order-id prefix is 25 chars so the
+    #    suffix is what disambiguates).
+    _make_sandbox_order_payment(suffix="hf1sbx")
+    # 2) Terminal-stage real-customer row.
+    o_term, p_term = _make_pending_real_customer_pair(
+        suffix="hf1term"
+    )
+    o_term.stage = Order.Stage.DELIVERED
+    o_term.save(update_fields=["stage"])
+    # 3) Real-customer Order=Pending, Payment in terminal state.
+    o_pterm, p_pterm = _make_pending_real_customer_pair(
+        suffix="hf1pterm"
+    )
+    p_pterm.status = Payment.Status.PAID
+    p_pterm.save(update_fields=["status"])
+    # 4) Payment with a missing Order id (FK points at nothing).
+    _, p_mis = _make_pending_real_customer_pair(suffix="hf1mis")
+    p_mis.order_id = "totally_different_order_id"
+    p_mis.save(update_fields=["order_id"])
+
+    report = inspect_phase8e_real_customer_candidate_pool(
+        limit=200, include_blocked=True
+    )
+    blocked_counts = report["blockedCountsByReason"]
+    assert blocked_counts.get("blocked_phase8c_sandbox", 0) >= 1
+    assert blocked_counts.get("blocked_terminal_stage", 0) >= 1
+    assert blocked_counts.get("blocked_payment_not_pending", 0) >= 1
+    assert (
+        blocked_counts.get("blocked_missing_required_data", 0) >= 1
+    )
+    # None of the blocked-row order_ids appear in recommendedCandidates.
+    recommended_ids = {
+        r["orderId"] for r in report["recommendedCandidates"]
+    }
+    assert o_term.id not in recommended_ids
+    assert o_pterm.id not in recommended_ids
+
+
+@pytest.mark.django_db
+def test_phase8e_hotfix1_pool_inspector_endpoint_get_405_on_writes(
+    admin_client,
+) -> None:
+    """The candidate-pool API endpoint is read-only. GET works;
+    POST / PATCH / DELETE return 405."""
+    url = reverse(
+        "saas-phase8e-real-customer-payment-order-pilot-candidate-pool"
+    )
+    assert admin_client.get(url).status_code == 200
+    assert admin_client.post(url, {}).status_code == 405
+    assert admin_client.patch(url, {}).status_code == 405
+    assert admin_client.delete(url).status_code == 405
+
+
+@pytest.mark.django_db
+def test_phase8e_hotfix1_pool_inspector_management_command_runs_clean() -> None:
+    """The new ``inspect_phase8e_real_customer_candidate_pool``
+    management command runs without raising and emits a single
+    pool-inspected audit row by default (no business mutation)."""
+    _make_locked_phase8d(source_event_id="phase8e_hf1_cmd")
+    _make_partial_real_customer_pair(suffix="hf1_cmd")
+    before = _row_counts()
+    before_audits = AuditEvent.objects.filter(
+        kind=AUDIT_KIND_POOL_INSPECTED
+    ).count()
+    buf = io.StringIO()
+    call_command(
+        "inspect_phase8e_real_customer_candidate_pool",
+        "--json",
+        stdout=buf,
+    )
+    after = _row_counts()
+    after_audits = AuditEvent.objects.filter(
+        kind=AUDIT_KIND_POOL_INSPECTED
+    ).count()
+    payload = json.loads(buf.getvalue())
+    assert payload["phase"] == "8E"
+    assert payload["frontendCanExecute"] is False
+    assert payload["apiEndpointCanExecute"] is False
+    assert before == after  # no business row mutation
+    assert after_audits == before_audits + 1
+
+
+@pytest.mark.django_db
+def test_phase8e_hotfix1_pool_inspector_no_audit_skips_write() -> None:
+    """``--no-audit`` flag must skip the AuditEvent write."""
+    _make_locked_phase8d(source_event_id="phase8e_hf1_noaudit")
+    before_audits = AuditEvent.objects.filter(
+        kind=AUDIT_KIND_POOL_INSPECTED
+    ).count()
+    buf = io.StringIO()
+    call_command(
+        "inspect_phase8e_real_customer_candidate_pool",
+        "--no-audit",
+        "--json",
+        stdout=buf,
+    )
+    after_audits = AuditEvent.objects.filter(
+        kind=AUDIT_KIND_POOL_INSPECTED
+    ).count()
+    assert after_audits == before_audits
+
+
+def test_phase8e_hotfix1_pool_inspector_does_not_import_provider_clients() -> (
+    None
+):
+    """Static-file scan: the inspector + service module must not
+    import the Razorpay / Meta Cloud / Delhivery / WhatsApp send /
+    dotenv clients at module load time."""
+    import apps.payments.phase8e_real_customer_payment_order_pilot as svc
+    import apps.payments.management.commands.inspect_phase8e_real_customer_candidate_pool as cmd  # noqa: E501
+
+    forbidden = (
+        "razorpay_client",
+        "meta_cloud_client",
+        "delhivery_client",
+        "apps.whatsapp.services.send_freeform_text_message",
+        "apps.whatsapp.services.send_template_message",
+        "apps.whatsapp.services.queue_template_message",
+        "from dotenv",
+        "import dotenv",
+        "import razorpay",
+    )
+    for module in (svc, cmd):
+        with open(module.__file__, "r", encoding="utf-8") as fh:
+            text = fh.read()
+        # Only inspect actual import-line forbidden phrases. The
+        # service module mentions some of these inside docstrings;
+        # we keep this scan tight to lines starting with `import`
+        # or `from `.
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("import ", "from ")):
+                for needle in forbidden:
+                    assert needle not in stripped, (
+                        f"{module.__name__} imports forbidden "
+                        f"client `{needle}` on line: {line!r}"
+                    )

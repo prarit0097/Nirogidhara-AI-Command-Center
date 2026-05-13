@@ -2036,6 +2036,66 @@ describe("Phase 7B - Razorpay Controlled Pilot Execution Gate", () => {
   );
 
   it(
+    "exposes the Phase 8E-Hotfix-1 candidate pool inspector " +
+      "section without forbidden buttons",
+    async () => {
+      expect(
+        typeof api.getSaasPhase8ERealCustomerCandidatePool,
+      ).toBe("function");
+      const pool =
+        await api.getSaasPhase8ERealCustomerCandidatePool(50, false);
+      expect(pool.phase).toBe("8E");
+      expect(pool.frontendCanExecute).toBe(false);
+      expect(pool.apiEndpointCanExecute).toBe(false);
+      expect(pool.phase8EMutatesOrder).toBe(false);
+      expect(pool.phase8EMutatesPayment).toBe(false);
+      expect(pool.phase8ECallsRazorpay).toBe(false);
+      expect(pool.phase8ESendsWhatsApp).toBe(false);
+      expect(pool.phase8ESendsCustomerNotification).toBe(false);
+
+      render(<SaasAdminPage />);
+      expect(
+        await screen.findByTestId(
+          "phase8e-candidate-pool-subsection",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/Phase 8E-Hotfix-1 Candidate Pool/i),
+      ).toBeInTheDocument();
+
+      const poolForbiddenButtons = [
+        /^run pool inspector$/i,
+        /^select candidate$/i,
+        /^approve candidate$/i,
+        /^execute candidate$/i,
+        /^prepare candidate$/i,
+        /^dry-run candidate$/i,
+        /^mark partial as paid$/i,
+        /^send whatsapp$/i,
+        /^notify customer$/i,
+        /^capture$/i,
+        /^refund$/i,
+      ];
+      for (const pattern of poolForbiddenButtons) {
+        expect(
+          screen.queryByRole("button", { name: pattern }),
+        ).not.toBeInTheDocument();
+      }
+
+      const body = document.body.textContent ?? "";
+      expect(body).not.toMatch(/\+91\d{10}/);
+      // Sensitive payload values must never leak into the body
+      // (the copy strings for the Phase 8C section legitimately
+      // mention `raw_response.phase8c_sandbox` as a doc reference,
+      // so we don't reject the string itself — we reject the
+      // values that would indicate a real leak).
+      expect(body).not.toContain("rzp_live_");
+      expect(body).not.toContain("DELHIVERY_API_TOKEN=");
+      expect(body).not.toContain("META_WA_TOKEN");
+    },
+  );
+
+  it(
     "renders the Phase 8D Controlled Mutation Evidence Lock " +
       "section in read-only / lock-only safe state",
     async () => {

@@ -75,6 +75,7 @@ from .views import (
     Phase8DControlledMutationEvidenceLockPreviewView,
     Phase8DControlledMutationEvidenceLockReadinessView,
     Phase8DControlledMutationEvidenceLocksListView,
+    Phase8ERealCustomerPaymentOrderPilotCandidatePoolView,
     Phase8ERealCustomerPaymentOrderPilotCandidatesView,
     Phase8ERealCustomerPaymentOrderPilotDryRunsView,
     Phase8ERealCustomerPaymentOrderPilotGateDetailView,
@@ -932,6 +933,17 @@ urlpatterns = [
         Phase8ERealCustomerPaymentOrderPilotDryRunsView.as_view(),
         name=(
             "saas-phase8e-real-customer-payment-order-pilot-dry-runs"
+        ),
+    ),
+    # Phase 8E-Hotfix-1 candidate pool inspector (read-only;
+    # classifies real-customer Order + Payment pairs by Phase 8E
+    # eligibility reason; phones masked to last-4 only; NEVER
+    # mutates a business row; NEVER calls a provider).
+    path(
+        "phase8/real-customer-payment-order-pilot-candidate-pool/",
+        Phase8ERealCustomerPaymentOrderPilotCandidatePoolView.as_view(),
+        name=(
+            "saas-phase8e-real-customer-payment-order-pilot-candidate-pool"
         ),
     ),
 ]

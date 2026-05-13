@@ -5525,6 +5525,38 @@ export const SAAS_PHASE8E_REAL_CUSTOMER_PAYMENT_ORDER_PILOT_GATES: Record<
   phase8EApprovesRealCustomerAutomation: false,
 };
 
+export const SAAS_PHASE8E_REAL_CUSTOMER_CANDIDATE_POOL: Record<
+  string,
+  unknown
+> = {
+  phase: "8E",
+  phase8EPaymentOrderPilotEnabled: false,
+  killSwitch: { enabled: true },
+  totalLinkedPairs: 0,
+  eligibleStrictPendingPendingCount: 0,
+  eligiblePartialPendingReviewOnlyCount: 0,
+  blockedCountsByReason: {},
+  recommendedCandidates: [],
+  blockedCandidates: [],
+  phase8EMutatesOrder: false,
+  phase8EMutatesPayment: false,
+  phase8EMutatesCustomer: false,
+  phase8EMutatesLead: false,
+  phase8EMutatesShipment: false,
+  phase8EMutatesDiscountOfferLog: false,
+  phase8EMutatesWhatsAppMessage: false,
+  phase8ECallsRazorpay: false,
+  phase8ECallsMetaCloud: false,
+  phase8ECallsDelhivery: false,
+  phase8ESendsWhatsApp: false,
+  phase8ESendsCustomerNotification: false,
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  warnings: [],
+  nextAction: "no_eligible_real_customer_candidate_review_pool",
+  forbiddenActions: [],
+};
+
 // ---------- Phase 7D - Razorpay Controlled Pilot Execution (one-shot TEST) ----------
 
 const PHASE_7D_ATTEMPT_COUNTS = {

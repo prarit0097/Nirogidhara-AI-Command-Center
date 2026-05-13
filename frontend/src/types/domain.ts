@@ -6075,3 +6075,58 @@ export interface SaasPhase8ERealCustomerPaymentOrderPilotGatesResponse {
   phase8EMutatesLead: false;
   phase8EApprovesRealCustomerAutomation: false;
 }
+
+export type SaasPhase8ERealCustomerCandidatePoolRecommendation =
+  | "strict_pending_pending"
+  | "partial_pending_review_only"
+  | "blocked_terminal_stage"
+  | "blocked_payment_not_pending"
+  | "blocked_order_status_not_pending_or_partial"
+  | "blocked_order_payment_mismatch"
+  | "blocked_phase8c_sandbox"
+  | "blocked_missing_required_data";
+
+export interface SaasPhase8ERealCustomerCandidatePoolRow {
+  orderId: string;
+  paymentId: string;
+  orderPaymentStatus: string;
+  paymentStatus: string;
+  stage: string;
+  state: string;
+  phoneLast4: string;
+  customerNameMasked: string;
+  amount: number;
+  gateway: string;
+  paymentReferencePrefix: string;
+  recommendation: SaasPhase8ERealCustomerCandidatePoolRecommendation;
+  warnings: string[];
+}
+
+export interface SaasPhase8ERealCustomerCandidatePoolResponse {
+  phase: "8E";
+  phase8EPaymentOrderPilotEnabled: boolean;
+  killSwitch: Record<string, unknown>;
+  totalLinkedPairs: number;
+  eligibleStrictPendingPendingCount: number;
+  eligiblePartialPendingReviewOnlyCount: number;
+  blockedCountsByReason: Record<string, number>;
+  recommendedCandidates: SaasPhase8ERealCustomerCandidatePoolRow[];
+  blockedCandidates: SaasPhase8ERealCustomerCandidatePoolRow[];
+  phase8EMutatesOrder: false;
+  phase8EMutatesPayment: false;
+  phase8EMutatesCustomer: false;
+  phase8EMutatesLead: false;
+  phase8EMutatesShipment: false;
+  phase8EMutatesDiscountOfferLog: false;
+  phase8EMutatesWhatsAppMessage: false;
+  phase8ECallsRazorpay: false;
+  phase8ECallsMetaCloud: false;
+  phase8ECallsDelhivery: false;
+  phase8ESendsWhatsApp: false;
+  phase8ESendsCustomerNotification: false;
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}

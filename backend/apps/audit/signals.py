@@ -512,6 +512,7 @@ ICON_BY_KIND: dict[str, str] = {
     "phase8e.pilot.rejected": "x-circle",
     "phase8e.pilot.archived": "archive",
     "phase8e.pilot.blocked": "ban",
+    "phase8e.pilot.pool_inspected": "eye",
     # Phase 6M-0 MCP Gateway Foundation.
     "mcp.tool.call_attempted": "send",
     "mcp.tool.call_blocked": "ban",

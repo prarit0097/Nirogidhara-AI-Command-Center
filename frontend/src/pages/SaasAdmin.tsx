@@ -50,6 +50,8 @@ import type {
   SaasPhase8DControlledMutationEvidenceLocksResponse,
   SaasPhase8ERealCustomerPaymentOrderPilotReadiness,
   SaasPhase8ERealCustomerPaymentOrderPilotGatesResponse,
+  SaasPhase8ERealCustomerCandidatePoolResponse,
+  SaasPhase8ERealCustomerCandidatePoolRow,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -323,6 +325,10 @@ export default function SaasAdminPage() {
   ] = useState<SaasPhase8ERealCustomerPaymentOrderPilotGatesResponse | null>(
     null,
   );
+  const [
+    phase8eRealCustomerCandidatePool,
+    setPhase8eRealCustomerCandidatePool,
+  ] = useState<SaasPhase8ERealCustomerCandidatePoolResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -384,6 +390,7 @@ export default function SaasAdminPage() {
       api.getSaasPhase8DControlledMutationEvidenceLocks(25),
       api.getSaasPhase8ERealCustomerPaymentOrderPilotReadiness(),
       api.getSaasPhase8ERealCustomerPaymentOrderPilotGates(25),
+      api.getSaasPhase8ERealCustomerCandidatePool(50, false),
     ])
       .then(
         ([
@@ -443,6 +450,7 @@ export default function SaasAdminPage() {
           p8dLocks,
           p8eRead,
           p8eGates,
+          p8ePool,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -500,6 +508,7 @@ export default function SaasAdminPage() {
           setPhase8dControlledMutationEvidenceLocks(p8dLocks);
           setPhase8eRealCustomerPaymentOrderPilotReadiness(p8eRead);
           setPhase8eRealCustomerPaymentOrderPilotGates(p8eGates);
+          setPhase8eRealCustomerCandidatePool(p8ePool);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -6216,6 +6225,128 @@ export default function SaasAdminPage() {
                 )}
               </div>
             )}
+          {phase8eRealCustomerCandidatePool && (
+            <div
+              className="border-t border-border px-6 py-4 text-xs"
+              data-testid="phase8e-candidate-pool-subsection"
+            >
+              <div className="font-semibold text-foreground mb-2">
+                Phase 8E-Hotfix-1 Candidate Pool (read-only;
+                masked)
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <KeyValue
+                  label="Total linked pairs"
+                  value={String(
+                    phase8eRealCustomerCandidatePool.totalLinkedPairs,
+                  )}
+                />
+                <KeyValue
+                  label="Strict Pending/Pending"
+                  value={String(
+                    phase8eRealCustomerCandidatePool.eligibleStrictPendingPendingCount,
+                  )}
+                />
+                <KeyValue
+                  label="Partial/Pending review-only"
+                  value={String(
+                    phase8eRealCustomerCandidatePool.eligiblePartialPendingReviewOnlyCount,
+                  )}
+                />
+                <KeyValue
+                  label="Recommended"
+                  value={String(
+                    phase8eRealCustomerCandidatePool
+                      .recommendedCandidates.length,
+                  )}
+                />
+              </div>
+              {phase8eRealCustomerCandidatePool.warnings.length >
+                0 && (
+                <ul className="mt-3 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+                  {phase8eRealCustomerCandidatePool.warnings
+                    .filter((w) => !w.startsWith("Phase 8E is"))
+                    .map((w) => (
+                      <li key={w}>⚠ {w}</li>
+                    ))}
+                </ul>
+              )}
+              {phase8eRealCustomerCandidatePool
+                .recommendedCandidates.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-foreground font-medium mb-1">
+                    Top recommended candidate (masked):
+                  </div>
+                  {(() => {
+                    const top: SaasPhase8ERealCustomerCandidatePoolRow =
+                      phase8eRealCustomerCandidatePool
+                        .recommendedCandidates[0];
+                    return (
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <KeyValue
+                          label="orderId"
+                          value={top.orderId || "—"}
+                        />
+                        <KeyValue
+                          label="paymentId"
+                          value={top.paymentId || "—"}
+                        />
+                        <KeyValue
+                          label="orderPaymentStatus"
+                          value={top.orderPaymentStatus || "—"}
+                        />
+                        <KeyValue
+                          label="paymentStatus"
+                          value={top.paymentStatus || "—"}
+                        />
+                        <KeyValue
+                          label="stage"
+                          value={top.stage || "—"}
+                        />
+                        <KeyValue
+                          label="phoneLast4"
+                          value={top.phoneLast4 || "—"}
+                        />
+                        <KeyValue
+                          label="amount"
+                          value={String(top.amount)}
+                        />
+                        <KeyValue
+                          label="recommendation"
+                          value={top.recommendation}
+                        />
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+              {Object.keys(
+                phase8eRealCustomerCandidatePool
+                  .blockedCountsByReason,
+              ).length > 0 && (
+                <div className="mt-3 text-muted-foreground">
+                  <span className="font-medium">
+                    Blocked counts by reason:
+                  </span>
+                  {Object.entries(
+                    phase8eRealCustomerCandidatePool
+                      .blockedCountsByReason,
+                  ).map(([reason, count]) => (
+                    <span key={reason} className="ml-2">
+                      <code>{reason}</code>=
+                      <strong>{count as number}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 text-muted-foreground">
+                Pool <strong>nextAction:</strong>{" "}
+                <code>
+                  {phase8eRealCustomerCandidatePool.nextAction}
+                </code>
+              </div>
+            </div>
+          )}
           {phase8eRealCustomerPaymentOrderPilotReadiness?.nextAction && (
             <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
               <strong>nextAction:</strong>{" "}

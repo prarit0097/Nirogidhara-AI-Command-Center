@@ -1199,3 +1199,31 @@ sandbox rows (real-customer-only). **Phase 7E-Live-B (real
 customer WhatsApp send), Phase 7G-Live (real customer courier
 execution), Phase 8F (real customer controlled mutation), and
 broad customer automation all remain NOT approved.**
+
+### Phase 8E-Hotfix-1 — Candidate Pool Inspector (read-only)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/phase8/real-customer-payment-order-pilot-candidate-pool/?limit=N&include_blocked=true\|false` | admin/staff | Read-only candidate pool classification. Returns `totalLinkedPairs`, `eligibleStrictPendingPendingCount`, `eligiblePartialPendingReviewOnlyCount`, `blockedCountsByReason`, and `recommendedCandidates[]` (each row is masked: phone last-4 only, customer name first-letter-of-each-word + asterisks, `paymentReferencePrefix` truncated to first 8 chars). Raw `Payment.raw_response` / full `gateway_reference_id` / full payment URLs NEVER appear. |
+
+POST/PATCH/DELETE on the candidate-pool endpoint return 405. This
+endpoint is the read-only sibling of the new
+`python manage.py inspect_phase8e_real_customer_candidate_pool`
+CLI command; both delegate to the same selector. **Phase 8E-Hotfix-1
+also widens the candidate validator** to accept
+`Order.payment_status ∈ {"Pending", "Partial"}` (was `"Pending"`
+only) when `Payment.status="Pending"` AND the Order stage is
+non-terminal AND no Phase 8C sandbox marker is present. When
+`Order.payment_status="Partial"` the candidate carries an explicit
+`phase8e_candidate_partial_order_pending_payment_review_only`
+warning — this is **review-only**; approval still only flips the
+gate status to
+`approved_for_future_phase8f_real_customer_controlled_mutation`
+and does NOT execute any mutation. Phase 8E-Hotfix-1 never calls
+Razorpay / Meta Cloud / Delhivery / Vapi, never sends or queues
+WhatsApp, never creates a `Shipment` / AWB / payment link, never
+captures / refunds, never sends a customer notification, never
+mutates real `Order.payment_status` / `Order.state` /
+`Payment.status` / `Customer` / `Lead` / `Shipment` /
+`DiscountOfferLog` / `WhatsAppMessage` rows. 1 new audit kind
+(`phase8e.pilot.pool_inspected`, 28 chars).

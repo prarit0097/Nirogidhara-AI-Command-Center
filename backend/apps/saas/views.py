@@ -3827,6 +3827,7 @@ class Phase8CPaymentOrderControlledMutationRollbacksView(APIView):
 
 
 from apps.payments.phase8e_real_customer_payment_order_pilot import (  # noqa: E402
+    inspect_phase8e_real_customer_candidate_pool as _inspect_phase8e_pool,
     inspect_phase8e_real_customer_payment_order_pilot_readiness as _inspect_phase8e_readiness,
     preview_phase8e_real_customer_payment_order_pilot as _preview_phase8e_gate,
     serialize_phase8e_candidate as _serialize_phase8e_candidate,
@@ -4061,6 +4062,40 @@ class Phase8ERealCustomerPaymentOrderPilotDryRunsView(APIView):
         )
 
 
+class Phase8ERealCustomerPaymentOrderPilotCandidatePoolView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-payment-order-pilot-candidate-pool/``.
+
+    Phase 8E-Hotfix-1 read-only candidate pool. Classifies every
+    ``Order`` + ``Payment`` row pair currently in the system by
+    Phase 8E eligibility reason (strict Pending/Pending,
+    Partial/Pending review-only, or blocked-with-reason). Phones
+    masked to last-4 only; raw provider payloads / customer names
+    / addresses NEVER appear. Auth + admin only; POST/PATCH/DELETE
+    return 405. NEVER mutates any business row; NEVER calls a
+    provider.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        limit_raw = request.query_params.get("limit") or "50"
+        include_blocked = (
+            request.query_params.get("include_blocked", "false")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on"}
+        )
+        try:
+            limit = int(limit_raw)
+        except (TypeError, ValueError):
+            limit = 50
+        return Response(
+            _inspect_phase8e_pool(
+                limit=limit, include_blocked=include_blocked
+            )
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -4205,4 +4240,5 @@ __all__ = (
     "Phase8ERealCustomerPaymentOrderPilotPreviewView",
     "Phase8ERealCustomerPaymentOrderPilotCandidatesView",
     "Phase8ERealCustomerPaymentOrderPilotDryRunsView",
+    "Phase8ERealCustomerPaymentOrderPilotCandidatePoolView",
 )

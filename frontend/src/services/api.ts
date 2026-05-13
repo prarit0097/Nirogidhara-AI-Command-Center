@@ -185,6 +185,7 @@ import type {
   SaasPhase8DControlledMutationEvidenceLocksResponse,
   SaasPhase8ERealCustomerPaymentOrderPilotReadiness,
   SaasPhase8ERealCustomerPaymentOrderPilotGatesResponse,
+  SaasPhase8ERealCustomerCandidatePoolResponse,
   SaasRazorpayWhatsAppInternalNotificationGatesResponse,
   SaasRazorpayWhatsAppInternalNotificationReadiness,
   SaasRazorpayPhase6FinalAuditLockReadiness,
@@ -1771,6 +1772,15 @@ export const api = {
       `/v1/saas/phase8/real-customer-payment-order-pilot-gates/?limit=${limit}`,
       () =>
         M.SAAS_PHASE8E_REAL_CUSTOMER_PAYMENT_ORDER_PILOT_GATES as SaasPhase8ERealCustomerPaymentOrderPilotGatesResponse,
+    ),
+  getSaasPhase8ERealCustomerCandidatePool: (
+    limit: number = 50,
+    includeBlocked: boolean = false,
+  ) =>
+    safeFetch<SaasPhase8ERealCustomerCandidatePoolResponse>(
+      `/v1/saas/phase8/real-customer-payment-order-pilot-candidate-pool/?limit=${limit}&include_blocked=${includeBlocked}`,
+      () =>
+        M.SAAS_PHASE8E_REAL_CUSTOMER_CANDIDATE_POOL as SaasPhase8ERealCustomerCandidatePoolResponse,
     ),
 
   // ---------- Phase 6P - Controlled Internal Paid-Status Mutation Test ----------

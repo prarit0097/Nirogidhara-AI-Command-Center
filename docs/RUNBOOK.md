@@ -3743,3 +3743,81 @@ approval to design and ship.
 (real customer courier execution), Phase 8F (real customer
 controlled mutation), and broad customer automation all remain
 NOT approved.**
+
+### Phase 8E-Hotfix-1 — Candidate Pool Inspector + Partial+Pending Review-Only
+
+Phase 8E-Hotfix-1 is a **review-only widening** of the Phase 8E
+candidate validator + a new read-only candidate pool inspector
+command. Real business data ships orders whose
+`Order.payment_status="Partial"` (advance captured, balance still
+outstanding) with `Payment.status="Pending"`. The strict
+Pending/Pending query returned 0 rows on the VPS; the pool
+contains 6 Partial+Pending real-customer pairs. The hotfix
+widens the candidate validator to accept `Partial`+`Pending` as a
+**review-only** candidate (a typed warning
+`phase8e_candidate_partial_order_pending_payment_review_only` is
+attached). This is NOT mutation approval; Phase 8F remains
+NOT approved.
+
+```bash
+# 1. Read-only candidate pool inspector. Classifies every Order
+#    + Payment row pair by Phase 8E eligibility reason.
+#    Phones masked to last-4. Raw provider payload never exposed.
+python manage.py inspect_phase8e_real_customer_candidate_pool \
+    --json
+
+# 2. Read-only with blocked rows included (still masked).
+python manage.py inspect_phase8e_real_customer_candidate_pool \
+    --include-blocked --limit 200 --json
+
+# 3. Read-only via HTTP (auth + admin only).
+GET /api/v1/saas/phase8/real-customer-payment-order-pilot-candidate-pool/?limit=50&include_blocked=false
+
+# 4. Now select a recommended candidate as before; Partial+Pending
+#    rows are accepted with the review-only warning.
+python manage.py select_phase8e_real_customer_candidate \
+    --gate-id <ID> \
+    --order-id <ORDER_ID> \
+    --payment-id <PAYMENT_ID> \
+    --webhook-event-id <RAZORPAY_WEBHOOK_EVENT_ID> --json
+```
+
+**Classification reasons returned by the pool inspector:**
+
+- `strict_pending_pending` — `Order.payment_status="Pending"` AND
+  `Payment.status="Pending"` AND non-terminal stage. Canonical
+  happy path.
+- `partial_pending_review_only` — `Order.payment_status="Partial"`
+  AND `Payment.status="Pending"` AND non-terminal stage.
+  Phase 8E-Hotfix-1 review-only path; the candidate carries the
+  `phase8e_candidate_partial_order_pending_payment_review_only`
+  warning.
+- `blocked_terminal_stage` — Order stage is `DELIVERED` / `RTO` /
+  `CANCELLED`.
+- `blocked_payment_not_pending` — `Payment.status` is not
+  `"Pending"` (i.e. `PAID` / `REFUNDED` / `FAILED` / etc.).
+- `blocked_order_status_not_pending_or_partial` — Order is in some
+  other payment state.
+- `blocked_phase8c_sandbox` — row pair carries a Phase 8C sandbox
+  marker (`phase8c-controlled-` / `phase8c::controlled::` /
+  `internal-test` / `sandbox` substring OR
+  `Payment.raw_response.phase8c_sandbox=True` /
+  `Order.confirmation_checklist.phase8c_sandbox=True`).
+- `blocked_missing_required_data` — `Payment.order_id` points at a
+  non-existent Order.
+- `blocked_order_payment_mismatch` — reserved for the manual
+  candidate-selection path (the pool walker can't reach this).
+
+**Phase 8E-Hotfix-1 refuses to mutate:**
+
+- `Order.payment_status` / `Order.state` / `Payment.status`
+- `Customer` / `Lead` / `Shipment` / `DiscountOfferLog` /
+  `WhatsAppMessage`
+- any `.env*` file
+
+**Phase 8E-Hotfix-1 NEVER calls** Razorpay / Meta Cloud /
+Delhivery / Vapi, **NEVER sends or queues** WhatsApp, **NEVER
+creates** a `Shipment` / AWB / payment link, **NEVER captures**,
+**NEVER refunds**, **NEVER sends a customer notification**.
+Approval still only flips status to
+`approved_for_future_phase8f_real_customer_controlled_mutation`.
