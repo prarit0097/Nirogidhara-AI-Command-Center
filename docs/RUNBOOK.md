@@ -3928,3 +3928,80 @@ no business-row count drift.
 **Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
 (real customer courier execution), and broad customer automation
 all remain NOT approved.**
+
+### Phase 8F-Hotfix-1 — Recover Blocked Approval Gate
+
+Phase 8F-Hotfix-1 patches `approve_phase8f_real_customer_controlled_mutation`
+so a gate that landed in `blocked` SOLELY because the runtime
+gate env flag was off at the prior approve attempt may be safely
+recovered to approval AFTER the flag is flipped on. The recovery
+path is narrowly scoped — every other safety condition must still
+hold. This is approval-only; it does NOT execute the mutation.
+
+```bash
+# 1. Apply the new index-rename migration on the VPS:
+python manage.py migrate payments
+
+# 2. Verify makemigrations is clean:
+python manage.py makemigrations --check --dry-run
+#   -> No changes detected
+
+# 3. Flip the Phase 8F gate env flag ON (in .env.production):
+#    PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED=true
+#    (the other two execute env flags STAY false until separate
+#    Director approval).
+
+# 4. Retry approve. The recovery path triggers only when:
+#    gate.status="blocked"
+#    AND gate.blockers == [
+#      "PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true"
+#    ]   (exactly this single blocker, no others)
+#    AND PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED=true
+#    AND no attempt on this gate carries executed_at OR any
+#      *_mutation_was_made flag True OR any provider/send/courier/
+#      notification flag True
+#    AND current Order.payment_status ∈ {Pending, Partial}
+#    AND current Payment.status = Pending
+#    AND Payment.order_id == Order.id
+#    AND Phase 8E source gate still approved_for_future_phase8f_real_customer_controlled_mutation
+#    AND kill switch enabled
+#    AND Phase 7E-Live-B / 7G-Live / broad customer automation NOT approved.
+python manage.py approve_phase8f_real_customer_controlled_mutation \
+    --gate-id 1 \
+    --reason "Phase 8F-Hotfix-1: recovery approval after env flag flipped true." \
+    --json
+```
+
+On success, the response includes
+`phase8fHotfix1RecoveredFromMissingEnvApprovalBlock=true` and
+`gate.evidence_json.phase8fHotfix1Recovery` is stamped with
+`recoveredFromMissingEnvApprovalBlock=true`,
+`recoveredBlocker="PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true"`,
+`executionStillNotRun=true`. The `phase8f.real_mutation.approved`
+audit row carries the same recovery markers.
+
+**Phase 8F-Hotfix-1 refuses recovery when any of these are false:**
+
+- Gate blockers contains anything other than the single env-flag
+  blocker — fix the other blockers first.
+- Env flag still off at the new approve attempt.
+- Any attempt on the gate has `executed_at` set OR any
+  `*_mutation_was_made` flag True OR any provider/send/courier/
+  notification flag True — the gate has already crossed execute.
+- Current `Order.payment_status` has drifted away from
+  `{Pending, Partial}` OR `Payment.status` is no longer `Pending`
+  OR `Payment.order_id` no longer matches `Order.id`.
+
+**Phase 8F-Hotfix-1 NEVER executes Phase 8F, NEVER rolls back
+Phase 8F, NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi,
+NEVER sends or queues WhatsApp, NEVER creates a `Shipment` / AWB
+/ payment link, NEVER captures / refunds, NEVER sends a customer
+notification, NEVER mutates `Order.payment_status` /
+`Order.state` / `Payment.status` / `Customer` / `Lead` /
+`Shipment` / `DiscountOfferLog` / `WhatsAppMessage` rows, NEVER
+edits any `.env*` file.** Recovery is a status transition only —
+the execute CLI command remains the ONLY path that may write the
+model fields, and it still requires all three Phase 8F env flags
+true + structured 15-min Director UTC window + kill switch
+enabled + `--confirm-one-shot-real-mutation` + non-empty
+`--operator-name`.

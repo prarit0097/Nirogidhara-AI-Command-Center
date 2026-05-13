@@ -5024,15 +5024,20 @@ class RazorpayRealCustomerPaymentOrderControlledMutationGate(models.Model):
     class Meta:
         ordering = ("-created_at",)
         indexes = (
-            models.Index(fields=("status", "-created_at")),
             models.Index(
-                fields=("source_phase8e_gate", "-created_at")
+                fields=("status", "-created_at"),
+                name="p8f_gate_status_created_idx",
+            ),
+            models.Index(
+                fields=("source_phase8e_gate", "-created_at"),
+                name="p8f_gate_src8e_created_idx",
             ),
             models.Index(
                 fields=(
                     "selected_order_id_snapshot",
                     "selected_payment_id_snapshot",
-                )
+                ),
+                name="p8f_gate_target_pair_idx",
             ),
         )
 
@@ -5144,10 +5149,17 @@ class RazorpayRealCustomerPaymentOrderControlledMutationAttempt(models.Model):
     class Meta:
         ordering = ("-created_at",)
         indexes = (
-            models.Index(fields=("gate", "-created_at")),
-            models.Index(fields=("status", "-created_at")),
             models.Index(
-                fields=("target_order_id", "target_payment_id")
+                fields=("gate", "-created_at"),
+                name="p8f_atmpt_gate_created_idx",
+            ),
+            models.Index(
+                fields=("status", "-created_at"),
+                name="p8f_atmpt_status_created_idx",
+            ),
+            models.Index(
+                fields=("target_order_id", "target_payment_id"),
+                name="p8f_atmpt_target_pair_idx",
             ),
         )
 
@@ -5214,8 +5226,14 @@ class RazorpayRealCustomerPaymentOrderControlledMutationRollback(models.Model):
     class Meta:
         ordering = ("-created_at",)
         indexes = (
-            models.Index(fields=("attempt", "-created_at")),
-            models.Index(fields=("status", "-created_at")),
+            models.Index(
+                fields=("attempt", "-created_at"),
+                name="p8f_rb_attempt_created_idx",
+            ),
+            models.Index(
+                fields=("status", "-created_at"),
+                name="p8f_rb_status_created_idx",
+            ),
         )
 
     def __str__(self) -> str:  # pragma: no cover

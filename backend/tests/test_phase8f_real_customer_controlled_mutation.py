@@ -21,6 +21,7 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone as django_timezone
 
 from apps.audit.models import AuditEvent
 from apps.orders.models import Order
@@ -1134,3 +1135,373 @@ def test_phase8f_full_lifecycle_no_provider_no_business_mutation() -> None:
         AUDIT_KIND_ROLLBACK,
     ):
         assert AuditEvent.objects.filter(kind=kind).exists()
+
+
+# ---------------------------------------------------------------------------
+# Phase 8F-Hotfix-1: recover blocked approval gate when blocked solely
+# by missing runtime gate env flag
+# ---------------------------------------------------------------------------
+
+
+_PHASE8F_MISSING_ENV_BLOCKER = (
+    "PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true"
+)
+
+
+def _block_gate_with_missing_env_only(
+    gate: RazorpayRealCustomerPaymentOrderControlledMutationGate,
+    *,
+    extra_blockers: list[str] | None = None,
+) -> None:
+    """Force a Phase 8F gate into ``blocked`` state with the exact
+    blocker list a real prior approve would have written when the
+    env flag was off (optionally with extra blockers to test the
+    refusal-of-recovery path)."""
+    gate.status = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.Status.BLOCKED
+    )
+    gate.blockers = [_PHASE8F_MISSING_ENV_BLOCKER] + list(
+        extra_blockers or []
+    )
+    gate.save(update_fields=["status", "blockers", "updated_at"])
+
+
+@pytest.mark.django_db
+def test_phase8f_hotfix1_approve_recovery_succeeds_from_blocked_env_flag_only() -> None:
+    """A gate blocked SOLELY by the missing-env-flag blocker may
+    recover to approval after the flag is flipped True — current
+    DB still matches the approved snapshot, no attempt has
+    executed/mutated/sent anything, Phase 8E source still approved,
+    kill switch enabled."""
+    phase8e_gate, order, payment = _make_approved_phase8e_gate(
+        source_event_id="phase8f_hf1_recov_ok"
+    )
+    with _phase8f_partial_enabled():
+        prep = prepare_phase8f_real_customer_controlled_mutation(
+            phase8e_gate_id=phase8e_gate.pk
+        )
+    gate = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    # Force the prior real-VPS posture: gate is `blocked` with the
+    # exact "GATE_ENABLED_must_be_true" blocker.
+    _block_gate_with_missing_env_only(gate)
+
+    # No business row mutation across the recovery approval.
+    before = _row_counts()
+    with _phase8f_enabled():
+        out = approve_phase8f_real_customer_controlled_mutation(
+            gate.pk,
+            reason=(
+                "Phase 8F-Hotfix-1: recovery approval after env "
+                "flag flipped true."
+            ),
+        )
+    after = _row_counts()
+    assert out["ok"] is True
+    assert (
+        out["phase8fHotfix1RecoveredFromMissingEnvApprovalBlock"]
+        is True
+    )
+    gate.refresh_from_db()
+    assert gate.status == (
+        "approved_for_one_shot_real_customer_mutation"
+    )
+    assert gate.blockers == []
+    recovery = (gate.evidence_json or {}).get(
+        "phase8fHotfix1Recovery"
+    )
+    assert recovery is not None
+    assert recovery["recoveredFromMissingEnvApprovalBlock"] is True
+    assert (
+        recovery["recoveredBlocker"]
+        == _PHASE8F_MISSING_ENV_BLOCKER
+    )
+    assert recovery["executionStillNotRun"] is True
+    assert recovery["phase8fHotfix1"] is True
+    # No business mutation; Order.payment_status / Payment.status
+    # unchanged.
+    order.refresh_from_db()
+    payment.refresh_from_db()
+    assert order.payment_status == "Partial"
+    assert payment.status == "Pending"
+    assert before == after
+    # Audit row carries the recovery marker.
+    audit_rows = AuditEvent.objects.filter(
+        kind=AUDIT_KIND_APPROVED
+    ).order_by("-occurred_at")
+    assert audit_rows.exists()
+    payload = audit_rows.first().payload or {}
+    assert (
+        payload.get(
+            "phase8f_hotfix1_recovered_from_missing_env_flag"
+        )
+        is True
+    )
+    assert (
+        payload.get("phase8f_hotfix1_execution_still_not_run")
+        is True
+    )
+
+
+@pytest.mark.django_db
+def test_phase8f_hotfix1_approve_recovery_refuses_blocked_with_other_blocker() -> None:
+    """If the gate is blocked AND carries ANY blocker other than the
+    single missing-env-flag blocker, recovery must refuse — the
+    operator has to investigate the other blockers manually."""
+    phase8e_gate, _, _ = _make_approved_phase8e_gate(
+        source_event_id="phase8f_hf1_recov_other"
+    )
+    with _phase8f_partial_enabled():
+        prep = prepare_phase8f_real_customer_controlled_mutation(
+            phase8e_gate_id=phase8e_gate.pk
+        )
+    gate = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    _block_gate_with_missing_env_only(
+        gate, extra_blockers=["some_other_blocker_to_inspect"]
+    )
+    with _phase8f_enabled():
+        out = approve_phase8f_real_customer_controlled_mutation(
+            gate.pk, reason="Director attempt recovery."
+        )
+    assert out["ok"] is False
+    assert any(
+        "phase8f_gate_status_blocked_not_transitionable_to_approved"
+        in b
+        for b in out["blockers"]
+    )
+    gate.refresh_from_db()
+    assert gate.status == "blocked"
+
+
+@pytest.mark.django_db
+def test_phase8f_hotfix1_approve_recovery_refuses_when_order_status_drifted() -> None:
+    """If `Order.payment_status` has drifted away from
+    {Pending, Partial} after the prior block, recovery must refuse
+    — even if the blocker list is the single missing-env blocker."""
+    phase8e_gate, order, _ = _make_approved_phase8e_gate(
+        source_event_id="phase8f_hf1_recov_drift"
+    )
+    with _phase8f_partial_enabled():
+        prep = prepare_phase8f_real_customer_controlled_mutation(
+            phase8e_gate_id=phase8e_gate.pk
+        )
+    gate = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    _block_gate_with_missing_env_only(gate)
+    # Drift Order.payment_status AFTER the block.
+    order.payment_status = Order.PaymentStatus.PAID
+    order.save(update_fields=["payment_status"])
+    with _phase8f_enabled():
+        out = approve_phase8f_real_customer_controlled_mutation(
+            gate.pk, reason="Director recovery attempt."
+        )
+    assert out["ok"] is False
+    assert any(
+        "phase8f_target_order_payment_status_must_be_pending_or_partial_was_Paid"
+        in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_phase8f_hotfix1_approve_recovery_refuses_when_executed_attempt_exists() -> None:
+    """If ANY attempt on this gate carries `executed_at`, recovery
+    must refuse — the gate has already crossed execute."""
+    phase8e_gate, _, _ = _make_approved_phase8e_gate(
+        source_event_id="phase8f_hf1_recov_exec"
+    )
+    with _phase8f_partial_enabled():
+        prep = prepare_phase8f_real_customer_controlled_mutation(
+            phase8e_gate_id=phase8e_gate.pk
+        )
+    gate = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    # Hand-craft an executed attempt.
+    RazorpayRealCustomerPaymentOrderControlledMutationAttempt.objects.create(
+        gate=gate,
+        target_order_id=gate.selected_order_id_snapshot,
+        target_payment_id=gate.selected_payment_id_snapshot,
+        status="executed",
+        old_order_payment_status="Partial",
+        old_payment_status="Pending",
+        new_order_payment_status="Paid",
+        new_payment_status="Paid",
+        order_mutation_was_made=True,
+        payment_mutation_was_made=True,
+        business_mutation_was_made=True,
+        executed_at=django_timezone.now(),
+    )
+    _block_gate_with_missing_env_only(gate)
+    with _phase8f_enabled():
+        out = approve_phase8f_real_customer_controlled_mutation(
+            gate.pk, reason="Director recovery attempt."
+        )
+    assert out["ok"] is False
+    assert any(
+        "phase8f_gate_status_blocked_not_transitionable_to_approved"
+        in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_phase8f_hotfix1_approve_recovery_refuses_when_mutation_flag_present() -> None:
+    """If ANY attempt carries a *_mutation_was_made flag True (even
+    without `executed_at`), recovery must refuse."""
+    phase8e_gate, _, _ = _make_approved_phase8e_gate(
+        source_event_id="phase8f_hf1_recov_flag"
+    )
+    with _phase8f_partial_enabled():
+        prep = prepare_phase8f_real_customer_controlled_mutation(
+            phase8e_gate_id=phase8e_gate.pk
+        )
+    gate = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    RazorpayRealCustomerPaymentOrderControlledMutationAttempt.objects.create(
+        gate=gate,
+        target_order_id=gate.selected_order_id_snapshot,
+        target_payment_id=gate.selected_payment_id_snapshot,
+        status="failed",
+        old_order_payment_status="Partial",
+        old_payment_status="Pending",
+        order_mutation_was_made=True,
+    )
+    _block_gate_with_missing_env_only(gate)
+    with _phase8f_enabled():
+        out = approve_phase8f_real_customer_controlled_mutation(
+            gate.pk, reason="Director recovery attempt."
+        )
+    assert out["ok"] is False
+    assert any(
+        "phase8f_gate_status_blocked_not_transitionable_to_approved"
+        in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_phase8f_hotfix1_approve_recovery_refuses_when_provider_flag_present() -> None:
+    """If ANY attempt carries provider/send/courier/notification
+    flag True (even without an executed attempt), recovery must
+    refuse — those bookkeeping flags should never have been set
+    without a real Phase 8F execute, but defense-in-depth keeps
+    the recovery path narrow."""
+    phase8e_gate, _, _ = _make_approved_phase8e_gate(
+        source_event_id="phase8f_hf1_recov_provider"
+    )
+    with _phase8f_partial_enabled():
+        prep = prepare_phase8f_real_customer_controlled_mutation(
+            phase8e_gate_id=phase8e_gate.pk
+        )
+    gate = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    RazorpayRealCustomerPaymentOrderControlledMutationAttempt.objects.create(
+        gate=gate,
+        target_order_id=gate.selected_order_id_snapshot,
+        target_payment_id=gate.selected_payment_id_snapshot,
+        status="failed",
+        provider_call_attempted=True,
+    )
+    _block_gate_with_missing_env_only(gate)
+    with _phase8f_enabled():
+        out = approve_phase8f_real_customer_controlled_mutation(
+            gate.pk, reason="Director recovery attempt."
+        )
+    assert out["ok"] is False
+
+
+@pytest.mark.django_db
+def test_phase8f_hotfix1_approve_recovery_refuses_when_env_flag_still_off() -> None:
+    """If the gate is blocked-with-only-env-blocker but the env
+    flag is STILL OFF at the new approve attempt, recovery must
+    refuse — the canonical refusal path remains."""
+    phase8e_gate, _, _ = _make_approved_phase8e_gate(
+        source_event_id="phase8f_hf1_recov_env_off"
+    )
+    with _phase8f_partial_enabled():
+        prep = prepare_phase8f_real_customer_controlled_mutation(
+            phase8e_gate_id=phase8e_gate.pk
+        )
+    gate = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    _block_gate_with_missing_env_only(gate)
+    # Env flag remains OFF here (no _phase8f_*_enabled context).
+    out = approve_phase8f_real_customer_controlled_mutation(
+        gate.pk, reason="Director recovery attempt env off."
+    )
+    assert out["ok"] is False
+    assert any(
+        "phase8f_gate_status_blocked_not_transitionable_to_approved"
+        in b
+        for b in out["blockers"]
+    )
+
+
+@pytest.mark.django_db
+def test_phase8f_hotfix1_recovery_path_does_not_call_providers_or_send() -> None:
+    """Static-file sentinel: the approve recovery path uses the
+    same approve function as the canonical path; that function is
+    asserted (via the existing static-file scan test) to NOT import
+    any provider / WhatsApp send / Meta Cloud / Delhivery / dotenv
+    module. Here we additionally assert that, after recovery
+    approval, every locked-False flag on the new attempt + the
+    gate remains False (no provider/send/courier/notification
+    side-effect)."""
+    phase8e_gate, order, payment = _make_approved_phase8e_gate(
+        source_event_id="phase8f_hf1_recov_static"
+    )
+    with _phase8f_partial_enabled():
+        prep = prepare_phase8f_real_customer_controlled_mutation(
+            phase8e_gate_id=phase8e_gate.pk
+        )
+    gate = (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.objects.get(
+            pk=prep["gate"]["id"]
+        )
+    )
+    _block_gate_with_missing_env_only(gate)
+    with _phase8f_enabled():
+        out = approve_phase8f_real_customer_controlled_mutation(
+            gate.pk, reason="Director recovery approve."
+        )
+    assert out["ok"] is True
+    attempt = (
+        RazorpayRealCustomerPaymentOrderControlledMutationAttempt.objects.get(
+            pk=out["attempt"]["id"]
+        )
+    )
+    assert attempt.customer_notification_sent is False
+    assert attempt.whatsapp_sent is False
+    assert attempt.courier_called is False
+    assert attempt.provider_call_attempted is False
+    assert attempt.shipment_created is False
+    assert attempt.order_mutation_was_made is False
+    assert attempt.payment_mutation_was_made is False
+    assert attempt.business_mutation_was_made is False
+    # Order / Payment / Order.state untouched by approval recovery.
+    order.refresh_from_db()
+    payment.refresh_from_db()
+    assert order.payment_status == "Partial"
+    assert payment.status == "Pending"

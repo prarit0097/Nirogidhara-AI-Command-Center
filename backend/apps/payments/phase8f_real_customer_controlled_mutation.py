@@ -152,6 +152,65 @@ _PROPOSED_NEW_ORDER_PAYMENT_STATUS = Order.PaymentStatus.PAID.value
 _PROPOSED_NEW_PAYMENT_STATUS = Payment.Status.PAID.value
 
 
+# Phase 8F-Hotfix-1: a gate that landed in `blocked` solely because
+# the runtime gate env flag was False at the prior approve attempt
+# may be recovered to approval AFTER the flag is flipped True — as
+# long as every other safety condition still holds. This is the
+# ONLY blocker that qualifies for safe recovery.
+_RECOVERABLE_APPROVE_BLOCKER = (
+    "PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true"
+)
+
+
+def _is_blocked_only_by_missing_env_flag(
+    gate: "RazorpayRealCustomerPaymentOrderControlledMutationGate",
+) -> bool:
+    """Return True iff the gate is in ``blocked`` AND its persisted
+    ``blockers`` list contains exactly the missing-env-flag blocker
+    (and nothing else)."""
+    if gate.status != (
+        RazorpayRealCustomerPaymentOrderControlledMutationGate.Status.BLOCKED
+    ):
+        return False
+    raw_blockers = list(gate.blockers or [])
+    # Tolerate whitespace, but no other blocker — the recovery path
+    # is intentionally narrow to a single, env-flag-only cause.
+    blocker_set = {(b or "").strip() for b in raw_blockers if b}
+    return blocker_set == {_RECOVERABLE_APPROVE_BLOCKER}
+
+
+def _attempt_has_executed_or_mutation(
+    gate: "RazorpayRealCustomerPaymentOrderControlledMutationGate",
+) -> bool:
+    """Return True if ANY attempt on this gate carries
+    ``executed_at`` OR has any *_mutation_was_made flag True. The
+    recovery path must refuse if there's ANY trace of execution."""
+    qs = gate.attempts.all()
+    if qs.filter(executed_at__isnull=False).exists():
+        return True
+    if qs.filter(order_mutation_was_made=True).exists():
+        return True
+    if qs.filter(payment_mutation_was_made=True).exists():
+        return True
+    if qs.filter(business_mutation_was_made=True).exists():
+        return True
+    # And — for completeness — no attempt may carry a provider /
+    # send / courier / customer-notification flag flipped True.
+    if qs.filter(
+        customer_notification_sent=True
+    ).exists():
+        return True
+    if qs.filter(whatsapp_sent=True).exists():
+        return True
+    if qs.filter(courier_called=True).exists():
+        return True
+    if qs.filter(provider_call_attempted=True).exists():
+        return True
+    if qs.filter(shipment_created=True).exists():
+        return True
+    return False
+
+
 _PHASE8E_APPROVED_STATUS = (
     RazorpayRealCustomerPaymentOrderMutationPilotGate.Status.APPROVED_FOR_FUTURE_PHASE8F
 )
@@ -1098,9 +1157,21 @@ def approve_phase8f_real_customer_controlled_mutation(
             "warnings": [PHASE_8F_WARNING],
             "nextAction": "phase8f_approve_reason_required",
         }
-    if gate.status != (
+    # Phase 8F-Hotfix-1: allow approval from EITHER
+    # `pending_manual_review` (canonical) OR `blocked` IFF the
+    # gate's persisted blockers list contains exactly the
+    # missing-env-flag blocker AND nothing else AND no attempt has
+    # executed/mutated/sent anything. Any other blocker keeps the
+    # canonical refusal.
+    recovered_from_missing_env_flag = (
+        _is_blocked_only_by_missing_env_flag(gate)
+        and _flag_phase8f_gate_enabled()
+        and not _attempt_has_executed_or_mutation(gate)
+    )
+    in_canonical_pending = gate.status == (
         RazorpayRealCustomerPaymentOrderControlledMutationGate.Status.PENDING_MANUAL_REVIEW
-    ):
+    )
+    if not (in_canonical_pending or recovered_from_missing_env_flag):
         return {
             "phase": "8F",
             "ok": False,
@@ -1176,6 +1247,27 @@ def approve_phase8f_real_customer_controlled_mutation(
         gate.next_action = (
             "phase8f_attempt_pending_director_signoff_then_execute"
         )
+        if recovered_from_missing_env_flag:
+            # Clear stale blockers from the prior missing-env-flag
+            # failure; stamp Phase 8F-Hotfix-1 recovery markers on
+            # the immutable evidence_json blob so the audit + future
+            # readers can see exactly how this gate got promoted.
+            gate.blockers = []
+            evidence = dict(gate.evidence_json or {})
+            recovery_marker = {
+                "recoveredFromMissingEnvApprovalBlock": True,
+                "recoveredBlocker": _RECOVERABLE_APPROVE_BLOCKER,
+                "executionStillNotRun": True,
+                "recoveredAtUtc": (
+                    timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+                ),
+                "phase8fHotfix1": True,
+            }
+            evidence["phase8fHotfix1Recovery"] = recovery_marker
+            gate.evidence_json = evidence
+            gate.warnings = list(gate.warnings or []) + [
+                "phase8f_hotfix1_recovered_from_missing_env_flag"
+            ]
         gate.save()
 
         # Create the matching attempt row in
@@ -1212,6 +1304,11 @@ def approve_phase8f_real_customer_controlled_mutation(
         text=(
             f"Phase 8F approved gate_id={gate.pk} "
             f"attempt_id={attempt.pk}"
+            + (
+                " (recovered from missing-env-flag block)"
+                if recovered_from_missing_env_flag
+                else ""
+            )
         ),
         tone=AuditEvent.Tone.SUCCESS,
         payload=_audit_gate_payload(
@@ -1222,6 +1319,10 @@ def approve_phase8f_real_customer_controlled_mutation(
                 "review_reason_present": bool(
                     (gate.review_reason or "").strip()
                 ),
+                "phase8f_hotfix1_recovered_from_missing_env_flag": bool(
+                    recovered_from_missing_env_flag
+                ),
+                "phase8f_hotfix1_execution_still_not_run": True,
             },
         ),
     )
@@ -1234,6 +1335,9 @@ def approve_phase8f_real_customer_controlled_mutation(
         "warnings": [PHASE_8F_WARNING],
         "nextAction": (
             "phase8f_attempt_pending_director_signoff_then_execute"
+        ),
+        "phase8fHotfix1RecoveredFromMissingEnvApprovalBlock": bool(
+            recovered_from_missing_env_flag
         ),
     }
 
