@@ -4532,3 +4532,338 @@ class RazorpayPaymentOrderControlledMutationEvidenceLock(models.Model):
             f"phase8c_gate={self.source_phase8c_gate_id} "
             f"status={self.status}]"
         )
+
+
+class RazorpayRealCustomerPaymentOrderMutationPilotGate(models.Model):
+    """Phase 8E - Real Customer Payment -> Order Mutation Pilot Gate.
+
+    Phase 8E is **review / dry-run only** against ONE explicitly
+    selected real customer ``Order`` + ``Payment`` candidate. It
+    converts a locked Phase 8D evidence chain into a single
+    pilot-review row, validates the chosen real candidate, and
+    dry-runs the proposed Pending -> Paid mutation without writing
+    any field on any business row.
+
+    Phase 8E NEVER mutates real ``Order`` / ``Payment`` /
+    ``Customer`` / ``Lead`` / ``Shipment`` / ``DiscountOfferLog``
+    / ``WhatsAppMessage`` rows, NEVER calls Razorpay / Meta Cloud
+    / Delhivery / Vapi, NEVER sends or queues WhatsApp, NEVER
+    sends a customer notification, NEVER creates a ``Shipment`` /
+    AWB / payment link, NEVER captures / refunds, NEVER edits any
+    ``.env*`` file. Review state changes are CLI-only.
+
+    Status flow:
+        draft -> pending_manual_review -> dry_run_passed ->
+        approved_for_future_phase8f_real_customer_controlled_mutation
+        / rejected / archived
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_MANUAL_REVIEW = (
+            "pending_manual_review",
+            "Pending manual review",
+        )
+        DRY_RUN_PASSED = "dry_run_passed", "Dry-run passed"
+        APPROVED_FOR_FUTURE_PHASE8F = (
+            "approved_for_future_phase8f_real_customer_controlled_mutation",
+            "Approved for future Phase 8F real customer controlled mutation",
+        )
+        REJECTED = "rejected", "Rejected"
+        ARCHIVED = "archived", "Archived"
+        BLOCKED = "blocked", "Blocked"
+
+    source_phase8d_lock = models.ForeignKey(
+        RazorpayPaymentOrderControlledMutationEvidenceLock,
+        on_delete=models.PROTECT,
+        related_name="phase8e_pilot_gates",
+    )
+    source_phase8c_gate = models.ForeignKey(
+        RazorpayPaymentOrderControlledMutationGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8e_pilot_gates",
+    )
+    source_phase8b_gate = models.ForeignKey(
+        RazorpayPaymentOrderMutationReviewGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8e_pilot_gates",
+    )
+    source_phase8a_gate = models.ForeignKey(
+        RazorpayPaymentOrderMutationSandboxGate,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8e_pilot_gates",
+    )
+    source_phase7i_lock = models.ForeignKey(
+        RazorpayPhase7FinalAuditLock,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="phase8e_pilot_gates",
+    )
+
+    status = models.CharField(
+        max_length=80,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+
+    # Hard contract: every flag below stays True/False as declared.
+    real_customer_pilot_only = models.BooleanField(default=True)
+    real_mutation_allowed = models.BooleanField(default=False)
+    real_order_mutation_allowed = models.BooleanField(default=False)
+    real_payment_mutation_allowed = models.BooleanField(default=False)
+    customer_notification_allowed = models.BooleanField(default=False)
+    whatsapp_allowed = models.BooleanField(default=False)
+    courier_allowed = models.BooleanField(default=False)
+    provider_call_allowed = models.BooleanField(default=False)
+    phase8f_required = models.BooleanField(default=True)
+    manual_review_required = models.BooleanField(default=True)
+    director_signoff_required = models.BooleanField(default=True)
+    rollback_required = models.BooleanField(default=True)
+
+    # Canonical candidate snapshot (populated when dry-run passes).
+    candidate_order_id_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    candidate_payment_id_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    candidate_order_current_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    candidate_payment_current_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    proposed_order_new_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    proposed_payment_new_status_snapshot = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+
+    dry_run_passed = models.BooleanField(default=False)
+
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    count_deltas = models.JSONField(default=dict, blank=True)
+
+    evidence_json = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=128, blank=True, default="")
+
+    reviewed_by_username = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8e_real_customer_pilot_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.TextField(blank=True, default="")
+    reject_reason = models.TextField(blank=True, default="")
+    archive_reason = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    organization = models.ForeignKey(
+        "saas.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8e_real_customer_pilot_gates",
+    )
+    branch = models.ForeignKey(
+        "saas.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="phase8e_real_customer_pilot_gates",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status", "-created_at")),
+            models.Index(
+                fields=("source_phase8d_lock", "-created_at")
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8E-RealCustomerPilotGate[id={self.pk} "
+            f"phase8d_lock={self.source_phase8d_lock_id} "
+            f"status={self.status}]"
+        )
+
+
+class RazorpayRealCustomerPaymentOrderMutationCandidate(models.Model):
+    """Phase 8E candidate row — represents one real-customer
+    ``Order`` + ``Payment`` pair selected for pilot review.
+
+    The candidate row carries **masked** customer name + phone
+    last-4 only; never the raw phone, email, address, or provider
+    payload.
+    """
+
+    gate = models.ForeignKey(
+        RazorpayRealCustomerPaymentOrderMutationPilotGate,
+        on_delete=models.CASCADE,
+        related_name="candidates",
+    )
+
+    order_id = models.CharField(max_length=32, db_index=True)
+    payment_id = models.CharField(max_length=32, db_index=True)
+
+    # Masked customer info ONLY. Raw phone / email / address never
+    # persisted on this row.
+    order_customer_name_masked = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    order_phone_last4 = models.CharField(
+        max_length=8, blank=True, default=""
+    )
+    payment_gateway = models.CharField(
+        max_length=24, blank=True, default=""
+    )
+    payment_reference = models.CharField(
+        max_length=120, blank=True, default=""
+    )
+    order_current_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    payment_current_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    order_amount = models.IntegerField(default=0)
+    payment_amount = models.IntegerField(default=0)
+
+    is_real_customer_candidate = models.BooleanField(default=True)
+    candidate_validation_passed = models.BooleanField(
+        default=False, db_index=True
+    )
+    candidate_validation_blockers = models.JSONField(
+        default=list, blank=True
+    )
+    candidate_validation_warnings = models.JSONField(
+        default=list, blank=True
+    )
+
+    # Hard contract: every flag below stays True/False as declared.
+    consent_required = models.BooleanField(default=True)
+    customer_notification_allowed = models.BooleanField(default=False)
+    whatsapp_allowed = models.BooleanField(default=False)
+    courier_allowed = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "-created_at")),
+            models.Index(fields=("order_id", "payment_id")),
+        )
+        constraints = (
+            models.UniqueConstraint(
+                fields=("gate", "order_id", "payment_id"),
+                name=(
+                    "phase8e_pilot_gate_unique_candidate_order_payment"
+                ),
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8E-RealCustomerCandidate[id={self.pk} "
+            f"gate={self.gate_id} order={self.order_id} "
+            f"payment={self.payment_id}]"
+        )
+
+
+class RazorpayRealCustomerPaymentOrderMutationPilotDryRun(models.Model):
+    """Phase 8E dry-run record.
+
+    Records a proposed (but never executed) Pending -> Paid
+    mutation on a real customer Order + Payment pair. Every
+    ``would_*`` boolean stays False; before/after row counts must
+    be identical. The record itself is the only DB write the
+    dry-run produces; no business row is created or mutated.
+    """
+
+    gate = models.ForeignKey(
+        RazorpayRealCustomerPaymentOrderMutationPilotGate,
+        on_delete=models.CASCADE,
+        related_name="dry_runs",
+    )
+    candidate = models.ForeignKey(
+        RazorpayRealCustomerPaymentOrderMutationCandidate,
+        on_delete=models.CASCADE,
+        related_name="dry_runs",
+    )
+
+    target_order_id = models.CharField(max_length=32, blank=True, default="")
+    target_payment_id = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+
+    old_order_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    new_order_payment_status_candidate = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    old_payment_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    new_payment_status_candidate = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+
+    # Hard contract: every `would_*` boolean stays False at all times.
+    would_mutate_order = models.BooleanField(default=False)
+    would_mutate_payment = models.BooleanField(default=False)
+    would_send_customer_notification = models.BooleanField(default=False)
+    would_send_whatsapp = models.BooleanField(default=False)
+    would_call_courier = models.BooleanField(default=False)
+    would_create_shipment = models.BooleanField(default=False)
+    would_call_provider = models.BooleanField(default=False)
+
+    before_counts = models.JSONField(default=dict, blank=True)
+    after_counts = models.JSONField(default=dict, blank=True)
+    count_deltas = models.JSONField(default=dict, blank=True)
+
+    passed = models.BooleanField(default=False, db_index=True)
+    blockers = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("gate", "-created_at")),
+            models.Index(fields=("candidate", "-created_at")),
+            models.Index(fields=("passed", "-created_at")),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase8E-RealCustomerPilotDryRun[id={self.pk} "
+            f"gate={self.gate_id} passed={self.passed}]"
+        )

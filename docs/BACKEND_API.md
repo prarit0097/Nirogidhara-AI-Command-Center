@@ -1168,3 +1168,34 @@ refunds, never sends a customer notification, never mutates real
 (real customer WhatsApp send), Phase 7G-Live (real customer
 courier execution), and broad customer automation all remain NOT
 approved.**
+
+### Phase 8E — Real Customer Payment → Order Pilot (review-only)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| GET | `/api/v1/saas/phase8/real-customer-payment-order-pilot-readiness/` | admin/staff | Read-only readiness composition (eligibility counters + locked-False safety contract + masked candidate counts). |
+| GET | `/api/v1/saas/phase8/real-customer-payment-order-pilot-gates/?limit=N` | admin/staff | Phase 8E gate listing with locked-False safety booleans on the response shell. |
+| GET | `/api/v1/saas/phase8/real-customer-payment-order-pilot-gates/<int:pk>/` | admin/staff | Read-only gate detail (whitelist serializer; phones masked to last-4 only; customer names masked to first-letter-of-each-word + asterisks; raw provider payloads / `gateway_reference_id` / full payment URLs / Director sign-off text NEVER returned). |
+| GET | `/api/v1/saas/phase8/real-customer-payment-order-pilot-preview/?phase8d_lock_id=N` | admin/staff | Read-only preview from a locked Phase 8D evidence lock. Never creates rows. |
+| GET | `/api/v1/saas/phase8/real-customer-payment-order-pilot-candidates/<int:gate_id>/` | admin/staff | Read-only candidate listing for a Phase 8E gate (phones masked, payment references truncated to first 8 chars as `paymentReferencePrefix`). |
+| GET | `/api/v1/saas/phase8/real-customer-payment-order-pilot-dry-runs/<int:gate_id>/` | admin/staff | Read-only dry-run record listing for a Phase 8E gate (would_* locked-False booleans surfaced; before/after Order + Payment status snapshots equal — the gate did NOT flip them). |
+
+POST/PATCH/DELETE on every Phase 8E endpoint return 405. **No POST
+endpoint dispatches gate state changes** — every transition is
+CLI-only via the 8 management commands
+(`inspect_phase8e_real_customer_payment_order_pilot`, `preview_…`,
+`prepare_…`, `select_phase8e_real_customer_candidate`, `dry_run_…`,
+`approve_…_pilot --reason`, `reject_…_pilot --reason`,
+`archive_…_pilot --reason`). Phase 8E approval flips status to
+`approved_for_future_phase8f_real_customer_controlled_mutation`
+only — it does NOT execute any mutation and does NOT authorise any
+provider call. Phase 8E never calls Razorpay / Meta Cloud /
+Delhivery / Vapi, never sends or queues WhatsApp, never creates a
+`Shipment` / AWB / payment link, never captures / refunds, never
+sends a customer notification, never mutates real `Order` /
+`Payment` / `Customer` / `Lead` / `Shipment` / `DiscountOfferLog` /
+`WhatsAppMessage` rows. Candidate selection refuses Phase 8C
+sandbox rows (real-customer-only). **Phase 7E-Live-B (real
+customer WhatsApp send), Phase 7G-Live (real customer courier
+execution), Phase 8F (real customer controlled mutation), and
+broad customer automation all remain NOT approved.**

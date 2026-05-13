@@ -5886,3 +5886,192 @@ export interface SaasPhase8DControlledMutationEvidenceLocksResponse {
   phase8DMutatesCustomer: false;
   phase8DMutatesLead: false;
 }
+
+// ---------- Phase 8E - Real Customer Payment -> Order Pilot ----------
+
+export type SaasPhase8ERealCustomerPaymentOrderPilotGateStatus =
+  | "draft"
+  | "pending_manual_review"
+  | "dry_run_passed"
+  | "approved_for_future_phase8f_real_customer_controlled_mutation"
+  | "rejected"
+  | "archived"
+  | "blocked";
+
+export interface SaasPhase8ERealCustomerPaymentOrderPilotGateDto {
+  id: number;
+  status: SaasPhase8ERealCustomerPaymentOrderPilotGateStatus;
+  sourcePhase8DLockId: number | null;
+  sourcePhase8CGateId: number | null;
+  sourcePhase8BGateId: number | null;
+  sourcePhase8AGateId: number | null;
+  sourcePhase7ILockId: number | null;
+  realCustomerPilotOnly: true;
+  realMutationAllowed: false;
+  realOrderMutationAllowed: false;
+  realPaymentMutationAllowed: false;
+  customerNotificationAllowed: false;
+  whatsAppAllowed: false;
+  courierAllowed: false;
+  providerCallAllowed: false;
+  phase8FRequired: true;
+  manualReviewRequired: true;
+  directorSignoffRequired: true;
+  rollbackRequired: true;
+  candidateOrderIdSnapshot: string;
+  candidatePaymentIdSnapshot: string;
+  candidateOrderCurrentStatusSnapshot: string;
+  candidatePaymentCurrentStatusSnapshot: string;
+  proposedOrderNewStatusSnapshot: string;
+  proposedPaymentNewStatusSnapshot: string;
+  dryRunPassed: boolean;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  evidenceJson: Record<string, unknown>;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  reviewedByUsername: string;
+  reviewedAt: string | null;
+  reviewReasonPresent: boolean;
+  rejectReasonPresent: boolean;
+  archiveReasonPresent: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface SaasPhase8ERealCustomerPaymentOrderPilotCandidateDto {
+  id: number;
+  gateId: number;
+  orderId: string;
+  paymentId: string;
+  orderCustomerNameMasked: string;
+  orderPhoneLast4: string;
+  paymentGateway: string;
+  paymentReferencePrefix: string;
+  orderCurrentPaymentStatus: string;
+  paymentCurrentStatus: string;
+  orderAmount: number;
+  paymentAmount: number;
+  isRealCustomerCandidate: true;
+  candidateValidationPassed: boolean;
+  candidateValidationBlockers: string[];
+  candidateValidationWarnings: string[];
+  consentRequired: true;
+  customerNotificationAllowed: false;
+  whatsAppAllowed: false;
+  courierAllowed: false;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SaasPhase8ERealCustomerPaymentOrderPilotDryRunDto {
+  id: number;
+  gateId: number;
+  candidateId: number;
+  targetOrderId: string;
+  targetPaymentId: string;
+  oldOrderPaymentStatus: string;
+  newOrderPaymentStatusCandidate: string;
+  oldPaymentStatus: string;
+  newPaymentStatusCandidate: string;
+  wouldMutateOrder: false;
+  wouldMutatePayment: false;
+  wouldSendCustomerNotification: false;
+  wouldSendWhatsApp: false;
+  wouldCallCourier: false;
+  wouldCreateShipment: false;
+  wouldCallProvider: false;
+  beforeCounts: Record<string, number>;
+  afterCounts: Record<string, number>;
+  countDeltas: Record<string, number>;
+  passed: boolean;
+  blockers: string[];
+  warnings: string[];
+  createdAt: string | null;
+}
+
+export interface SaasPhase8ERealCustomerPaymentOrderPilotGateCounts {
+  draft: number;
+  pending_manual_review: number;
+  dry_run_passed: number;
+  approved_for_future_phase8f_real_customer_controlled_mutation: number;
+  rejected: number;
+  archived: number;
+  blocked: number;
+}
+
+export interface SaasPhase8ERealCustomerPaymentOrderPilotReadiness {
+  phase: "8E";
+  status: "real_customer_payment_order_pilot_review_only";
+  latestCompletedPhase: "8D";
+  nextPhase: string;
+  phase8EPaymentOrderPilotEnabled: boolean;
+  killSwitch: { enabled: boolean; model: string; id?: number };
+  eligiblePhase8DLockCount: number;
+  phase8EGateCounts: SaasPhase8ERealCustomerPaymentOrderPilotGateCounts;
+  items: SaasPhase8ERealCustomerPaymentOrderPilotGateDto[];
+  phase8ECallsRazorpay: false;
+  phase8ECallsMetaCloud: false;
+  phase8ECallsDelhivery: false;
+  phase8ECallsVapi: false;
+  phase8ESendsWhatsApp: false;
+  phase8EQueuesWhatsApp: false;
+  phase8ECreatesShipmentRow: false;
+  phase8ECreatesAwb: false;
+  phase8ECreatesPaymentLink: false;
+  phase8ECapturesPayment: false;
+  phase8ERefundsPayment: false;
+  phase8ESendsCustomerNotification: false;
+  phase8EMutatesOrder: false;
+  phase8EMutatesPayment: false;
+  phase8EMutatesCustomer: false;
+  phase8EMutatesLead: false;
+  phase8EMutatesShipment: false;
+  phase8EMutatesDiscountOfferLog: false;
+  phase8EMutatesWhatsAppMessage: false;
+  phase8EApprovesRealCustomerAutomation: false;
+  phase8FApproved: false;
+  phase7ELiveBApproved: false;
+  phase7GLiveApproved: false;
+  executionPath: "review_dry_run_only_cli_only_no_execute";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+  forbiddenActions: string[];
+}
+
+export interface SaasPhase8ERealCustomerPaymentOrderPilotGatesResponse {
+  phase: "8E";
+  limit: number;
+  counts: SaasPhase8ERealCustomerPaymentOrderPilotGateCounts;
+  items: SaasPhase8ERealCustomerPaymentOrderPilotGateDto[];
+  executionPath: "review_dry_run_only_cli_only_no_execute";
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  phase8ECallsRazorpay: false;
+  phase8ECallsMetaCloud: false;
+  phase8ECallsDelhivery: false;
+  phase8ECallsVapi: false;
+  phase8ESendsWhatsApp: false;
+  phase8EQueuesWhatsApp: false;
+  phase8ECreatesShipmentRow: false;
+  phase8ECreatesAwb: false;
+  phase8ECreatesPaymentLink: false;
+  phase8ECapturesPayment: false;
+  phase8ERefundsPayment: false;
+  phase8ESendsCustomerNotification: false;
+  phase8EMutatesOrder: false;
+  phase8EMutatesPayment: false;
+  phase8EMutatesCustomer: false;
+  phase8EMutatesLead: false;
+  phase8EApprovesRealCustomerAutomation: false;
+}

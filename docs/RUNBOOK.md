@@ -3642,3 +3642,104 @@ canonical signals instead of re-deriving from the nested
 **Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
 (real customer courier execution), and broad customer automation
 all remain NOT approved.**
+
+### Phase 8E — Real Customer Payment → Order Mutation Pilot Gate
+
+Phase 8E is the **review-only and dry-run-only** pilot gate that
+designs how a future Phase 8F would mutate `Order.payment_status`
+and `Payment.status` on REAL customer rows (after a Razorpay
+webhook payment.captured). It chains off a `locked` Phase 8D
+evidence lock and is the first gate that handles real-customer
+candidates. Approval flips status to
+`approved_for_future_phase8f_real_customer_controlled_mutation`
+only — it does NOT enable any mutation. Phase 8E NEVER calls
+Razorpay / Meta Cloud / Delhivery / Vapi, NEVER sends or queues
+WhatsApp, NEVER creates a `Shipment` / AWB / payment link, NEVER
+captures / refunds, NEVER sends a customer notification, NEVER
+mutates real `Order` / `Payment` / `Customer` / `Lead` /
+`Shipment` / `DiscountOfferLog` / `WhatsAppMessage` rows. **All
+PII is masked at every surface**: phone numbers are last-4 only;
+customer names show first letter of each word followed by
+asterisks; raw provider payloads (`raw_response`,
+`gateway_reference_id`, full payment URLs) NEVER appear in any
+candidate row, audit payload, or API response.
+
+```bash
+# 1. Read-only readiness composition.
+python manage.py inspect_phase8e_real_customer_payment_order_pilot \
+    --json --no-audit
+
+# 2. Read-only preview from a locked Phase 8D evidence lock.
+python manage.py preview_phase8e_real_customer_payment_order_pilot \
+    --phase8d-lock-id <PHASE8D_LOCK_ID> --json
+
+# 3. Prepare a Phase 8E pilot gate row (one per Phase 8D lock;
+#    idempotent inside transaction.atomic()). Refuses outright
+#    when PHASE8E_REAL_CUSTOMER_PAYMENT_ORDER_PILOT_ENABLED=false.
+python manage.py prepare_phase8e_real_customer_payment_order_pilot \
+    --phase8d-lock-id <PHASE8D_LOCK_ID> --json
+
+# 4. Select a real-customer candidate (Order + Payment pair from
+#    a Razorpay webhook payment.captured event). Refuses Phase 8C
+#    sandbox rows. Refuses mismatched Order/Payment. Phones masked
+#    to last-4 only. Idempotent on (gate, order_id, payment_id).
+python manage.py select_phase8e_real_customer_candidate \
+    --gate-id <ID> \
+    --order-id <REAL_ORDER_ID> \
+    --payment-id <REAL_PAYMENT_ID> \
+    --webhook-event-id <RAZORPAY_WEBHOOK_EVENT_ID> --json
+
+# 5. Dry-run the proposed mutation on a candidate (would_*
+#    locked-False booleans; never actually flips Order or
+#    Payment status; emits `phase8e.pilot.dry_run_passed` or
+#    `dry_run_failed`).
+python manage.py dry_run_phase8e_real_customer_payment_order_pilot \
+    --candidate-id <CANDIDATE_ID> --json
+
+# 6. Approve (status -> approved_for_future_phase8f_real_customer_controlled_mutation).
+#    Mandatory non-empty reason. Refuses unless gate.dry_run_passed=True
+#    AND at least one passed dry-run AND a recorded rollback dry-run
+#    AND the runtime kill switch is enabled AND Phase 7E-Live-B /
+#    7G-Live / broad customer automation all remain not-approved.
+python manage.py approve_phase8e_real_customer_payment_order_pilot \
+    --gate-id <ID> \
+    --reason "Director Phase 8E pilot approval" --json
+
+# 7. Reject (only from draft / pending_manual_review /
+#    dry_run_passed / blocked).
+python manage.py reject_phase8e_real_customer_payment_order_pilot \
+    --gate-id <ID> \
+    --reason "Director paused real-customer pilot review" --json
+
+# 8. Archive (after approved / rejected).
+python manage.py archive_phase8e_real_customer_payment_order_pilot \
+    --gate-id <ID> --reason "Director archive" --json
+```
+
+**Phase 8E refuses to prepare unless:**
+- Phase 8D lock is `status=locked` AND `final_db_restored_snapshot=True`
+  AND `phase8c_gate_status_snapshot="rolled_back"`.
+- `PHASE8E_REAL_CUSTOMER_PAYMENT_ORDER_PILOT_ENABLED=true` env flag.
+- The runtime kill switch is enabled.
+- Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live (real
+  customer courier execution), and broad customer automation all
+  remain not-approved.
+
+**Phase 8E candidate validation refuses any Order/Payment pair that:**
+- Carries the Phase 8C sandbox marker on `Payment.raw_response.phase8c_sandbox=True`
+  or matches the `phase8c-controlled-` / `phase8c::controlled::` id markers
+  (Phase 8E is real-customer-only; sandbox rows are explicitly out of scope).
+- Has mismatched references (Payment does not point at the supplied Order id).
+- Is already in a terminal state (Order.payment_status not currently
+  `"Pending"` AND Payment.status not currently `"Pending"`).
+
+Approval flips status to
+`approved_for_future_phase8f_real_customer_controlled_mutation`
+only — Phase 8F (the real-customer one-shot controlled mutation) is
+NOT implemented in Phase 8E and requires fresh explicit Director
+approval to design and ship.
+
+**Phase 7E-Live-B (real customer WhatsApp send), Phase 7G-Live
+(real customer courier execution), Phase 8F (real customer
+controlled mutation), and broad customer automation all remain
+NOT approved.**

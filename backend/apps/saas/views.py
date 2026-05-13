@@ -3821,6 +3821,246 @@ class Phase8CPaymentOrderControlledMutationRollbacksView(APIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 8E - Real Customer Payment -> Order Mutation Pilot
+# ---------------------------------------------------------------------------
+
+
+from apps.payments.phase8e_real_customer_payment_order_pilot import (  # noqa: E402
+    inspect_phase8e_real_customer_payment_order_pilot_readiness as _inspect_phase8e_readiness,
+    preview_phase8e_real_customer_payment_order_pilot as _preview_phase8e_gate,
+    serialize_phase8e_candidate as _serialize_phase8e_candidate,
+    serialize_phase8e_dry_run as _serialize_phase8e_dry_run,
+    serialize_phase8e_gate as _serialize_phase8e_gate,
+    summarize_phase8e_gates as _summarize_phase8e_gates,
+)
+from apps.payments.models import (  # noqa: E402
+    RazorpayRealCustomerPaymentOrderMutationCandidate,
+    RazorpayRealCustomerPaymentOrderMutationPilotDryRun,
+    RazorpayRealCustomerPaymentOrderMutationPilotGate,
+)
+
+
+class Phase8ERealCustomerPaymentOrderPilotReadinessView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-payment-order-pilot-readiness/``.
+
+    Phase 8E read-only readiness composition. Auth + admin only;
+    POST/PATCH/DELETE return 405. NEVER mutates real ``Order`` /
+    ``Payment`` / ``Customer`` / ``Lead`` / ``Shipment`` /
+    ``DiscountOfferLog`` / ``WhatsAppMessage`` rows; NEVER calls
+    Razorpay / Meta Cloud / Delhivery / Vapi; NEVER sends a
+    customer notification; NEVER edits any ``.env*`` file.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request):
+        return Response(_inspect_phase8e_readiness())
+
+
+class Phase8ERealCustomerPaymentOrderPilotGatesListView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-payment-order-pilot-gates/``.
+
+    Phase 8E read-only list of pilot gates.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        limit = max(1, min(limit, 200))
+        report = _summarize_phase8e_gates(limit=limit)
+        return Response(
+            {
+                "phase": "8E",
+                "limit": limit,
+                "counts": report["counts"],
+                "items": report["items"],
+                "executionPath": (
+                    "review_dry_run_only_cli_only_no_execute"
+                ),
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "apiEndpointCanApprove": False,
+                "phase8ECallsRazorpay": False,
+                "phase8ECallsMetaCloud": False,
+                "phase8ECallsDelhivery": False,
+                "phase8ECallsVapi": False,
+                "phase8ESendsWhatsApp": False,
+                "phase8EQueuesWhatsApp": False,
+                "phase8ECreatesShipmentRow": False,
+                "phase8ECreatesAwb": False,
+                "phase8ECreatesPaymentLink": False,
+                "phase8ECapturesPayment": False,
+                "phase8ERefundsPayment": False,
+                "phase8ESendsCustomerNotification": False,
+                "phase8EMutatesOrder": False,
+                "phase8EMutatesPayment": False,
+                "phase8EMutatesCustomer": False,
+                "phase8EMutatesLead": False,
+                "phase8EApprovesRealCustomerAutomation": False,
+            }
+        )
+
+
+class Phase8ERealCustomerPaymentOrderPilotGateDetailView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-payment-order-pilot-gates/<pk>/``.
+
+    Phase 8E read-only gate detail.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, pk: int):
+        row = (
+            RazorpayRealCustomerPaymentOrderMutationPilotGate.objects.filter(
+                pk=pk
+            ).first()
+        )
+        if row is None:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8E real customer payment-order "
+                        "pilot gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_serialize_phase8e_gate(row))
+
+
+class Phase8ERealCustomerPaymentOrderPilotPreviewView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-payment-order-pilot-preview/``.
+
+    Phase 8E read-only preview composed from a Phase 8D evidence
+    lock id. NEVER mutates the database; NEVER calls any provider.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        raw = request.query_params.get("phase8d_lock_id")
+        try:
+            lock_id = int(raw or 0)
+        except (TypeError, ValueError):
+            lock_id = 0
+        if lock_id <= 0:
+            return Response(
+                {
+                    "detail": (
+                        "phase8d_lock_id query param must be a "
+                        "positive integer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            _preview_phase8e_gate(phase8d_lock_id=lock_id)
+        )
+
+
+class Phase8ERealCustomerPaymentOrderPilotCandidatesView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-payment-order-pilot-candidates/<gate_id>/``.
+
+    Phase 8E read-only list of candidate rows for one pilot gate.
+    Candidate serializer masks customer name / phone (last-4 only)
+    and NEVER returns raw provider payload / full phone / email.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayRealCustomerPaymentOrderMutationPilotGate.objects.filter(
+                pk=gate_id
+            ).exists()
+        )
+        if not gate_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8E real customer payment-order "
+                        "pilot gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayRealCustomerPaymentOrderMutationCandidate.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "8E",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase8e_candidate(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "phase8EMutatesOrder": False,
+                "phase8EMutatesPayment": False,
+                "phase8ESendsCustomerNotification": False,
+            }
+        )
+
+
+class Phase8ERealCustomerPaymentOrderPilotDryRunsView(APIView):
+    """``GET /api/v1/saas/phase8/real-customer-payment-order-pilot-dry-runs/<gate_id>/``.
+
+    Phase 8E read-only list of dry-run records for one pilot gate.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, _request, gate_id: int):
+        gate_exists = (
+            RazorpayRealCustomerPaymentOrderMutationPilotGate.objects.filter(
+                pk=gate_id
+            ).exists()
+        )
+        if not gate_exists:
+            return Response(
+                {
+                    "detail": (
+                        "Phase 8E real customer payment-order "
+                        "pilot gate not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rows = (
+            RazorpayRealCustomerPaymentOrderMutationPilotDryRun.objects.filter(
+                gate_id=gate_id
+            )
+            .order_by("-created_at")[:200]
+        )
+        return Response(
+            {
+                "phase": "8E",
+                "gateId": gate_id,
+                "items": [
+                    _serialize_phase8e_dry_run(r) for r in rows
+                ],
+                "frontendCanExecute": False,
+                "apiEndpointCanExecute": False,
+                "phase8EMutatesOrder": False,
+                "phase8EMutatesPayment": False,
+                "phase8ECallsRazorpay": False,
+                "phase8ECallsMetaCloud": False,
+                "phase8ECallsDelhivery": False,
+                "phase8ESendsWhatsApp": False,
+                "phase8ESendsCustomerNotification": False,
+            }
+        )
+
+
 __all__ = (
     "CurrentOrganizationView",
     "MyOrganizationsView",
@@ -3959,4 +4199,10 @@ __all__ = (
     "Phase8DControlledMutationEvidenceLocksListView",
     "Phase8DControlledMutationEvidenceLockDetailView",
     "Phase8DControlledMutationEvidenceLockPreviewView",
+    "Phase8ERealCustomerPaymentOrderPilotReadinessView",
+    "Phase8ERealCustomerPaymentOrderPilotGatesListView",
+    "Phase8ERealCustomerPaymentOrderPilotGateDetailView",
+    "Phase8ERealCustomerPaymentOrderPilotPreviewView",
+    "Phase8ERealCustomerPaymentOrderPilotCandidatesView",
+    "Phase8ERealCustomerPaymentOrderPilotDryRunsView",
 )

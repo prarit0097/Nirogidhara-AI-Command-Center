@@ -75,6 +75,12 @@ from .views import (
     Phase8DControlledMutationEvidenceLockPreviewView,
     Phase8DControlledMutationEvidenceLockReadinessView,
     Phase8DControlledMutationEvidenceLocksListView,
+    Phase8ERealCustomerPaymentOrderPilotCandidatesView,
+    Phase8ERealCustomerPaymentOrderPilotDryRunsView,
+    Phase8ERealCustomerPaymentOrderPilotGateDetailView,
+    Phase8ERealCustomerPaymentOrderPilotGatesListView,
+    Phase8ERealCustomerPaymentOrderPilotPreviewView,
+    Phase8ERealCustomerPaymentOrderPilotReadinessView,
     RazorpayWhatsAppInternalNotificationDryRunsView,
     RazorpayWhatsAppInternalNotificationGateDetailView,
     RazorpayWhatsAppInternalNotificationGatesListView,
@@ -882,6 +888,50 @@ urlpatterns = [
         Phase8DControlledMutationEvidenceLockPreviewView.as_view(),
         name=(
             "saas-phase8d-controlled-mutation-evidence-lock-preview"
+        ),
+    ),
+    # Phase 8E - Real Customer Payment -> Order Mutation Pilot
+    # Gate (review / dry-run only against ONE real customer Order
+    # + Payment candidate; read-only API; CLI-only state changes;
+    # NEVER mutates real Order / Payment / Customer / Lead /
+    # Shipment / DiscountOfferLog / WhatsAppMessage rows; NEVER
+    # calls Razorpay / Meta Cloud / Delhivery / Vapi).
+    path(
+        "phase8/real-customer-payment-order-pilot-readiness/",
+        Phase8ERealCustomerPaymentOrderPilotReadinessView.as_view(),
+        name="saas-phase8e-real-customer-payment-order-pilot-readiness",
+    ),
+    path(
+        "phase8/real-customer-payment-order-pilot-gates/",
+        Phase8ERealCustomerPaymentOrderPilotGatesListView.as_view(),
+        name="saas-phase8e-real-customer-payment-order-pilot-gates",
+    ),
+    path(
+        "phase8/real-customer-payment-order-pilot-gates/<int:pk>/",
+        Phase8ERealCustomerPaymentOrderPilotGateDetailView.as_view(),
+        name=(
+            "saas-phase8e-real-customer-payment-order-pilot-gate-detail"
+        ),
+    ),
+    path(
+        "phase8/real-customer-payment-order-pilot-preview/",
+        Phase8ERealCustomerPaymentOrderPilotPreviewView.as_view(),
+        name=(
+            "saas-phase8e-real-customer-payment-order-pilot-preview"
+        ),
+    ),
+    path(
+        "phase8/real-customer-payment-order-pilot-candidates/<int:gate_id>/",
+        Phase8ERealCustomerPaymentOrderPilotCandidatesView.as_view(),
+        name=(
+            "saas-phase8e-real-customer-payment-order-pilot-candidates"
+        ),
+    ),
+    path(
+        "phase8/real-customer-payment-order-pilot-dry-runs/<int:gate_id>/",
+        Phase8ERealCustomerPaymentOrderPilotDryRunsView.as_view(),
+        name=(
+            "saas-phase8e-real-customer-payment-order-pilot-dry-runs"
         ),
     ),
 ]
