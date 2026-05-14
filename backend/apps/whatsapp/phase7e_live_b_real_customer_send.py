@@ -67,10 +67,28 @@ def _flag_enabled() -> bool:
 
 
 def _kill_switch_state() -> dict[str, Any]:
+    # Phase 7E-Live-B Hotfix-1: an explicitly disabled global kill
+    # switch row anywhere in the table means the kill switch is OFF
+    # (no longer protecting). The legacy ``.first()`` lookup returned
+    # undefined ordering across DB engines, so a seeded ``enabled=True``
+    # row could mask a freshly created ``enabled=False`` row on
+    # Postgres. Returning the disabled row whenever one exists is the
+    # safety-correct semantic.
     try:
         from apps.saas.models import RuntimeKillSwitch
 
-        row = RuntimeKillSwitch.objects.filter(scope="global").first()
+        disabled = (
+            RuntimeKillSwitch.objects.filter(scope="global", enabled=False)
+            .order_by("-pk")
+            .first()
+        )
+        if disabled is not None:
+            return {
+                "enabled": False,
+                "model": "RuntimeKillSwitch",
+                "id": disabled.pk,
+            }
+        row = RuntimeKillSwitch.objects.filter(scope="global").order_by("-pk").first()
     except Exception:  # pragma: no cover - defensive
         return {"enabled": True, "model": "lookup_failed_treated_as_enabled"}
     if row is None:
