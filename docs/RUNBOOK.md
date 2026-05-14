@@ -4065,3 +4065,105 @@ NOT call Razorpay / Meta Cloud / Delhivery / Vapi, did NOT send
 or queue WhatsApp, did NOT send a customer notification, did NOT
 create a `Shipment` / AWB / payment link, did NOT mutate any
 business row, did NOT edit any `.env*` file.**
+
+### Test Hygiene Hotfix-1 — Pin integration modes in conftest for VPS-safe full-suite runs
+
+Test Hygiene Hotfix-1 is a **TEST-ONLY** fix that resolves the
+~43 VPS full-suite failures observed when `pytest -q` was first
+run against the live `.env.production` on the VPS. No production
+code, model, migration, service, view, env flag, `.env*` file,
+or frontend was touched.
+
+**Root cause.** The VPS `.env.production` has non-mock values
+for several integration adapters:
+
+- `RAZORPAY_MODE=test` (NOT `mock`) — real Razorpay TEST API
+- `WHATSAPP_PROVIDER=meta_cloud` (NOT `mock`) — real Meta Cloud client
+- `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` — final-send allow-list guard
+
+Tests that don't carry their own `override_settings` inherit
+these values. The cascade of failures observed:
+
+- Phase 4D / `test_writes` — real Razorpay TEST API created live
+  `rzp.io` payment links instead of the mock placeholder; URL
+  mismatch + Razorpay 500s.
+- Phase 5A webhook — Meta Cloud signature verification rejected
+  the test fixtures' app-secret HMAC because the live
+  `META_WA_APP_SECRET` was in scope.
+- Phase 5A / 5B / 5C / 5D / 5E sends — the final-send limited-mode
+  allow-list guard refused outbounds to any phone not in
+  `WHATSAPP_LIVE_META_ALLOWED_TEST_NUMBERS`, surfacing as
+  `Limited test mode: destination not on allow-list`.
+
+**Reproduce locally** (proves these are env-leak failures, not
+product defects):
+
+```bash
+cd backend
+RAZORPAY_MODE=test \
+WHATSAPP_PROVIDER=meta_cloud \
+WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true \
+python -m pytest -q
+# Before the hotfix: 49 failures (matched the ~43 the VPS saw).
+# After the hotfix: all 2188 passed.
+```
+
+**Fix.** `backend/tests/conftest.py` extends the existing
+`_force_eager_celery` session-autouse fixture to also pin every
+integration adapter to `mock` for the whole test session:
+
+```python
+with override_settings(
+    CELERY_TASK_ALWAYS_EAGER=True,
+    CELERY_TASK_EAGER_PROPAGATES=True,
+    RAZORPAY_MODE="mock",
+    WHATSAPP_PROVIDER="mock",
+    WHATSAPP_LIVE_META_LIMITED_TEST_MODE=False,
+    DELHIVERY_MODE="mock",
+    VAPI_MODE="mock",
+    META_MODE="mock",
+):
+    yield
+```
+
+Tests that intentionally need a non-mock value already carry
+their own `override_settings`, which wins over the session pin
+inside that test. **Zero stragglers needed manual cleanup** — no
+test file other than `backend/tests/conftest.py` was touched.
+
+**Verification.** Both runs are now all-green at **2188 backend
+tests + 82 frontend tests**:
+
+```bash
+# Normal run.
+python -m pytest -q                    # 2188 passed
+python manage.py makemigrations --check --dry-run   # No changes detected
+python manage.py check                              # 0 issues
+
+# Faked-`.env.production` run — must also pass.
+RAZORPAY_MODE=test \
+WHATSAPP_PROVIDER=meta_cloud \
+WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true \
+python -m pytest -q                    # 2188 passed
+
+cd ../frontend
+npm run lint && npm test && npm run build    # all green
+```
+
+**Director reconciliation note.** The current VPS
+`.env.production` has drifted from the canonical "stays mock-mode
+in production" list in nd.md §17. The WhatsApp pair
+(`WHATSAPP_PROVIDER=meta_cloud` + `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`)
+appears intentional for the controlled-pilot posture that powered
+the Phase 7E-Live-A real send + the Phase 5F-Gate real-inbound
+auto-reply test. `RAZORPAY_MODE=test` must be flipped to `live`
+before any real customer payment collection — that flip is a
+separate Director directive. **Do NOT edit `.env.production`
+without Director sign-off.**
+
+**Test Hygiene Hotfix-1 did NOT execute or roll back anything,
+did NOT call Razorpay / Meta Cloud / Delhivery / Vapi, did NOT
+send or queue WhatsApp, did NOT send a customer notification,
+did NOT create a `Shipment` / AWB / payment link, did NOT mutate
+any business row, did NOT edit any `.env*` file or any frontend
+file.**
