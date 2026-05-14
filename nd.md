@@ -102,15 +102,30 @@
 
 ---
 
-## Current Working Memory — Phase 6M Baseline
+## Current Working Memory — Phase 8F-Hotfix-1 Baseline
 
 > Single point of truth for "where are we right now". Re-read this block at the start of every new session before touching anything.
 
 - **Project:** Nirogidhara AI Command Center (multi-tenant SaaS scaffold over a single-tenant Ayurvedic D2C operations stack).
 - **Production URL:** <https://ai.nirogidhara.com>
 - **VPS path:** `/opt/nirogidhara-command` (Hostinger VPS; six namespaced containers; host port `18020 → 80`; host Ubuntu Nginx + Certbot terminate TLS).
-- **Latest completed phase:** **Phase 7B — Controlled Pilot Execution Gate (gate-only; CLI-only review state changes; `PHASE7_CONTROLLED_PILOT_GATE_ENABLED=false` default; never executes a pilot, never calls Razorpay / Meta Cloud / Delhivery / Vapi, never sends or queues WhatsApp, never creates shipment / AWB, never mutates real business tables, never validates the live `RAZORPAY_KEY_ID`). Approval flips status to `approved_for_future_phase7c_execution_review` only — Phase 7C / live execution remains NOT approved.**
+- **Latest completed phase:** **Phase 8F-Hotfix-1 — Recover blocked approval gate + sync migration drift (approval-only recovery; no execute; never run on VPS; commit `2ffb3ca`).** Phase 8F Controlled Real Customer Payment → Order Mutation gate framework is implemented but **NOT executed on the VPS**. The on-VPS Phase 8F gate id=1 landed in `blocked` after the prior approve attempt ran while `PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED` was false; the hotfix added migration `payments.0025_phase8f_hotfix_rename_indexes` (`RenameIndex` ×8) + a narrowly-scoped approve-recovery path (`gate.status="blocked"` AND `gate.blockers == {"PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true"}` AND env flag now on AND no attempt ever crossed execute/mutation/provider) that stamps a sealed `phase8fHotfix1Recovery` evidence block on the gate. Recovery is approval-only; it does NOT execute the mutation.
+- **Phase 8F target candidate (still selected, NOT mutated):** Order `NRG-20435` (Partial, Confirmed stage), Payment `PAY-30125` (Pending), masked phone `1203`. The execute CLI command exists but has NEVER been run on the VPS. Order/Payment statuses on the live DB remain `Partial` / `Pending` unchanged.
 
+- **Phase 8F (still complete; not executed):** Controlled Real Customer Payment → Order Mutation Gate framework — CLI-only one-shot mutation against the single Phase 8E-approved candidate; three Phase 8F env flags default LOCKED OFF (`PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED`, `PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION`, `PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION`).
+- **Phase 8E-Hotfix-1 (still complete):** Candidate pool inspector + `Partial`+`Pending` review-only candidate acceptance.
+- **Phase 8E (still complete):** Real Customer Payment → Order Mutation Pilot Gate (review / dry-run only; CLI-only review state changes; approval flips to `approved_for_future_phase8f_real_customer_controlled_mutation`).
+- **Phase 8D / 8D-Hotfix-1 (still complete):** Phase 8C Controlled Mutation Evidence Lock + resolver via rollback record (lock-only meta-audit).
+- **Phase 8C / 8C-Hotfix-1 (still complete):** Controlled Real Payment → Order Mutation framework + sandbox fixture seed (CLI-only one-shot; never run on VPS; only executed in test DB).
+- **Phase 8A / 8B (still complete):** Payment → Order Mutation Sandbox + Review gates (sandbox / review-only; CLI-only review state changes).
+- **Phase 7I (still complete):** Final Phase 7 Payment + WhatsApp + Courier Audit Lock (lock-only meta-audit over Phase 7D + 7E-Live-A + 7G + 7H).
+- **Phase 7E-Live-A + Hotfix-1/2/3 (still complete; one real WhatsApp template send done; rolled back):** Internal allowed-list WhatsApp one-shot send + retry-safety hotfixes. Phase 7E-Live-B (real customer WhatsApp send) remains **NOT approved**.
+- **Phase 7H (still complete):** Phase 7G Courier Execution Evidence Lock (lock-only meta-audit).
+- **Phase 7G / 7G-Hotfix-1/2 (still complete; one real Delhivery TEST/MOCK AWB created; rolled back):** Delhivery courier one-shot TEST/MOCK execution + UTC window guard + safe-retry hotfixes. Phase 7G-Live (real customer courier execution) remains **NOT approved**.
+- **Phase 7F (still complete):** Delhivery / Courier Controlled Readiness Gate (gate-only; CLI-only review state changes).
+- **Phase 7E (still complete):** Controlled Internal WhatsApp Notification Readiness Gate (gate-only; CLI-only review state changes; the `apps.saas.utc_window` shared utility was introduced here).
+- **Phase 7D / 7D-Hotfix-1 (still complete; one real Razorpay TEST order created; rolled back):** Controlled Pilot one-shot internal TEST execution + structured UTC window guard. Single real artefact: `order_SmThqpK6sc6Dhs` (executed 2026-05-07 12:42:46 UTC, status `rolled_back`).
+- **Phase 7B (still complete):** Controlled Pilot Execution Gate (gate-only; CLI-only review state changes). Phase 7C remains **NOT approved**.
 - **Phase 6T (still complete):** Final Phase 6 Audit + Lock / Controlled Pilot Execution Decision Gate (audit-lock-only; CLI-only review state changes; `RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED=false` default).
 - **Phase 6Q (still complete):** Payment → Order Workflow Safety Gate (audit-gate-only, CLI-only review state changes).
 - **Phase 6P (still complete):** Controlled Internal Paid-Status Mutation Test (sandbox-ledger-only, CLI-only execution).
@@ -123,9 +138,9 @@
   3. `tests/test_phase5a.py::test_webhook_post_accepts_valid_signature_in_meta_cloud_mode` — `override_settings` now also sets `WHATSAPP_WEBHOOK_SECRET=""`, forcing `MetaCloudProvider` to fall back to `META_WA_APP_SECRET=secret`. Without this, a real `WHATSAPP_WEBHOOK_SECRET` in `.env.production` wins over the test's app-secret override and verification fails.
   4. + 5. `tests/conftest.py` — new session-autouse fixture pins `CELERY_TASK_ALWAYS_EAGER=True` + `CELERY_TASK_EAGER_PROPAGATES=True` for every test. This is required because production `.env.production` runs Celery with a real broker (`CELERY_TASK_ALWAYS_EAGER=false`) so `.delay()` would otherwise be async on VPS and Phase 5B `whatsapp.message.sent` / Phase 5C `whatsapp.ai.run_started` audit kinds would never land before the test's assertions ran.
   6. `requirements.txt` adds `pytest-asyncio>=0.21,<1.0` + `pyproject.toml` sets `asyncio_mode = "strict"`. Phase 4A's three async Channels-consumer tests use the explicit `@pytest.mark.asyncio` decorator; strict mode keeps every existing sync test untouched while the async tests run cleanly on a freshly built VPS image.
-- **Latest pushed commit:** see `git log -1` after this Phase 6T commit is pushed.
-- **Test baseline (green):** **1792 backend tests + 70 frontend tests.** `python manage.py makemigrations --check --dry-run` → `No changes detected`. `python manage.py check` → 0 issues. `npm run lint` → 0 errors (8 pre-existing shadcn warnings). `npm test` → 70 passed. `npm run build` → OK.
-- **Next planned phase:** **Phase 7C — Future Controlled Pilot Execution (NOT approved, NOT designed in this turn).** Phase 7B's `approved_for_future_phase7c_execution_review` is a *status name*, not an authorisation. Phase 7C may only be considered after a fresh, dated, written Director approval that names a specific Phase 7B gate id; Phase 7B does not preempt or imply Phase 7C approval. Do not implement or run any live pilot execution, provider call, WhatsApp send, courier booking, shipment / AWB creation, or `Order` / `Payment` mutation without a separate, future, explicitly recorded Director approval beyond Phase 7B.
+- **Latest pushed commit:** `2ffb3ca` — `fix: recover phase 8f blocked approval gate` (Phase 8F-Hotfix-1). Pushed to `origin/main` at GitHub: https://github.com/prarit0097/Nirogidhara-AI-Command-Center.
+- **Test baseline (green):** **2188 backend tests + 82 frontend tests.** `python manage.py makemigrations --check --dry-run` → `No changes detected`. `python manage.py check` → 0 issues. `npm run lint` → 0 errors (8 pre-existing shadcn warnings). `npm test` → 82 passed. `npm run build` → OK.
+- **Next planned phase:** **Phase 8F live execute on the VPS for the chosen Order `NRG-20435` + Payment `PAY-30125` candidate — STILL NOT APPROVED.** A live Phase 8F execute requires (a) a separate dated, written Director directive that explicitly names the Phase 8F gate id, attempt id, source Phase 8E gate id 1, target Order id NRG-20435, target Payment id PAY-30125; (b) all three Phase 8F env flags flipped true (`PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED`, `PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION`, `PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION`); (c) a structured 15-min `BEGIN_UTC=…` / `END_UTC=…` Director sign-off window; (d) `--confirm-one-shot-real-mutation` + non-empty `--operator-name`; (e) the runtime kill switch enabled; (f) a ready rollback command. Approval-recovery via Phase 8F-Hotfix-1 is the safe path to unblock the gate after the env flag flip, but it does NOT execute the mutation. Phase 7E-Live-B (real customer WhatsApp send) and Phase 7G-Live (real customer courier execution) remain **NOT approved**.
 - **Main safety flags (all stay in current state until Director explicitly flips them):**
   - `WHATSAPP_AI_AUTO_REPLY_ENABLED=false`
   - `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`
@@ -133,10 +148,23 @@
   - `WHATSAPP_CALL_HANDOFF_ENABLED=false`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false`, `WHATSAPP_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false`, `WHATSAPP_REORDER_DAY20_ENABLED=false`
   - `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`, `RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED=false`, `RAZORPAY_WEBHOOK_NOTIFY_CUSTOMER_ENABLED=false`, `RAZORPAY_WEBHOOK_STORE_RAW_PAYLOAD=false`
   - `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED=false` (rolled back after the Phase 6K-B one-shot pass)
+  - `PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED=false`, `PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION=false`, `PHASE7D_ALLOW_RAZORPAY_TEST_ORDER=false` (rolled back after the Phase 7D one-shot)
+  - `PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED=false` (rolled back after the Phase 7E-Live-A one-shot)
+  - `PHASE7G_COURIER_EXECUTION_ENABLED=false`, `PHASE7G_DIRECTOR_APPROVED_ONE_SHOT_COURIER_EXECUTION=false`, `PHASE7G_ALLOW_DELHIVERY_TEST_AWB=false` (rolled back after the Phase 7G TEST/MOCK one-shot)
+  - `PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_ENABLED=false`, `PHASE8B_PAYMENT_ORDER_MUTATION_REVIEW_GATE_ENABLED=false`
+  - `PHASE8C_PAYMENT_ORDER_CONTROLLED_MUTATION_GATE_ENABLED=false`, `PHASE8C_DIRECTOR_APPROVED_ONE_SHOT_MUTATION=false`, `PHASE8C_ALLOW_INTERNAL_ORDER_PAYMENT_MUTATION=false`
+  - `PHASE8E_REAL_CUSTOMER_PAYMENT_ORDER_PILOT_ENABLED=false`
+  - **`PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED=false`, `PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION=false`, `PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION=false`** (all three required true to execute the real-customer mutation; defaults LOCKED OFF)
   - `MCP_ENABLED=false`, `MCP_READ_ONLY_MODE=true`, `MCP_WRITE_TOOLS_ENABLED=false`, `MCP_PROVIDER_TOOLS_ENABLED=false`
   - `RuntimeKillSwitch` global → **enabled** (live gate refuses provider-side execution)
   - Campaigns / broadcast / lifecycle automation / RTO rescue / reorder cadence → **LOCKED**
-- **Phase 6K-B real artefact (immutable record):** `execution_id=pex_8f309650e9644cfaae4418f9` → `provider_object_id=order_Sks3KPf0vntKhf`, amount = `100 paise INR` (₹1.00), Razorpay TEST key, **no payment link, no capture, no customer notification, no business mutation**, `rollback_status=completed`, `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED` flipped back to `false` immediately after the run. This is the only real provider-side write the platform has ever made.
+- **Real artefacts the platform has produced (immutable records — each was rolled back / record-only):**
+  - **Phase 6K-B (Razorpay TEST order, 2026-04):** `execution_id=pex_8f309650e9644cfaae4418f9` → `provider_object_id=order_Sks3KPf0vntKhf`, amount = `100 paise INR` (₹1.00), Razorpay TEST key. No payment link, no capture, no customer notification, no business mutation. `rollback_status=completed`. `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED` flipped back to `false` immediately after the run.
+  - **Phase 7D (Razorpay TEST order, 2026-05-07):** Phase 7D attempt id=1, gate id=1, `executed_at=2026-05-07T12:42:46Z`, provider order id `order_SmThqpK6sc6Dhs`, status `rolled_back`, `rollback_status=completed`, `provider_call_attempted=True`. The execute fell ~134 seconds *before* the Director-approved UTC window of `12:45:00Z → 13:00:00Z` — this drove the Phase 7D-Hotfix-1 structured UTC window guard. No business or customer impact (every locked-False boolean stayed False, the attempt was rolled back).
+  - **Phase 7G (Delhivery TEST/MOCK AWB, 2026-05):** Phase 7G attempt id=2, AWB `DLH35391376`, provider object id present, status `rolled_back_recorded`, `rollback_status=recorded_only_no_provider_cancel`, `awb_created=True`. Shipment NOT created (Phase 7G writes no `Shipment` row at execute time — provider/AWB summary lives on the attempt row only). No WhatsApp, no customer notification.
+  - **Phase 7E-Live-A (internal allowed-list WhatsApp send, 2026-05):** One real Meta template send to an internal allowed test number (suffix `9990`), `provider_message_id=WAM-100003+`, delivered + read, then manually rolled back (record-only). Phase 7E-Live-A-Hotfix-2 and -3 added safe-retry support for wrapper-failure + no-provider rollback retry. No real customer phone touched; `recipient_scope=internal_staff_allow_list`.
+  - **Phase 5F-Gate Real Inbound Auto-Reply (real Meta inbound + outbound, 2026-05):** Real customer inbound `WAM-100059` (allowed test number suffix `9990`) routed through the deterministic Claim-Vault-grounded fallback inside the orchestrator, auto-reply sent + delivered + read, `replyAutoSentCount=1`, `unexpectedNonAllowedSendsCount=0`, mutation counts (Order/Payment/Shipment/DiscountOfferLog) = 0. After the soak the Director rolled `WHATSAPP_AI_AUTO_REPLY_ENABLED` back to `false`.
+- **Real-customer Order/Payment row currently selected for Phase 8F:** `Order.id=NRG-20435` (`payment_status=Partial`, stage `Confirmed`, masked phone last-4 `1203`), `Payment.id=PAY-30125` (`status=Pending`, `order_id=NRG-20435`). Phase 8E gate id=1 is approved for future Phase 8F; Phase 8F gate id=1 went through `blocked → recovery-eligible` (Phase 8F-Hotfix-1) but **has NOT been executed**. The execute CLI command exists; running it requires a fresh Director directive + the three Phase 8F env flag flips + a 15-min structured UTC window.
 - **Phase 6M handler safety summary:** `POST /api/webhooks/razorpay/test/` is wired but stays dormant — refuses every inbound when `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`. When enabled (test only, never on production webhook secret), it verifies HMAC-SHA256 over the raw body in constant time, validates a 300-second replay window, dedupes on `X-Razorpay-Event-Id`, masks every payload (13-key scrub list), persists only a safe summary on `RazorpayWebhookEvent`, and **never** mutates Order / Payment / Shipment / DiscountOfferLog / Customer or sends a customer notification (asserted by `assert_no_business_mutation` in tests).
 - **Phase 6R implementation summary:** new `apps.payments.RazorpayPaymentDispatchReadinessGate` model + migration `payments.0008_phase6r_payment_dispatch_readiness`. New `apps.payments.razorpay_payment_dispatch_readiness` service ships 10 functions (`build_phase6r_payment_dispatch_readiness_contract`, `inspect_phase6r_payment_dispatch_readiness`, `validate_phase6r_source_gate_eligibility`, `preview_phase6r_payment_dispatch_readiness_gate`, `prepare_phase6r_payment_dispatch_readiness_gate`, `approve_phase6r_payment_dispatch_readiness_gate`, `reject_phase6r_payment_dispatch_readiness_gate`, `archive_phase6r_payment_dispatch_readiness_gate`, `summarize_phase6r_payment_dispatch_readiness_gates`, `assert_phase6r_no_live_send_or_courier_mutation`). Seven CLI commands (`inspect_razorpay_payment_dispatch_readiness`, `preview_razorpay_payment_dispatch_readiness_gate`, `prepare_razorpay_payment_dispatch_readiness_gate`, `approve_razorpay_payment_dispatch_readiness_gate` (`require_reason=True`), `reject_razorpay_payment_dispatch_readiness_gate`, `archive_razorpay_payment_dispatch_readiness_gate`, `inspect_razorpay_payment_dispatch_readiness_gates`). Four **read-only GET** admin/auth-protected DRF endpoints under `/api/v1/saas/razorpay/payment-dispatch-readiness{,-gates,-gates/<id>,-preview}/`. **There is no POST endpoint that prepares, approves, rejects, or archives a readiness gate** — review state changes are exclusively via CLI. Eight new audit kinds (`razorpay.payment_dispatch_readiness.{readiness_inspected,previewed,prepared,approved_for_future_phase6s,rejected,archived,blocked,invariant_violation_blocked}`); audit payloads NEVER carry `raw_payload` / `raw_signature` / `raw_secret` / `phone` / `email` / `address` / `card` / `vpa` / `upi` / `bank_account` / `wallet`. New env flag `RAZORPAY_PAYMENT_DISPATCH_READINESS_ENABLED` (default `False`) gates `prepare`/`approve`/`reject`/`archive`. Approve also requires non-empty manual review reason. The model declares **12 locked-False safety booleans** (`dispatch_readiness_allowed_in_phase6r`, `real_order_mutation_was_made`, `real_payment_mutation_was_made`, `shipment_mutation_was_made`, `shipment_created`, `whatsapp_message_created`, `whatsapp_message_queued`, `customer_notification_sent`, `meta_cloud_call_attempted`, `delhivery_call_attempted`, `razorpay_call_attempted`, `provider_call_attempted`); the defensive guard `assert_phase6r_no_live_send_or_courier_mutation` emits an audit row + raises `ValueError` if any of these is ever flipped. `/saas-admin` adds a "Razorpay Payment → WhatsApp / Courier Dispatch Readiness" section (read-only — no buttons; CLI-only reminder; readiness contract table for all 9 events; recent readiness gates table; three readiness checklists — WhatsApp / courier / dispatch). Phase 6R NEVER sends a WhatsApp message, NEVER calls Meta Cloud, NEVER calls Delhivery, NEVER creates a shipment / AWB, NEVER mutates real `Order` / `Payment` / `Shipment` / `DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` / `WhatsAppConversation` rows, NEVER calls Razorpay (asserted with before/after counts + mock-spied Razorpay / WhatsApp / Vapi / Delhivery clients in tests). 32 new backend tests + 2 new frontend tests; **1441 backend / 58 frontend, all green**.
 - **Phase 6Q implementation summary:** new `apps.payments.RazorpayPaymentOrderWorkflowGate` model + migration `payments.0007_phase6q_payment_order_workflow_gate`. New `apps.payments.razorpay_payment_order_workflow_gate` service ships 10 functions (`build_phase6q_payment_order_workflow_contract`, `inspect_phase6q_payment_order_workflow_gate_readiness`, `validate_phase6q_source_eligibility`, `preview_phase6q_payment_order_workflow_gate`, `prepare_phase6q_payment_order_workflow_gate`, `approve_phase6q_payment_order_workflow_gate`, `reject_phase6q_payment_order_workflow_gate`, `archive_phase6q_payment_order_workflow_gate`, `summarize_phase6q_payment_order_workflow_gates`, `assert_phase6q_no_real_business_mutation`). Seven CLI commands. Four **read-only GET** admin/auth-protected DRF endpoints. **There is no POST endpoint that prepares, approves, rejects, or archives a gate** — gate state changes are exclusively via CLI. Eight new audit kinds (`razorpay.payment_order_gate.{readiness_inspected,previewed,prepared,approved_for_future_phase6r,rejected,archived,blocked,invariant_violation_blocked}`). New env flag `RAZORPAY_PAYMENT_ORDER_WORKFLOW_GATE_ENABLED` (default `False`) gates `prepare`/`approve`/`reject`/`archive`. Approve also requires non-empty manual review reason. `/saas-admin` adds a "Razorpay Payment → Order Workflow Safety Gate" section (read-only — no buttons; CLI-only reminder). Phase 6Q NEVER mutates real `Order` / `Payment` / `Shipment` / `DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` / `WhatsAppConversation` rows (asserted with before/after counts + mock-spied Razorpay / WhatsApp / Vapi clients). 31 new backend tests + 2 new frontend tests; **1409 backend / 56 frontend, all green**.
@@ -151,33 +179,35 @@
   - Claim Vault: `version="demo-v2"` rows are seeded for the eight categories; **doctor-approved final claims are NOT yet committed**. Lifecycle messages requiring Claim coverage still fail closed for any category whose final approved claims are missing.
   - WhatsApp customer pilot soak was an accelerated rehearsal, not a full multi-day soak — the dashboard remains the source of truth before any flag flip.
 
-### Docs Sync Status (Phase 6T baseline)
+### Docs Sync Status (Phase 8F-Hotfix-1 baseline)
 
 | Doc | Status | Notes |
 | --- | --- | --- |
-| `nd.md` | ✅ synced | This block lists Phase 6R as the latest completed phase; Phase 6S as next planned. |
-| `CLAUDE.md` | ✅ synced | Line-12 status string includes Phase 6R; new "Phase 6R note" block + "Where things live" rows. |
-| `AGENTS.md` | ✅ synced | Test counts + hard-stop list current. |
-| `README.md` | ✅ synced | Phase summary + test counts current. |
-| `docs/MASTER_BLUEPRINT_V2.md` | ✅ synced | Document Control table reflects Phase 6N + 1318/50 baseline; Completed Build Timeline gained the Phase 6N row; Phase 6O marked as planned (not started). |
-| `docs/RUNBOOK.md` | ✅ synced | New Phase 6N diagnostics section; baseline `1318/50`. |
-| `docs/BACKEND_API.md` | ✅ synced | New `/api/v1/saas/razorpay/business-mutation-sandbox-plan/` + `/api/v1/saas/razorpay/business-mutation-sandbox-readiness/` rows. |
-| `docs/FRONTEND_AUDIT.md` | ✅ synced | Header bumped to Phase 6N; new `/saas-admin` "Razorpay Business Mutation Sandbox Plan" section listed. |
-| `docs/FUTURE_BACKEND_PLAN.md` | ✅ synced | Phase 6N marked ✅ shipped (planning-only); Phase 6O added as next planned. |
-| `docs/DEPLOYMENT_VPS.md` | ✅ synced | Phase 6N production posture documented (read-only inspectors only; no env change). |
-| `docs/WHATSAPP_INTEGRATION_PLAN.md` | ✅ synced | Top-of-file status note unchanged (Phase 6N does not touch WhatsApp). |
+| `nd.md` | ✅ synced | TL;DR §0 + Working Memory list Phase 8F-Hotfix-1 as the latest completed phase; Phase 8F live execute (still NOT approved) as next planned. |
+| `CLAUDE.md` | ✅ synced | §0 status block carries Phase 8F-Hotfix-1 entry + canonical Phase 8F summary; "Where things live" rows current through migration `payments.0025`. |
+| `AGENTS.md` | ✅ synced | Test counts (2188 backend / 82 frontend) current. |
+| `README.md` | ⚠ recheck | Earlier README snapshot lagged Phase 8 entries; verify before next release. |
+| `docs/MASTER_BLUEPRINT_V2.md` | ⚠ recheck | Document Control table + Completed Build Timeline should add Phase 7+/8+ rows. |
+| `docs/RUNBOOK.md` | ✅ synced | Phase 8E + 8E-Hotfix-1 + 8F + 8F-Hotfix-1 runbook sections appended. |
+| `docs/BACKEND_API.md` | ✅ synced | Phase 8E candidate-pool endpoint + Phase 8F read-only endpoints listed. |
+| `docs/FRONTEND_AUDIT.md` | ⚠ recheck | Verify `/saas-admin` Phase 8E candidate-pool subsection + Phase 8F section are listed. |
+| `docs/FUTURE_BACKEND_PLAN.md` | ⚠ recheck | Phase 8F-Hotfix-1 should be marked ✅ shipped; Phase 8F live-execute should remain marked NOT approved. |
+| `docs/DEPLOYMENT_VPS.md` | ⚠ recheck | Phase 8F-Hotfix-1 production posture (migration `payments.0025` applied; recovery-only approval CLI; no execute flags flipped) should be documented. |
+| `docs/WHATSAPP_INTEGRATION_PLAN.md` | ✅ synced | Top-of-file status note unchanged (Phase 8F does not touch WhatsApp). |
 
-### Phase 6T shipped summary
+### Phase 8F-Hotfix-1 shipped summary
 
-Phase 6T ships the final Phase 6 audit-lock / decision gate over the Phase 6N -> 6S chain. It adds `RazorpayPhase6FinalAuditLock`, the `RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED=false` safe-default flag, CLI-only review commands, read-only SaaS endpoints, and the read-only `/saas-admin` final audit section. Phase 6T did not execute a pilot, did not call any provider, did not send or queue WhatsApp, did not create shipment / AWB rows, and did not mutate real business state. Local verification for this handoff: `python manage.py makemigrations --check --dry-run`, `python manage.py check`, `python -m pytest -q` = **1495 passed**, `npm run lint` = **0 errors / existing warnings only**, `npm test` = **62 passed**, `npm run build` = passed.
+Phase 8F-Hotfix-1 (commit `2ffb3ca`) ships migration `payments.0025_phase8f_hotfix_rename_indexes` (`RenameIndex` ×8 — pure metadata; no schema rewrite; no `RunPython`) + a narrowly-scoped approve-recovery path on `apps.payments.phase8f_real_customer_controlled_mutation.approve_phase8f_real_customer_controlled_mutation`. The recovery path lets a Phase 8F gate go from `blocked` to `approved_for_one_shot_real_customer_mutation` ONLY when (a) `gate.blockers` exactly equals `{"PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true"}`, (b) `PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED=true` at runtime, (c) no attempt on the gate carries `executed_at` set or any `*_mutation_was_made` / `customer_notification_sent` / `whatsapp_sent` / `courier_called` / `provider_call_attempted` / `shipment_created` flag True, (d) every other eligibility condition (Order/Payment status snapshot, Phase 8E source gate status, kill switch, Phase 7E-Live-B / 7G-Live / broad customer automation not approved) still holds. When recovery fires, `gate.evidence_json` is stamped with a sealed `phase8fHotfix1Recovery` block + `gate.blockers` is cleared + the `phase8f.real_mutation.approved` audit row carries `phase8f_hotfix1_recovered_from_missing_env_flag=true`. Phase 8F-Hotfix-1 did NOT execute Phase 8F, did NOT roll back Phase 8F, did NOT call any provider, did NOT send or queue WhatsApp, did NOT send a customer notification, did NOT create a `Shipment` / AWB / payment link, did NOT mutate real `Order.payment_status` / `Order.state` / `Payment.status` / `Customer` / `Lead` / `Shipment` / `DiscountOfferLog` / `WhatsAppMessage`. Local verification: `python manage.py makemigrations --check --dry-run` → `No changes detected`; `python manage.py check` → 0 issues; `python -m pytest -q` → **2188 passed**; `npm run lint` → 0 errors; `npm test` → **82 passed**; `npm run build` → passed. 8 net new backend tests cover the recovery contract (succeeds with env-flag-only blocker + env on; refuses on any extra blocker / drifted Order status / executed attempt / mutation flag / provider flag / env flag still off; recovery keeps every locked-False flag on the new attempt False).
 
 ### Recommended next action
 
-**Phase 7A - Future controlled internal pilot execution design, only after explicit Director approval.** Phase 6T does not approve execution. Any future Phase 7A work must be a separate design phase before live workflow code exists, and it must preserve the Phase 6T lock: internal staff only, max one pilot order, max 100 paise, kill-switch reviewed, rollback approved, provider flags still false until the future phase explicitly changes them, and no real customer data without final approval.
+**Live Phase 8F execute on the VPS — STILL NOT APPROVED.** Phase 8F-Hotfix-1 unblocks the approve transition only; it does NOT execute the mutation. A live Phase 8F execute requires a separate dated, written Director directive that explicitly names the Phase 8F gate id, attempt id, source Phase 8E gate id 1, target Order id `NRG-20435`, target Payment id `PAY-30125`; all three Phase 8F env flags flipped true; a structured 15-min Director sign-off UTC window referencing those exact ids; `--confirm-one-shot-real-mutation`; non-empty `--operator-name`; the runtime kill switch enabled; and a ready rollback command. Phase 7E-Live-B (real customer WhatsApp send) and Phase 7G-Live (real customer courier execution) remain **NOT approved** and are NOT a prerequisite for Phase 8F (Phase 8F mutates `Order.payment_status` + `Payment.status` only; it does NOT send WhatsApp, NOT call Delhivery, NOT call any provider, NOT mutate `Order.state` / `Customer` / `Lead` / `Shipment` / `DiscountOfferLog` / `WhatsAppMessage` rows).
 
-Acceptance criteria for any future Phase 7A design: Director approval exists before code work; no broad rollout; no WhatsApp send, courier booking, Razorpay call, or business mutation is added without a separate reviewed execution contract and rollback plan.
+Acceptance criteria for any future Phase 8F live execute: Director approval exists before the env flags are flipped; the structured UTC window is fresh + ≤ 15 min; the rollback command is documented and the operator confirms it is staged; the current `Order.payment_status` is still `Partial` or `Pending` AND `Payment.status` is still `Pending` AND `Payment.order_id == Order.id`; no prior `executed` attempt exists on the gate; the kill switch is enabled; the canonical refusals + locked-False contract remain enforced.
 ### Do not do next
 
+- Do **not** flip any of the three Phase 8F env flags (`PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED`, `PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION`, `PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION`) without a separate dated Director directive that names the exact Phase 8F gate id, attempt id, source Phase 8E gate id, target Order id, target Payment id, AND a 15-min structured UTC window.
+- Do **not** run `python manage.py execute_phase8f_real_customer_controlled_mutation` on the VPS — the recovery path landed in `2ffb3ca` is approval-only; execute remains gated on Director sign-off.
 - Do **not** flip `RAZORPAY_WEBHOOK_TEST_MODE_ENABLED` to `true` on production.
 - Do **not** flip `RAZORPAY_WEBHOOK_BUSINESS_MUTATION_ENABLED` (the Phase 6M handler flag remains dormant — Phase 6O introduces a SEPARATE `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED` flag that gates review preparation only, never any business-row mutation).
 - Do **not** flip `RAZORPAY_SANDBOX_STATUS_MAPPING_ENABLED` to `true` on production. Even when `True`, Phase 6O ONLY allows creating sandbox review rows; mutation paths stay closed.
@@ -428,15 +458,15 @@ The seed command intentionally **disconnects the signal receivers** during bulk 
 
 ---
 
-## 6. Frontend pages (21)
+## 6. Frontend pages (24)
 
 All under `frontend/src/pages/`. Each one calls **only** `import { api } from "@/services/api"` — never `mockData.ts`.
 
 | # | Page | Route | Backend endpoints used |
 | --- | --- | --- | --- |
-| 1 | Command Center Dashboard | `/` (`Index.tsx`) | `getDashboardMetrics`, `getLiveActivityFeed`, `getCeoBriefing`, `getCaioAudits`, `getAgentStatus`, `getRtoRiskOrders`, `getRewardPenaltyScores` |
+| 1 | Command Center Dashboard | `/` (`Index.tsx`) | `getDashboardMetrics`, `getLiveActivityFeed`, `getCeoBriefing`, `getCaioAudits`, `getAgentStatus`, `getRtoRiskOrders`, `getRewardPenaltyScores`, SaaS coverage / org-scope / write-path readiness cards |
 | 2 | Leads CRM | `/leads` | `getLeads` |
-| 3 | Customer 360 | `/customers` | `getCustomers`, `getCustomerById` |
+| 3 | Customer 360 | `/customers` | `getCustomers`, `getCustomerById` (WhatsApp tab via Phase 5B) |
 | 4 | AI Calling Console | `/calling` | `getCalls`, `getActiveCall` |
 | 5 | Orders Pipeline | `/orders` | `getOrders`, `getOrderPipeline` |
 | 6 | Confirmation Queue | `/confirmation` | `getConfirmationQueue` |
@@ -453,6 +483,11 @@ All under `frontend/src/pages/`. Each one calls **only** `import { api } from "@
 | 17 | Claim Vault & Compliance | `/claims` | `getClaimVault` |
 | 18 | Analytics | `/analytics` | `getAnalyticsData` |
 | 19 | Settings & Control Center | `/settings` | `getSettingsMock` |
+| 20 | WhatsApp Templates (Phase 5A) | `/whatsapp-templates` | `getWhatsAppTemplates`, sync command output |
+| 21 | WhatsApp Inbox (Phase 5B) | `/whatsapp-inbox` | `getWhatsAppInbox`, conversation thread + internal notes + manual template send + AI panel |
+| 22 | WhatsApp Monitoring Dashboard (Phase 5F-Gate Auto-Reply Monitoring) | `/whatsapp-monitoring` | `getWhatsAppMonitoring{Overview,Gate,Activity,Cohort,Audit,MutationSafety,UnexpectedOutbound}` |
+| 23 | SaaS Admin Panel (Phase 6E + 7+ + 8+) | `/saas-admin` | full Phase 6 → Phase 8F section grid (read-only; no execute buttons; CLI-only review/approve banners on every section) |
+| 24 | NotFound (404) | `*` (`NotFound.tsx`) | — |
 
 **Premium Ayurveda + AI SaaS theme:** deep green / emerald / teal / saffron-gold / ivory / charcoal. Rounded cards, soft shadows, clean typography, strong hierarchy. Director should grok business health in 30 seconds. Not an admin template.
 
@@ -516,7 +551,10 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far — Phase 1 to Phase 3D — every checkpoint we shipped
+## 8. What's done so far — Phase 1 → Phase 8F-Hotfix-1 — every checkpoint we shipped
+
+> This section is a chronological reference for the earliest phases. The latest checkpoints (Phase 5 → Phase 8F-Hotfix-1) are summarised in the §0 TL;DR + the §11 phase roadmap. Read those first for the current state.
+
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
 - 21 pages, all routing through `src/services/api.ts`. **No page imports `mockData.ts` directly.** Phase 3C added the Scheduler Status page; Phase 3D added the AI Governance page; Phase 5A added the read-only WhatsApp Templates page; Phase 5B added the three-pane WhatsApp Inbox page + Customer 360 WhatsApp tab.
@@ -1034,11 +1072,11 @@ Open [http://localhost:8080](http://localhost:8080).
 ### Tests
 ```bash
 # Backend
-cd backend && python -m pytest -q   # 434 tests (Phase 1 → 5B inclusive — see test_phaseNN.py files)
+cd backend && python -m pytest -q   # 2188 tests (Phase 1 → 8F-Hotfix-1 inclusive — see test_phaseNN.py files)
 
 # Frontend
-cd frontend && npm test             # 13 tests
-cd frontend && npm run lint         # 0 errors
+cd frontend && npm test             # 82 tests
+cd frontend && npm run lint         # 0 errors (8 pre-existing shadcn warnings)
 cd frontend && npm run build        # production build
 ```
 
@@ -1150,44 +1188,35 @@ Django Channels + channels_redis + daphne wired with `ProtocolTypeRouter`. New W
 ### ✅ Phase 4E — Expanded Approved Execution Registry (DONE)
 Three new handlers wired into `apps/ai_governance/approval_execution.py`: `discount.up_to_10` and `discount.11_to_20` apply through a new `apps.orders.services.apply_order_discount` (mutates only `Order.discount_pct`, validates via `validate_discount`, writes `discount.applied` audit), `ai.sandbox.disable` flips the SandboxState singleton via the existing helper (Director-only via matrix `director_override`, idempotent on already-off). `discount.above_20` + ad-budget + refund + WhatsApp + production live-mode-switch remain unmapped → HTTP 400 + `ai.approval.execution_skipped` audit. CAIO blocked at engine + bridge + execute layer. 31 new tests; previous Phase 4D unmapped-list parametrizations trimmed by 2 to reflect the new mapping.
 
+### ✅ Phase 5A → 5F — WhatsApp Live Sender Foundation + Inbox + AI Chat Sales Agent + Lifecycle Automation + Rescue Discount + Day-20 Reorder + Gate Tooling + Customer Pilot Readiness (DONE)
+
+Full WhatsApp stack: live Meta Cloud sender, three-provider adapter (`mock` default + `meta_cloud` + `baileys_dev`), signed Meta webhook at `/api/webhooks/whatsapp/meta/`, inbound inbox + Customer 360 timeline, AI Chat Sales Agent with Hinglish + Claim Vault enforcement + 50% total discount cap, chat-to-call handoff via Vapi, Order/Payment/Shipment-driven lifecycle templates, rescue discount engine with `DiscountOfferLog`, Day-20 reorder sweep, controlled scenario test harness, internal allowed-number cohort tooling, customer-pilot readiness dashboard at `/whatsapp-monitoring`. All broad automation flags default OFF; live limited-test mode is the default; final-send guard blocks any outbound outside the allow-list. See §0 TL;DR + CLAUDE.md §0 status entry for full status.
+
+### ✅ Phase 5B-Deploy + Hotfix Sync — Production Docker scaffold for ai.nirogidhara.com (DONE)
+
+Six-container production stack (`nirogidhara-db` Postgres + `nirogidhara-redis` + `nirogidhara-backend` Daphne ASGI + `nirogidhara-worker` Celery + `nirogidhara-beat` Celery beat + `nirogidhara-nginx`); host port `18020 → 80`; host Ubuntu Nginx + Certbot terminate TLS. Hotfix sync resolved the duplicate-Postgres-index issue + made the backend entrypoint robust. See `docs/DEPLOYMENT_VPS.md` + §17 below.
+
+### ✅ Phase 6A → 6T — Multi-tenant SaaS scaffold + Razorpay webhook + Sandbox Status Mapping + Internal Paid-Status Mutation Test + Payment-Order Workflow Gate + Payment Dispatch Readiness + Pilot Plan + Final Audit Lock (DONE)
+
+Full SaaS scaffold (`Organization`, `Branch`, `OrganizationMembership`, etc.), nullable org/branch FKs on 14 business-state models + idempotent backfill, scoped queryset helpers, write-path readiness, SaaS admin panel at `/saas-admin`, runtime routing dry-run with NVIDIA-primary AI routing table + OpenAI fallback, runtime live-audit gate, single internal live-gate simulation, single internal provider test plan, Razorpay TEST-mode execution gate (one real run as Phase 6K-B = `pex_8f309650e9644cfaae4418f9` → `order_Sks3KPf0vntKhf`, rolled back), test-execution audit review, Razorpay webhook handler (test-mode, dormant by default), MCP gateway foundation (dormant), business-mutation sandbox plan, sandbox status mapping + manual review, controlled internal paid-status mutation test (sandbox-ledger-only), payment-order workflow safety gate, payment dispatch readiness, limited internal dispatch pilot plan, final Phase 6 audit + lock. All default LOCKED OFF; never sends a customer message; never calls a live provider beyond the one Phase 6K-B TEST order.
+
+### ✅ Phase 7B → 7I — Controlled Pilot Execution Gate framework + TEST executions + audit locks (DONE; CLI-only; one real Razorpay TEST + one real Delhivery TEST/MOCK + one real internal WhatsApp send done; all rolled back)
+
+Phase 7B Controlled Pilot Execution Gate (gate-only), Phase 7D Razorpay Controlled Pilot Execution (one real `order_SmThqpK6sc6Dhs` executed 2026-05-07; rolled back; Phase 7D-Hotfix-1 added structured UTC window guard via new shared `apps.saas.utc_window` utility), Phase 7E Controlled Internal WhatsApp Notification Readiness Gate (gate-only), Phase 7E-Live-A Internal Allowed-List WhatsApp One-Shot Send (one real send to internal allowed test number; rolled back record-only; Hotfix-2/3 added wrapper-failure + no-provider safe-retry), Phase 7F Delhivery / Courier Controlled Readiness Gate, Phase 7G Delhivery Courier One-Shot TEST/MOCK Execution (one real AWB `DLH35391376` created; rolled back record-only; Hotfix-1 added UTC window guard; Hotfix-2 added safe-retry after pre-window blocked attempt), Phase 7H Phase 7G Courier Execution Evidence Lock, Phase 7I Final Phase 7 Payment + WhatsApp + Courier Audit Lock. Phase 7C remains **NOT approved** (Phase 7B `approved_for_future_phase7c_execution_review` is a status name, not an authorisation). Phase 7E-Live-B (real customer WhatsApp send) + Phase 7G-Live (real customer courier execution) remain **NOT approved**.
+
+### ✅ Phase 8A → 8F + Hotfixes — Payment → Order Mutation Sandbox / Review / Controlled-Mutation Framework / Evidence Lock / Real-Customer Pilot / Real-Customer Controlled Mutation (DONE; never executed on VPS)
+
+Phase 8A Payment → Order Mutation Sandbox Gate (sandbox-only); Phase 8B Payment → Order Mutation Review Gate (review-only); Phase 8C Controlled Real Payment → Order Mutation framework (CLI-only one-shot; only executed against the Phase 8C-Hotfix-1 seeded sandbox fixture `Order.id=phase8c-controlled-order-001` / `Payment.id=phase8c-controlled-payment-001`, NEVER against real customer rows on the VPS); Phase 8D Phase 8C Controlled Mutation Evidence Lock + Hotfix-1 (resolves Phase 8C source attempt via rollback record, not `attempt.status`); Phase 8E Real Customer Payment → Order Mutation Pilot Gate (review / dry-run only against ONE real-customer Order + Payment candidate); Phase 8E-Hotfix-1 Candidate pool inspector + accept `Partial`+`Pending` review-only candidate (the VPS pool has 6 `Partial`+`Pending` real-customer pairs; strict `Pending`+`Pending` query returned 0 rows; the candidate validator was widened to accept `Partial` as REVIEW-ONLY); **Phase 8F Controlled Real Customer Payment → Order Mutation Gate framework + Hotfix-1 — implemented but NOT executed on VPS, gate id=1 currently approval-recovery-eligible against target Order `NRG-20435` + Payment `PAY-30125`.** Phase 8F live execute on the VPS requires a separate Director directive AND all three Phase 8F env flags flipped true AND a 15-min structured UTC window. Phase 7E-Live-B + Phase 7G-Live + broad customer automation all remain **NOT approved**.
+
 ### Pending
-- Live WhatsApp Business Cloud API sender (consent-gated, Claim-Vault-grounded) is still pending; Phase 3E ships only the design scaffold.
-- Ad-budget execution, refund execution, production live-mode switch, and discount.above_20 execution intentionally remain unmapped — expansion needs explicit Prarit sign-off + matching tests.
-
-### Phase 2 — Other gateways / credentials (slot when needed)
-- **PayU payment links** — same shape as Razorpay; only the adapter is missing.
-- **Delhivery test/live credentials** — code path is wired; flip `DELHIVERY_MODE=test` once a real test API token + a pickup location registered with Delhivery are available.
-- **Meta test/live credentials** — code path is wired; flip `META_MODE=test` once a real Meta app + page access token are available.
-- **WhatsApp Business outbound + consent** — design first per blueprint §24, build later.
-- Tighten role permissions per blueprint §8 where needed (compliance writes, settings writes).
-
-### Phase 3 — LLM-powered AI agents
-- `AgentRun` model (agent · prompt_version · input · output · latency · cost).
-- `services/agents/{ceo,caio,ads,rto,...}.py` — each takes a DB slice, returns the same dataclass shape the seed currently produces.
-- Celery beat regenerates the daily CEO briefing.
-- Approved Claim Vault is force-injected into every prompt.
-- Sandbox mode + prompt versioning.
-
-### Phase 4 — Real-time
-- Django Channels + WebSockets pushing `AuditEvent` rows to subscribed dashboards.
-- Frontend already polls — push is purely additive.
-
-### Phase 5 — Governance UI write paths
-- Kill-switch toggle endpoints.
-- Prompt rollback engine.
-- Reward/penalty engine — actually compute Blueprint §10.2 from the event ledger.
-- Approval matrix middleware blocking risky actions until CEO AI / Prarit approves.
-
-### Phase 6 — Learning loop
-- Recording upload → STT → speaker separation pipeline.
-- QA scoring → Compliance review → CAIO audit workflow tables.
-- Sandbox test infrastructure.
-- Approved learning → playbook version update.
-
-### Phase 7 — Multi-tenant SaaS
-- Tenant model + middleware scoping every queryset.
-- Per-tenant settings, integrations, claim vault.
-- Billing.
+- Ad-budget execution, refund execution, production live-mode switch, and `discount.above_20` execution intentionally remain unmapped in the Approved Action Execution Layer — expansion needs explicit Director sign-off + matching tests.
+- Phase 7E-Live-B (real customer WhatsApp send) — design + approval pending.
+- Phase 7G-Live (real customer courier execution) — design + approval pending.
+- Phase 8F live execute on the VPS — pending separate Director directive + env-flag flip + structured UTC window.
+- PayU payment links — adapter still missing; Razorpay is the only payment provider rehearsed end-to-end.
+- Delhivery live credentials — only TEST/MOCK execution has run via Phase 7G; no real customer AWB created.
+- Vapi: `phone_number_id` + `webhook_secret` still missing in `.env.production`; runtime-routing readiness flags Vapi as "warning, not ready for live".
+- Claim Vault: `version="demo-v2"` rows seeded for 8 categories; doctor-approved final claims still pending.
 
 ---
 
@@ -1691,14 +1720,22 @@ The audit found no runtime bugs — the missing env vars all had safe
 in-code defaults, so the gap was purely documentation drift. Phase 5B
 implementation can start from a clean baseline.
 
-_End of `nd.md`. Last updated after **Phase 5C — WhatsApp AI Chat Sales
-Agent** (`apps.whatsapp.ai_orchestration` runs on every inbound;
-deterministic Hindi/Hinglish/English detection; locked greeting
-template; OpenAI dispatch with strict JSON schema + Claim Vault gate +
-blocked-phrase filter + discount discipline + 50% total cap + auto-send
-rate gates; six new endpoints + 18 audit kinds + frontend AI Chat Agent
-panel). Auto-reply defaults to OFF; production flips
-`WHATSAPP_AI_AUTO_REPLY_ENABLED=true` after verification. **35 new
-tests; 469 backend + 13 frontend, all green.** Live at
+_End of `nd.md`. Last updated after **Phase 8F-Hotfix-1 — Recover
+blocked approval gate + sync migration drift** (commit `2ffb3ca`).
+Adds migration `payments.0025_phase8f_hotfix_rename_indexes`
+(`RenameIndex` ×8 — pure metadata) + a narrowly-scoped Phase 8F approve
+recovery path: a gate `blocked` solely by the missing-env-flag blocker
+may be safely promoted to
+`approved_for_one_shot_real_customer_mutation` after the env flag is
+flipped on AND no attempt has crossed execute/mutation/provider AND
+every other safety condition still holds. The hotfix did NOT execute
+Phase 8F, did NOT call any provider, did NOT send WhatsApp, did NOT
+mutate real `Order` / `Payment` / `Customer` / `Lead` / `Shipment` /
+`DiscountOfferLog` / `WhatsAppMessage` rows. **8 new backend tests;
+2188 backend + 82 frontend, all green.** Live at
 **`https://ai.nirogidhara.com`**. Operational runbook lives in `nd.md`
-§17 + `docs/DEPLOYMENT_VPS.md`._
+§17 + `docs/DEPLOYMENT_VPS.md`. Phase 8F live execute on the VPS still
+requires a separate Director directive + all three `PHASE8F_*` env
+flags true + a 15-min structured UTC window referencing the actual
+Phase 8F gate id / attempt id / Phase 8E gate id 1 / target Order
+`NRG-20435` / target Payment `PAY-30125`._
