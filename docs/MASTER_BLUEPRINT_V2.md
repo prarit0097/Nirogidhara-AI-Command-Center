@@ -10,14 +10,14 @@
 | --- | --- |
 | Version | v2.0 |
 | Supersedes | Master Blueprint v1.0 (historical reference only — pre-Phase 5 design draft, kept for context, not for guidance) |
-| Last revised | 2026-05-04 |
+| Last revised | 2026-05-14 |
 | Author of record | Prarit Sidana (Director, Nirogidhara Private Limited) |
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
-| Completed phase range | Phase 1 → **Phase 7F — Delhivery / Courier Controlled Readiness Gate (gate-only, CLI-only review state changes)** |
-| Latest pushed commit | see `git log -1` (Phase 7F commit on `origin/main`) |
-| Last verified test baseline | **1792 backend tests · 70 frontend tests** · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors · build OK |
-| Next planned phase | **Phase 7G (live courier execution) — NOT approved as of this commit and NOT designed.** Live courier execution requires (a) a separate, dated, written Director directive that names the exact Phase 7F gate id, (b) a future "execute-window guard for Delhivery" extension reusing `apps.saas.utc_window.validate_within_director_window` (15-minute cap, mirrors Phase 7D-Hotfix-1), and (c) a new env flag (e.g. `PHASE7G_DELHIVERY_COURIER_EXECUTION_ENABLED`) default `false`. Phase 7E-Live (real customer WhatsApp send) likewise remains NOT approved. |
+| Completed phase range | Phase 1 → **Test Hygiene Hotfix-1** (Phase 8F framework + Phase 8F-Hotfix-1/-2 shipped; Phase 8F gate id=1 recovered/approved on the VPS, execute NOT run) |
+| Latest pushed commit | `046875d` on `origin/main` (Test Hygiene Hotfix-1 baseline) |
+| Last verified test baseline | **2188 backend tests · 82 frontend tests** · local SQLite and VPS Postgres full-suite runs green · `makemigrations --check` clean · `manage.py check` clean · frontend lint/tests/build green |
+| Next planned phase | **Phase 8F live execute on the VPS — NOT approved.** Requires a separate dated Director directive, all three Phase 8F env flags true, and a 15-minute structured UTC window naming the actual Phase 8F gate id / attempt id / Phase 8E gate id 1 / target Order `NRG-20435` / target Payment `PAY-30125`. Phase 7E-Live-B and Phase 7G-Live remain NOT approved. |
 | Smoke + provider state | All earlier 5E / 5F gates green. Phase 6A → 6M shipped on top: SaaS multi-tenant scaffold (Phase 6A), default-org backfill (6B), org-scoped read APIs (6C), org-aware write paths (6D), SaaS Admin foundation + integration settings metadata (6E), per-org runtime routing preview (6F), controlled runtime routing dry run + AI provider routing preview (6G), controlled runtime live audit gate (6H), single internal live gate simulation (6I), single internal provider test plan (6J), single internal Razorpay test-mode execution gate (6K-A) + manual VPS one-shot pass (6K-B → `pex_8f309650e9644cfaae4418f9` → `order_Sks3KPf0vntKhf`, ₹1.00, rolled back), Razorpay test execution audit review + webhook readiness plan (6L), MCP Gateway foundation (6M-0, dormant), and Razorpay test-mode webhook handler (6M, dormant). Runtime providers still use env/config; `RuntimeKillSwitch` enabled; no MCP tools active; no broad-automation flags flipped. |
 | Live deployment stack | Docker Compose (six containers) on Hostinger VPS, host port 18020 → host Nginx + Certbot SSL |
 | GitHub repo | https://github.com/prarit0097/Nirogidhara-AI-Command-Center |
@@ -25,6 +25,14 @@
 | Source of truth | [`nd.md`](../nd.md) — if any wording in this blueprint diverges from `nd.md`, `nd.md` wins. |
 
 ---
+
+**Test Hygiene Hotfix-1 update (2026-05-14):** Current baseline is Phase 8F
+framework + Phase 8F-Hotfix-1/-2 + Test Hygiene Hotfix-1. Phase 8F gate id=1
+was recovered/approved on the VPS on 2026-05-14 and attempt id=1 was minted,
+but **Phase 8F execute was NOT run**; Order `NRG-20435` remains `Partial` and
+Payment `PAY-30125` remains `Pending`. Verification baseline is **2188 backend
+tests + 82 frontend tests**, green on local SQLite and VPS Postgres. Phase
+8F live execute, Phase 7E-Live-B, and Phase 7G-Live remain **NOT approved**.
 
 **Phase 7F update (2026-05-08):** Completed phase range is now Phase 1 → **Phase 7F — Delhivery / Courier Controlled Readiness Gate**. Phase 7F is gate-only and CLI-only for review state changes, with `PHASE7F_COURIER_READINESS_GATE_ENABLED=false` by default. Phase 7F never calls Delhivery, never creates a `Shipment` / `WorkflowStep` / `RescueAttempt` row, never creates an AWB, never books a pickup, never generates a courier label, never sends or queues WhatsApp, never calls Meta Cloud / Razorpay / Vapi, never sends a customer notification, never mutates real business rows, never edits any `.env*` file. Approval flips status to `approved_for_future_phase7g_or_courier_execution_review` only — it does **NOT** enable any provider call. 13 audit kinds (each ≤ 64 chars). 8 CLI commands (archive intentionally deferred). 5 read-only auth-protected GET DRF endpoints. Approve takes only `--reason` (no `--director-signoff`); refuses unless dry-run + rollback-dry-run + Hotfix-1 all pass. Last verified baseline: **1792 backend tests + 70 frontend tests**, `makemigrations --check` clean, `manage.py check` clean, frontend lint 0 errors, frontend build OK. **Phase 7G (live courier execution) remains NOT approved.**
 
@@ -162,10 +170,16 @@ curl -fsS https://ai.nirogidhara.com/api/healthz/
 
 ---
 
-## 3. Completed Build Timeline — Phase 1 → Phase 6Q Payment → Order Workflow Safety Gate (audit-gate-only, CLI-only review state changes)
+## 3. Completed Build Timeline — Phase 1 → Test Hygiene Hotfix-1
 
 | Phase | Status | What shipped | Risk / Safety note |
 | --- | --- | --- | --- |
+| Test Hygiene Hotfix-1 | ✅ Shipped (test-only) | `backend/tests/conftest.py` pins integration modes to mock for full-suite runs so `.env.production` values (`RAZORPAY_MODE=test`, `WHATSAPP_PROVIDER=meta_cloud`, limited Meta mode) do not leak into tests. | No production code, model, migration, service, view, env flag, `.env*` file, frontend, provider call, customer notification, or business row touched. 2188 backend + 82 frontend tests green on SQLite and VPS Postgres. |
+| Phase 8F-Hotfix-2 | ✅ Shipped (test-only) | Phase 8F execute/rollback tests use the dynamic Phase 8E gate id instead of assuming id=1, making the file Postgres-safe. | No production code touched; Phase 8F execute not run. Phase 8F test file 40/40 on VPS. |
+| Phase 8F-Hotfix-1 | ✅ Shipped (approval-only recovery) | Migration `payments.0025_phase8f_hotfix_rename_indexes` plus a narrow recovery path for a Phase 8F gate blocked only by the missing env-flag blocker. VPS gate id=1 recovered to `approved_for_one_shot_real_customer_mutation`; attempt id=1 minted. | Execute not run; every locked-False flag stayed False; Order `NRG-20435` still Partial and Payment `PAY-30125` still Pending. |
+| 8A-8F | ✅ Shipped (framework / review / dry-run; no VPS execute) | Payment → Order mutation sandbox, review, controlled sandbox mutation, evidence lock, real-customer pilot review, candidate-pool hotfix, and Phase 8F controlled real-customer mutation framework. | Phase 8F live execute remains NOT approved and requires a separate Director directive, env flags, and a 15-minute structured UTC window. |
+| 7B-7I | ✅ Shipped (controlled gates + TEST/MOCK executions + locks) | Controlled Pilot Execution Gate, Razorpay TEST execution + UTC-window hotfix, WhatsApp readiness + internal allowed-list send, courier readiness, Delhivery TEST/MOCK AWB execution + evidence/final audit locks. | Real customer WhatsApp send (Phase 7E-Live-B) and real customer courier execution (Phase 7G-Live) remain NOT approved. |
+| 6T | ✅ Shipped (audit-lock-only, CLI-only) | Final Phase 6 Audit + Lock composes Phase 6N → 6S into a locked audit-chain attestation and future controlled-pilot contract. | No provider call, WhatsApp send, courier action, customer notification, or business mutation. |
 | 1 | ✅ Live | 14 Django apps, 25 read endpoints, JWT auth, role-based permissions, Master Event Ledger via signals, deterministic seed (42 leads, 60 orders, 18 calls, 19 agents). 21 frontend pages with mock fallback. | All reads only; mock fallback keeps frontend up offline. |
 | 2A | ✅ Live | 14 write endpoints across CRM / orders / payments / shipments. Order state machine (`apps.orders.services.ALLOWED_TRANSITIONS`). Service-layer pattern. | Role-based writes; no auto-execution. |
 | 2B | ✅ Live | Razorpay payment-link integration with `mock / test / live` adapter. HMAC-verified, idempotent webhook at `/api/webhooks/razorpay/`. ₹499 advance-link service. | `RAZORPAY_MODE=mock` default; live keys only on VPS. |

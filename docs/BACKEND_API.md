@@ -7,15 +7,14 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 7F baseline:** documented through Phase 7F (Delhivery /
-> Courier Controlled Readiness Gate, gate-only, CLI-only review
-> state changes). Phase 7D-Hotfix-1 is shipped (structured UTC
-> window guard on Razorpay TEST execute commands). Phase 7G (live
-> courier execution) and Phase 7E-Live (real customer WhatsApp
-> send) remain NOT approved and NOT designed. Neither Phase 7D,
-> Phase 7E, Phase 7E-Live, Phase 7F, nor Phase 7G exposes a POST
-> execute / approve / reject / archive endpoint — every review
-> state change is CLI-only.
+> **Test Hygiene Hotfix-1 baseline:** endpoint body is documented
+> through Phase 8F read-only surfaces. Current verification baseline:
+> **2188 backend tests + 82 frontend tests**, green on local SQLite
+> and VPS Postgres. Phase 8F gate id=1 was recovered/approved on
+> the VPS on 2026-05-14 and attempt id=1 was minted, but **Phase 8F
+> execute was NOT run**. Phase 8F live execute, Phase 7E-Live-B,
+> and Phase 7G-Live remain **NOT approved**. Phase 8F state changes
+> and execute remain CLI-only; HTTP endpoints are read-only.
 >
 ## Health
 

@@ -17,6 +17,9 @@ nirogidhara-command/
 
 ## Current SaaS foundation status
 
+- **Current baseline:** Test Hygiene Hotfix-1 is shipped at origin/main commit `046875d`. Phase 8F framework + Phase 8F-Hotfix-1/-2 are shipped; Phase 8F gate id=1 was recovered/approved on the VPS on 2026-05-14 and attempt id=1 was minted, but execute was NOT run. Order `NRG-20435` remains Partial and Payment `PAY-30125` remains Pending.
+- **Verification baseline:** 2188 backend tests + 82 frontend tests are green on local SQLite and the VPS Postgres full-suite run. Test Hygiene Hotfix-1 only pins integration modes to mock for tests; it did not touch production code, models, migrations, services, views, env flags, `.env*` files, or frontend.
+- **Next planned item:** Phase 8F live execute on the VPS remains NOT approved. Phase 7E-Live-B and Phase 7G-Live also remain NOT approved.
 - Phase 6D org-aware write assignment is **FULL PASS**: safe create paths inherit or fall back to the default `nirogidhara` organization without changing request payloads.
 - Phase 6E adds the `/saas-admin` read-only control panel, admin SaaS readiness APIs, and `OrganizationIntegrationSetting` for per-org integration readiness.
 - Phase 6F adds a read-only per-provider runtime preview + secret-ref helpers; live runtime stays on env/config.
@@ -111,10 +114,10 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 # Backend migration drift gate — MUST report "No changes detected"
 cd backend && python manage.py makemigrations --check --dry-run
 
-# Backend (pytest, 1540 tests)
+# Backend (pytest, 2188 tests)
 cd backend && python -m pytest -q
 
-# Frontend (vitest, 64 tests)
+# Frontend (vitest, 82 tests)
 cd frontend && npm test
 ```
 
@@ -122,6 +125,7 @@ cd frontend && npm test
 
 **Done:**
 
+- ✅ **Current completed baseline** — Phase 6T, Phase 7B → 7I with hotfixes, Phase 8A → 8F with hotfixes, and Test Hygiene Hotfix-1 are shipped. Phase 8F gate id=1 is recovered/approved on the VPS, attempt id=1 exists, and execute has NOT run.
 - ✅ **Phase 1** — 14 Django apps, 25 read endpoints, JWT auth, CORS, Master Event Ledger via signals, seed command (42 leads, 60 orders, 18 calls, 19 agents, etc.), frontend wired with mock fallback.
 - ✅ **Phase 2A** — 14 write endpoints, role-based permissions (`apps/accounts/permissions.py`), order workflow state machine (`apps/orders/services.py`), service-layer pattern across CRM / orders / payments / shipments.
 - ✅ **Phase 2B** — Razorpay payment-link integration with mock / test / live modes (`apps/payments/integrations/razorpay_client.py`) and HMAC-verified, idempotent webhook receiver at `/api/webhooks/razorpay/`.
@@ -180,8 +184,8 @@ cd frontend && npm test
 
 **Next:**
 
-- ⏭ **Phase 5F** — Director-approved broadcast / sales campaigns (gated, MARKETING template tier).
-- ⏭ **Phase 6** — Recording / QA / learning loop pipeline (speech-to-text → compliance review → CAIO audit → sandbox test → live promotion).
+- ⏭ **Phase 8F live execute on the VPS** — NOT approved. Requires separate Director directive, all three Phase 8F env flags true, and a 15-minute structured UTC window naming the actual gate/attempt/source/target ids.
+- ⏭ **Phase 7E-Live-B / Phase 7G-Live** — real customer WhatsApp send and real customer courier execution remain NOT approved.
 
 ## Documentation index
 

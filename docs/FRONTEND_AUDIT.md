@@ -5,8 +5,9 @@ direction.
 
 ## Status (current)
 
-**Phase 7B baseline.** `/saas-admin` now renders every Phase 6 + Phase 7B read-only
-section through Phase 6T:
+**Test Hygiene Hotfix-1 baseline.** `/saas-admin` now renders the Phase 6 →
+Phase 8F read-only section grid, with no execute buttons and CLI-only
+review/approve banners on every section:
 
 - **Phase 6E** — SaaS overview + integration settings metadata (read-only).
 - **Phase 6F** — Runtime Integration Routing Preview (`runtimeSource=env_config`, `perOrgRuntimeEnabled=false`).
@@ -25,6 +26,8 @@ section through Phase 6T:
 - **Phase 6R** — Razorpay Payment → WhatsApp / Courier Dispatch Readiness (audit-only readiness contract, CLI-only review state changes) — readiness grid + 9-row dispatch readiness contract table (every "Send allowed in 6R" / "Courier in 6R" cell `No`) + recent readiness gates table + three readiness checklists (WhatsApp / courier / dispatch) + forbidden-action chips + "Readiness contract only" banner. **No Send WhatsApp / Queue WhatsApp / Create Shipment / Create AWB / Book Courier / Dispatch Order / Notify Customer / Approve Readiness / Reject Readiness buttons exist** — review state changes are exclusively dispatched via the seven CLI commands; the page renders status only.
 - **Phase 6S** — Razorpay Limited Internal Dispatch Pilot Plan (planning-only, CLI-only review state changes) — readiness grid + 9-row Limited Internal Dispatch Pilot contract table (every "Pilot in 6S" / "Send in 6S" / "Courier in 6S" cell `No`) + recent pilot plans table + four readiness checklists (internal staff cohort / WhatsApp / courier / dispatch) + abort criteria + verification checklist + forbidden-action chips + "Pilot plan only" banner. **No Start Pilot / Run Pilot / Execute Pilot / Send WhatsApp / Queue WhatsApp / Notify Customer / Create Shipment / Create AWB / Book Courier / Dispatch Order / Call Delhivery / Call Meta / Approve Pilot Plan / Reject Pilot Plan buttons exist** — review state changes are exclusively dispatched via the seven CLI commands; the page renders status only.
 - **Phase 6T** — Razorpay Phase 6 Final Audit + Lock (audit-lock-only, CLI-only review state changes) — readiness grid + Phase 6N -> 6S audit-chain table + final audit lock records table + Director signoff / kill-switch / rollback contracts + abort criteria + operator checklist + safety invariants + CLI-only reminder. **No live execution / pilot / provider / WhatsApp / courier / mutation buttons exist**; the page renders status only.
+- **Phase 7B → 7I** — controlled pilot, Razorpay TEST execution evidence, WhatsApp readiness/internal-send, courier readiness/execution, and final Phase 7 audit-lock sections. All runtime-changing operations remain CLI-only; Phase 7E-Live-B and Phase 7G-Live remain NOT approved.
+- **Phase 8A → 8F** — payment → order mutation sandbox/review/controlled-mutation/evidence-lock/real-customer pilot/controlled real-customer mutation sections. The Phase 8E section includes the candidate-pool subsection; the Phase 8F section shows the controlled real-customer mutation readiness and target snapshot for Order `NRG-20435` / Payment `PAY-30125`. **Phase 8F execute is NOT approved and no UI execute control exists.**
 
 **Forbidden UI buttons (asserted in `frontend/src/test/saas-admin.test.tsx`):**
 no "Execute Razorpay" / "Create Order" / "Create Payment Link" / "Capture"
@@ -71,7 +74,7 @@ Sidebar collapse layout | done — shared collapsed state
 Mobile responsiveness | baseline done — KPI stack, sidebar drawer, tables horizontal-scroll on small screens; per-page tuning continues
 Dashboard polish | baseline done — premium spacing, hierarchy, executive feel; iterate as needed
 Workflow visuals | UI-component diagrams in `WorkflowMap`
-Vitest tests | 64 tests today. Phase 6J/6K/6L/6M-0/6M/6N/6O/6P/6Q/6R/6S/6T/**7B** assertions in `frontend/src/test/saas-admin.test.tsx` cover render of every new section, absence of forbidden buttons, no raw env-var names like `RAZORPAY_KEY_SECRET` / `RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED` in body text, no full Indian phone numbers, and no raw secrets in any rendered preview. Phase 6T specifically asserts the final audit section, audit-chain table, lock records table, Director signoff contract, kill-switch contract, rollback contract, safety invariants, CLI-only reminder, and no forbidden execution buttons. **Phase 7B** specifically asserts the read-only "Razorpay Controlled Pilot Execution Gate" section (`razorpay-controlled-pilot-execution-gate-section`), the safe-to-start-phase7c-review badge, the env-posture block, the forbidden-actions chip cloud, the CLI-only banner, and that no Start Pilot / Run Pilot / Execute Pilot / Send WhatsApp / Queue WhatsApp / Notify Customer / Create Shipment / Create AWB / Book Courier / Dispatch Order / Call Delhivery / Call Meta / Call Razorpay / Mark Paid / Capture Payment / Refund / Create Payment Link / Mutate Order / Approve Gate / Reject Gate buttons exist on the page.
+Vitest tests | 82 tests today. Phase 6 → Phase 8F assertions in `frontend/src/test/saas-admin.test.tsx` cover render of every current `/saas-admin` section, the Phase 8E candidate-pool subsection, the Phase 8F controlled real-customer mutation section, absence of forbidden execute/send/courier/payment-mutation buttons, no raw env-var names like `RAZORPAY_KEY_SECRET` / `RAZORPAY_PHASE6_FINAL_AUDIT_LOCK_ENABLED` in body text, no full Indian phone numbers, and no raw secrets in any rendered preview.
 ESLint warnings | 8 pre-existing shadcn warnings (`react-refresh/only-export-components`); 0 errors
 Mock fallback in `api.ts` | done — pages never break when backend is offline
 
@@ -123,11 +126,11 @@ cd ../frontend && npm run dev
 | `/whatsapp-inbox` | `WhatsAppInbox.tsx` | 5B | Three-pane manual-only WhatsApp inbox + internal notes + manual template send + AI-suggestions-disabled placeholder |
 | `/whatsapp-templates` | `WhatsAppTemplates.tsx` | 5A | Meta-mirrored WhatsApp templates (read-only) + Sync from Meta button |
 | `/whatsapp-monitoring` | `WhatsAppMonitoring.tsx` | 5F-Gate | Read-only auto-reply safety dashboard + Approved Customer Pilot Readiness; masked phones only; no send/enable controls |
-| `/saas-admin` | `SaasAdmin.tsx` | 6E-6Q | SaaS admin panel: organization overview, org/write readiness, integration readiness, safety locks, runtime routing preview (6F), Controlled Runtime Routing Dry Run + AI Provider Routing Preview (6G), Controlled Runtime Live Audit Gate (6H), Single Internal Live Gate Simulation (6I), Single Internal Provider Test Plan (6J), Single Internal Razorpay Test-Mode Execution Gate (6K), Razorpay Test Execution Audit + Webhook Readiness (6L), MCP Gateway Readiness (6M-0), Razorpay Webhook Handler Test Mode (6M), **Razorpay Business Mutation Sandbox Plan (6N — planning-only)**; no activation / send / provider-execution / replay / apply-mutation / go-live / disable-kill-switch / mark-paid / capture-payment / refund / mutate-order / run-mcp-tool controls anywhere. |
+| `/saas-admin` | `SaasAdmin.tsx` | 6E-8F | SaaS admin panel: full Phase 6 → Phase 8F section grid, including Phase 8E candidate-pool subsection and Phase 8F controlled real-customer mutation readiness. Read-only; no activation / send / provider-execution / replay / apply-mutation / go-live / disable-kill-switch / mark-paid / capture-payment / refund / mutate-order / run-mcp-tool / execute controls anywhere. |
 | `/settings` | `Settings.tsx` | 1 / 5A | Settings & Control + WABA section |
 
-Phase 6M note: `/saas-admin` is the central read-only command-center for
-every Phase 6 surface. It does not render send, create-payment,
+Phase 8F baseline note: `/saas-admin` is the central read-only command-center for
+every Phase 6 → Phase 8F surface. It does not render send, create-payment,
 create-shipment, place-call, run-live, replay-webhook, apply-mutation,
 or activate-connector controls.
 Current total: 23 pages. Sidebar groups include Overview, Sales, Operations, AI Layer, Governance, Insights, Messaging, and System.

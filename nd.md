@@ -185,19 +185,19 @@
   - Claim Vault: `version="demo-v2"` rows are seeded for the eight categories; **doctor-approved final claims are NOT yet committed**. Lifecycle messages requiring Claim coverage still fail closed for any category whose final approved claims are missing.
   - WhatsApp customer pilot soak was an accelerated rehearsal, not a full multi-day soak — the dashboard remains the source of truth before any flag flip.
 
-### Docs Sync Status (Phase 8F-Hotfix-1 baseline)
+### Docs Sync Status (Test Hygiene Hotfix-1 baseline)
 
 | Doc | Status | Notes |
 | --- | --- | --- |
 | `nd.md` | ✅ synced | TL;DR §0 + Working Memory list Phase 8F-Hotfix-1 as the latest completed phase; Phase 8F live execute (still NOT approved) as next planned. |
 | `CLAUDE.md` | ✅ synced | §0 status block carries Phase 8F-Hotfix-1 entry + canonical Phase 8F summary; "Where things live" rows current through migration `payments.0025`. |
-| `AGENTS.md` | ✅ synced | Test counts (2188 backend / 82 frontend) current. |
-| `README.md` | ⚠ recheck | Earlier README snapshot lagged Phase 8 entries; verify before next release. |
-| `docs/MASTER_BLUEPRINT_V2.md` | ⚠ recheck | Document Control table + Completed Build Timeline should add Phase 7+/8+ rows. |
+| `AGENTS.md` | ✅ synced | Test counts (2188 backend / 82 frontend) current; Phase 8F-Hotfix-1/-2 + Test Hygiene Hotfix-1 pointers added. |
+| `README.md` | ✅ synced | Current baseline, test counts, and next planned Phase 8F live execute (NOT approved) updated. |
+| `docs/MASTER_BLUEPRINT_V2.md` | ✅ synced | Document Control table + Completed Build Timeline updated through Phase 8F hotfixes + Test Hygiene Hotfix-1. |
 | `docs/RUNBOOK.md` | ✅ synced | Phase 8E + 8E-Hotfix-1 + 8F + 8F-Hotfix-1 runbook sections appended. |
-| `docs/BACKEND_API.md` | ✅ synced | Phase 8E candidate-pool endpoint + Phase 8F read-only endpoints listed. |
-| `docs/FRONTEND_AUDIT.md` | ⚠ recheck | Verify `/saas-admin` Phase 8E candidate-pool subsection + Phase 8F section are listed. |
-| `docs/FUTURE_BACKEND_PLAN.md` | ⚠ recheck | Phase 8F-Hotfix-1 should be marked ✅ shipped; Phase 8F live-execute should remain marked NOT approved. |
+| `docs/BACKEND_API.md` | ✅ synced | Top baseline note updated; Phase 8E candidate-pool endpoint + Phase 8F read-only endpoints listed. |
+| `docs/FRONTEND_AUDIT.md` | ✅ synced | `/saas-admin` Phase 8E candidate-pool subsection + Phase 8F section listed. |
+| `docs/FUTURE_BACKEND_PLAN.md` | ✅ synced | Phase 6T → 7B–7I → 8A–8F + hotfixes + Test Hygiene Hotfix-1 marked shipped; Phase 8F live execute remains NOT approved. |
 | `docs/DEPLOYMENT_VPS.md` | ⚠ recheck | Phase 8F-Hotfix-1 production posture (migration `payments.0025` applied; recovery-only approval CLI; no execute flags flipped) should be documented. |
 | `docs/WHATSAPP_INTEGRATION_PLAN.md` | ✅ synced | Top-of-file status note unchanged (Phase 8F does not touch WhatsApp). |
 
@@ -1305,9 +1305,9 @@ These are blockers for Phase 2+. They need a decision from Prarit before code ca
 
 ## 15. Reference document
 
-**Active strategic blueprint:** [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) — Master Blueprint v2.0. Owner: Prarit Sidana. Reflects production reality through Phase 5E-Hotfix-2 (Phase 1 → 5E-Hotfix-2 done, 550 backend tests + 13 frontend tests, live at https://ai.nirogidhara.com).
+**Active strategic blueprint:** [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) — Master Blueprint v2.0. Owner: Prarit Sidana. Reflects production reality through Test Hygiene Hotfix-1 (Phase 1 → Phase 8F framework + hotfixes shipped, 2188 backend tests + 82 frontend tests, green on local SQLite and VPS Postgres, live at https://ai.nirogidhara.com). Phase 8F live execute remains NOT approved.
 
-**Historical reference only:** the original *Master Blueprint v1.0* (PDF, pre-Phase 5 design draft) is superseded and kept solely for context. v2.0 supersedes its discount bands (now 50% cumulative cap), reorder cadence (now Day 20), Phase 0–7 roadmap (now Phase 1 → 5E-Hotfix-2 done + controlled rollout + 5F next), and "WhatsApp future" framing (WhatsApp AI Sales engine is shipped and live). Sections of v1.0 that remain valid (CEO AI / CAIO hierarchy, reward / penalty philosophy, learning loop philosophy, KPI definition, locked non-negotiables) have been carried forward into v2.0 in updated language.
+**Historical reference only:** the original *Master Blueprint v1.0* (PDF, pre-Phase 5 design draft) is superseded and kept solely for context. v2.0 supersedes its discount bands (now 50% cumulative cap), reorder cadence (now Day 20), Phase 0–7 roadmap (now Phase 1 → Phase 8F framework + hotfixes done, with Phase 8F live execute still NOT approved), and "WhatsApp future" framing (WhatsApp AI Sales engine is shipped and live). Sections of v1.0 that remain valid (CEO AI / CAIO hierarchy, reward / penalty philosophy, learning loop philosophy, KPI definition, locked non-negotiables) have been carried forward into v2.0 in updated language.
 
 When in doubt: **`nd.md` wins** on operational truth, **`docs/MASTER_BLUEPRINT_V2.md` wins** on strategic framing. Every decision in this codebase traces back to a section in one of those two documents.
 

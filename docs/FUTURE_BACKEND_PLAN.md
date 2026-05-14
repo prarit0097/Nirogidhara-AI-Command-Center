@@ -2,45 +2,26 @@
 
 ## Current SaaS runtime gate status
 
-Phase 6G Controlled Runtime Routing Dry Run + AI Provider Routing is
-**FULL PASS**. Phase 6H Live Audit Gate, Phase 6I Single Internal Live
-Gate Simulation, Phase 6J Single Internal Provider Test Plan, Phase 6K-A
-Single Internal Razorpay Test-Mode Execution Gate, Phase 6K-B (one-shot
-real Razorpay test-mode execution on the VPS — `pex_8f309650e9644cfaae4418f9`
-→ `order_Sks3KPf0vntKhf`, ₹1.00, rolled back), Phase 6L Razorpay Test
-Execution Audit Review + Webhook Readiness Plan, Phase 6M-0 MCP Gateway
-Foundation (dormant), and Phase 6M Razorpay Webhook Handler (test-mode,
-dormant by default) all ✅ shipped. Default live execution remains blocked
-(`dryRun=true`, `liveExecutionAllowed=false`,
-`externalCallWillBeMade=false`, `externalCallWasMade=false`,
-`providerCallAttempted=false` everywhere except the recorded Phase 6K-B
-artefact), runtime providers still use env/config, the global kill switch
-remains active, `MCP_ENABLED=false`, and
-`RAZORPAY_WEBHOOK_TEST_MODE_ENABLED=false`.
+Current baseline is **Test Hygiene Hotfix-1**. Phase 6T, Phase 7B → 7I
+with hotfixes, Phase 8A → 8F with hotfixes, Phase 8F-Hotfix-1,
+Phase 8F-Hotfix-2, and Test Hygiene Hotfix-1 are ✅ shipped.
+Verification baseline is **2188 backend tests +
+82 frontend tests**, green on both local SQLite and the VPS Postgres
+full-suite run. Test Hygiene Hotfix-1 is test-only: it pins integration
+modes to mock inside `backend/tests/conftest.py` so `.env.production`
+values do not leak into the suite; it did not touch production code,
+models, migrations, services, views, env flags, `.env*` files, or
+frontend.
 
-**Phase 6S Limited Internal Dispatch Pilot Plan is FULL PASS
-(planning-only, CLI-only review state changes).** New
-`RazorpayPaymentDispatchPilotPlan` model + migration
-`payments.0009_phase6s_payment_dispatch_pilot_plan`, service module +
-7 management commands + 4 read-only admin/auth-protected DRF
-endpoints + `/saas-admin` section + 8 audit kinds + new env flag
-`RAZORPAY_PAYMENT_DISPATCH_PILOT_PLAN_ENABLED` (default `False`).
-**There is no POST API endpoint that prepares, approves, rejects, or
-archives a pilot plan** — review state changes are exclusively CLI.
-Approve requires non-empty manual review reason. Phase 6S pilot plan
-transitions never execute a pilot, never send a WhatsApp message,
-never call Meta Cloud / Delhivery / Razorpay, never create a shipment
-/ AWB, never touch real `Order` / `Payment` / `Shipment` /
-`DiscountOfferLog` / `Customer` / `Lead` / `WhatsAppMessage` /
-`WhatsAppConversation` rows. Internal cohort only:
-`internal_only=True`, `max_pilot_orders=1`, `max_amount_paise=100`.
-**Next backend phase: Phase 6T — Final Phase 6 audit + lock /
-controlled pilot execution decision gate** (composes the full
-Phase 6N → 6S audit chain into a single read-only attestation report
-and defines the kill-switch + Director-signoff contract any future
-controlled pilot execution would need). Do **not** enable any
-sandbox or readiness or pilot-plan env flag in production until
-Phase 6T implementation lands and passes its own acceptance criteria.
+**Next backend item: Phase 8F live execute on the VPS — NOT approved.**
+Phase 8F gate id=1 was recovered/approved on the VPS on 2026-05-14 and
+attempt id=1 was minted, but execute was NOT run. Order `NRG-20435`
+remains `Partial`; Payment `PAY-30125` remains `Pending`. A live execute
+requires a separate dated Director directive, all three Phase 8F env
+flags true, and a 15-minute structured UTC window referencing the actual
+Phase 8F gate id 1 / attempt id 1 / Phase 8E gate id 1 / target Order
+`NRG-20435` / target Payment `PAY-30125`. Phase 7E-Live-B and
+Phase 7G-Live remain **NOT approved**.
 
 **Phase 7F Delhivery / Courier Controlled Readiness Gate is
 shipped (gate-only, CLI-only review state changes).** New
@@ -92,13 +73,10 @@ locked, kill switch enabled, `DELHIVERY_MODE in {mock, test}`
 6K/7D execute env flags False, **Phase 7D-Hotfix-1 importable**
 (verified at prepare AND re-verified at approve). 87 new backend
 tests + 2 new frontend tests; 1792 backend + 70 frontend, all
-green. **Next backend phase: Phase 7G (live courier execution) —
-NOT approved as of this commit and NOT designed.** Live courier
-execution requires a separate, dated, written Director directive
-+ a future "execute-window guard for Delhivery" extension reusing
-`apps.saas.utc_window.validate_within_director_window` (15-minute
-cap, mirrors Phase 7D-Hotfix-1) + a new env flag (e.g.
-`PHASE7G_DELHIVERY_COURIER_EXECUTION_ENABLED`, default `false`).
+green. Historical next step at the Phase 7F checkpoint was Phase 7G;
+current baseline has since shipped Phase 7G TEST/MOCK, Phase 7H,
+Phase 7I, Phase 8A → 8F, and hotfixes. **Phase 7G-Live remains NOT
+approved.**
 
 **Phase 7E Controlled Internal WhatsApp Notification Readiness
 Gate is shipped (gate-only, CLI-only review state changes).** New
