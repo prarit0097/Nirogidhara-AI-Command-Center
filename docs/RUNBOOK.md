@@ -4066,6 +4066,73 @@ or queue WhatsApp, did NOT send a customer notification, did NOT
 create a `Shipment` / AWB / payment link, did NOT mutate any
 business row, did NOT edit any `.env*` file.**
 
+### Phase 8F-Hotfix-3 - Recover Blocked Attempt
+
+Phase 8F-Hotfix-3 adds a governance-only recovery command for the
+specific case where a Phase 8F attempt was blocked by a failed
+pre-execute Director signoff check before any mutation happened.
+The confirmed root cause was attempt id=1 receiving placeholder
+signoff (`<FILL>`), failing the UTC window precheck, and being set
+to `blocked`. Since execute requires
+`approved_for_one_shot_real_mutation`, that blocked status would
+refuse every future execute even with a proper signoff.
+
+This recovery is NOT execute. It requires no UTC window because it
+does not mutate Order/Payment. It only transitions the attempt from
+`blocked` back to `approved_for_one_shot_real_mutation` and appends
+`phase8fHotfix3Recovery_recovered_from_blocked` to
+`attempt.blockers` for audit evidence.
+
+```bash
+python manage.py recover_phase8f_attempt_to_approved \
+    --attempt-id 1 \
+    --director-signoff "Director Phase 8F-Hotfix-3 recovery. phase8f_attempt_id_1 phase8f_gate_id_1 phase8fHotfix3AttemptRecovery" \
+    --operator-name "Operator Prarit" \
+    --confirm-phase8f-attempt-recovery \
+    --json
+```
+
+The command refuses unless all of these are true:
+
+- `PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED=true`.
+- Runtime kill switch is enabled.
+- `--confirm-phase8f-attempt-recovery` is present.
+- `--operator-name` is non-empty.
+- The attempt exists and is currently `blocked`.
+- The gate is `approved_for_one_shot_real_customer_mutation`.
+- No attempt on the gate has status `executed`.
+- Director signoff contains `phase8f_attempt_id_<ID>`.
+- Director signoff contains `phase8f_gate_id_<ID>`.
+- Director signoff contains `phase8fHotfix3AttemptRecovery`.
+
+On success:
+
+- `attempt.status` becomes `approved_for_one_shot_real_mutation`.
+- `attempt.blockers` gains
+  `phase8fHotfix3Recovery_recovered_from_blocked`.
+- A `phase8f.real_mutation.approved` audit event records
+  `recovery="phase8fHotfix3AttemptRecovery"`.
+- `nextAction` is
+  `run_execute_phase8f_with_proper_director_directive`.
+
+**Field outcome (2026-05-14).** After the VPS recovery run,
+Phase 8F gate id=1 remains
+`approved_for_one_shot_real_customer_mutation`; attempt id=1 is back
+to `approved_for_one_shot_real_mutation`; Order `NRG-20435` remains
+`payment_status="Partial"`; Payment `PAY-30125` remains
+`status="Pending"`.
+
+**Phase 8F-Hotfix-3 NEVER executes Phase 8F, NEVER rolls back
+Phase 8F, NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi,
+NEVER sends or queues WhatsApp, NEVER creates a `Shipment` / AWB
+/ payment link, NEVER captures / refunds, NEVER sends a customer
+notification, NEVER mutates `Order.payment_status` / `Order.state`
+/ `Payment.status` / `Customer` / `Lead` / `Shipment` /
+`DiscountOfferLog` / `WhatsAppMessage` rows, NEVER edits any
+`.env*` file.** Phase 8F live execute remains **NOT approved** and
+still requires a separate Director directive, all three Phase 8F
+execute flags, and a fresh 15-minute structured UTC window.
+
 ### Test Hygiene Hotfix-1 — Pin integration modes in conftest for VPS-safe full-suite runs
 
 Test Hygiene Hotfix-1 is a **TEST-ONLY** fix that resolves the
