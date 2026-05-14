@@ -2864,6 +2864,9 @@ from apps.payments.razorpay_whatsapp_internal_send import (  # noqa: E402
     serialize_phase7e_live_internal_send_attempt as _serialize_phase7e_live_attempt,
     summarize_phase7e_live_internal_send_attempts as _summarize_phase7e_live_attempts,
 )
+from apps.whatsapp.phase7e_live_b_real_customer_send import (  # noqa: E402
+    summarize_gates as _summarize_phase7e_live_b_gates,
+)
 
 
 class WhatsAppInternalSendReadinessView(APIView):
@@ -2954,6 +2957,23 @@ class WhatsAppInternalSendPreviewView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(_preview_phase7e_live_send(gate_id))
+
+
+class Phase7ELiveBRealCustomerGatesListView(APIView):
+    """``GET /api/v1/saas/phase7e-live-b/gates/?limit=N``.
+
+    Read-only gate list. Auth + admin only; POST/PATCH/DELETE return
+    405. There is no API approve or execute endpoint.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        return Response(_summarize_phase7e_live_b_gates(limit=limit))
 
 
 # ---------------------------------------------------------------------------
@@ -4408,6 +4428,7 @@ __all__ = (
     "WhatsAppInternalSendAttemptsListView",
     "WhatsAppInternalSendAttemptDetailView",
     "WhatsAppInternalSendPreviewView",
+    "Phase7ELiveBRealCustomerGatesListView",
     "Phase7IFinalAuditLockReadinessView",
     "Phase7IFinalAuditLocksListView",
     "Phase7IFinalAuditLockDetailView",

@@ -406,6 +406,14 @@ PHASE7G_ALLOW_DELHIVERY_TEST_AWB = _razorpay_webhook_bool(
 PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED = _razorpay_webhook_bool(
     "PHASE7E_LIVE_INTERNAL_WHATSAPP_SEND_ENABLED"
 )
+# `PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED` controls the
+# Phase 7E-Live-B one-shot real-customer WhatsApp send gate. Defaults
+# LOCKED OFF. Operators must pass it via runtime env prefix only; the
+# execute path is CLI-only and additionally requires a structured
+# Director BEGIN_UTC/END_UTC window plus explicit confirmation.
+PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED = _razorpay_webhook_bool(
+    "PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED"
+)
 # `PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_ENABLED` controls the
 # Phase 8A Payment -> Order Mutation Sandbox Gate. Defaults LOCKED
 # OFF. Phase 8A is sandbox / dry-run ONLY: it never mutates real

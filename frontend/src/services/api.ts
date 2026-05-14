@@ -173,6 +173,7 @@ import type {
   SaasRazorpayCourierExecutionEvidenceLocksResponse,
   SaasPhase7ELiveInternalSendReadiness,
   SaasPhase7ELiveInternalSendAttemptsResponse,
+  SaasPhase7ELiveBRealCustomerGatesResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1678,6 +1679,12 @@ export const api = {
       `/v1/saas/whatsapp/internal-send-attempts/?limit=${limit}`,
       () =>
         M.SAAS_PHASE7E_LIVE_INTERNAL_SEND_ATTEMPTS as SaasPhase7ELiveInternalSendAttemptsResponse,
+    ),
+  getSaasPhase7ELiveBRealCustomerGates: (limit: number = 25) =>
+    safeFetch<SaasPhase7ELiveBRealCustomerGatesResponse>(
+      `/v1/saas/phase7e-live-b/gates/?limit=${limit}`,
+      () =>
+        M.SAAS_PHASE7E_LIVE_B_REAL_CUSTOMER_GATES as SaasPhase7ELiveBRealCustomerGatesResponse,
     ),
 
   // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------

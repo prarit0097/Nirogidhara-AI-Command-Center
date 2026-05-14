@@ -4843,6 +4843,28 @@ export const SAAS_PHASE7E_LIVE_INTERNAL_SEND_ATTEMPTS: Record<
   phase7ELiveSupportsFreeformMedicalText: false,
 };
 
+// ---------- Phase 7E-Live-B - Real Customer WhatsApp One-shot Send ----------
+
+const PHASE_7E_LIVE_B_GATE_COUNTS = {
+  draft: 0,
+  approved: 0,
+  executed: 0,
+  failed: 0,
+  cancelled: 0,
+};
+
+export const SAAS_PHASE7E_LIVE_B_REAL_CUSTOMER_GATES: Record<
+  string,
+  unknown
+> = {
+  phase: "7E-Live-B",
+  counts: PHASE_7E_LIVE_B_GATE_COUNTS,
+  items: [],
+  frontendCanExecute: false,
+  apiEndpointCanExecute: false,
+  apiEndpointCanApprove: false,
+};
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 const PHASE_7I_LOCK_COUNTS = {

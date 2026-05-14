@@ -51,6 +51,7 @@ from .views import (
     WhatsAppInternalSendAttemptsListView,
     WhatsAppInternalSendPreviewView,
     WhatsAppInternalSendReadinessView,
+    Phase7ELiveBRealCustomerGatesListView,
     Phase7IFinalAuditLockDetailView,
     Phase7IFinalAuditLockPreviewView,
     Phase7IFinalAuditLockReadinessView,
@@ -746,6 +747,11 @@ urlpatterns = [
         "whatsapp/internal-send-preview/",
         WhatsAppInternalSendPreviewView.as_view(),
         name="saas-whatsapp-internal-send-preview",
+    ),
+    path(
+        "phase7e-live-b/gates/",
+        Phase7ELiveBRealCustomerGatesListView.as_view(),
+        name="saas-phase7e-live-b-real-customer-gates",
     ),
     # Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit
     # Lock (lock-only; read-only API; CLI-only state changes).

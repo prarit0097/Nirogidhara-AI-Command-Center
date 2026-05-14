@@ -5079,6 +5079,47 @@ export interface SaasPhase7ELiveInternalSendAttemptsResponse {
   phase7ELiveSupportsFreeformMedicalText: false;
 }
 
+// ---------- Phase 7E-Live-B - Real Customer WhatsApp One-shot Send ----------
+
+export type SaasPhase7ELiveBRealCustomerGateStatus =
+  | "draft"
+  | "approved"
+  | "executed"
+  | "failed"
+  | "cancelled";
+
+export interface SaasPhase7ELiveBRealCustomerGateDto {
+  id: number;
+  status: SaasPhase7ELiveBRealCustomerGateStatus;
+  targetMasked: string;
+  targetCustomerName: string;
+  templateName: string;
+  operatorName: string;
+  recordedSignoffWindowStartUtc: string | null;
+  recordedSignoffWindowEndUtc: string | null;
+  executedAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  metaMessageId: string;
+  blockers: string[];
+  nextAction: string;
+  customerNotificationSent: boolean;
+  paymentMutationMade: false;
+  orderMutationMade: false;
+  courierCalled: false;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SaasPhase7ELiveBRealCustomerGatesResponse {
+  phase: "7E-Live-B";
+  counts: Record<SaasPhase7ELiveBRealCustomerGateStatus, number>;
+  items: SaasPhase7ELiveBRealCustomerGateDto[];
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

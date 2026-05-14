@@ -38,6 +38,7 @@ import type {
   SaasRazorpayCourierExecutionEvidenceLocksResponse,
   SaasPhase7ELiveInternalSendReadiness,
   SaasPhase7ELiveInternalSendAttemptsResponse,
+  SaasPhase7ELiveBRealCustomerGatesResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -268,6 +269,10 @@ export default function SaasAdminPage() {
     setPhase7eLiveInternalSendAttempts,
   ] = useState<SaasPhase7ELiveInternalSendAttemptsResponse | null>(null);
   const [
+    phase7eLiveBRealCustomerGates,
+    setPhase7eLiveBRealCustomerGates,
+  ] = useState<SaasPhase7ELiveBRealCustomerGatesResponse | null>(null);
+  const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
   ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
@@ -392,6 +397,7 @@ export default function SaasAdminPage() {
       api.getSaasRazorpayCourierExecutionEvidenceLocks(25),
       api.getSaasPhase7ELiveInternalSendReadiness(),
       api.getSaasPhase7ELiveInternalSendAttempts(25),
+      api.getSaasPhase7ELiveBRealCustomerGates(25),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -454,6 +460,7 @@ export default function SaasAdminPage() {
           p7hLocks,
           p7eLiveRead,
           p7eLiveAttempts,
+          p7eLiveBGates,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -514,6 +521,7 @@ export default function SaasAdminPage() {
           setRazorpayCourierExecutionEvidenceLocks(p7hLocks);
           setPhase7eLiveInternalSendReadiness(p7eLiveRead);
           setPhase7eLiveInternalSendAttempts(p7eLiveAttempts);
+          setPhase7eLiveBRealCustomerGates(p7eLiveBGates);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5217,6 +5225,81 @@ export default function SaasAdminPage() {
             CLI command and requires three structured Director
             sign-off conditions + the allow-list recipient + the
             structured UTC window.
+          </div>
+        </section>
+      )}
+
+      {phase7eLiveBRealCustomerGates && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase7e-live-b-real-customer-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 7E-Live-B Real Customer WhatsApp One-shot
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                One approved template to one real customer per gate. The
+                lifecycle is CLI-only, requires Director sign-off with a
+                structured UTC window, and has no rollback because WhatsApp
+                messages cannot be unsent.
+              </p>
+            </div>
+            <StatusPill tone="warning">CLI-only</StatusPill>
+          </div>
+          <div className="px-6 py-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-5 text-xs">
+            {Object.entries(phase7eLiveBRealCustomerGates.counts).map(
+              ([status, count]) => (
+                <KeyValue
+                  key={status}
+                  label={status}
+                  value={String(count)}
+                />
+              ),
+            )}
+          </div>
+          {phase7eLiveBRealCustomerGates.items.length > 0 && (
+            <div className="border-t border-border px-6 py-4 overflow-x-auto">
+              <table className="min-w-full text-left text-xs">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-4">Gate</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="py-2 pr-4">Template</th>
+                    <th className="py-2 pr-4">Target</th>
+                    <th className="py-2 pr-4">Executed</th>
+                    <th className="py-2 pr-4">Meta message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {phase7eLiveBRealCustomerGates.items.map((gate) => (
+                    <tr key={gate.id} data-testid="phase7e-live-b-gate-row">
+                      <td className="py-2 pr-4">{gate.id}</td>
+                      <td className="py-2 pr-4">{gate.status}</td>
+                      <td className="py-2 pr-4">{gate.templateName}</td>
+                      <td className="py-2 pr-4">{gate.targetMasked}</td>
+                      <td className="py-2 pr-4">
+                        {gate.executedAt ?? "Not executed"}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {gate.metaMessageId || "None"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7e-live-b-cli-only-banner"
+          >
+            <strong>CLI-only Execute.</strong> No "Send WhatsApp" /
+            "Approve Send" / "Execute" / "Cancel" / "Broadcast" /
+            "Campaign" / "Bulk Send" / "AI Freeform" buttons exist on
+            this page.
           </div>
         </section>
       )}

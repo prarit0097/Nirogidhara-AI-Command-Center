@@ -3248,8 +3248,87 @@ broad automation; NEVER calls Delhivery / Razorpay / Vapi; NEVER
 sends a customer notification; NEVER mutates real `Order` /
 `Payment` / `Customer` / `Lead` / `DiscountOfferLog` rows; NEVER
 sends freeform medical text (approved Meta template only); NEVER
-edits any `.env*` file.** Phase 7E-Live-B (real customer WhatsApp
-send) remains NOT approved.
+edits any `.env*` file.**
+
+### Phase 7E-Live-B — Real Customer WhatsApp One-shot Send Gate
+
+Phase 7E-Live-B is the **CLI-only real-customer WhatsApp one-shot
+gate**. It may send exactly one approved Phase 5A template to
+exactly one real customer for each approved gate. There is no
+rollback because WhatsApp messages cannot be unsent.
+
+Safety contract:
+- No frontend approve / execute / cancel buttons.
+- No broadcast, campaign, AI freeform, or bulk send.
+- `.env.production` is not edited; `PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true`
+  must be passed with a runtime env prefix for an approved run.
+- Templates are limited to `confirmation_reminder`,
+  `delivery_reminder`, `rto_rescue`, `reorder_reminder`,
+  `payment_reminder`, and `usage_explanation`.
+- Approval and execute require kill switch enabled, explicit
+  confirmation, non-empty operator, no prior executed gate, and a
+  Director signoff containing `phase7e_live_b_gate_id_<ID>`,
+  `target_phone_<last4>`, `template_<name>`,
+  `phase7eLiveBApproval`, plus structured `BEGIN_UTC=` /
+  `END_UTC=` markers validated by
+  `apps.saas.utc_window.validate_within_director_window` (15-minute
+  cap, now inside the window).
+- Execute calls `apps.whatsapp.services.queue_template_message(...,
+  override_limited_test_mode=True)` for this one CLI path only; all
+  existing consent, approved-template, Claim Vault, approval matrix,
+  CAIO, idempotency, and audit gates stay in force.
+
+```bash
+# 1. Read-only readiness.
+python manage.py inspect_phase7e_live_b_real_customer_gate --json --no-audit
+
+# 2. Prepare one draft gate.
+python manage.py prepare_phase7e_live_b_real_customer_gate \
+    --target-phone "+91XXXXXXXXXX" \
+    --target-customer-name "Customer Name" \
+    --template-name payment_reminder \
+    --template-params '{"customer_name":"Customer Name"}' \
+    --operator-name "Prarit Sidana" \
+    --json
+
+# 3. Approve one gate. BEGIN/END must be current and <= 15 minutes.
+BEGIN=$(date -u -d "-1 minute" +"%Y-%m-%dT%H:%M:%SZ")
+END=$(date -u -d "+12 minutes" +"%Y-%m-%dT%H:%M:%SZ")
+PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true \
+python manage.py approve_phase7e_live_b_real_customer_gate \
+    --gate-id <GATE_ID> \
+    --operator-name "Prarit Sidana" \
+    --director-signoff "phase7eLiveBApproval phase7e_live_b_gate_id_<GATE_ID> target_phone_<LAST4> template_<TEMPLATE> BEGIN_UTC=${BEGIN} END_UTC=${END}" \
+    --confirm-phase7e-live-b-real-customer-send \
+    --json
+
+# 4. Execute the one-shot send. Use a fresh current window.
+BEGIN=$(date -u -d "-1 minute" +"%Y-%m-%dT%H:%M:%SZ")
+END=$(date -u -d "+12 minutes" +"%Y-%m-%dT%H:%M:%SZ")
+PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true \
+python manage.py execute_phase7e_live_b_real_customer_send \
+    --gate-id <GATE_ID> \
+    --operator-name "Prarit Sidana" \
+    --director-signoff "phase7eLiveBApproval phase7e_live_b_gate_id_<GATE_ID> target_phone_<LAST4> template_<TEMPLATE> BEGIN_UTC=${BEGIN} END_UTC=${END}" \
+    --confirm-phase7e-live-b-real-customer-send \
+    --json
+
+# 5. Cancel only before execute. Executed gates refuse cancellation.
+python manage.py cancel_phase7e_live_b_real_customer_gate \
+    --gate-id <GATE_ID> \
+    --reason "Director cancelled before send" \
+    --operator-name "Prarit Sidana" \
+    --json
+```
+
+Read-only operator visibility:
+
+```bash
+curl -sS "$BASE_URL/api/v1/saas/phase7e-live-b/gates/?limit=25"
+```
+
+The `/saas-admin` page shows only masked gate rows. It cannot
+approve, execute, or cancel a Phase 7E-Live-B gate.
 
 ### Phase 7I — Final Phase 7 Payment + WhatsApp + Courier Audit Lock
 
@@ -3319,8 +3398,10 @@ python manage.py archive_phase7i_final_audit_lock \
   / payment-link / capture / refund boolean False.
 - The kill switch is enabled.
 
-**Phase 7G-Live (real customer courier execution) and Phase 7E-Live-B
-(real customer WhatsApp send) remain NOT approved.**
+**Phase 7G-Live (real customer courier execution) remains NOT approved.**
+Phase 7E-Live-B gate code is shipped, but each real-customer execute
+still requires a separate Director directive, runtime env prefix, and
+fresh 15-minute UTC window.
 
 ### Phase 8A — Payment → Order Mutation Sandbox Gate
 

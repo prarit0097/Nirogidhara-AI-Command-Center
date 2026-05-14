@@ -816,3 +816,75 @@ class WhatsAppPilotCohortMember(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"pilot - {self.customer_id} - {self.status}"
+
+
+class Phase7ELiveBRealCustomerSendGate(models.Model):
+    """Phase 7E-Live-B one-shot real-customer WhatsApp send gate.
+
+    CLI-only governance row. Approval authorizes exactly one approved
+    template send to exactly one real customer phone within a structured
+    Director UTC window. There is no rollback because WhatsApp messages
+    cannot be unsent.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "draft"
+        APPROVED = "approved", "approved"
+        EXECUTED = "executed", "executed"
+        FAILED = "failed", "failed"
+        CANCELLED = "cancelled", "cancelled"
+
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    target_phone = models.CharField(max_length=32)
+    target_customer_name = models.CharField(max_length=120)
+    template_name = models.CharField(max_length=80)
+    template_params = models.JSONField(default=dict, blank=True)
+    operator_name = models.CharField(max_length=120, blank=True, default="")
+    director_signoff_text_hash = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    recorded_signoff_window_start_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_end_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    executed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    meta_message_id = models.CharField(max_length=120, blank=True, default="")
+    blockers = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=160, blank=True, default="")
+
+    customer_notification_sent = models.BooleanField(default=False)
+    payment_mutation_made = models.BooleanField(default=False)
+    order_mutation_made = models.BooleanField(default=False)
+    courier_called = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "whatsapp"
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(
+                fields=("status", "-created_at"),
+                name="p7elb_gate_status_created_idx",
+            ),
+            models.Index(
+                fields=("template_name", "-created_at"),
+                name="p7elb_gate_tpl_created_idx",
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return (
+            f"phase7e-live-b gate {self.pk} - "
+            f"{self.template_name} - {self.status}"
+        )

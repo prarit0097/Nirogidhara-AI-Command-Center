@@ -21,6 +21,7 @@ Failed sends NEVER mutate ``Order`` / ``Payment`` / ``Shipment``.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -70,6 +71,7 @@ from .template_registry import (
 # are honoured. Trivial cost — providers hold no state beyond config refs.
 
 CAIO_AGENT_TOKEN = "caio"
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +326,7 @@ def queue_template_message(
     idempotency_key: str = "",
     extra_metadata: Mapping[str, Any] | None = None,
     by_user=None,
+    override_limited_test_mode: bool = False,
 ) -> QueuedMessage:
     """Queue a template send for the customer.
 
@@ -384,8 +387,19 @@ def queue_template_message(
             block_reason="consent_missing",
         )
 
-    # Phase 5F-Gate — limited-test-mode final-send guard.
-    limited_block = _limited_test_mode_blocks_send(customer)
+    # Phase 5F-Gate — limited-test-mode final-send guard. The override
+    # exists only for the Phase 7E-Live-B CLI one-shot real-customer gate.
+    # API/request callers passing it are suspicious and get logged.
+    if override_limited_test_mode and by_user is not None:
+        logger.warning(
+            "queue_template_message override_limited_test_mode used with "
+            "request/API context; intended only for Phase 7E-Live-B CLI."
+        )
+    limited_block = (
+        ""
+        if override_limited_test_mode
+        else _limited_test_mode_blocks_send(customer)
+    )
     if limited_block:
         _block(
             customer,
