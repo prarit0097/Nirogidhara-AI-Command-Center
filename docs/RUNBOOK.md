@@ -3929,6 +3929,77 @@ no business-row count drift.
 (real customer courier execution), and broad customer automation
 all remain NOT approved.**
 
+### Phase 8F Live Execute — 2026-05-14
+
+Phase 8F live execute was run on the VPS for the first time on
+2026-05-14 as Reading 1 mechanism proof, then rolled back. This
+was a controlled Order/Payment status mutation only; it did not
+call any provider and did not notify the customer.
+
+Execute facts:
+
+- `attempt_id=1`
+- `gate_id=1`
+- `source_phase8e_gate_id=1`
+- `target_order=NRG-20435`
+- `target_payment=PAY-30125`
+- `operator=Prarit Sidana`
+- Director signoff window:
+  `BEGIN_UTC=2026-05-14T09:32:29Z` to
+  `END_UTC=2026-05-14T09:45:29Z`
+- Result: `ok=True`, `status=executed`
+- Mutation: Order `NRG-20435.payment_status -> Paid`, Payment
+  `PAY-30125.status -> Paid`
+
+Safety confirmations:
+
+- `customer_notification_sent=False`
+- `whatsapp_sent=False`
+- `courier_called=False`
+- `provider_call_attempted=False`
+- `shipment_created=False`
+- No Razorpay / Meta Cloud / Delhivery / Vapi call
+- No WhatsApp send
+- No customer notification
+- No shipment/AWB
+- No `Order.state` mutation
+
+The three `PHASE8F_*` flags were passed via runtime env prefix
+only. `.env.production` was NOT edited.
+
+Rollback Reading 1:
+
+- Result: `ok=True`, `status=rollback_recorded`, `rollbackId=1`
+- psql confirmed Order `NRG-20435.payment_status` restored to
+  `Partial`
+- psql confirmed Payment `PAY-30125.status` restored to `Pending`
+- Health endpoint returned `{"status": "ok"}`
+
+Pre-execute audit trail:
+
+- Multiple execute attempts with placeholder signoffs were
+  correctly refused by the guard:
+  `phase8f_director_signoff_missing_structured_utc_window`,
+  `phase8f_now_outside_director_signoff_utc_window_before_start`.
+- Hotfix-3 recovery was used to restore `attempt.status` between
+  each refused run.
+- Safety gates worked correctly throughout: no mutation occurred
+  on any refused attempt.
+
+Confirmed working UTC-window shell pattern for future reference:
+
+```bash
+BEGIN=$(date -u -d "-1 minute" +"%Y-%m-%dT%H:%M:%SZ")
+END=$(date -u -d "+12 minutes" +"%Y-%m-%dT%H:%M:%SZ")
+
+# Embed ${BEGIN} and ${END} in the Director signoff text as:
+# BEGIN_UTC=${BEGIN} END_UTC=${END}
+```
+
+Phase 8F Reading 1 is complete as executed + rolled back with no
+lasting change: system state is back to Order Partial / Payment
+Pending. Phase 7E-Live-B and Phase 7G-Live remain NOT approved.
+
 ### Phase 8F-Hotfix-1 — Recover Blocked Approval Gate
 
 Phase 8F-Hotfix-1 patches `approve_phase8f_real_customer_controlled_mutation`
@@ -4015,9 +4086,10 @@ locked-False flag still False and `executed_at=NULL`; the gate's
 `evidence_json.phase8fHotfix1Recovery` block carries
 `recoveredFromMissingEnvApprovalBlock=true`,
 `recoveredBlocker="PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true"`,
-`executionStillNotRun=true`, `phase8fHotfix1=true`. **Phase 8F
-EXECUTE was NOT run** — `Order.NRG-20435` is still
-`payment_status="Partial"`, `Payment.PAY-30125` is still
+`executionStillNotRun=true`, `phase8fHotfix1=true`. **At the
+Hotfix-1 field-outcome checkpoint, Phase 8F EXECUTE had not yet
+run** — `Order.NRG-20435` was still
+`payment_status="Partial"`, `Payment.PAY-30125` was still
 `status="Pending"`, no real customer was charged, no provider was
 called, no notification was sent.
 
@@ -4115,12 +4187,10 @@ On success:
 - `nextAction` is
   `run_execute_phase8f_with_proper_director_directive`.
 
-**Field outcome (2026-05-14).** After the VPS recovery run,
-Phase 8F gate id=1 remains
-`approved_for_one_shot_real_customer_mutation`; attempt id=1 is back
-to `approved_for_one_shot_real_mutation`; Order `NRG-20435` remains
-`payment_status="Partial"`; Payment `PAY-30125` remains
-`status="Pending"`.
+**Field outcome before Reading 1 execute (2026-05-14).** Hotfix-3
+restored attempt id=1 to `approved_for_one_shot_real_mutation` after
+placeholder-signoff execute attempts were refused. No mutation occurred
+on any refused attempt.
 
 **Phase 8F-Hotfix-3 NEVER executes Phase 8F, NEVER rolls back
 Phase 8F, NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi,
@@ -4129,9 +4199,8 @@ NEVER sends or queues WhatsApp, NEVER creates a `Shipment` / AWB
 notification, NEVER mutates `Order.payment_status` / `Order.state`
 / `Payment.status` / `Customer` / `Lead` / `Shipment` /
 `DiscountOfferLog` / `WhatsAppMessage` rows, NEVER edits any
-`.env*` file.** Phase 8F live execute remains **NOT approved** and
-still requires a separate Director directive, all three Phase 8F
-execute flags, and a fresh 15-minute structured UTC window.
+`.env*` file.** It was a recovery command only; the later Reading 1
+execute + rollback is recorded in the section above.
 
 ### Test Hygiene Hotfix-1 — Pin integration modes in conftest for VPS-safe full-suite runs
 
