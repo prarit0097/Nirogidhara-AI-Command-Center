@@ -4005,3 +4005,63 @@ model fields, and it still requires all three Phase 8F env flags
 true + structured 15-min Director UTC window + kill switch
 enabled + `--confirm-one-shot-real-mutation` + non-empty
 `--operator-name`.
+
+**Phase 8F-Hotfix-1 — Field outcome (2026-05-14).** The recovery
+CLI documented above was run on the VPS against Phase 8F gate
+id=1. The gate transitioned from `blocked` to
+`approved_for_one_shot_real_customer_mutation`; attempt id=1 was
+minted in `approved_for_one_shot_real_mutation` status with every
+locked-False flag still False and `executed_at=NULL`; the gate's
+`evidence_json.phase8fHotfix1Recovery` block carries
+`recoveredFromMissingEnvApprovalBlock=true`,
+`recoveredBlocker="PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED_must_be_true"`,
+`executionStillNotRun=true`, `phase8fHotfix1=true`. **Phase 8F
+EXECUTE was NOT run** — `Order.NRG-20435` is still
+`payment_status="Partial"`, `Payment.PAY-30125` is still
+`status="Pending"`, no real customer was charged, no provider was
+called, no notification was sent.
+
+### Phase 8F-Hotfix-2 — Postgres-safe Phase 8F execute tests
+
+Phase 8F-Hotfix-2 is a **test-only fix** (no production code, no
+model, no migration, no service, no env flag, no API touched).
+The fix patches `backend/tests/test_phase8f_real_customer_controlled_mutation.py`
+so the Postgres + full-file run no longer fails on the two happy-
+path tests (`test_phase8f_execute_happy_path_mutates_only_target_statuses`
+and `test_phase8f_rollback_restores_old_statuses_no_side_effect`).
+
+**Root cause:** the helper `_prep_approve(...)` created a Phase 8E
+gate but did not return its `pk`. The tests then hardcoded
+`phase8e_gate_id=1` (and the literal `phase8e_gate_id_1` in
+inline signoff strings). Postgres `ROLLBACK` does **not** reset
+`AUTOINCREMENT` sequences between tests in the same file run, so
+the real Phase 8E gate id is rarely 1 — and the execute path's
+literal-ref check (`phase8e_gate_id_<ID>` must appear in the
+Director sign-off body) then refused with
+`phase8f_director_signoff_must_reference_phase8e_gate_id`.
+SQLite (local dev) effectively resets the sequence so the bug
+was invisible locally; it only surfaced on the Postgres VPS
+under a full-file run.
+
+**Fix:**
+
+1. `_prep_approve` now returns a 5-tuple
+   `(attempt_id, gate_id, phase8e_gate_pk, order, payment)`.
+2. Every caller of `_prep_approve` unpacks the new
+   `phase8e_gate_id` value.
+3. The two happy-path tests pass the dynamic `phase8e_gate_id`
+   into `_structured_signoff` instead of the literal `1`.
+4. Every refusal test replaces inline `phase8e_gate_id_1`
+   fragments with `f"phase8e_gate_id_{phase8e_gate_id}"`.
+
+Test intent, counts, and assertion logic are unchanged. Phase 8F
+test count stays at **40 passed**; verification baseline stays
+at **2188 backend / 82 frontend** with `makemigrations --check
+--dry-run`, `manage.py check`, frontend lint, vitest, and build
+all green.
+
+**Phase 8F-Hotfix-2 did NOT execute or roll back Phase 8F, did
+NOT call Razorpay / Meta Cloud / Delhivery / Vapi, did NOT send
+or queue WhatsApp, did NOT send a customer notification, did NOT
+create a `Shipment` / AWB / payment link, did NOT mutate any
+business row, did NOT edit any `.env*` file.**

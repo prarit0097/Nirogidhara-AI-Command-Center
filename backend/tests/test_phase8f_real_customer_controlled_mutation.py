@@ -538,6 +538,11 @@ def test_phase8f_archive_records_status_and_writes_audit() -> None:
 
 
 def _prep_approve(source_event_id: str, *, partial: bool = True):
+    """Phase 8F-Hotfix-2: also return ``phase8e_gate.pk`` so callers can
+    pass the **dynamic** gate id into the Director sign-off body
+    instead of hardcoding ``phase8e_gate_id_1``. On Postgres the
+    AUTOINCREMENT sequence does not reset between tests within a file
+    run, so a real test may see a phase8e gate id of 7, 12, etc."""
     phase8e_gate, order, payment = _make_approved_phase8e_gate(
         source_event_id=source_event_id, partial=partial
     )
@@ -549,12 +554,18 @@ def _prep_approve(source_event_id: str, *, partial: bool = True):
             prep["gate"]["id"],
             reason="Director Phase 8F approve.",
         )
-    return appr["attempt"]["id"], appr["gate"]["id"], order, payment
+    return (
+        appr["attempt"]["id"],
+        appr["gate"]["id"],
+        phase8e_gate.pk,
+        order,
+        payment,
+    )
 
 
 @pytest.mark.django_db
 def test_phase8f_execute_refuses_when_three_env_flags_off() -> None:
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_exec_flags"
     )
     # All three Phase 8F flags off here.
@@ -563,7 +574,7 @@ def test_phase8f_execute_refuses_when_three_env_flags_off() -> None:
         director_signoff=(
             f"phase8f_attempt_id_{attempt_id} "
             f"phase8f_gate_id_{gate_id} "
-            f"phase8e_gate_id_1 "
+            f"phase8e_gate_id_{phase8e_gate_id} "
             f"target_order_{order.id} "
             f"target_payment_{payment.id}"
         ),
@@ -584,7 +595,7 @@ def test_phase8f_execute_refuses_when_three_env_flags_off() -> None:
 
 @pytest.mark.django_db
 def test_phase8f_execute_refuses_missing_utc_window() -> None:
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_exec_window_missing"
     )
     with _phase8f_enabled():
@@ -592,7 +603,7 @@ def test_phase8f_execute_refuses_missing_utc_window() -> None:
             attempt_id,
             director_signoff=(
                 f"phase8f_attempt_id_{attempt_id} "
-                f"phase8f_gate_id_{gate_id} phase8e_gate_id_1 "
+                f"phase8f_gate_id_{gate_id} phase8e_gate_id_{phase8e_gate_id} "
                 f"target_order_{order.id} "
                 f"target_payment_{payment.id}"
             ),
@@ -612,14 +623,14 @@ def test_phase8f_execute_refuses_missing_utc_window() -> None:
 
 @pytest.mark.django_db
 def test_phase8f_execute_refuses_stale_or_outside_window() -> None:
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_exec_window_stale"
     )
     far_past = datetime(2020, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     signoff = _structured_signoff(
         attempt_id=attempt_id,
         gate_id=gate_id,
-        phase8e_gate_id=1,
+        phase8e_gate_id=phase8e_gate_id,
         target_order_id=order.id,
         target_payment_id=payment.id,
         now=far_past,
@@ -648,7 +659,7 @@ def test_phase8f_execute_refuses_stale_or_outside_window() -> None:
 
 @pytest.mark.django_db
 def test_phase8f_execute_refuses_if_current_status_drifted() -> None:
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_exec_drift"
     )
     order.payment_status = Order.PaymentStatus.PAID
@@ -657,7 +668,7 @@ def test_phase8f_execute_refuses_if_current_status_drifted() -> None:
     signoff = _structured_signoff(
         attempt_id=attempt_id,
         gate_id=gate_id,
-        phase8e_gate_id=1,
+        phase8e_gate_id=phase8e_gate_id,
         target_order_id=order.id,
         target_payment_id=payment.id,
         now=now,
@@ -680,14 +691,14 @@ def test_phase8f_execute_refuses_if_current_status_drifted() -> None:
 
 @pytest.mark.django_db
 def test_phase8f_execute_refuses_missing_confirm_flag() -> None:
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_exec_confirm"
     )
     now = datetime(2026, 5, 13, 12, 0, 0, tzinfo=timezone.utc)
     signoff = _structured_signoff(
         attempt_id=attempt_id,
         gate_id=gate_id,
-        phase8e_gate_id=1,
+        phase8e_gate_id=phase8e_gate_id,
         target_order_id=order.id,
         target_payment_id=payment.id,
         now=now,
@@ -708,14 +719,14 @@ def test_phase8f_execute_refuses_missing_confirm_flag() -> None:
 
 @pytest.mark.django_db
 def test_phase8f_execute_refuses_missing_operator_name() -> None:
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_exec_operator"
     )
     now = datetime(2026, 5, 13, 12, 0, 0, tzinfo=timezone.utc)
     signoff = _structured_signoff(
         attempt_id=attempt_id,
         gate_id=gate_id,
-        phase8e_gate_id=1,
+        phase8e_gate_id=phase8e_gate_id,
         target_order_id=order.id,
         target_payment_id=payment.id,
         now=now,
@@ -734,7 +745,7 @@ def test_phase8f_execute_refuses_missing_operator_name() -> None:
 
 @pytest.mark.django_db
 def test_phase8f_execute_refuses_signoff_missing_required_refs() -> None:
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_exec_signoff"
     )
     now = datetime(2026, 5, 13, 12, 0, 0, tzinfo=timezone.utc)
@@ -744,7 +755,7 @@ def test_phase8f_execute_refuses_signoff_missing_required_refs() -> None:
     signoff = (
         f"phase8f_attempt_id_{attempt_id} "
         f"phase8f_gate_id_{gate_id} "
-        f"phase8e_gate_id_1 "
+        f"phase8e_gate_id_{phase8e_gate_id} "
         f"BEGIN_UTC={begin.strftime('%Y-%m-%dT%H:%M:%SZ')} "
         f"END_UTC={end.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     )
@@ -784,7 +795,7 @@ def test_phase8f_execute_happy_path_mutates_only_target_statuses() -> None:
     stay identical; every provider/send/courier flag stays False;
     Order.state, Customer, Lead, Shipment, DiscountOfferLog,
     WhatsAppMessage are NOT mutated."""
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_exec_happy"
     )
     original_order_state = order.state
@@ -793,7 +804,7 @@ def test_phase8f_execute_happy_path_mutates_only_target_statuses() -> None:
     signoff = _structured_signoff(
         attempt_id=attempt_id,
         gate_id=gate_id,
-        phase8e_gate_id=1,
+        phase8e_gate_id=phase8e_gate_id,
         target_order_id=order.id,
         target_payment_id=payment.id,
         now=now,
@@ -882,14 +893,14 @@ def test_phase8f_rollback_restores_old_statuses_no_side_effect() -> None:
     original Order.payment_status + Payment.status snapshots, NOT
     call any provider, NOT send WhatsApp, NOT notify the customer,
     NOT grow any protected business table."""
-    attempt_id, gate_id, order, payment = _prep_approve(
+    attempt_id, gate_id, phase8e_gate_id, order, payment = _prep_approve(
         "phase8f_rb_happy"
     )
     now = datetime(2026, 5, 13, 12, 0, 0, tzinfo=timezone.utc)
     signoff = _structured_signoff(
         attempt_id=attempt_id,
         gate_id=gate_id,
-        phase8e_gate_id=1,
+        phase8e_gate_id=phase8e_gate_id,
         target_order_id=order.id,
         target_payment_id=payment.id,
         now=now,
