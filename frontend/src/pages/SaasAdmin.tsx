@@ -45,6 +45,7 @@ import type {
   CfoLatestResponse,
   DataAnalystLatestResponse,
   CallingTeamLeaderLatestResponse,
+  CeoOrchestrationLatestResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -303,6 +304,10 @@ export default function SaasAdminPage() {
     setCallingTeamLeaderLatest,
   ] = useState<CallingTeamLeaderLatestResponse | null>(null);
   const [
+    ceoOrchestrationLatest,
+    setCeoOrchestrationLatest,
+  ] = useState<CeoOrchestrationLatestResponse | null>(null);
+  const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
   ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
@@ -434,6 +439,7 @@ export default function SaasAdminPage() {
       api.getCfoLatest(),
       api.getDataAnalystLatest(),
       api.getCallingTeamLeaderLatest(),
+      api.getCeoOrchestrationLatest(),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -503,6 +509,7 @@ export default function SaasAdminPage() {
           p9cLatest,
           p9dLatest,
           p9eLatest,
+          p9fLatest,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -570,6 +577,7 @@ export default function SaasAdminPage() {
           setCfoLatest(p9cLatest);
           setDataAnalystLatest(p9dLatest);
           setCallingTeamLeaderLatest(p9eLatest);
+          setCeoOrchestrationLatest(p9fLatest);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5435,6 +5443,168 @@ export default function SaasAdminPage() {
             "Create AWB" / "Approve" / "Execute" / "Rollback" / "Cancel
             AWB" / "Bulk Dispatch" / "Auto Dispatch" / "AI Dispatch"
             buttons exist on this page.
+          </div>
+        </section>
+      )}
+
+      {ceoOrchestrationLatest && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="ceo-orchestration-agent-v1-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                CEO AI — Daily Director Briefing
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Recommendations-only. Deterministic daily synthesis over
+                Phase 9A–9E agent snapshots producing a composite
+                business health score, cross-cutting alerts, top-3
+                priorities, and an internal-only briefing text. The
+                agent NEVER triggers WhatsApp, calls, payments, or
+                shipments; downstream gates (Phase 5D / 5E / 7E-Live-B
+                / 7G-Live) remain the only paths to real customer
+                action.
+              </p>
+            </div>
+            <StatusPill tone="success">Recs-only</StatusPill>
+          </div>
+          {ceoOrchestrationLatest.snapshot ? (
+            <>
+              <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+                <div
+                  className="rounded border border-border px-3 py-3"
+                  data-testid="ceo-orchestration-health-score"
+                >
+                  <div className="text-muted-foreground">
+                    Business health score
+                  </div>
+                  <div className="text-2xl font-semibold">
+                    {String(
+                      ceoOrchestrationLatest.snapshot.businessHealthScore,
+                    )}
+                  </div>
+                  <div className="text-xs uppercase tracking-wide">
+                    {ceoOrchestrationLatest.snapshot.healthTier}
+                  </div>
+                </div>
+                <KeyValue
+                  label="Snapshot timestamp"
+                  value={
+                    ceoOrchestrationLatest.snapshot.snapshotAt
+                      ? String(
+                          ceoOrchestrationLatest.snapshot.snapshotAt,
+                        )
+                      : "—"
+                  }
+                />
+                <KeyValue
+                  label="Last agent run status"
+                  value={
+                    ceoOrchestrationLatest.lastAgentRunStatus || "n/a"
+                  }
+                />
+              </div>
+              <div className="border-t border-border px-6 py-4 overflow-x-auto">
+                <p className="text-xs font-medium mb-2">
+                  Agent status summary
+                </p>
+                <table className="min-w-full text-left text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr>
+                      <th className="py-2 pr-4">Agent</th>
+                      <th className="py-2 pr-4">Status</th>
+                      <th className="py-2 pr-4">Summary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(
+                      ceoOrchestrationLatest.snapshot.agentStatusSummary,
+                    ).map(([key, entry]) => (
+                      <tr
+                        key={key}
+                        data-testid="ceo-orchestration-agent-row"
+                      >
+                        <td className="py-2 pr-4">{key}</td>
+                        <td className="py-2 pr-4">{entry.status}</td>
+                        <td className="py-2 pr-4">{entry.summary}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {ceoOrchestrationLatest.snapshot.top3Priorities.length >
+              0 && (
+                <div className="border-t border-border px-6 py-4">
+                  <p className="text-xs font-medium mb-2">
+                    Top priorities
+                  </p>
+                  <ol className="space-y-1 text-xs list-decimal pl-5">
+                    {ceoOrchestrationLatest.snapshot.top3Priorities.map(
+                      (entry) => (
+                        <li
+                          key={entry.priority}
+                          data-testid="ceo-orchestration-priority-row"
+                        >
+                          <strong>{entry.issue}</strong>{" "}
+                          (source: {entry.source_agent}) —{" "}
+                          {entry.recommended_action}
+                        </li>
+                      ),
+                    )}
+                  </ol>
+                </div>
+              )}
+              {ceoOrchestrationLatest.snapshot.crossCuttingAlerts.length >
+              0 && (
+                <div className="border-t border-border px-6 py-4">
+                  <p className="text-xs font-medium mb-2">
+                    Cross-cutting alerts
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {ceoOrchestrationLatest.snapshot.crossCuttingAlerts.map(
+                      (entry, idx) => (
+                        <span
+                          key={`${entry.code}-${idx}`}
+                          data-testid="ceo-orchestration-alert-pill"
+                          className="rounded-full border border-border px-2 py-1 text-xs"
+                        >
+                          [{entry.severity}] {entry.code}{" "}
+                          ({entry.source_agent})
+                        </span>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="border-t border-border px-6 py-4">
+                <p className="text-xs font-medium mb-2">
+                  Briefing text
+                </p>
+                <pre
+                  data-testid="ceo-orchestration-briefing-text"
+                  className="max-h-64 overflow-auto rounded bg-muted/30 p-3 text-xs whitespace-pre-wrap"
+                >
+                  {ceoOrchestrationLatest.snapshot.briefingText}
+                </pre>
+              </div>
+            </>
+          ) : (
+            <div className="px-6 py-4 text-xs text-muted-foreground">
+              No CEO orchestration snapshot yet. The daily Celery task
+              will produce one at the configured time.
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="ceo-orchestration-recs-only-banner"
+          >
+            <strong>Recommendations-only.</strong> No "Approve
+            Priority" / "Trigger Workflow" / "Send Briefing" / "Run
+            Agent" / "Apply Recommendation" buttons exist on this
+            page.
           </div>
         </section>
       )}

@@ -185,6 +185,8 @@ import type {
   DataAnalystSnapshotsResponse,
   CallingTeamLeaderLatestResponse,
   CallingTeamLeaderSnapshotsResponse,
+  CeoOrchestrationLatestResponse,
+  CeoOrchestrationSnapshotsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1837,6 +1839,32 @@ export const api = {
       url,
       () =>
         M.CALLING_TEAM_LEADER_SNAPSHOTS as CallingTeamLeaderSnapshotsResponse,
+    );
+  },
+
+  // ---------- Phase 9F — CEO AI Orchestration V1 ----------
+
+  getCeoOrchestrationLatest: () =>
+    safeFetch<CeoOrchestrationLatestResponse>(
+      "/v1/ceo-orchestration/snapshots/latest/",
+      () =>
+        M.CEO_ORCHESTRATION_LATEST as CeoOrchestrationLatestResponse,
+    ),
+
+  getCeoOrchestrationSnapshots: (
+    params: { page?: number; pageSize?: number } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("page_size", String(params.pageSize));
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/ceo-orchestration/snapshots/?${qs}`
+      : "/v1/ceo-orchestration/snapshots/";
+    return safeFetch<CeoOrchestrationSnapshotsResponse>(
+      url,
+      () =>
+        M.CEO_ORCHESTRATION_SNAPSHOTS as CeoOrchestrationSnapshotsResponse,
     );
   },
 

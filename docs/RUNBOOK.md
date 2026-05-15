@@ -3440,6 +3440,101 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 9F — CEO AI Orchestration V1 (synthesis layer)
+
+Phase 9F is the **synthesis layer** over the Phase 9A–9E agent
+stack and is **recommendations-only**. It produces ONE daily
+director briefing per task invocation aggregating the latest
+snapshots from all five upstream agents into a composite business
+health view. It never triggers outbound action; downstream gates
+(Phase 5D / 5E / 7E-Live-B / 7G-Live) remain the only paths to a
+real customer action.
+
+Phase 9F does NOT modify or call the legacy
+`ai_governance.CeoBriefing` model or its `ai-daily-briefing-morning`
+/ `ai-daily-briefing-evening` scheduled tasks — they remain
+untouched alongside the new Phase 9F surface.
+
+Run shape:
+- Celery beat task
+  `apps.agents.ceo_orchestration.tasks.run_ceo_orchestration_agent_daily`
+  scheduled at 13:00 IST (env-shiftable via
+  `AI_CEO_ORCHESTRATION_DAILY_HOUR` / `_MINUTE`). Runs after
+  Customer Success (08:00), RTO Prevention (09:00), CFO (10:00),
+  Data Analyst (11:00), and Calling Team Leader (12:00).
+- One `CeoOrchestrationSnapshot` row per invocation, one linked
+  `AgentRun` (`agent="ceo"`, model `"deterministic_v1"`,
+  provider `"disabled"`, `cost_usd=0`, `dry_run=True`,
+  `triggered_by="celery_beat_daily"`), one
+  `ceo_orchestration.snapshot.created` AuditEvent, and one
+  `ceo_orchestration.daily_run.completed` summary event.
+
+Health score formula:
+- `score = clamp(70 + cfo_factor + rto_factor + cs_factor +
+  data_analyst_factor + ctl_factor, 0, 100)` where each factor
+  applies the agent's penalties / bonuses (CFO −15/−10/−10/−10/+5;
+  RTO −min(critical*3,20)−min(high*1,10); CS −min(at_risk,10) +
+  min(reorder//5,5); DA −min(active_alerts*10,30); CTL
+  −min(active_alerts*5,20) excluding `all_clear` +
+  `no_agent_attribution_field`). Missing agents incur −5 each.
+- Tier mapping: 0–19 critical / 20–39 poor / 40–59 fair / 60–79
+  good / 80–100 excellent.
+
+Cross-cutting alerts:
+- Union of every agent's alerts, excluding `all_clear`.
+- Each entry: `{code, severity (critical/high/medium/low),
+  source_agent, rationale}`. The severity map normalises codes
+  from Phase 9C / 9D / 9E.
+- For every missing upstream snapshot, one `data_gap` alert is
+  added with `source_agent=<missing_agent>` (severity high).
+- Final list is severity-sorted (critical → low).
+
+Top-3 priorities:
+- First 3 actionable alerts (excluding `all_clear` and
+  `no_agent_attribution_field`), each with deterministic
+  `recommended_action` string (internal-only). Fewer than 3
+  actionable alerts → list of what's available. Zero → `[{"priority":
+  "1", "issue": "all_clear", "source_agent": "none",
+  "recommended_action": "Continue monitoring."}]`.
+
+Agent status summary:
+- Per-agent `{status: "ok"|"alert"|"missing", summary: <one-line
+  factual>}` covering Customer Success, RTO Prevention, CFO, Data
+  Analyst, Calling Team Leader. "missing" means no snapshot was
+  found in the last 24h.
+
+Briefing text:
+- Multi-line factual summary covering health_score + tier,
+  per-agent status, top priorities, and cross-cutting alert count.
+  Internal-only. NEVER customer-facing.
+
+Safety contract:
+- The agent NEVER imports / calls
+  `apps.whatsapp.services.queue_template_message`,
+  `apps.whatsapp.services.send_freeform_text_message`,
+  `apps.calls.services.trigger_call_for_lead`,
+  `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
+  or Vapi. The safety test patches all four entrypoints and asserts
+  no calls and stable upstream snapshot row counts after a sweep
+  (Phase 9F is strictly read-only over the agent layer — it must
+  not add per-customer or per-order rows).
+- `briefing_text` is a deterministic internal-only summary; it is
+  **never** a customer-facing message.
+- Kill switch uses the Phase 7E-Live-B Hotfix-1 Postgres-safe
+  pattern: any `RuntimeKillSwitch(scope="global", enabled=False)`
+  row wins (ordered by `-pk`) and the task exits with one
+  `ceo_orchestration.daily_run.blocked` audit event.
+- Sandbox mode: when
+  `apps.ai_governance.sandbox.is_sandbox_enabled()` is True, the
+  snapshot row and its linked AgentRun both carry the sandbox flag.
+- API: `/api/v1/ceo-orchestration/snapshots/`,
+  `/api/v1/ceo-orchestration/snapshots/latest/`, and
+  `/api/v1/ceo-orchestration/snapshots/<id>/` are admin+ only and
+  strictly read-only. POST/PATCH/DELETE return 405. The
+  `/saas-admin` CEO card carries no "Approve Priority" /
+  "Trigger Workflow" / "Send Briefing" / "Run Agent" /
+  "Apply Recommendation" buttons.
+
 ### Phase 9E — Calling Team Leader Agent V1 (call-performance lens)
 
 Phase 9E is the call-performance lens and is **recommendations-only**.

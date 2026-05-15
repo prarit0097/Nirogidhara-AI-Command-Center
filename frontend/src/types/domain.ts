@@ -5462,6 +5462,75 @@ export interface CallingTeamLeaderSnapshotsResponse {
   pageSize: number;
 }
 
+// ---------- Phase 9F — CEO AI Orchestration V1 ----------
+
+export type CeoOrchestrationHealthTier =
+  | "critical"
+  | "poor"
+  | "fair"
+  | "good"
+  | "excellent";
+
+export type CeoOrchestrationAlertSeverity =
+  | "critical"
+  | "high"
+  | "medium"
+  | "low";
+
+export interface CeoOrchestrationCrossCuttingAlert {
+  code: string;
+  severity: CeoOrchestrationAlertSeverity;
+  source_agent: string;
+  rationale: string;
+}
+
+export interface CeoOrchestrationPriority {
+  priority: string;
+  issue: string;
+  source_agent: string;
+  recommended_action: string;
+}
+
+export interface CeoOrchestrationAgentStatusEntry {
+  status: "ok" | "alert" | "missing";
+  summary: string;
+}
+
+export interface CeoOrchestrationSnapshotDto {
+  id: number;
+  snapshotAt: string | null;
+  businessHealthScore: number;
+  healthTier: CeoOrchestrationHealthTier;
+  customerSuccessSnapshotId: number | null;
+  rtoSnapshotId: number | null;
+  cfoSnapshotId: number | null;
+  dataAnalystSnapshotId: number | null;
+  callingTeamLeaderSnapshotId: number | null;
+  crossCuttingAlerts: CeoOrchestrationCrossCuttingAlert[];
+  top3Priorities: CeoOrchestrationPriority[];
+  agentStatusSummary: Record<string, CeoOrchestrationAgentStatusEntry>;
+  briefingText: string;
+  alerts: string[];
+  agentRunId: string | null;
+  sandbox: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CeoOrchestrationLatestResponse {
+  agent: "ceo_orchestration_v1";
+  snapshot: CeoOrchestrationSnapshotDto | null;
+  lastAgentRunAt: string | null;
+  lastAgentRunStatus: string;
+}
+
+export interface CeoOrchestrationSnapshotsResponse {
+  items: CeoOrchestrationSnapshotDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

@@ -69,6 +69,14 @@ def build_beat_schedule() -> dict:
     # Never triggers outbound action.
     ctl_hour = getattr(settings, "AI_CALLING_TEAM_LEADER_DAILY_HOUR", 12)
     ctl_minute = getattr(settings, "AI_CALLING_TEAM_LEADER_DAILY_MINUTE", 0)
+    # Phase 9F - CEO AI Orchestration V1. Recommendations-only daily
+    # synthesis briefing rolling up Phase 9A-9E snapshots; 13:00 IST
+    # default (after all five upstream agents). Never triggers outbound
+    # action. Independent of the legacy ai-daily-briefing-* tasks.
+    ceo_orch_hour = getattr(settings, "AI_CEO_ORCHESTRATION_DAILY_HOUR", 13)
+    ceo_orch_minute = getattr(
+        settings, "AI_CEO_ORCHESTRATION_DAILY_MINUTE", 0
+    )
 
     return {
         "ai-daily-briefing-morning": {
@@ -104,6 +112,13 @@ def build_beat_schedule() -> dict:
             "task": "apps.agents.calling_team_leader.tasks."
             "run_calling_team_leader_agent_daily",
             "schedule": crontab(hour=ctl_hour, minute=ctl_minute),
+        },
+        "ceo-orchestration-daily": {
+            "task": "apps.agents.ceo_orchestration.tasks."
+            "run_ceo_orchestration_agent_daily",
+            "schedule": crontab(
+                hour=ceo_orch_hour, minute=ceo_orch_minute
+            ),
         },
     }
 

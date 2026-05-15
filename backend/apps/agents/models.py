@@ -47,3 +47,8 @@ from .data_analyst.models import DataAnalystSnapshot  # noqa: E402, F401
 from .calling_team_leader.models import (  # noqa: E402, F401
     CallingTeamLeaderSnapshot,
 )
+
+# Phase 9F — CEO AI Orchestration V1 (synthesis over Phase 9A–9E).
+from .ceo_orchestration.models import (  # noqa: E402, F401
+    CeoOrchestrationSnapshot,
+)
