@@ -181,6 +181,8 @@ import type {
   RtoPreventionSnapshotsResponse,
   CfoLatestResponse,
   CfoSnapshotsResponse,
+  DataAnalystLatestResponse,
+  DataAnalystSnapshotsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1783,6 +1785,30 @@ export const api = {
     return safeFetch<CfoSnapshotsResponse>(
       url,
       () => M.CFO_SNAPSHOTS as CfoSnapshotsResponse,
+    );
+  },
+
+  // ---------- Phase 9D — Data Analyst Agent V1 ----------
+
+  getDataAnalystLatest: () =>
+    safeFetch<DataAnalystLatestResponse>(
+      "/v1/data-analyst/snapshots/latest/",
+      () => M.DATA_ANALYST_LATEST as DataAnalystLatestResponse,
+    ),
+
+  getDataAnalystSnapshots: (
+    params: { page?: number; pageSize?: number } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("page_size", String(params.pageSize));
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/data-analyst/snapshots/?${qs}`
+      : "/v1/data-analyst/snapshots/";
+    return safeFetch<DataAnalystSnapshotsResponse>(
+      url,
+      () => M.DATA_ANALYST_SNAPSHOTS as DataAnalystSnapshotsResponse,
     );
   },
 

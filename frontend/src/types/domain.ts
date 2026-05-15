@@ -5350,6 +5350,66 @@ export interface CfoLatestResponse {
   lastAgentRunStatus: string;
 }
 
+// ---------- Phase 9D — Data Analyst Agent V1 (funnel analytics) ----------
+
+export type DataAnalystAlertCode =
+  | "conversion_drop"
+  | "geographic_concentration_shift"
+  | "dead_end_calls"
+  | "lead_volume_drop"
+  | "all_clear";
+
+export interface DataAnalystTopState {
+  state: string;
+  order_count: number;
+  revenue: string;
+}
+
+export type DayOfWeekKey =
+  | "mon"
+  | "tue"
+  | "wed"
+  | "thu"
+  | "fri"
+  | "sat"
+  | "sun";
+
+export interface DataAnalystSnapshotDto {
+  id: number;
+  snapshotAt: string | null;
+  leadCount30d: number;
+  callCount30d: number;
+  confirmedOrderCount30d: number;
+  deliveredOrderCount30d: number;
+  reorderCount30d: number;
+  leadToCallRate: number;
+  callToConfirmedRate: number;
+  confirmedToDeliveredRate: number;
+  deliveredToReorderRate: number;
+  topStates: DataAnalystTopState[];
+  dayOfWeekCounts: Partial<Record<DayOfWeekKey, number>>;
+  alerts: DataAnalystAlertCode[];
+  alertText: string;
+  agentRunId: string | null;
+  sandbox: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface DataAnalystLatestResponse {
+  agent: "data_analyst_v1";
+  snapshot: DataAnalystSnapshotDto | null;
+  lastAgentRunAt: string | null;
+  lastAgentRunStatus: string;
+}
+
+export interface DataAnalystSnapshotsResponse {
+  items: DataAnalystSnapshotDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

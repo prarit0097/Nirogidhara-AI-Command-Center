@@ -59,6 +59,11 @@ def build_beat_schedule() -> dict:
     # agents). Never triggers outbound action.
     cfo_hour = getattr(settings, "AI_CFO_DAILY_HOUR", 10)
     cfo_minute = getattr(settings, "AI_CFO_DAILY_MINUTE", 0)
+    # Phase 9D - Data Analyst Agent V1. Recommendations-only operational
+    # daily funnel snapshot; 11:00 IST default (after CFO). Never
+    # triggers outbound action.
+    da_hour = getattr(settings, "AI_DATA_ANALYST_DAILY_HOUR", 11)
+    da_minute = getattr(settings, "AI_DATA_ANALYST_DAILY_MINUTE", 0)
 
     return {
         "ai-daily-briefing-morning": {
@@ -84,6 +89,11 @@ def build_beat_schedule() -> dict:
         "cfo-daily": {
             "task": "apps.agents.cfo.tasks.run_cfo_agent_daily",
             "schedule": crontab(hour=cfo_hour, minute=cfo_minute),
+        },
+        "data-analyst-daily": {
+            "task": "apps.agents.data_analyst.tasks."
+            "run_data_analyst_agent_daily",
+            "schedule": crontab(hour=da_hour, minute=da_minute),
         },
     }
 

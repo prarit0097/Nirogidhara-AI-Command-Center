@@ -43,6 +43,7 @@ import type {
   CustomerSuccessCohortsResponse,
   RtoPreventionCohortsResponse,
   CfoLatestResponse,
+  DataAnalystLatestResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -293,6 +294,10 @@ export default function SaasAdminPage() {
     setCfoLatest,
   ] = useState<CfoLatestResponse | null>(null);
   const [
+    dataAnalystLatest,
+    setDataAnalystLatest,
+  ] = useState<DataAnalystLatestResponse | null>(null);
+  const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
   ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
@@ -422,6 +427,7 @@ export default function SaasAdminPage() {
       api.getCustomerSuccessCohorts(),
       api.getRtoPreventionCohorts(),
       api.getCfoLatest(),
+      api.getDataAnalystLatest(),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -489,6 +495,7 @@ export default function SaasAdminPage() {
           p9aCohorts,
           p9bCohorts,
           p9cLatest,
+          p9dLatest,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -554,6 +561,7 @@ export default function SaasAdminPage() {
           setCustomerSuccessCohorts(p9aCohorts);
           setRtoPreventionCohorts(p9bCohorts);
           setCfoLatest(p9cLatest);
+          setDataAnalystLatest(p9dLatest);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5782,6 +5790,200 @@ export default function SaasAdminPage() {
             <strong>Recommendations-only.</strong> No "Send Report" /
             "Trigger Refund" / "Apply Discount" / "Run Agent" /
             "Auto-collect" buttons exist on this page.
+          </div>
+        </section>
+      )}
+
+      {dataAnalystLatest && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="data-analyst-agent-v1-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Data Analyst Agent V1 — Funnel & Operational Snapshot
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Recommendations-only. Deterministic daily aggregation of
+                lead → call → confirmed → delivered → reorder funnel,
+                conversion rates, top geographic states, day-of-week
+                order distribution, and operational anomaly alert codes.
+                The agent NEVER triggers WhatsApp, calls, payments,
+                shipments, or discounts; downstream gates (Phase 5D /
+                5E / 7E-Live-B / 7G-Live) remain the only paths to real
+                customer action.
+              </p>
+            </div>
+            <StatusPill tone="success">Recs-only</StatusPill>
+          </div>
+          {dataAnalystLatest.snapshot ? (
+            <>
+              <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5 text-xs">
+                <KeyValue
+                  label="Leads (30d)"
+                  value={String(dataAnalystLatest.snapshot.leadCount30d)}
+                />
+                <KeyValue
+                  label="Calls (30d)"
+                  value={String(dataAnalystLatest.snapshot.callCount30d)}
+                />
+                <KeyValue
+                  label="Confirmed (30d)"
+                  value={String(
+                    dataAnalystLatest.snapshot.confirmedOrderCount30d,
+                  )}
+                />
+                <KeyValue
+                  label="Delivered (30d)"
+                  value={String(
+                    dataAnalystLatest.snapshot.deliveredOrderCount30d,
+                  )}
+                />
+                <KeyValue
+                  label="Reorders (30d)"
+                  value={String(dataAnalystLatest.snapshot.reorderCount30d)}
+                />
+              </div>
+              <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                <KeyValue
+                  label="Lead → Call"
+                  value={(
+                    dataAnalystLatest.snapshot.leadToCallRate * 100
+                  ).toFixed(1) + "%"}
+                />
+                <KeyValue
+                  label="Call → Confirmed"
+                  value={(
+                    dataAnalystLatest.snapshot.callToConfirmedRate * 100
+                  ).toFixed(1) + "%"}
+                />
+                <KeyValue
+                  label="Confirmed → Delivered"
+                  value={(
+                    dataAnalystLatest.snapshot.confirmedToDeliveredRate * 100
+                  ).toFixed(1) + "%"}
+                />
+                <KeyValue
+                  label="Delivered → Reorder"
+                  value={(
+                    dataAnalystLatest.snapshot.deliveredToReorderRate * 100
+                  ).toFixed(1) + "%"}
+                />
+              </div>
+              {dataAnalystLatest.snapshot.topStates.length > 0 && (
+                <div className="border-t border-border px-6 py-4 overflow-x-auto">
+                  <p className="text-xs font-medium mb-2">
+                    Top states by order volume (30d)
+                  </p>
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr>
+                        <th className="py-2 pr-4">State</th>
+                        <th className="py-2 pr-4">Orders</th>
+                        <th className="py-2 pr-4">Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dataAnalystLatest.snapshot.topStates.map(
+                        (row) => (
+                          <tr
+                            key={row.state}
+                            data-testid="data-analyst-state-row"
+                          >
+                            <td className="py-2 pr-4">{row.state}</td>
+                            <td className="py-2 pr-4">
+                              {String(row.order_count)}
+                            </td>
+                            <td className="py-2 pr-4">₹{row.revenue}</td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="border-t border-border px-6 py-4 overflow-x-auto">
+                <p className="text-xs font-medium mb-2">
+                  Day-of-week order counts (30d)
+                </p>
+                <div className="grid grid-cols-7 gap-2 text-xs">
+                  {(
+                    [
+                      "mon",
+                      "tue",
+                      "wed",
+                      "thu",
+                      "fri",
+                      "sat",
+                      "sun",
+                    ] as const
+                  ).map((day) => (
+                    <div
+                      key={day}
+                      className="rounded border border-border px-2 py-2"
+                      data-testid="data-analyst-dow-cell"
+                    >
+                      <div className="text-muted-foreground">{day}</div>
+                      <div className="text-base font-semibold">
+                        {String(
+                          dataAnalystLatest.snapshot?.dayOfWeekCounts?.[
+                            day
+                          ] ?? 0,
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t border-border px-6 py-4">
+                <p className="text-xs font-medium mb-2">Active alerts</p>
+                <div className="flex flex-wrap gap-2">
+                  {dataAnalystLatest.snapshot.alerts.map((alert) => (
+                    <span
+                      key={alert}
+                      data-testid="data-analyst-alert-pill"
+                      className="rounded-full border border-border px-2 py-1 text-xs"
+                    >
+                      {alert}
+                    </span>
+                  ))}
+                </div>
+                {dataAnalystLatest.snapshot.alertText && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {dataAnalystLatest.snapshot.alertText}
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="px-6 py-4 text-xs text-muted-foreground">
+              No Data Analyst snapshot yet. The daily Celery task will
+              produce one at the configured time.
+            </div>
+          )}
+          <div className="px-6 py-3 grid gap-2 sm:grid-cols-2 text-xs">
+            <KeyValue
+              label="Snapshot timestamp"
+              value={
+                dataAnalystLatest.snapshot?.snapshotAt
+                  ? String(dataAnalystLatest.snapshot.snapshotAt)
+                  : "—"
+              }
+            />
+            <KeyValue
+              label="Last agent run status"
+              value={dataAnalystLatest.lastAgentRunStatus || "n/a"}
+            />
+          </div>
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="data-analyst-recs-only-banner"
+          >
+            <strong>Recommendations-only.</strong> No "Send Report" /
+            "Trigger Funnel Fix" / "Apply Discount" / "Run Agent" /
+            "Auto-rebalance" buttons exist on this page.
           </div>
         </section>
       )}

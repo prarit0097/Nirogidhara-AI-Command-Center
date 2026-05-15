@@ -3440,6 +3440,89 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 9D — Data Analyst Agent V1 (operational / funnel analytics)
+
+Phase 9D is the second **business-level** agent and is
+**recommendations-only**. It produces ONE daily operational snapshot
+per task invocation summarising the conversion funnel, top
+geographic states, day-of-week distribution, and anomaly alert
+codes. It never triggers outbound action; downstream gates (Phase
+5D / 5E / 7E-Live-B / 7G-Live) remain the only paths to a real
+customer action.
+
+Run shape:
+- Celery beat task
+  `apps.agents.data_analyst.tasks.run_data_analyst_agent_daily`
+  scheduled at 11:00 IST (env-shiftable via
+  `AI_DATA_ANALYST_DAILY_HOUR` / `_MINUTE`). Runs after the Customer
+  Success (08:00), RTO Prevention (09:00), and CFO (10:00) sweeps.
+- One `DataAnalystSnapshot` row per invocation, one linked
+  `AgentRun` (`agent="data_analyst"`, model `"deterministic_v1"`,
+  provider `"disabled"`, `cost_usd=0`, `dry_run=True`,
+  `triggered_by="celery_beat_daily"`), one
+  `data_analyst.snapshot.created` AuditEvent, and one
+  `data_analyst.daily_run.completed` summary event.
+
+Snapshot fields:
+- Funnel counts (30d): `lead_count_30d`, `call_count_30d`,
+  `confirmed_order_count_30d` (stages Confirmed / Dispatched /
+  Out for Delivery / Delivered), `delivered_order_count_30d`,
+  `reorder_count_30d`.
+- Conversion rates (0.0–1.0): `lead_to_call_rate`,
+  `call_to_confirmed_rate`, `confirmed_to_delivered_rate`,
+  `delivered_to_reorder_rate`. Each rate has a divide-by-zero
+  guard.
+- `top_states`: list of `{state, order_count, revenue}` dicts,
+  capped at 5 by default, sorted by `order_count` DESC.
+- `day_of_week_counts`: dict with keys `mon` through `sun`,
+  zero-filled.
+- `alerts` + `alert_text`: anomaly codes + short factual rationale.
+
+Reorder rule:
+- An in-window order is a reorder *unless* it is the customer's
+  earliest-ever order. For each phone with at least one in-window
+  order, look up `Order.objects.filter(phone=phone).order_by("created_at").first()`.
+  If the earliest order is in-window: `reorder += max(0, in_window - 1)`.
+  Otherwise: `reorder += in_window`.
+
+Anomaly thresholds (deterministic):
+- `conversion_drop` when any of the 4 rates < 0.10 AND the
+  corresponding upstream count > 5 (small-sample false-positive
+  guard).
+- `geographic_concentration_shift` when top state's share > 70 %
+  AND top state's `order_count` > 10.
+- `dead_end_calls` when `call_count_30d > 0` AND
+  `call_to_confirmed_rate < 0.05`.
+- `lead_volume_drop` when `lead_count_30d == 0`.
+- `all_clear` when none of the above fires.
+
+Safety contract:
+- The agent NEVER imports / calls
+  `apps.whatsapp.services.queue_template_message`,
+  `apps.whatsapp.services.send_freeform_text_message`,
+  `apps.calls.services.trigger_call_for_lead`,
+  `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
+  or Vapi. The safety test patches all four entrypoints and asserts
+  no calls and stable Lead / Call / Order / Customer row counts
+  after a sweep.
+- `alert_text` is a short internal rationale stored on the snapshot
+  for operator review; it is **never** a customer-facing message
+  and is **never** sent to a customer.
+- Kill switch uses the Phase 7E-Live-B Hotfix-1 Postgres-safe
+  pattern: any `RuntimeKillSwitch(scope="global", enabled=False)`
+  row wins (ordered by `-pk`) and the task exits with one
+  `data_analyst.daily_run.blocked` audit event.
+- Sandbox mode: when
+  `apps.ai_governance.sandbox.is_sandbox_enabled()` is True, the
+  snapshot row and its linked AgentRun both carry the sandbox flag.
+- API: `/api/v1/data-analyst/snapshots/`,
+  `/api/v1/data-analyst/snapshots/latest/`, and
+  `/api/v1/data-analyst/snapshots/<id>/` are admin+ only and
+  strictly read-only. POST/PATCH/DELETE return 405. The
+  `/saas-admin` Data Analyst card carries no "Send Report" /
+  "Trigger Funnel Fix" / "Apply Discount" / "Run Agent" /
+  "Auto-rebalance" buttons.
+
 ### Phase 9C — CFO Agent V1 (business-level daily snapshot)
 
 Phase 9C is the first **business-level** agent and is

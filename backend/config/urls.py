@@ -53,5 +53,9 @@ urlpatterns = [
         "api/v1/cfo/",
         include("apps.agents.cfo.urls"),
     ),
+    path(
+        "api/v1/data-analyst/",
+        include("apps.agents.data_analyst.urls"),
+    ),
     path("api/", include(api_patterns)),
 ]

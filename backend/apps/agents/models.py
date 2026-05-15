@@ -39,3 +39,6 @@ from .rto_prevention.models import RtoRiskSnapshot  # noqa: E402, F401
 
 # Phase 9C — CFO Agent V1 (business-level daily financial snapshot).
 from .cfo.models import CfoFinancialSnapshot  # noqa: E402, F401
+
+# Phase 9D — Data Analyst Agent V1 (operational/funnel analytics).
+from .data_analyst.models import DataAnalystSnapshot  # noqa: E402, F401

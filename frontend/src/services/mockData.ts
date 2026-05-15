@@ -4946,6 +4946,22 @@ export const CFO_SNAPSHOTS: Record<string, unknown> = {
   pageSize: 50,
 };
 
+// ---------- Phase 9D — Data Analyst Agent V1 ----------
+
+export const DATA_ANALYST_LATEST: Record<string, unknown> = {
+  agent: "data_analyst_v1",
+  snapshot: null,
+  lastAgentRunAt: null,
+  lastAgentRunStatus: "",
+};
+
+export const DATA_ANALYST_SNAPSHOTS: Record<string, unknown> = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 30,
+};
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 const PHASE_7I_LOCK_COUNTS = {
