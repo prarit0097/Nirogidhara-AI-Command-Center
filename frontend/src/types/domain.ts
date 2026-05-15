@@ -5531,6 +5531,36 @@ export interface CeoOrchestrationSnapshotsResponse {
   pageSize: number;
 }
 
+// ---------- Phase 10A — Diagnostics: Pending Payments Drilldown ----------
+
+export interface PendingPaymentRow {
+  payment_id: string;
+  payment_status: "Pending" | "Partial" | string;
+  amount: number;
+  payment_link_url: string | null;
+  gateway_reference_id: string | null;
+  created_at: string | null;
+  days_since_creation: number;
+  order_id: string;
+  order_state: string | null;
+  order_status: string | null;
+  customer_name: string;
+  customer_phone: string;
+  last_whatsapp_at: string | null;
+  last_call_at: string | null;
+  last_call_outcome: string | null;
+}
+
+export interface PendingPaymentsDrilldownResponse {
+  count: number;
+  filters: {
+    include_partial: boolean;
+    limit: number;
+    state: string | null;
+  };
+  results: PendingPaymentRow[];
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

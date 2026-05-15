@@ -65,5 +65,9 @@ urlpatterns = [
         "api/v1/ceo-orchestration/",
         include("apps.agents.ceo_orchestration.urls"),
     ),
+    path(
+        "api/v1/diagnostics/",
+        include("apps.diagnostics.urls"),
+    ),
     path("api/", include(api_patterns)),
 ]

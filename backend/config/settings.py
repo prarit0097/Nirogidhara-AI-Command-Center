@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "apps.whatsapp",
     "apps.saas",
     "apps.mcp_gateway",
+    "apps.diagnostics",
 ]
 
 MIDDLEWARE = [

@@ -4994,6 +4994,83 @@ export const CEO_ORCHESTRATION_SNAPSHOTS: Record<string, unknown> = {
   pageSize: 30,
 };
 
+// ---------- Phase 10A — Diagnostics: Pending Payments Drilldown ----------
+
+export const DIAGNOSTICS_PENDING_PAYMENTS: Record<string, unknown> = {
+  count: 4,
+  filters: { include_partial: true, limit: 100, state: null },
+  results: [
+    {
+      payment_id: "PAY-MOCK-001",
+      payment_status: "Pending",
+      amount: 3000,
+      payment_link_url: "https://rzp.io/mock/pl-1",
+      gateway_reference_id: "plink_mock_001",
+      created_at: "2026-05-09T10:00:00Z",
+      days_since_creation: 6,
+      order_id: "NRG-MOCK-001",
+      order_state: "Delhi",
+      order_status: "Confirmed",
+      customer_name: "Mock Customer A",
+      customer_phone: "+919999990001",
+      last_whatsapp_at: "2026-05-10T11:00:00Z",
+      last_call_at: "2026-05-11T09:00:00Z",
+      last_call_outcome: "Completed",
+    },
+    {
+      payment_id: "PAY-MOCK-002",
+      payment_status: "Partial",
+      amount: 1499,
+      payment_link_url: "https://rzp.io/mock/pl-2",
+      gateway_reference_id: "plink_mock_002",
+      created_at: "2026-05-12T08:00:00Z",
+      days_since_creation: 3,
+      order_id: "NRG-MOCK-002",
+      order_state: "Mumbai",
+      order_status: "Confirmed",
+      customer_name: "Mock Customer B",
+      customer_phone: "+919999990002",
+      last_whatsapp_at: null,
+      last_call_at: "2026-05-13T12:00:00Z",
+      last_call_outcome: "Missed",
+    },
+    {
+      payment_id: "PAY-MOCK-003",
+      payment_status: "Pending",
+      amount: 2999,
+      payment_link_url: "https://rzp.io/mock/pl-3",
+      gateway_reference_id: "plink_mock_003",
+      created_at: "2026-05-14T14:00:00Z",
+      days_since_creation: 1,
+      order_id: "NRG-MOCK-003",
+      order_state: "Bengaluru",
+      order_status: "Order Punched",
+      customer_name: "Mock Customer C",
+      customer_phone: "+919999990003",
+      last_whatsapp_at: "2026-05-15T07:00:00Z",
+      last_call_at: null,
+      last_call_outcome: null,
+    },
+    {
+      payment_id: "PAY-MOCK-004",
+      payment_status: "Pending",
+      amount: 4500,
+      payment_link_url: null,
+      gateway_reference_id: null,
+      created_at: "2026-05-15T09:30:00Z",
+      days_since_creation: 0,
+      order_id: "NRG-MOCK-004",
+      order_state: "Pune",
+      order_status: "Confirmation Pending",
+      customer_name: "Mock Customer D",
+      customer_phone: "+919999990004",
+      last_whatsapp_at: null,
+      last_call_at: null,
+      last_call_outcome: null,
+    },
+  ],
+};
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 const PHASE_7I_LOCK_COUNTS = {

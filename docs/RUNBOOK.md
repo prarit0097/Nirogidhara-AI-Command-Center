@@ -3440,6 +3440,62 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 10A — Pending Payments Drilldown (Diagnostics V1)
+
+Phase 10A is the first module under the new `apps/diagnostics/`
+Django app. It is **read-only** — no models, no migrations, no
+mutations, no outbound calls. The Phase 9F CEO orchestration's
+first real run flagged `high_pending_payments` as the #1 Director
+priority (9 pending payments totalling ~₹20,440); Phase 10A is the
+review surface that answers that priority without crossing the
+action boundary.
+
+Surfaces:
+- `apps.diagnostics.service.list_pending_payments_drilldown` —
+  pure read-only aggregation function. Reads `Payment` rows with
+  status `Pending` (+ optionally `Partial`), joins with `Order` +
+  `crm.Customer` + last-outbound `WhatsAppMessage` + last `Call`,
+  returns rows sorted oldest-first.
+- `GET /api/v1/diagnostics/pending-payments/?include_partial=true|false&limit=N&state=Delhi`
+  — admin / director / superuser only. POST/PATCH/PUT/DELETE return
+  405. Response: `{count, filters, results}`.
+- `python manage.py inspect_pending_payments [--include-partial /
+  --no-include-partial] [--limit N] [--state STATE] [--json]` —
+  pretty-print to stdout or emit JSON. Useful for SSH / cron
+  debugging.
+- `/operations/pending-payments` frontend page — sortable table
+  with client-side search; "Include Partial" toggle; "Read-only
+  diagnostic" banner; no action buttons.
+
+Field availability (discovered before coding):
+- `Payment.payment_url` exists (URLField); surfaced as
+  `payment_link_url`.
+- `Payment.gateway_reference_id` exists; surfaced as-is.
+- `Call` has no dedicated `outcome` field; `Call.status` is the
+  closest action-relevant signal and is surfaced as
+  `last_call_outcome`.
+- `WhatsAppMessage.direction` is the inbound/outbound/system enum;
+  the last-WhatsApp lookup filters to `OUTBOUND` only.
+
+Safety contract:
+- The module NEVER imports / calls
+  `apps.whatsapp.services.queue_template_message`,
+  `apps.whatsapp.services.send_freeform_text_message`,
+  `apps.calls.services.trigger_call_for_lead`,
+  `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
+  or Vapi. The safety test patches all four entrypoints and asserts
+  no calls and stable Payment / Order / Customer / Call /
+  WhatsAppMessage row counts across BOTH the API endpoint AND the
+  CLI command.
+- Action on pending payments still requires the existing
+  approval-gated CLI workflows (Phase 7E-Live-B for real customer
+  WhatsApp reminders; future Razorpay live-collect gate for
+  payment-side actions). Phase 10A surfaces the records; it does
+  not act on them.
+- API + CLI are admin / director / superuser only. The frontend
+  route lives under `/operations/pending-payments` and is not
+  exposed to operations / viewer roles.
+
 ### Phase 9F — CEO AI Orchestration V1 (synthesis layer)
 
 Phase 9F is the **synthesis layer** over the Phase 9A–9E agent

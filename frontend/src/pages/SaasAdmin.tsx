@@ -5961,6 +5961,18 @@ export default function SaasAdminPage() {
               value={cfoLatest.lastAgentRunStatus || "n/a"}
             />
           </div>
+          <div className="border-t border-border px-6 py-3 text-xs">
+            <a
+              href="/operations/pending-payments"
+              data-testid="cfo-pending-payments-link"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              View pending payments →
+            </a>
+            <span className="ml-2 text-muted-foreground">
+              (read-only diagnostic; no action buttons)
+            </span>
+          </div>
           <div
             className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
             data-testid="cfo-recs-only-banner"

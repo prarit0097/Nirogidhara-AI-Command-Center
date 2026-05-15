@@ -187,6 +187,7 @@ import type {
   CallingTeamLeaderSnapshotsResponse,
   CeoOrchestrationLatestResponse,
   CeoOrchestrationSnapshotsResponse,
+  PendingPaymentsDrilldownResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1865,6 +1866,32 @@ export const api = {
       url,
       () =>
         M.CEO_ORCHESTRATION_SNAPSHOTS as CeoOrchestrationSnapshotsResponse,
+    );
+  },
+
+  // ---------- Phase 10A — Diagnostics: Pending Payments Drilldown ----------
+
+  getPendingPaymentsDrilldown: (
+    params: {
+      includePartial?: boolean;
+      limit?: number;
+      state?: string;
+    } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.includePartial !== undefined) {
+      q.set("include_partial", params.includePartial ? "true" : "false");
+    }
+    if (params.limit) q.set("limit", String(params.limit));
+    if (params.state) q.set("state", params.state);
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/diagnostics/pending-payments/?${qs}`
+      : "/v1/diagnostics/pending-payments/";
+    return safeFetch<PendingPaymentsDrilldownResponse>(
+      url,
+      () =>
+        M.DIAGNOSTICS_PENDING_PAYMENTS as PendingPaymentsDrilldownResponse,
     );
   },
 
