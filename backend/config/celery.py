@@ -64,6 +64,11 @@ def build_beat_schedule() -> dict:
     # triggers outbound action.
     da_hour = getattr(settings, "AI_DATA_ANALYST_DAILY_HOUR", 11)
     da_minute = getattr(settings, "AI_DATA_ANALYST_DAILY_MINUTE", 0)
+    # Phase 9E - Calling Team Leader Agent V1. Recommendations-only daily
+    # call-performance snapshot; 12:00 IST default (after Data Analyst).
+    # Never triggers outbound action.
+    ctl_hour = getattr(settings, "AI_CALLING_TEAM_LEADER_DAILY_HOUR", 12)
+    ctl_minute = getattr(settings, "AI_CALLING_TEAM_LEADER_DAILY_MINUTE", 0)
 
     return {
         "ai-daily-briefing-morning": {
@@ -94,6 +99,11 @@ def build_beat_schedule() -> dict:
             "task": "apps.agents.data_analyst.tasks."
             "run_data_analyst_agent_daily",
             "schedule": crontab(hour=da_hour, minute=da_minute),
+        },
+        "calling-team-leader-daily": {
+            "task": "apps.agents.calling_team_leader.tasks."
+            "run_calling_team_leader_agent_daily",
+            "schedule": crontab(hour=ctl_hour, minute=ctl_minute),
         },
     }
 

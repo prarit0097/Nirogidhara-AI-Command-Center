@@ -57,5 +57,9 @@ urlpatterns = [
         "api/v1/data-analyst/",
         include("apps.agents.data_analyst.urls"),
     ),
+    path(
+        "api/v1/calling-team-leader/",
+        include("apps.agents.calling_team_leader.urls"),
+    ),
     path("api/", include(api_patterns)),
 ]

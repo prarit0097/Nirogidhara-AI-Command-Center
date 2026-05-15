@@ -5410,6 +5410,58 @@ export interface DataAnalystSnapshotsResponse {
   pageSize: number;
 }
 
+// ---------- Phase 9E — Calling Team Leader Agent V1 ----------
+
+export type CallingTeamLeaderAlertCode =
+  | "low_connection_rate"
+  | "high_transcript_backlog"
+  | "no_calls_today"
+  | "agent_concentration_risk"
+  | "no_agent_attribution_field"
+  | "all_clear";
+
+export interface CallingTeamLeaderAgentBreakdownRow {
+  agent_id: string;
+  agent_label: string;
+  call_count: number;
+  connection_rate: number;
+  avg_duration_seconds: number;
+}
+
+export interface CallingTeamLeaderSnapshotDto {
+  id: number;
+  snapshotAt: string | null;
+  callCount24h: number;
+  callCount7d: number;
+  callCount30d: number;
+  answeredCount30d: number;
+  connectionRate30d: number;
+  avgDurationSeconds30d: number;
+  outcomeBreakdown: Record<string, number>;
+  agentBreakdown: CallingTeamLeaderAgentBreakdownRow[];
+  transcriptBacklogCount: number;
+  alerts: CallingTeamLeaderAlertCode[];
+  alertText: string;
+  agentRunId: string | null;
+  sandbox: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CallingTeamLeaderLatestResponse {
+  agent: "calling_team_leader_v1";
+  snapshot: CallingTeamLeaderSnapshotDto | null;
+  lastAgentRunAt: string | null;
+  lastAgentRunStatus: string;
+}
+
+export interface CallingTeamLeaderSnapshotsResponse {
+  items: CallingTeamLeaderSnapshotDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

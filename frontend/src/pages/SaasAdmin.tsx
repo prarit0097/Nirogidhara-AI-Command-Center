@@ -44,6 +44,7 @@ import type {
   RtoPreventionCohortsResponse,
   CfoLatestResponse,
   DataAnalystLatestResponse,
+  CallingTeamLeaderLatestResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -298,6 +299,10 @@ export default function SaasAdminPage() {
     setDataAnalystLatest,
   ] = useState<DataAnalystLatestResponse | null>(null);
   const [
+    callingTeamLeaderLatest,
+    setCallingTeamLeaderLatest,
+  ] = useState<CallingTeamLeaderLatestResponse | null>(null);
+  const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
   ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
@@ -428,6 +433,7 @@ export default function SaasAdminPage() {
       api.getRtoPreventionCohorts(),
       api.getCfoLatest(),
       api.getDataAnalystLatest(),
+      api.getCallingTeamLeaderLatest(),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -496,6 +502,7 @@ export default function SaasAdminPage() {
           p9bCohorts,
           p9cLatest,
           p9dLatest,
+          p9eLatest,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -562,6 +569,7 @@ export default function SaasAdminPage() {
           setRtoPreventionCohorts(p9bCohorts);
           setCfoLatest(p9cLatest);
           setDataAnalystLatest(p9dLatest);
+          setCallingTeamLeaderLatest(p9eLatest);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5984,6 +5992,198 @@ export default function SaasAdminPage() {
             <strong>Recommendations-only.</strong> No "Send Report" /
             "Trigger Funnel Fix" / "Apply Discount" / "Run Agent" /
             "Auto-rebalance" buttons exist on this page.
+          </div>
+        </section>
+      )}
+
+      {callingTeamLeaderLatest && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="calling-team-leader-agent-v1-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Calling Team Leader Agent V1
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Recommendations-only. Deterministic daily aggregation of
+                call counts, connection rate, avg duration, outcome
+                breakdown, per-agent metrics, and transcript backlog.
+                The agent NEVER triggers calls, WhatsApp, payments, or
+                shipments; downstream gates (Phase 5D / 5E / 7E-Live-B /
+                7G-Live) remain the only paths to real customer action.
+              </p>
+            </div>
+            <StatusPill tone="success">Recs-only</StatusPill>
+          </div>
+          {callingTeamLeaderLatest.snapshot ? (
+            <>
+              <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5 text-xs">
+                <KeyValue
+                  label="Calls 24h"
+                  value={String(
+                    callingTeamLeaderLatest.snapshot.callCount24h,
+                  )}
+                />
+                <KeyValue
+                  label="Calls 7d"
+                  value={String(
+                    callingTeamLeaderLatest.snapshot.callCount7d,
+                  )}
+                />
+                <KeyValue
+                  label="Calls 30d"
+                  value={String(
+                    callingTeamLeaderLatest.snapshot.callCount30d,
+                  )}
+                />
+                <KeyValue
+                  label="Connection rate"
+                  value={(
+                    callingTeamLeaderLatest.snapshot.connectionRate30d *
+                    100
+                  ).toFixed(1) + "%"}
+                />
+                <KeyValue
+                  label="Avg duration"
+                  value={
+                    callingTeamLeaderLatest.snapshot.avgDurationSeconds30d.toFixed(
+                      0,
+                    ) + "s"
+                  }
+                />
+                <KeyValue
+                  label="Transcript backlog"
+                  value={String(
+                    callingTeamLeaderLatest.snapshot.transcriptBacklogCount,
+                  )}
+                />
+              </div>
+              {Object.keys(
+                callingTeamLeaderLatest.snapshot.outcomeBreakdown,
+              ).length > 0 && (
+                <div className="border-t border-border px-6 py-4 overflow-x-auto">
+                  <p className="text-xs font-medium mb-2">
+                    Outcome breakdown (Call.status, 30d)
+                  </p>
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr>
+                        <th className="py-2 pr-4">Status</th>
+                        <th className="py-2 pr-4">Count</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(
+                        callingTeamLeaderLatest.snapshot.outcomeBreakdown,
+                      ).map(([status, count]) => (
+                        <tr
+                          key={status}
+                          data-testid="calling-team-leader-outcome-row"
+                        >
+                          <td className="py-2 pr-4">{status}</td>
+                          <td className="py-2 pr-4">{String(count)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {callingTeamLeaderLatest.snapshot.agentBreakdown.length >
+              0 ? (
+                <div className="border-t border-border px-6 py-4 overflow-x-auto">
+                  <p className="text-xs font-medium mb-2">
+                    Top agents (30d)
+                  </p>
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr>
+                        <th className="py-2 pr-4">Agent</th>
+                        <th className="py-2 pr-4">Calls</th>
+                        <th className="py-2 pr-4">Connection</th>
+                        <th className="py-2 pr-4">Avg duration</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {callingTeamLeaderLatest.snapshot.agentBreakdown.map(
+                        (row) => (
+                          <tr
+                            key={row.agent_id || row.agent_label}
+                            data-testid="calling-team-leader-agent-row"
+                          >
+                            <td className="py-2 pr-4">{row.agent_label}</td>
+                            <td className="py-2 pr-4">
+                              {String(row.call_count)}
+                            </td>
+                            <td className="py-2 pr-4">
+                              {(row.connection_rate * 100).toFixed(1) + "%"}
+                            </td>
+                            <td className="py-2 pr-4">
+                              {row.avg_duration_seconds.toFixed(0) + "s"}
+                            </td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="border-t border-border px-6 py-4 text-xs text-muted-foreground">
+                  No agent attribution field — per-agent metrics
+                  unavailable in V1.
+                </div>
+              )}
+              <div className="border-t border-border px-6 py-4">
+                <p className="text-xs font-medium mb-2">Active alerts</p>
+                <div className="flex flex-wrap gap-2">
+                  {callingTeamLeaderLatest.snapshot.alerts.map((alert) => (
+                    <span
+                      key={alert}
+                      data-testid="calling-team-leader-alert-pill"
+                      className="rounded-full border border-border px-2 py-1 text-xs"
+                    >
+                      {alert}
+                    </span>
+                  ))}
+                </div>
+                {callingTeamLeaderLatest.snapshot.alertText && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {callingTeamLeaderLatest.snapshot.alertText}
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="px-6 py-4 text-xs text-muted-foreground">
+              No Calling Team Leader snapshot yet. The daily Celery task
+              will produce one at the configured time.
+            </div>
+          )}
+          <div className="px-6 py-3 grid gap-2 sm:grid-cols-2 text-xs">
+            <KeyValue
+              label="Snapshot timestamp"
+              value={
+                callingTeamLeaderLatest.snapshot?.snapshotAt
+                  ? String(callingTeamLeaderLatest.snapshot.snapshotAt)
+                  : "—"
+              }
+            />
+            <KeyValue
+              label="Last agent run status"
+              value={
+                callingTeamLeaderLatest.lastAgentRunStatus || "n/a"
+              }
+            />
+          </div>
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="calling-team-leader-recs-only-banner"
+          >
+            <strong>Recommendations-only.</strong> No "Trigger Call" /
+            "Reassign Agent" / "Send Coaching Note" / "Run Agent" /
+            "Auto-dial" buttons exist on this page.
           </div>
         </section>
       )}

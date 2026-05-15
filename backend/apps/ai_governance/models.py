@@ -86,6 +86,7 @@ class AgentRun(models.Model):
         CUSTOMER_SUCCESS = "customer_success", "customer_success"
         RTO_PREVENTION = "rto_prevention", "rto_prevention"
         DATA_ANALYST = "data_analyst", "data_analyst"
+        CALLING_TEAM_LEADER = "calling_team_leader", "calling_team_leader"
 
     id = models.CharField(primary_key=True, max_length=32)
     agent = models.CharField(max_length=24, choices=Agent.choices)

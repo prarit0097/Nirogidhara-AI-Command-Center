@@ -42,3 +42,8 @@ from .cfo.models import CfoFinancialSnapshot  # noqa: E402, F401
 
 # Phase 9D — Data Analyst Agent V1 (operational/funnel analytics).
 from .data_analyst.models import DataAnalystSnapshot  # noqa: E402, F401
+
+# Phase 9E — Calling Team Leader Agent V1 (call-performance snapshot).
+from .calling_team_leader.models import (  # noqa: E402, F401
+    CallingTeamLeaderSnapshot,
+)

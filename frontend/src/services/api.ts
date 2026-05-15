@@ -183,6 +183,8 @@ import type {
   CfoSnapshotsResponse,
   DataAnalystLatestResponse,
   DataAnalystSnapshotsResponse,
+  CallingTeamLeaderLatestResponse,
+  CallingTeamLeaderSnapshotsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1809,6 +1811,32 @@ export const api = {
     return safeFetch<DataAnalystSnapshotsResponse>(
       url,
       () => M.DATA_ANALYST_SNAPSHOTS as DataAnalystSnapshotsResponse,
+    );
+  },
+
+  // ---------- Phase 9E — Calling Team Leader Agent V1 ----------
+
+  getCallingTeamLeaderLatest: () =>
+    safeFetch<CallingTeamLeaderLatestResponse>(
+      "/v1/calling-team-leader/snapshots/latest/",
+      () =>
+        M.CALLING_TEAM_LEADER_LATEST as CallingTeamLeaderLatestResponse,
+    ),
+
+  getCallingTeamLeaderSnapshots: (
+    params: { page?: number; pageSize?: number } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("page_size", String(params.pageSize));
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/calling-team-leader/snapshots/?${qs}`
+      : "/v1/calling-team-leader/snapshots/";
+    return safeFetch<CallingTeamLeaderSnapshotsResponse>(
+      url,
+      () =>
+        M.CALLING_TEAM_LEADER_SNAPSHOTS as CallingTeamLeaderSnapshotsResponse,
     );
   },
 

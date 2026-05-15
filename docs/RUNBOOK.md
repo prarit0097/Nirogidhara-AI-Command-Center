@@ -3440,6 +3440,76 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 9E — Calling Team Leader Agent V1 (call-performance lens)
+
+Phase 9E is the call-performance lens and is **recommendations-only**.
+It produces ONE daily snapshot per task invocation summarising call
+counts, connection rate, avg duration, per-agent metrics, and
+transcript backlog. It never triggers outbound action.
+
+Run shape:
+- Celery beat task `apps.agents.calling_team_leader.tasks.
+  run_calling_team_leader_agent_daily` scheduled at 12:00 IST
+  (env-shiftable via `AI_CALLING_TEAM_LEADER_DAILY_HOUR` /
+  `_MINUTE`). Runs after Customer Success (08:00), RTO Prevention
+  (09:00), CFO (10:00), and Data Analyst (11:00).
+- One `CallingTeamLeaderSnapshot` row per invocation, one linked
+  `AgentRun` (`agent="calling_team_leader"`, model
+  `"deterministic_v1"`, provider `"disabled"`, `cost_usd=0`,
+  `dry_run=True`, `triggered_by="celery_beat_daily"`), one
+  `calling_team_leader.snapshot.created` AuditEvent, and one
+  `calling_team_leader.daily_run.completed` summary event.
+
+Field availability (V1):
+- `Call.agent` is a `CharField(max_length=80)` — per-agent metrics
+  ARE supported.
+- `Call.duration` stores `"m:ss"` / `"mm:ss"` / `"h:mm:ss"`. The
+  service module parses it with a garbage-tolerant fallback to 0.
+- `Call.outcome` does not exist — outcome breakdown groups by
+  `Call.status` (Live / Queued / Completed / Missed / Failed).
+- "Answered" rule (V1): `status="Completed"`.
+- Transcript backlog: `Call.created_at < now - 24h` AND no
+  `CallTranscriptLine` rows linked.
+
+Anomaly thresholds (deterministic):
+- `low_connection_rate` when `call_count_30d >= 10` AND
+  `connection_rate_30d < 0.30`.
+- `high_transcript_backlog` when backlog > 20.
+- `no_calls_today` when `call_count_24h == 0` AND
+  `call_count_7d > 0`.
+- `agent_concentration_risk` when top agent's call_count
+  > 0.70 × `call_count_30d` AND `call_count_30d > 10`.
+- `no_agent_attribution_field` (informational only; never blocks
+  `all_clear`) — fires only when the agent breakdown path is
+  disabled.
+- `all_clear` when no real problem fires.
+
+Safety contract:
+- The agent NEVER imports / calls
+  `apps.whatsapp.services.queue_template_message`,
+  `apps.whatsapp.services.send_freeform_text_message`,
+  `apps.calls.services.trigger_call_for_lead`,
+  `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
+  or Vapi. The safety test patches all four entrypoints and asserts
+  no calls and stable Call / Customer / Order row counts after a
+  sweep.
+- `alert_text` is a short internal rationale; it is **never** a
+  customer-facing message and is **never** sent to a customer.
+- Kill switch uses the Phase 7E-Live-B Hotfix-1 Postgres-safe
+  pattern: any `RuntimeKillSwitch(scope="global", enabled=False)`
+  row wins (ordered by `-pk`) and the task exits with one
+  `calling_team_leader.daily_run.blocked` audit event.
+- Sandbox mode: when
+  `apps.ai_governance.sandbox.is_sandbox_enabled()` is True, the
+  snapshot row and its linked AgentRun both carry the sandbox flag.
+- API: `/api/v1/calling-team-leader/snapshots/`,
+  `/api/v1/calling-team-leader/snapshots/latest/`, and
+  `/api/v1/calling-team-leader/snapshots/<id>/` are admin+ only and
+  strictly read-only. POST/PATCH/DELETE return 405. The
+  `/saas-admin` Calling Team Leader card carries no "Trigger Call" /
+  "Reassign Agent" / "Send Coaching Note" / "Run Agent" /
+  "Auto-dial" buttons.
+
 ### Phase 9D — Data Analyst Agent V1 (operational / funnel analytics)
 
 Phase 9D is the second **business-level** agent and is
