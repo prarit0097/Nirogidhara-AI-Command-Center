@@ -227,9 +227,67 @@ def verify_webhook_signature(body: bytes, signature: str, secret: str | None = N
     return hmac.compare_digest(digest, signature)
 
 
+def cancel_awb(*, awb: str) -> dict:
+    """Attempt to cancel a Delhivery AWB via the live cancellation API.
+
+    Used exclusively by the Phase 7G-Live rollback path. Returns a
+    dict with ``status`` ("cancelled" / "rejected" / "mocked" /
+    "error") and ``raw`` (the underlying provider response or error
+    message). Never raises; the caller records the result honestly
+    even if Delhivery refuses cancellation (in-transit AWBs cannot
+    be cancelled).
+    """
+    if not awb:
+        return {"status": "error", "raw": {"error": "missing_awb"}}
+    mode = (getattr(settings, "DELHIVERY_MODE", "mock") or "mock").lower()
+    if mode == "mock":
+        return {
+            "status": "mocked",
+            "mode": "mock",
+            "raw": {"awb": awb, "mocked": True},
+        }
+    try:
+        import requests  # type: ignore[import-not-found]
+    except ImportError as exc:  # pragma: no cover - exercised only on missing dep
+        return {
+            "status": "error",
+            "raw": {"error": f"requests_not_installed:{exc}"},
+        }
+    base_url = getattr(settings, "DELHIVERY_API_BASE_URL", "") or ""
+    token = getattr(settings, "DELHIVERY_API_TOKEN", "") or ""
+    if not base_url or not token:
+        return {
+            "status": "error",
+            "raw": {"error": "delhivery_api_not_configured"},
+        }
+    url = f"{base_url.rstrip('/')}/api/p/edit"
+    headers = {
+        "Authorization": f"Token {token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    payload = {"waybill": awb, "cancellation": "true"}
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        body: Any
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"text": response.text}
+        ok = bool(response.ok) and bool(body and body.get("status", True))
+        return {
+            "status": "cancelled" if ok else "rejected",
+            "http_status": response.status_code,
+            "raw": body,
+        }
+    except Exception as exc:  # pragma: no cover - real-network path
+        return {"status": "error", "raw": {"error": str(exc)}}
+
+
 __all__ = (
     "DelhiveryClientError",
     "AwbResult",
     "create_awb",
+    "cancel_awb",
     "verify_webhook_signature",
 )

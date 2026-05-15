@@ -98,3 +98,79 @@ class RescueAttempt(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.id} · {self.order_id} · {self.outcome}"
+
+
+class Phase7GLiveRealCustomerDispatchGate(models.Model):
+    """Phase 7G-Live one-shot real-customer Delhivery dispatch gate.
+
+    CLI-only governance row. Approval authorizes exactly one real
+    Delhivery AWB creation for exactly one confirmed Order within a
+    structured Director UTC window. Rollback attempts the Delhivery
+    cancellation API and records the result honestly — Delhivery may
+    refuse cancellation if the AWB is already in transit.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "draft"
+        APPROVED = "approved", "approved"
+        EXECUTED = "executed", "executed"
+        FAILED = "failed", "failed"
+        CANCELLED = "cancelled", "cancelled"
+        ROLLBACK_RECORDED = "rollback_recorded", "rollback_recorded"
+
+    status = models.CharField(
+        max_length=24,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    target_order_id = models.CharField(max_length=32, db_index=True)
+    operator_name = models.CharField(max_length=120, blank=True, default="")
+    director_signoff_text_hash = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    recorded_signoff_window_start_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_end_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    executed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    awb_number = models.CharField(max_length=64, blank=True, default="")
+    delhivery_shipment_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    cancellation_attempted_at = models.DateTimeField(null=True, blank=True)
+    cancellation_result = models.JSONField(default=dict, blank=True)
+    blockers = models.JSONField(default=list, blank=True)
+    next_action = models.CharField(max_length=160, blank=True, default="")
+
+    payment_mutation_made = models.BooleanField(default=False)
+    order_payment_status_changed = models.BooleanField(default=False)
+    whatsapp_sent = models.BooleanField(default=False)
+    razorpay_called = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "shipments"
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(
+                fields=("status", "-created_at"),
+                name="p7gl_gate_status_created_idx",
+            ),
+            models.Index(
+                fields=("target_order_id", "-created_at"),
+                name="p7gl_gate_order_created_idx",
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return (
+            f"phase7g-live gate {self.pk} - "
+            f"{self.target_order_id} - {self.status}"
+        )

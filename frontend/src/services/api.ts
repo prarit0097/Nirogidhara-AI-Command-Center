@@ -174,6 +174,7 @@ import type {
   SaasPhase7ELiveInternalSendReadiness,
   SaasPhase7ELiveInternalSendAttemptsResponse,
   SaasPhase7ELiveBRealCustomerGatesResponse,
+  SaasPhase7GLiveRealCustomerDispatchGatesResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1685,6 +1686,12 @@ export const api = {
       `/v1/saas/phase7e-live-b/gates/?limit=${limit}`,
       () =>
         M.SAAS_PHASE7E_LIVE_B_REAL_CUSTOMER_GATES as SaasPhase7ELiveBRealCustomerGatesResponse,
+    ),
+  getSaasPhase7GLiveRealCustomerDispatchGates: (limit: number = 25) =>
+    safeFetch<SaasPhase7GLiveRealCustomerDispatchGatesResponse>(
+      `/v1/saas/phase7g-live/gates/?limit=${limit}`,
+      () =>
+        M.SAAS_PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_GATES as SaasPhase7GLiveRealCustomerDispatchGatesResponse,
     ),
 
   // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------

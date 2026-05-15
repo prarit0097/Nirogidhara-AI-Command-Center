@@ -5120,6 +5120,50 @@ export interface SaasPhase7ELiveBRealCustomerGatesResponse {
   apiEndpointCanApprove: false;
 }
 
+// ---------- Phase 7G-Live - Real Customer Delhivery Dispatch ----------
+
+export type SaasPhase7GLiveRealCustomerDispatchGateStatus =
+  | "draft"
+  | "approved"
+  | "executed"
+  | "failed"
+  | "cancelled"
+  | "rollback_recorded";
+
+export interface SaasPhase7GLiveRealCustomerDispatchGateDto {
+  id: number;
+  status: SaasPhase7GLiveRealCustomerDispatchGateStatus;
+  targetOrderId: string;
+  operatorName: string;
+  recordedSignoffWindowStartUtc: string | null;
+  recordedSignoffWindowEndUtc: string | null;
+  executedAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  awbNumber: string;
+  delhiveryShipmentId: string;
+  cancellationAttemptedAt: string | null;
+  cancellationResult: Record<string, unknown>;
+  blockers: string[];
+  nextAction: string;
+  paymentMutationMade: false;
+  orderPaymentStatusChanged: false;
+  whatsappSent: false;
+  razorpayCalled: false;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SaasPhase7GLiveRealCustomerDispatchGatesResponse {
+  phase: "7G-Live";
+  counts: Record<SaasPhase7GLiveRealCustomerDispatchGateStatus, number>;
+  items: SaasPhase7GLiveRealCustomerDispatchGateDto[];
+  frontendCanExecute: false;
+  apiEndpointCanExecute: false;
+  apiEndpointCanApprove: false;
+  apiEndpointCanRollback: false;
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

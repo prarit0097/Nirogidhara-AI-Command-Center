@@ -2867,6 +2867,9 @@ from apps.payments.razorpay_whatsapp_internal_send import (  # noqa: E402
 from apps.whatsapp.phase7e_live_b_real_customer_send import (  # noqa: E402
     summarize_gates as _summarize_phase7e_live_b_gates,
 )
+from apps.shipments.phase7g_live_real_customer_dispatch import (  # noqa: E402
+    summarize_gates as _summarize_phase7g_live_gates,
+)
 
 
 class WhatsAppInternalSendReadinessView(APIView):
@@ -2974,6 +2977,24 @@ class Phase7ELiveBRealCustomerGatesListView(APIView):
         except (TypeError, ValueError):
             limit = 25
         return Response(_summarize_phase7e_live_b_gates(limit=limit))
+
+
+class Phase7GLiveRealCustomerDispatchGatesListView(APIView):
+    """``GET /api/v1/saas/phase7g-live/gates/?limit=N``.
+
+    Read-only Phase 7G-Live gate list. Auth + admin only;
+    POST/PATCH/DELETE return 405. There is no API approve / execute /
+    rollback endpoint.
+    """
+
+    permission_classes = [AdminSaasPermission]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 25)
+        except (TypeError, ValueError):
+            limit = 25
+        return Response(_summarize_phase7g_live_gates(limit=limit))
 
 
 # ---------------------------------------------------------------------------
@@ -4429,6 +4450,7 @@ __all__ = (
     "WhatsAppInternalSendAttemptDetailView",
     "WhatsAppInternalSendPreviewView",
     "Phase7ELiveBRealCustomerGatesListView",
+    "Phase7GLiveRealCustomerDispatchGatesListView",
     "Phase7IFinalAuditLockReadinessView",
     "Phase7IFinalAuditLocksListView",
     "Phase7IFinalAuditLockDetailView",

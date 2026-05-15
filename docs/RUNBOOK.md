@@ -3398,10 +3398,47 @@ python manage.py archive_phase7i_final_audit_lock \
   / payment-link / capture / refund boolean False.
 - The kill switch is enabled.
 
-**Phase 7G-Live (real customer courier execution) remains NOT approved.**
 Phase 7E-Live-B gate code is shipped, but each real-customer execute
 still requires a separate Director directive, runtime env prefix, and
 fresh 15-minute UTC window.
+
+### Phase 7G-Live — Real Customer Delhivery One-shot Dispatch Gate
+
+Phase 7G-Live is the **CLI-only real-customer Delhivery one-shot
+dispatch gate**. It authorises exactly one Delhivery live AWB creation
+against exactly one confirmed customer order per approved gate.
+
+Safety contract:
+- No frontend approve / execute / rollback buttons.
+- No bulk / auto / AI dispatch. One gate, one order.
+- Only orders in stage `Confirmed` are dispatch-ready; the gate
+  refuses to prepare against any other stage.
+- `.env.production` is not edited; both
+  `PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_ENABLED=true` and
+  `DELHIVERY_MODE=live` must be supplied with a runtime env prefix
+  for an approved run.
+- Approve and execute both require kill switch enabled, explicit
+  confirmation, non-empty operator, no prior executed gate against
+  the same order id, and a Director signoff containing
+  `phase7g_live_gate_id_<ID>`, `target_order_<ID>`,
+  `phase7gLiveApproval`, plus structured `BEGIN_UTC=` / `END_UTC=`
+  markers validated by
+  `apps.saas.utc_window.validate_within_director_window` (15-minute
+  cap, now inside the window).
+- Execute calls `apps.shipments.services.create_shipment(order=...)`
+  once inside `transaction.atomic()`. Locked-False flags
+  `payment_mutation_made`, `order_payment_status_changed`,
+  `whatsapp_sent`, and `razorpay_called` are asserted to stay False;
+  any flip raises and rolls the transaction back, marking the gate
+  failed.
+- Rollback attempts the Delhivery cancellation API for the gate's
+  AWB and records the provider result honestly. Delhivery may refuse
+  if the shipment is already in transit — the gate transitions to
+  `rollback_recorded` either way; the `cancellation_result` JSON is
+  the truthful record.
+- The kill switch helper uses the Phase 7E-Live-B Hotfix-1 pattern:
+  an explicit `scope="global", enabled=False` row always wins over
+  any seeded enabled default, ordered by `-pk` for determinism.
 
 ### Phase 8A — Payment → Order Mutation Sandbox Gate
 

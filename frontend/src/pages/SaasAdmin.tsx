@@ -39,6 +39,7 @@ import type {
   SaasPhase7ELiveInternalSendReadiness,
   SaasPhase7ELiveInternalSendAttemptsResponse,
   SaasPhase7ELiveBRealCustomerGatesResponse,
+  SaasPhase7GLiveRealCustomerDispatchGatesResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -273,6 +274,10 @@ export default function SaasAdminPage() {
     setPhase7eLiveBRealCustomerGates,
   ] = useState<SaasPhase7ELiveBRealCustomerGatesResponse | null>(null);
   const [
+    phase7gLiveRealCustomerDispatchGates,
+    setPhase7gLiveRealCustomerDispatchGates,
+  ] = useState<SaasPhase7GLiveRealCustomerDispatchGatesResponse | null>(null);
+  const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
   ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
@@ -398,6 +403,7 @@ export default function SaasAdminPage() {
       api.getSaasPhase7ELiveInternalSendReadiness(),
       api.getSaasPhase7ELiveInternalSendAttempts(25),
       api.getSaasPhase7ELiveBRealCustomerGates(25),
+      api.getSaasPhase7GLiveRealCustomerDispatchGates(25),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -461,6 +467,7 @@ export default function SaasAdminPage() {
           p7eLiveRead,
           p7eLiveAttempts,
           p7eLiveBGates,
+          p7gLiveGates,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -522,6 +529,7 @@ export default function SaasAdminPage() {
           setPhase7eLiveInternalSendReadiness(p7eLiveRead);
           setPhase7eLiveInternalSendAttempts(p7eLiveAttempts);
           setPhase7eLiveBRealCustomerGates(p7eLiveBGates);
+          setPhase7gLiveRealCustomerDispatchGates(p7gLiveGates);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5300,6 +5308,93 @@ export default function SaasAdminPage() {
             "Approve Send" / "Execute" / "Cancel" / "Broadcast" /
             "Campaign" / "Bulk Send" / "AI Freeform" buttons exist on
             this page.
+          </div>
+        </section>
+      )}
+
+      {phase7gLiveRealCustomerDispatchGates && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="phase7g-live-real-customer-dispatch-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Phase 7G-Live Real Customer Delhivery One-shot Dispatch
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                One confirmed order per gate. The lifecycle is CLI-only,
+                requires Director sign-off with a structured 15-minute UTC
+                window, and runs only when{" "}
+                <code>DELHIVERY_MODE=live</code> is supplied via runtime env
+                prefix. Rollback attempts AWB cancellation honestly —
+                Delhivery may refuse if the shipment is already in transit.
+              </p>
+            </div>
+            <StatusPill tone="warning">CLI-only</StatusPill>
+          </div>
+          <div className="px-6 py-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6 text-xs">
+            {Object.entries(phase7gLiveRealCustomerDispatchGates.counts).map(
+              ([status, count]) => (
+                <KeyValue
+                  key={status}
+                  label={status}
+                  value={String(count)}
+                />
+              ),
+            )}
+          </div>
+          {phase7gLiveRealCustomerDispatchGates.items.length > 0 && (
+            <div className="border-t border-border px-6 py-4 overflow-x-auto">
+              <table className="min-w-full text-left text-xs">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-4">Gate</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="py-2 pr-4">Order</th>
+                    <th className="py-2 pr-4">AWB</th>
+                    <th className="py-2 pr-4">Executed</th>
+                    <th className="py-2 pr-4">Rollback</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {phase7gLiveRealCustomerDispatchGates.items.map((gate) => (
+                    <tr
+                      key={gate.id}
+                      data-testid="phase7g-live-dispatch-gate-row"
+                    >
+                      <td className="py-2 pr-4">{gate.id}</td>
+                      <td className="py-2 pr-4">{gate.status}</td>
+                      <td className="py-2 pr-4">{gate.targetOrderId}</td>
+                      <td className="py-2 pr-4">
+                        {gate.awbNumber || "None"}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {gate.executedAt ?? "Not executed"}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {gate.cancellationAttemptedAt
+                          ? String(
+                              (gate.cancellationResult as { status?: string })
+                                ?.status ?? "recorded",
+                            )
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="phase7g-live-cli-only-banner"
+          >
+            <strong>CLI-only Execute + Rollback.</strong> No "Dispatch" /
+            "Create AWB" / "Approve" / "Execute" / "Rollback" / "Cancel
+            AWB" / "Bulk Dispatch" / "Auto Dispatch" / "AI Dispatch"
+            buttons exist on this page.
           </div>
         </section>
       )}
