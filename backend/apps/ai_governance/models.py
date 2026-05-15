@@ -83,6 +83,7 @@ class AgentRun(models.Model):
         MARKETING = "marketing", "marketing"
         CFO = "cfo", "cfo"
         COMPLIANCE = "compliance", "compliance"
+        CUSTOMER_SUCCESS = "customer_success", "customer_success"
 
     id = models.CharField(primary_key=True, max_length=32)
     agent = models.CharField(max_length=24, choices=Agent.choices)

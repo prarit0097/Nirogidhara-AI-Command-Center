@@ -45,6 +45,10 @@ def build_beat_schedule() -> dict:
     morning_minute = getattr(settings, "AI_DAILY_BRIEFING_MORNING_MINUTE", 0)
     evening_hour = getattr(settings, "AI_DAILY_BRIEFING_EVENING_HOUR", 18)
     evening_minute = getattr(settings, "AI_DAILY_BRIEFING_EVENING_MINUTE", 0)
+    # Phase 9A - Customer Success / Reorder Agent V1. Recommendations-only;
+    # 08:00 IST default (env-shiftable). Never triggers outbound action.
+    cs_hour = getattr(settings, "AI_CUSTOMER_SUCCESS_DAILY_HOUR", 8)
+    cs_minute = getattr(settings, "AI_CUSTOMER_SUCCESS_DAILY_MINUTE", 0)
 
     return {
         "ai-daily-briefing-morning": {
@@ -56,6 +60,11 @@ def build_beat_schedule() -> dict:
             "task": "apps.ai_governance.tasks.run_daily_ai_briefing_task",
             "schedule": crontab(hour=evening_hour, minute=evening_minute),
             "args": ("evening",),
+        },
+        "customer-success-daily": {
+            "task": "apps.agents.customer_success.tasks."
+            "run_customer_success_agent_daily",
+            "schedule": crontab(hour=cs_hour, minute=cs_minute),
         },
     }
 

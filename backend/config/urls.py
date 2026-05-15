@@ -41,5 +41,9 @@ urlpatterns = [
     path("api/v1/whatsapp/", include("apps.whatsapp.v1_urls")),
     path("api/v1/saas/", include("apps.saas.urls")),
     path("api/v1/mcp/", include("apps.mcp_gateway.urls")),
+    path(
+        "api/v1/customer-success/",
+        include("apps.agents.customer_success.urls"),
+    ),
     path("api/", include(api_patterns)),
 ]

@@ -28,3 +28,8 @@ class Agent(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.id} · {self.name}"
+
+
+# Phase 9A — Customer Success / Reorder Agent V1. Import here so Django
+# discovers the model and migrations live in apps/agents/migrations/.
+from .customer_success.models import CustomerSuccessSnapshot  # noqa: E402, F401

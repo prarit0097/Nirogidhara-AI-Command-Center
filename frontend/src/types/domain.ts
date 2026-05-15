@@ -5164,6 +5164,72 @@ export interface SaasPhase7GLiveRealCustomerDispatchGatesResponse {
   apiEndpointCanRollback: false;
 }
 
+// ---------- Phase 9A — Customer Success / Reorder Agent V1 ----------
+
+export type CustomerSuccessLifecycleStage =
+  | "fresh_delivery"
+  | "early_usage"
+  | "mid_usage"
+  | "reorder_window"
+  | "late_reorder"
+  | "lapsed";
+
+export type CustomerSuccessRecommendationKind =
+  | "send_usage_reminder"
+  | "send_reorder_reminder"
+  | "send_winback_offer"
+  | "monitor_only";
+
+export interface CustomerSuccessSnapshotDto {
+  id: number;
+  customerId: string;
+  score: number;
+  lifecycleStage: CustomerSuccessLifecycleStage;
+  daysSinceDelivery: number;
+  inReorderWindow: boolean;
+  reorderCandidate: boolean;
+  atRisk: boolean;
+  riskReasons: string[];
+  signals: Record<string, unknown>;
+  recommendationKind: CustomerSuccessRecommendationKind;
+  recommendationText: string;
+  agentRunId: string | null;
+  sandbox: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CustomerSuccessSnapshotsResponse {
+  items: CustomerSuccessSnapshotDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+  filters: {
+    stage: CustomerSuccessLifecycleStage | null;
+    kind: CustomerSuccessRecommendationKind | null;
+  };
+}
+
+export interface CustomerSuccessTopReorderCandidate {
+  id: number;
+  customerIdMasked: string;
+  score: number;
+  daysSinceDelivery: number;
+}
+
+export interface CustomerSuccessCohortsResponse {
+  agent: "customer_success_reorder_v1";
+  stageCounts: Partial<Record<CustomerSuccessLifecycleStage, number>>;
+  recommendationCounts: Partial<
+    Record<CustomerSuccessRecommendationKind, number>
+  >;
+  reorderCandidateCount: number;
+  atRiskCount: number;
+  lastAgentRunAt: string | null;
+  lastAgentRunStatus: string;
+  topReorderCandidates: CustomerSuccessTopReorderCandidate[];
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

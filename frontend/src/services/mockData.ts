@@ -4889,6 +4889,27 @@ export const SAAS_PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_GATES: Record<
   apiEndpointCanRollback: false,
 };
 
+// ---------- Phase 9A — Customer Success / Reorder Agent V1 ----------
+
+export const CUSTOMER_SUCCESS_COHORTS: Record<string, unknown> = {
+  agent: "customer_success_reorder_v1",
+  stageCounts: {},
+  recommendationCounts: {},
+  reorderCandidateCount: 0,
+  atRiskCount: 0,
+  lastAgentRunAt: null,
+  lastAgentRunStatus: "",
+  topReorderCandidates: [],
+};
+
+export const CUSTOMER_SUCCESS_SNAPSHOTS: Record<string, unknown> = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 50,
+  filters: { stage: null, kind: null },
+};
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 const PHASE_7I_LOCK_COUNTS = {

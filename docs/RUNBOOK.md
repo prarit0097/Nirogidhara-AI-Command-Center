@@ -3440,6 +3440,71 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 9A — Customer Success / Reorder Agent V1
+
+Phase 9A is a **recommendations-only** deterministic daily Celery
+sweep that scores each delivered customer's reorder readiness,
+lifecycle stage, and at-risk signals. It never triggers outbound
+action; downstream gates remain the only path to a real send /
+call / payment / dispatch.
+
+Run shape:
+- Celery beat task `apps.agents.customer_success.tasks.
+  run_customer_success_agent_daily` scheduled at 08:00 IST
+  (`AI_CUSTOMER_SUCCESS_DAILY_HOUR` / `_MINUTE` env-shiftable).
+- Iterates the distinct `Order.phone` values that have at least one
+  Delivered order in the last 60 days, joins back to `Customer` and
+  writes one fresh `CustomerSuccessSnapshot` per customer per run.
+- Each snapshot links to a freshly created `AgentRun`
+  (`agent="customer_success"`, model `"deterministic_v1"`,
+  `cost_usd=0`, `dry_run=True`, `triggered_by="celery_beat_daily"`
+  by default).
+- One `AuditEvent` per snapshot
+  (`customer_success.snapshot.created`); one summary event
+  (`customer_success.daily_run.completed`) at the end of each run.
+
+Score + recommendation:
+- `score = clamp(60 + min(delivered*5, 30) + min(reorder*10, 20)
+  − min(rto*10, 20) − (15 if complaint within 14d else 0), 0, 100)`.
+- Lifecycle: 0–2d `fresh_delivery`, 3–7d `early_usage`, 8–19d
+  `mid_usage`, 20–30d `reorder_window`, 31–45d `late_reorder`,
+  46+d `lapsed`.
+- `reorder_candidate` requires the 20–30d window AND no active
+  Pending/Confirmed/Dispatched order AND no complaint AuditEvent
+  in the last 14 days.
+- `at_risk` fires when `lapsed_no_reorder` OR `repeat_rto`
+  (≥ 2) OR `recent_complaint` (≤ 14d).
+- Recommendation priority: `send_reorder_reminder` →
+  `send_winback_offer` (late_reorder / lapsed + at_risk) →
+  `send_usage_reminder` (early_usage) → `monitor_only`.
+- `recommendation_text` is a short internal rationale (e.g. "Day 22
+  post-delivery, 1 prior delivery, no active reorder"); it is
+  **never** a customer-facing message and is **never** sent to a
+  customer.
+
+Safety contract:
+- The agent NEVER imports / calls `apps.whatsapp.services.send_*`,
+  `apps.whatsapp.services.queue_template_message`,
+  `apps.calls.services.trigger_call_for_lead`,
+  `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
+  or Vapi. Tests patch all four entrypoints and assert no calls
+  and stable Order/Customer counts after a sweep.
+- Kill switch uses the Phase 7E-Live-B Hotfix-1 Postgres-safe
+  pattern: any `RuntimeKillSwitch(scope="global", enabled=False)`
+  row wins (ordered by `-pk`) and the task exits with one
+  `customer_success.daily_run.blocked` audit event.
+- Sandbox mode: when `apps.ai_governance.sandbox.is_sandbox_enabled()`
+  is True, the snapshot row and its linked AgentRun both carry the
+  sandbox flag, so downstream consumers can filter pilot data
+  cleanly.
+- API: `/api/v1/customer-success/snapshots/`,
+  `/api/v1/customer-success/snapshots/<id>/`, and
+  `/api/v1/customer-success/cohorts/` are admin+ only and strictly
+  read-only. POST/PATCH/DELETE return 405. The `/saas-admin`
+  Customer Success card surfaces masked customer ids only and
+  carries no "Send" / "Trigger Call" / "Run Agent" / "Auto-dispatch"
+  buttons.
+
 ### Phase 8A — Payment → Order Mutation Sandbox Gate
 
 Phase 8A is **sandbox / dry-run only**. It designs how a verified

@@ -175,6 +175,8 @@ import type {
   SaasPhase7ELiveInternalSendAttemptsResponse,
   SaasPhase7ELiveBRealCustomerGatesResponse,
   SaasPhase7GLiveRealCustomerDispatchGatesResponse,
+  CustomerSuccessCohortsResponse,
+  CustomerSuccessSnapshotsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1693,6 +1695,37 @@ export const api = {
       () =>
         M.SAAS_PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_GATES as SaasPhase7GLiveRealCustomerDispatchGatesResponse,
     ),
+
+  // ---------- Phase 9A — Customer Success / Reorder Agent V1 ----------
+
+  getCustomerSuccessCohorts: () =>
+    safeFetch<CustomerSuccessCohortsResponse>(
+      "/v1/customer-success/cohorts/",
+      () => M.CUSTOMER_SUCCESS_COHORTS as CustomerSuccessCohortsResponse,
+    ),
+
+  getCustomerSuccessSnapshots: (
+    params: {
+      page?: number;
+      pageSize?: number;
+      stage?: string;
+      kind?: string;
+    } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("page_size", String(params.pageSize));
+    if (params.stage) q.set("stage", params.stage);
+    if (params.kind) q.set("kind", params.kind);
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/customer-success/snapshots/?${qs}`
+      : "/v1/customer-success/snapshots/";
+    return safeFetch<CustomerSuccessSnapshotsResponse>(
+      url,
+      () => M.CUSTOMER_SUCCESS_SNAPSHOTS as CustomerSuccessSnapshotsResponse,
+    );
+  },
 
   // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 

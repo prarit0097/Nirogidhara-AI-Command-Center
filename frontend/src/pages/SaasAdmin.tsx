@@ -40,6 +40,7 @@ import type {
   SaasPhase7ELiveInternalSendAttemptsResponse,
   SaasPhase7ELiveBRealCustomerGatesResponse,
   SaasPhase7GLiveRealCustomerDispatchGatesResponse,
+  CustomerSuccessCohortsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -278,6 +279,10 @@ export default function SaasAdminPage() {
     setPhase7gLiveRealCustomerDispatchGates,
   ] = useState<SaasPhase7GLiveRealCustomerDispatchGatesResponse | null>(null);
   const [
+    customerSuccessCohorts,
+    setCustomerSuccessCohorts,
+  ] = useState<CustomerSuccessCohortsResponse | null>(null);
+  const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
   ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
@@ -404,6 +409,7 @@ export default function SaasAdminPage() {
       api.getSaasPhase7ELiveInternalSendAttempts(25),
       api.getSaasPhase7ELiveBRealCustomerGates(25),
       api.getSaasPhase7GLiveRealCustomerDispatchGates(25),
+      api.getCustomerSuccessCohorts(),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -468,6 +474,7 @@ export default function SaasAdminPage() {
           p7eLiveAttempts,
           p7eLiveBGates,
           p7gLiveGates,
+          p9aCohorts,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -530,6 +537,7 @@ export default function SaasAdminPage() {
           setPhase7eLiveInternalSendAttempts(p7eLiveAttempts);
           setPhase7eLiveBRealCustomerGates(p7eLiveBGates);
           setPhase7gLiveRealCustomerDispatchGates(p7gLiveGates);
+          setCustomerSuccessCohorts(p9aCohorts);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5395,6 +5403,114 @@ export default function SaasAdminPage() {
             "Create AWB" / "Approve" / "Execute" / "Rollback" / "Cancel
             AWB" / "Bulk Dispatch" / "Auto Dispatch" / "AI Dispatch"
             buttons exist on this page.
+          </div>
+        </section>
+      )}
+
+      {customerSuccessCohorts && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="customer-success-reorder-agent-v1-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Customer Success / Reorder Agent V1
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Recommendations-only. Deterministic daily sweep scores each
+                delivered customer's reorder readiness, lifecycle stage, and
+                at-risk signals. The agent NEVER directly sends WhatsApp,
+                makes a call, creates a payment link, or dispatches an
+                order; downstream gates (Phase 5D / 7E-Live-B / 7G-Live)
+                remain the only paths to real customer action.
+              </p>
+            </div>
+            <StatusPill tone="success">Recs-only</StatusPill>
+          </div>
+          <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+            <KeyValue
+              label="Reorder candidates"
+              value={String(customerSuccessCohorts.reorderCandidateCount)}
+            />
+            <KeyValue
+              label="At-risk"
+              value={String(customerSuccessCohorts.atRiskCount)}
+            />
+            <KeyValue
+              label="Last agent run"
+              value={
+                customerSuccessCohorts.lastAgentRunAt
+                  ? String(customerSuccessCohorts.lastAgentRunAt)
+                  : "Not yet run"
+              }
+            />
+            <KeyValue
+              label="Last run status"
+              value={customerSuccessCohorts.lastAgentRunStatus || "n/a"}
+            />
+          </div>
+          <div className="border-t border-border px-6 py-4 overflow-x-auto">
+            <p className="text-xs font-medium mb-2">
+              Lifecycle stage cohort
+            </p>
+            <table className="min-w-full text-left text-xs">
+              <thead className="text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-4">Stage</th>
+                  <th className="py-2 pr-4">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(
+                  customerSuccessCohorts.stageCounts || {},
+                ).map(([stage, count]) => (
+                  <tr key={stage} data-testid="customer-success-stage-row">
+                    <td className="py-2 pr-4">{stage}</td>
+                    <td className="py-2 pr-4">{String(count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {customerSuccessCohorts.topReorderCandidates.length > 0 && (
+            <div className="border-t border-border px-6 py-4 overflow-x-auto">
+              <p className="text-xs font-medium mb-2">
+                Top reorder candidates (masked customer id)
+              </p>
+              <table className="min-w-full text-left text-xs">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-4">Customer</th>
+                    <th className="py-2 pr-4">Score</th>
+                    <th className="py-2 pr-4">Days since delivery</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerSuccessCohorts.topReorderCandidates.map((c) => (
+                    <tr
+                      key={c.id}
+                      data-testid="customer-success-reorder-row"
+                    >
+                      <td className="py-2 pr-4">{c.customerIdMasked}</td>
+                      <td className="py-2 pr-4">{String(c.score)}</td>
+                      <td className="py-2 pr-4">
+                        {String(c.daysSinceDelivery)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="customer-success-recs-only-banner"
+          >
+            <strong>Recommendations-only.</strong> No "Send WhatsApp" /
+            "Trigger Call" / "Run Agent" / "Execute" / "Push Reorder" /
+            "Auto-dispatch" buttons exist on this page.
           </div>
         </section>
       )}
