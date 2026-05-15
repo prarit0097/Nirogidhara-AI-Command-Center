@@ -41,6 +41,7 @@ import type {
   SaasPhase7ELiveBRealCustomerGatesResponse,
   SaasPhase7GLiveRealCustomerDispatchGatesResponse,
   CustomerSuccessCohortsResponse,
+  RtoPreventionCohortsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -283,6 +284,10 @@ export default function SaasAdminPage() {
     setCustomerSuccessCohorts,
   ] = useState<CustomerSuccessCohortsResponse | null>(null);
   const [
+    rtoPreventionCohorts,
+    setRtoPreventionCohorts,
+  ] = useState<RtoPreventionCohortsResponse | null>(null);
+  const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
   ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
@@ -410,6 +415,7 @@ export default function SaasAdminPage() {
       api.getSaasPhase7ELiveBRealCustomerGates(25),
       api.getSaasPhase7GLiveRealCustomerDispatchGates(25),
       api.getCustomerSuccessCohorts(),
+      api.getRtoPreventionCohorts(),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -475,6 +481,7 @@ export default function SaasAdminPage() {
           p7eLiveBGates,
           p7gLiveGates,
           p9aCohorts,
+          p9bCohorts,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -538,6 +545,7 @@ export default function SaasAdminPage() {
           setPhase7eLiveBRealCustomerGates(p7eLiveBGates);
           setPhase7gLiveRealCustomerDispatchGates(p7gLiveGates);
           setCustomerSuccessCohorts(p9aCohorts);
+          setRtoPreventionCohorts(p9bCohorts);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5511,6 +5519,136 @@ export default function SaasAdminPage() {
             <strong>Recommendations-only.</strong> No "Send WhatsApp" /
             "Trigger Call" / "Run Agent" / "Execute" / "Push Reorder" /
             "Auto-dispatch" buttons exist on this page.
+          </div>
+        </section>
+      )}
+
+      {rtoPreventionCohorts && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="rto-prevention-agent-v1-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                RTO Prevention Agent V1
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Recommendations-only. Deterministic daily sweep scores each
+                in-flight order's return-to-origin risk (0–100), classifies
+                tier and lifecycle stage, and suggests an intervention.
+                The agent NEVER directly triggers a call, WhatsApp send,
+                discount creation, shipment mutation, or payment mutation;
+                Phase 5D / 5E / 7E-Live-B / 7G-Live gates remain the only
+                paths to real customer action.
+              </p>
+            </div>
+            <StatusPill tone="success">Recs-only</StatusPill>
+          </div>
+          <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+            <KeyValue
+              label="Critical orders"
+              value={String(
+                rtoPreventionCohorts.tierCounts?.critical ?? 0,
+              )}
+            />
+            <KeyValue
+              label="High-risk orders"
+              value={String(rtoPreventionCohorts.tierCounts?.high ?? 0)}
+            />
+            <KeyValue
+              label="Last agent run"
+              value={
+                rtoPreventionCohorts.lastAgentRunAt
+                  ? String(rtoPreventionCohorts.lastAgentRunAt)
+                  : "Not yet run"
+              }
+            />
+            <KeyValue
+              label="Last run status"
+              value={rtoPreventionCohorts.lastAgentRunStatus || "n/a"}
+            />
+          </div>
+          <div className="border-t border-border px-6 py-4 overflow-x-auto">
+            <p className="text-xs font-medium mb-2">Risk tier cohort</p>
+            <table className="min-w-full text-left text-xs">
+              <thead className="text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-4">Tier</th>
+                  <th className="py-2 pr-4">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(
+                  rtoPreventionCohorts.tierCounts || {},
+                ).map(([tier, count]) => (
+                  <tr key={tier} data-testid="rto-prevention-tier-row">
+                    <td className="py-2 pr-4">{tier}</td>
+                    <td className="py-2 pr-4">{String(count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-border px-6 py-4 overflow-x-auto">
+            <p className="text-xs font-medium mb-2">Recommendation cohort</p>
+            <table className="min-w-full text-left text-xs">
+              <thead className="text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-4">Kind</th>
+                  <th className="py-2 pr-4">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(
+                  rtoPreventionCohorts.recommendationCounts || {},
+                ).map(([kind, count]) => (
+                  <tr key={kind} data-testid="rto-prevention-kind-row">
+                    <td className="py-2 pr-4">{kind}</td>
+                    <td className="py-2 pr-4">{String(count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rtoPreventionCohorts.topCriticalOrders.length > 0 && (
+            <div className="border-t border-border px-6 py-4 overflow-x-auto">
+              <p className="text-xs font-medium mb-2">
+                Top critical-tier orders (masked order id)
+              </p>
+              <table className="min-w-full text-left text-xs">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-4">Order</th>
+                    <th className="py-2 pr-4">Risk score</th>
+                    <th className="py-2 pr-4">Days since order</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rtoPreventionCohorts.topCriticalOrders.map((o) => (
+                    <tr
+                      key={o.id}
+                      data-testid="rto-prevention-critical-row"
+                    >
+                      <td className="py-2 pr-4">{o.orderIdMasked}</td>
+                      <td className="py-2 pr-4">{String(o.riskScore)}</td>
+                      <td className="py-2 pr-4">
+                        {String(o.daysSinceOrder)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="rto-prevention-recs-only-banner"
+          >
+            <strong>Recommendations-only.</strong> No "Call Customer" /
+            "Send WhatsApp" / "Apply Discount" / "Force Dispatch" /
+            "Run Agent" / "Auto-rescue" buttons exist on this page.
           </div>
         </section>
       )}

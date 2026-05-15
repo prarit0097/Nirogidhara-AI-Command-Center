@@ -49,6 +49,11 @@ def build_beat_schedule() -> dict:
     # 08:00 IST default (env-shiftable). Never triggers outbound action.
     cs_hour = getattr(settings, "AI_CUSTOMER_SUCCESS_DAILY_HOUR", 8)
     cs_minute = getattr(settings, "AI_CUSTOMER_SUCCESS_DAILY_MINUTE", 0)
+    # Phase 9B - RTO Prevention Agent V1. Recommendations-only; 09:00 IST
+    # default (after the Customer Success sweep). Never triggers outbound
+    # action.
+    rto_hour = getattr(settings, "AI_RTO_PREVENTION_DAILY_HOUR", 9)
+    rto_minute = getattr(settings, "AI_RTO_PREVENTION_DAILY_MINUTE", 0)
 
     return {
         "ai-daily-briefing-morning": {
@@ -65,6 +70,11 @@ def build_beat_schedule() -> dict:
             "task": "apps.agents.customer_success.tasks."
             "run_customer_success_agent_daily",
             "schedule": crontab(hour=cs_hour, minute=cs_minute),
+        },
+        "rto-prevention-daily": {
+            "task": "apps.agents.rto_prevention.tasks."
+            "run_rto_prevention_agent_daily",
+            "schedule": crontab(hour=rto_hour, minute=rto_minute),
         },
     }
 

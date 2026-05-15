@@ -177,6 +177,8 @@ import type {
   SaasPhase7GLiveRealCustomerDispatchGatesResponse,
   CustomerSuccessCohortsResponse,
   CustomerSuccessSnapshotsResponse,
+  RtoPreventionCohortsResponse,
+  RtoPreventionSnapshotsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1724,6 +1726,39 @@ export const api = {
     return safeFetch<CustomerSuccessSnapshotsResponse>(
       url,
       () => M.CUSTOMER_SUCCESS_SNAPSHOTS as CustomerSuccessSnapshotsResponse,
+    );
+  },
+
+  // ---------- Phase 9B — RTO Prevention Agent V1 ----------
+
+  getRtoPreventionCohorts: () =>
+    safeFetch<RtoPreventionCohortsResponse>(
+      "/v1/rto-prevention/cohorts/",
+      () => M.RTO_PREVENTION_COHORTS as RtoPreventionCohortsResponse,
+    ),
+
+  getRtoPreventionSnapshots: (
+    params: {
+      page?: number;
+      pageSize?: number;
+      tier?: string;
+      kind?: string;
+      stage?: string;
+    } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("page_size", String(params.pageSize));
+    if (params.tier) q.set("tier", params.tier);
+    if (params.kind) q.set("kind", params.kind);
+    if (params.stage) q.set("stage", params.stage);
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/rto-prevention/snapshots/?${qs}`
+      : "/v1/rto-prevention/snapshots/";
+    return safeFetch<RtoPreventionSnapshotsResponse>(
+      url,
+      () => M.RTO_PREVENTION_SNAPSHOTS as RtoPreventionSnapshotsResponse,
     );
   },
 

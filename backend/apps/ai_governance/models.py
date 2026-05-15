@@ -84,6 +84,7 @@ class AgentRun(models.Model):
         CFO = "cfo", "cfo"
         COMPLIANCE = "compliance", "compliance"
         CUSTOMER_SUCCESS = "customer_success", "customer_success"
+        RTO_PREVENTION = "rto_prevention", "rto_prevention"
 
     id = models.CharField(primary_key=True, max_length=32)
     agent = models.CharField(max_length=24, choices=Agent.choices)

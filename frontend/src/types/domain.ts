@@ -5230,6 +5230,75 @@ export interface CustomerSuccessCohortsResponse {
   topReorderCandidates: CustomerSuccessTopReorderCandidate[];
 }
 
+// ---------- Phase 9B — RTO Prevention Agent V1 ----------
+
+export type RtoPreventionRiskTier =
+  | "low"
+  | "medium"
+  | "high"
+  | "critical";
+
+export type RtoPreventionLifecycleStage =
+  | "pre_dispatch"
+  | "in_transit"
+  | "delivery_at_risk";
+
+export type RtoPreventionRecommendationKind =
+  | "monitor_only"
+  | "send_confirmation_reminder"
+  | "send_pre_delivery_call_request"
+  | "escalate_to_team_lead";
+
+export interface RtoPreventionSnapshotDto {
+  id: number;
+  orderId: string;
+  customerId: string | null;
+  riskScore: number;
+  riskTier: RtoPreventionRiskTier;
+  lifecycleStage: RtoPreventionLifecycleStage;
+  daysSinceOrder: number;
+  failedDeliveryAttempts: number;
+  riskReasons: string[];
+  signals: Record<string, unknown>;
+  recommendationKind: RtoPreventionRecommendationKind;
+  recommendationText: string;
+  agentRunId: string | null;
+  sandbox: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface RtoPreventionSnapshotsResponse {
+  items: RtoPreventionSnapshotDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+  filters: {
+    tier: RtoPreventionRiskTier | null;
+    kind: RtoPreventionRecommendationKind | null;
+    stage: RtoPreventionLifecycleStage | null;
+  };
+}
+
+export interface RtoPreventionTopCriticalOrder {
+  id: number;
+  orderIdMasked: string;
+  riskScore: number;
+  daysSinceOrder: number;
+}
+
+export interface RtoPreventionCohortsResponse {
+  agent: "rto_prevention_v1";
+  tierCounts: Partial<Record<RtoPreventionRiskTier, number>>;
+  recommendationCounts: Partial<
+    Record<RtoPreventionRecommendationKind, number>
+  >;
+  stageCounts: Partial<Record<RtoPreventionLifecycleStage, number>>;
+  lastAgentRunAt: string | null;
+  lastAgentRunStatus: string;
+  topCriticalOrders: RtoPreventionTopCriticalOrder[];
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

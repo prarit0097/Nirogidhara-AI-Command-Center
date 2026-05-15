@@ -4910,6 +4910,26 @@ export const CUSTOMER_SUCCESS_SNAPSHOTS: Record<string, unknown> = {
   filters: { stage: null, kind: null },
 };
 
+// ---------- Phase 9B — RTO Prevention Agent V1 ----------
+
+export const RTO_PREVENTION_COHORTS: Record<string, unknown> = {
+  agent: "rto_prevention_v1",
+  tierCounts: {},
+  recommendationCounts: {},
+  stageCounts: {},
+  lastAgentRunAt: null,
+  lastAgentRunStatus: "",
+  topCriticalOrders: [],
+};
+
+export const RTO_PREVENTION_SNAPSHOTS: Record<string, unknown> = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 50,
+  filters: { tier: null, kind: null, stage: null },
+};
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 const PHASE_7I_LOCK_COUNTS = {

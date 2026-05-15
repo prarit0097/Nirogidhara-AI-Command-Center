@@ -33,3 +33,6 @@ class Agent(models.Model):
 # Phase 9A — Customer Success / Reorder Agent V1. Import here so Django
 # discovers the model and migrations live in apps/agents/migrations/.
 from .customer_success.models import CustomerSuccessSnapshot  # noqa: E402, F401
+
+# Phase 9B — RTO Prevention Agent V1. Same pattern.
+from .rto_prevention.models import RtoRiskSnapshot  # noqa: E402, F401

@@ -3440,6 +3440,80 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 9B — RTO Prevention Agent V1
+
+Phase 9B is a **recommendations-only** deterministic daily Celery
+sweep over in-flight orders. It scores each order's return-to-origin
+risk, classifies tier and lifecycle stage, and emits a structured
+recommendation. The agent never triggers outbound action; downstream
+gates (Phase 5D / 5E / 7E-Live-B / 7G-Live) remain the only path to
+a real call / send / discount / dispatch.
+
+Run shape:
+- Celery beat task
+  `apps.agents.rto_prevention.tasks.run_rto_prevention_agent_daily`
+  scheduled at 09:00 IST (after the Customer Success sweep at 08:00).
+  Env-shiftable via `AI_RTO_PREVENTION_DAILY_HOUR` /
+  `_MINUTE`.
+- Scope: orders with `stage in (Confirmed, Dispatched, Out for
+  Delivery)` AND `created_at` within the last 30 days. Orders in
+  `Delivered`, `RTO`, or `Cancelled` are explicitly excluded
+  (asserted in tests).
+- Each in-flight order receives one `RtoRiskSnapshot` per run, one
+  linked `AgentRun` (`agent="rto_prevention"`, model
+  `"deterministic_v1"`, `cost_usd=0`, `dry_run=True`,
+  `triggered_by="celery_beat_daily"`), and one
+  `rto_prevention.snapshot.created` AuditEvent.
+- The task closes with a `rto_prevention.daily_run.completed`
+  summary event carrying tier / kind / stage counts.
+
+Score + tier:
+- `score = clamp(30 + min(rto*15, 45) + min(complaint*10, 20)
+  + 15 if not Paid + 10 if amount > 5000 + min(days, 10)
+  − min(delivered*5, 20) + 15*failed_attempts, 0, 100)`.
+- Tier mapping: 0–39 `low` → `monitor_only`, 40–59 `medium` →
+  `send_confirmation_reminder`, 60–79 `high` →
+  `send_pre_delivery_call_request`, 80–100 `critical` →
+  `escalate_to_team_lead`.
+- Lifecycle: `pre_dispatch` (no shipment), `in_transit` (shipment +
+  no failure indicator), `delivery_at_risk` (Delhivery status
+  contains NDR / undelivered / reattempt / failed delivery).
+- Reason codes populated from signals: `high_rto_history` (rto ≥ 1),
+  `recent_complaint` (>0 complaints in last 14d),
+  `cod_payment` (payment_status ≠ Paid),
+  `high_value_order` (amount > ₹5000),
+  `stale_order` (days_since_order > 14),
+  `multiple_failed_attempts` (failed_attempts ≥ 1).
+- `recommendation_text` is a short internal rationale; it is
+  **never** a customer-facing message and is **never** sent to a
+  customer.
+
+Safety contract:
+- The agent NEVER imports / calls
+  `apps.whatsapp.services.queue_template_message`,
+  `apps.whatsapp.services.send_freeform_text_message`,
+  `apps.calls.services.trigger_call_for_lead`,
+  `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
+  or Vapi. The safety test patches all four entrypoints and asserts
+  no calls and stable Order / Customer / Payment / Shipment row
+  counts after a sweep.
+- Kill switch uses the Phase 7E-Live-B Hotfix-1 Postgres-safe
+  pattern (same helper shape as Phase 9A): any
+  `RuntimeKillSwitch(scope="global", enabled=False)` row wins
+  (ordered by `-pk`) and the task exits with one
+  `rto_prevention.daily_run.blocked` audit event.
+- Sandbox mode: when
+  `apps.ai_governance.sandbox.is_sandbox_enabled()` is True, the
+  snapshot row and its linked AgentRun both carry the sandbox flag,
+  so downstream consumers can filter pilot data cleanly.
+- API: `/api/v1/rto-prevention/snapshots/`,
+  `/api/v1/rto-prevention/snapshots/<id>/`, and
+  `/api/v1/rto-prevention/cohorts/` are admin+ only and strictly
+  read-only. POST/PATCH/DELETE return 405. The `/saas-admin` RTO
+  Prevention card surfaces masked order ids only and carries no
+  "Call Customer" / "Send WhatsApp" / "Apply Discount" /
+  "Force Dispatch" / "Run Agent" / "Auto-rescue" buttons.
+
 ### Phase 9A — Customer Success / Reorder Agent V1
 
 Phase 9A is a **recommendations-only** deterministic daily Celery
