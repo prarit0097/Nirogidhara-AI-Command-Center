@@ -54,6 +54,11 @@ def build_beat_schedule() -> dict:
     # action.
     rto_hour = getattr(settings, "AI_RTO_PREVENTION_DAILY_HOUR", 9)
     rto_minute = getattr(settings, "AI_RTO_PREVENTION_DAILY_MINUTE", 0)
+    # Phase 9C - CFO Agent V1. Recommendations-only business-level daily
+    # financial snapshot; 10:00 IST default (after the customer + order
+    # agents). Never triggers outbound action.
+    cfo_hour = getattr(settings, "AI_CFO_DAILY_HOUR", 10)
+    cfo_minute = getattr(settings, "AI_CFO_DAILY_MINUTE", 0)
 
     return {
         "ai-daily-briefing-morning": {
@@ -75,6 +80,10 @@ def build_beat_schedule() -> dict:
             "task": "apps.agents.rto_prevention.tasks."
             "run_rto_prevention_agent_daily",
             "schedule": crontab(hour=rto_hour, minute=rto_minute),
+        },
+        "cfo-daily": {
+            "task": "apps.agents.cfo.tasks.run_cfo_agent_daily",
+            "schedule": crontab(hour=cfo_hour, minute=cfo_minute),
         },
     }
 

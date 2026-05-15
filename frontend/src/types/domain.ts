@@ -5299,6 +5299,57 @@ export interface RtoPreventionCohortsResponse {
   topCriticalOrders: RtoPreventionTopCriticalOrder[];
 }
 
+// ---------- Phase 9C — CFO Agent V1 (business-level snapshot) ----------
+
+export type CfoAlertCode =
+  | "revenue_drop_24h"
+  | "rto_spike"
+  | "high_pending_payments"
+  | "low_order_volume"
+  | "all_clear";
+
+export interface CfoFinancialSnapshotDto {
+  id: number;
+  snapshotAt: string | null;
+  revenue24h: string;
+  revenue7d: string;
+  revenue30d: string;
+  orderCount24h: number;
+  orderCount7d: number;
+  orderCount30d: number;
+  paidCount: number;
+  partialCount: number;
+  pendingCount: number;
+  paidAmount: string;
+  partialAmount: string;
+  pendingAmount: string;
+  averageOrderValue: string;
+  rtoCount30d: number;
+  rtoLossAmount30d: string;
+  newCustomerCount30d: number;
+  returningCustomerCount30d: number;
+  alerts: CfoAlertCode[];
+  alertText: string;
+  agentRunId: string | null;
+  sandbox: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CfoSnapshotsResponse {
+  items: CfoFinancialSnapshotDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CfoLatestResponse {
+  agent: "cfo_v1";
+  snapshot: CfoFinancialSnapshotDto | null;
+  lastAgentRunAt: string | null;
+  lastAgentRunStatus: string;
+}
+
 // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 
 export type SaasPhase7IFinalAuditLockStatus =

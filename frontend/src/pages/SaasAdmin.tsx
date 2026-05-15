@@ -42,6 +42,7 @@ import type {
   SaasPhase7GLiveRealCustomerDispatchGatesResponse,
   CustomerSuccessCohortsResponse,
   RtoPreventionCohortsResponse,
+  CfoLatestResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -288,6 +289,10 @@ export default function SaasAdminPage() {
     setRtoPreventionCohorts,
   ] = useState<RtoPreventionCohortsResponse | null>(null);
   const [
+    cfoLatest,
+    setCfoLatest,
+  ] = useState<CfoLatestResponse | null>(null);
+  const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
   ] = useState<SaasPhase7IFinalAuditLockReadiness | null>(null);
@@ -416,6 +421,7 @@ export default function SaasAdminPage() {
       api.getSaasPhase7GLiveRealCustomerDispatchGates(25),
       api.getCustomerSuccessCohorts(),
       api.getRtoPreventionCohorts(),
+      api.getCfoLatest(),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -482,6 +488,7 @@ export default function SaasAdminPage() {
           p7gLiveGates,
           p9aCohorts,
           p9bCohorts,
+          p9cLatest,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -546,6 +553,7 @@ export default function SaasAdminPage() {
           setPhase7gLiveRealCustomerDispatchGates(p7gLiveGates);
           setCustomerSuccessCohorts(p9aCohorts);
           setRtoPreventionCohorts(p9bCohorts);
+          setCfoLatest(p9cLatest);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5649,6 +5657,131 @@ export default function SaasAdminPage() {
             <strong>Recommendations-only.</strong> No "Call Customer" /
             "Send WhatsApp" / "Apply Discount" / "Force Dispatch" /
             "Run Agent" / "Auto-rescue" buttons exist on this page.
+          </div>
+        </section>
+      )}
+
+      {cfoLatest && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="cfo-agent-v1-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                CFO Agent V1 — Daily Financial Snapshot
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Recommendations-only. Deterministic daily aggregation of
+                revenue, order counts, payment status breakdown, AOV, RTO
+                impact, customer mix, and anomaly alert codes. The agent
+                NEVER triggers WhatsApp, calls, payments, shipments, or
+                discounts; downstream gates (Phase 5D / 5E / 7E-Live-B /
+                7G-Live) remain the only paths to real customer action.
+              </p>
+            </div>
+            <StatusPill tone="success">Recs-only</StatusPill>
+          </div>
+          {cfoLatest.snapshot ? (
+            <>
+              <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                <KeyValue
+                  label="Revenue 24h"
+                  value={`₹${cfoLatest.snapshot.revenue24h}`}
+                />
+                <KeyValue
+                  label="Revenue 7d"
+                  value={`₹${cfoLatest.snapshot.revenue7d}`}
+                />
+                <KeyValue
+                  label="Revenue 30d"
+                  value={`₹${cfoLatest.snapshot.revenue30d}`}
+                />
+                <KeyValue
+                  label="AOV (30d)"
+                  value={`₹${cfoLatest.snapshot.averageOrderValue}`}
+                />
+                <KeyValue
+                  label="Orders 24h"
+                  value={String(cfoLatest.snapshot.orderCount24h)}
+                />
+                <KeyValue
+                  label="Orders 7d"
+                  value={String(cfoLatest.snapshot.orderCount7d)}
+                />
+                <KeyValue
+                  label="Orders 30d"
+                  value={String(cfoLatest.snapshot.orderCount30d)}
+                />
+                <KeyValue
+                  label="RTO 30d"
+                  value={`${cfoLatest.snapshot.rtoCount30d} (₹${cfoLatest.snapshot.rtoLossAmount30d})`}
+                />
+                <KeyValue
+                  label="Paid"
+                  value={`${cfoLatest.snapshot.paidCount} / ₹${cfoLatest.snapshot.paidAmount}`}
+                />
+                <KeyValue
+                  label="Partial"
+                  value={`${cfoLatest.snapshot.partialCount} / ₹${cfoLatest.snapshot.partialAmount}`}
+                />
+                <KeyValue
+                  label="Pending"
+                  value={`${cfoLatest.snapshot.pendingCount} / ₹${cfoLatest.snapshot.pendingAmount}`}
+                />
+                <KeyValue
+                  label="Customer mix (30d)"
+                  value={`new ${cfoLatest.snapshot.newCustomerCount30d} / returning ${cfoLatest.snapshot.returningCustomerCount30d}`}
+                />
+              </div>
+              <div className="border-t border-border px-6 py-4 overflow-x-auto">
+                <p className="text-xs font-medium mb-2">Active alerts</p>
+                <div className="flex flex-wrap gap-2">
+                  {cfoLatest.snapshot.alerts.map((alert) => (
+                    <span
+                      key={alert}
+                      data-testid="cfo-alert-pill"
+                      className="rounded-full border border-border px-2 py-1 text-xs"
+                    >
+                      {alert}
+                    </span>
+                  ))}
+                </div>
+                {cfoLatest.snapshot.alertText && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {cfoLatest.snapshot.alertText}
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="px-6 py-4 text-xs text-muted-foreground">
+              No CFO snapshot yet. The daily Celery task will produce one
+              at the configured time.
+            </div>
+          )}
+          <div className="px-6 py-3 grid gap-2 sm:grid-cols-2 text-xs">
+            <KeyValue
+              label="Snapshot timestamp"
+              value={
+                cfoLatest.snapshot?.snapshotAt
+                  ? String(cfoLatest.snapshot.snapshotAt)
+                  : "—"
+              }
+            />
+            <KeyValue
+              label="Last agent run status"
+              value={cfoLatest.lastAgentRunStatus || "n/a"}
+            />
+          </div>
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="cfo-recs-only-banner"
+          >
+            <strong>Recommendations-only.</strong> No "Send Report" /
+            "Trigger Refund" / "Apply Discount" / "Run Agent" /
+            "Auto-collect" buttons exist on this page.
           </div>
         </section>
       )}

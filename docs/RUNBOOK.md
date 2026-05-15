@@ -3440,6 +3440,74 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 9C — CFO Agent V1 (business-level daily snapshot)
+
+Phase 9C is the first **business-level** agent and is
+**recommendations-only**. It produces ONE daily financial snapshot
+per task invocation summarising the operational state of the
+business. It never triggers outbound action; downstream gates
+(Phase 5D / 5E / 7E-Live-B / 7G-Live) remain the only paths to a
+real customer action.
+
+Run shape:
+- Celery beat task `apps.agents.cfo.tasks.run_cfo_agent_daily`
+  scheduled at 10:00 IST (env-shiftable via `AI_CFO_DAILY_HOUR` /
+  `_MINUTE`). Runs after the 08:00 IST Customer Success sweep and
+  the 09:00 IST RTO Prevention sweep.
+- One `CfoFinancialSnapshot` row per invocation, one linked
+  `AgentRun` (`agent="cfo"`, model `"deterministic_v1"`,
+  provider `"disabled"`, `cost_usd=0`, `dry_run=True`,
+  `triggered_by="celery_beat_daily"`), one
+  `cfo.snapshot.created` AuditEvent, and one
+  `cfo.daily_run.completed` summary event.
+
+Snapshot fields:
+- `revenue_24h` / `revenue_7d` / `revenue_30d`: `Sum(Payment.amount)`
+  where `Payment.status=Paid` and `Payment.created_at` is within the
+  rolling window.
+- `order_count_24h` / `_7d` / `_30d`: `Order.objects.filter(created_at__gte=cutoff).count()`.
+- `paid_count` / `partial_count` / `pending_count` + matching
+  `_amount` fields: 30-day Payment status breakdown.
+- `average_order_value`: 30-day `Sum(Order.amount) / Count` (₹).
+- `rto_count_30d` / `rto_loss_amount_30d`: 30-day count and ₹ loss
+  for `Order.stage=RTO`.
+- `new_customer_count_30d` / `returning_customer_count_30d`:
+  customers (phones with a matching Customer row) bucketed by
+  whether they have a prior order before the 30-day window.
+
+Anomaly thresholds (deterministic):
+- `revenue_drop_24h` when `revenue_24h < revenue_7d / 7 * 0.5`.
+- `rto_spike` when `rto_count_30d / order_count_30d > 15%`.
+- `high_pending_payments` when `pending_count > paid_count`.
+- `low_order_volume` when `order_count_24h == 0` and
+  `order_count_7d > 0`.
+- `all_clear` when none of the above fires.
+
+Safety contract:
+- The agent NEVER imports / calls
+  `apps.whatsapp.services.queue_template_message`,
+  `apps.whatsapp.services.send_freeform_text_message`,
+  `apps.calls.services.trigger_call_for_lead`,
+  `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
+  or Vapi. The safety test patches all four entrypoints and asserts
+  no calls and stable Order / Customer / Payment row counts after a
+  sweep.
+- `alert_text` is a short internal rationale stored on the snapshot
+  for operator review; it is **never** a customer-facing message and
+  is **never** sent to a customer.
+- Kill switch uses the Phase 7E-Live-B Hotfix-1 Postgres-safe
+  pattern: any `RuntimeKillSwitch(scope="global", enabled=False)`
+  row wins (ordered by `-pk`) and the task exits with one
+  `cfo.daily_run.blocked` audit event.
+- Sandbox mode: when
+  `apps.ai_governance.sandbox.is_sandbox_enabled()` is True, the
+  snapshot row and its linked AgentRun both carry the sandbox flag.
+- API: `/api/v1/cfo/snapshots/`, `/api/v1/cfo/snapshots/<id>/`, and
+  `/api/v1/cfo/latest/` are admin+ only and strictly read-only.
+  POST/PATCH/DELETE return 405. The `/saas-admin` CFO card carries
+  no "Send Report" / "Trigger Refund" / "Apply Discount" /
+  "Run Agent" / "Auto-collect" buttons.
+
 ### Phase 9B — RTO Prevention Agent V1
 
 Phase 9B is a **recommendations-only** deterministic daily Celery

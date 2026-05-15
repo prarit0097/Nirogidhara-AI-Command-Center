@@ -49,5 +49,9 @@ urlpatterns = [
         "api/v1/rto-prevention/",
         include("apps.agents.rto_prevention.urls"),
     ),
+    path(
+        "api/v1/cfo/",
+        include("apps.agents.cfo.urls"),
+    ),
     path("api/", include(api_patterns)),
 ]

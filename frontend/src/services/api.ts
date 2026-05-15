@@ -179,6 +179,8 @@ import type {
   CustomerSuccessSnapshotsResponse,
   RtoPreventionCohortsResponse,
   RtoPreventionSnapshotsResponse,
+  CfoLatestResponse,
+  CfoSnapshotsResponse,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1759,6 +1761,28 @@ export const api = {
     return safeFetch<RtoPreventionSnapshotsResponse>(
       url,
       () => M.RTO_PREVENTION_SNAPSHOTS as RtoPreventionSnapshotsResponse,
+    );
+  },
+
+  // ---------- Phase 9C — CFO Agent V1 ----------
+
+  getCfoLatest: () =>
+    safeFetch<CfoLatestResponse>(
+      "/v1/cfo/latest/",
+      () => M.CFO_LATEST as CfoLatestResponse,
+    ),
+
+  getCfoSnapshots: (
+    params: { page?: number; pageSize?: number } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("page_size", String(params.pageSize));
+    const qs = q.toString();
+    const url = qs ? `/v1/cfo/snapshots/?${qs}` : "/v1/cfo/snapshots/";
+    return safeFetch<CfoSnapshotsResponse>(
+      url,
+      () => M.CFO_SNAPSHOTS as CfoSnapshotsResponse,
     );
   },
 

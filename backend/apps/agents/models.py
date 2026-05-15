@@ -36,3 +36,6 @@ from .customer_success.models import CustomerSuccessSnapshot  # noqa: E402, F401
 
 # Phase 9B — RTO Prevention Agent V1. Same pattern.
 from .rto_prevention.models import RtoRiskSnapshot  # noqa: E402, F401
+
+# Phase 9C — CFO Agent V1 (business-level daily financial snapshot).
+from .cfo.models import CfoFinancialSnapshot  # noqa: E402, F401
