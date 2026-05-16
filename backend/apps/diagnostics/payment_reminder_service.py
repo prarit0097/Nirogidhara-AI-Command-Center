@@ -2,11 +2,11 @@
 
 Stage-aware wrapper that prepares a Phase 7E-Live-B real-customer
 WhatsApp send gate pre-filled with payment-reminder template params.
-Phase 10B itself NEVER sends — it only creates the controlled gate
-row. The existing Phase 7E-Live-B approve / execute commands remain
-the only path to a live send (full Director directive + structured
-UTC window + explicit confirmation + runtime env prefix all stay
-mandatory).
+Phase 10B itself NEVER sends — it only creates an optional CRM Customer
+bridge row for Payment/Order phone fallback plus the controlled gate row.
+The existing Phase 7E-Live-B approve / execute commands remain the only
+path to a live send (full Director directive + structured UTC window +
+explicit confirmation + runtime env prefix all stay mandatory).
 
 Discovery notes (read from apps/whatsapp/phase7e_live_b_real_customer_send.py
 on 2026-05-15 before writing this module):
@@ -27,9 +27,11 @@ template name.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
+from apps._id import next_id
 from apps.orders.models import Order
 from apps.payments.models import Payment
 
@@ -39,6 +41,7 @@ from .service import list_pending_payments_drilldown
 PHASE = "10B"
 DEFAULT_TEMPLATE_NAME = "payment_reminder"
 SANDBOX_PHONE_PLACEHOLDER = "0000000000"
+logger = logging.getLogger(__name__)
 
 ALLOWED_STAGES: frozenset[str] = frozenset(
     {
@@ -97,6 +100,7 @@ class PreparedReminder:
     phone_source: str
     forced: bool
     warning_emitted: bool
+    crm_customer_auto_created: bool = False
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -114,6 +118,7 @@ class PreparedReminder:
             "phone_source": self.phone_source,
             "forced": self.forced,
             "warning_emitted": self.warning_emitted,
+            "crm_customer_auto_created": self.crm_customer_auto_created,
             "next_action": (
                 "Director runs: python manage.py "
                 "approve_phase7e_live_b_real_customer_gate "
@@ -133,6 +138,65 @@ def _resolve_drilldown_row(payment_id: str) -> dict[str, Any] | None:
         if row.get("payment_id") == payment_id:
             return row
     return None
+
+
+def _ensure_crm_customer(
+    *,
+    phone: str,
+    name: str,
+    phone_source: str,
+    payment_id: str,
+) -> tuple[bool, bool]:
+    """Idempotently ensure a Customer exists for 7E-Live-B execute.
+
+    Returns ``(existed_or_created, was_new)``. Unexpected create failures
+    are non-fatal because Phase 10B must still prepare the controlled gate;
+    the later execute gate remains the final blocker if the Customer is
+    still absent.
+    """
+    if phone_source == "customer":
+        return True, False
+
+    try:
+        from apps.audit.models import AuditEvent
+        from apps.audit.signals import write_event
+        from apps.crm.models import Customer
+
+        _customer, created = Customer.objects.get_or_create(
+            phone=phone,
+            defaults={
+                "id": next_id("CU", Customer, base=5100),
+                "name": name,
+                "state": "",
+                "city": "",
+                "language": "",
+                "product_interest": "",
+            },
+        )
+        if created:
+            write_event(
+                kind="phase10b.crm_customer.auto_created",
+                text=(
+                    "Phase 10B auto-created CRM customer for payment "
+                    f"{payment_id} phone suffix {phone[-4:]}."
+                ),
+                tone=AuditEvent.Tone.INFO,
+                payload={
+                    "phase": PHASE,
+                    "phone_last4": phone[-4:],
+                    "name": name,
+                    "phone_source": phone_source,
+                    "payment_id": payment_id,
+                },
+            )
+        return True, bool(created)
+    except Exception as exc:  # noqa: BLE001 - non-fatal safety fallback
+        logger.warning(
+            "phase10b: crm customer auto-create failed for %s: %s",
+            phone[-4:],
+            exc,
+        )
+        return False, False
 
 
 def build_payment_reminder_attempt(
@@ -287,6 +351,13 @@ def build_payment_reminder_attempt(
             f"Payment '{payment.id}' has no resolvable customer name.",
         )
 
+    _, crm_customer_auto_created = _ensure_crm_customer(
+        phone=target_phone,
+        name=target_customer_name,
+        phone_source=phone_source,
+        payment_id=payment.id,
+    )
+
     template_name = (template_id or DEFAULT_TEMPLATE_NAME).strip()
 
     template_params = {
@@ -343,6 +414,7 @@ def build_payment_reminder_attempt(
             "stage": stage,
             "template_name": template_name,
             "phone_source": phone_source,
+            "crm_customer_auto_created": crm_customer_auto_created,
             "phase7e_live_b_gate_id": gate_id,
             "forced": bool(force),
             "operator_note": (operator_note or "")[:240],
@@ -360,4 +432,5 @@ def build_payment_reminder_attempt(
         phone_source=phone_source,
         forced=bool(force),
         warning_emitted=warning_emitted,
+        crm_customer_auto_created=crm_customer_auto_created,
     )

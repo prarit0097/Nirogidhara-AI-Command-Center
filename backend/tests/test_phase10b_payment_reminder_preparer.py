@@ -104,10 +104,11 @@ def test_happy_path_confirmed_stage_creates_attempt_no_outbound():
     wa_freeform.assert_not_called()
     call_trigger.assert_not_called()
     ship_create.assert_not_called()
-    # No business mutation; Payment / Order / Customer rows unchanged.
+    # No outbound or Payment / Order mutation. The hotfix may create the
+    # missing CRM Customer needed by the later 7E-Live-B execute gate.
     assert Payment.objects.count() == pre_payments
     assert Order.objects.count() == pre_orders
-    assert Customer.objects.count() == pre_customers
+    assert Customer.objects.count() == pre_customers + 1
     # Controlled gate row IS created (that's the entire point).
     assert Phase7ELiveBRealCustomerSendGate.objects.count() == pre_gates + 1
     gate = Phase7ELiveBRealCustomerSendGate.objects.get(pk=prepared.gate_id)
@@ -119,8 +120,12 @@ def test_happy_path_confirmed_stage_creates_attempt_no_outbound():
     assert prepared.phone_source == "payment"
     assert prepared.forced is False
     assert prepared.warning_emitted is False
+    assert prepared.crm_customer_auto_created is True
     assert AuditEvent.objects.filter(
         kind="phase10b.payment_reminder.prepared"
+    ).exists()
+    assert AuditEvent.objects.filter(
+        kind="phase10b.crm_customer.auto_created"
     ).exists()
 
 
@@ -276,6 +281,7 @@ def test_phone_fallback_via_order_when_payment_empty():
     prepared = build_payment_reminder_attempt(payment_id="PAY-P10B")
     assert prepared.target_phone == "+919999998801"
     assert prepared.phone_source == "order"
+    assert prepared.crm_customer_auto_created is True
 
 
 def test_phone_fallback_via_customer_name_match():
@@ -293,6 +299,91 @@ def test_phone_fallback_via_customer_name_match():
     prepared = build_payment_reminder_attempt(payment_id="PAY-P10B")
     assert prepared.target_phone == "+919999998802"
     assert prepared.phone_source == "customer"
+    assert prepared.crm_customer_auto_created is False
+
+
+def test_crm_customer_auto_created_when_phone_from_order():
+    phone = "+919559991203"
+    _make_order(phone=phone)
+    _make_payment(customer_phone="")
+
+    prepared = build_payment_reminder_attempt(payment_id="PAY-P10B")
+
+    assert Customer.objects.filter(phone=phone).count() == 1
+    customer = Customer.objects.get(phone=phone)
+    assert customer.name == "P10B Customer"
+    assert prepared.phone_source == "order"
+    assert prepared.crm_customer_auto_created is True
+    assert AuditEvent.objects.filter(
+        kind="phase10b.crm_customer.auto_created",
+        payload__payment_id="PAY-P10B",
+        payload__phone_source="order",
+    ).exists()
+
+
+def test_no_duplicate_crm_customer_when_already_exists():
+    phone = "+919559991204"
+    Customer.objects.create(
+        id="C-P10B-EXISTING",
+        name="Existing Customer",
+        phone=phone,
+        state="Delhi",
+        city="Delhi",
+        language="Hindi",
+        product_interest="Nirogidhara",
+    )
+    _make_order(phone=phone)
+    _make_payment(customer_phone="")
+
+    prepared = build_payment_reminder_attempt(payment_id="PAY-P10B")
+
+    assert Customer.objects.filter(phone=phone).count() == 1
+    assert prepared.phone_source == "order"
+    assert prepared.crm_customer_auto_created is False
+    assert not AuditEvent.objects.filter(
+        kind="phase10b.crm_customer.auto_created",
+        payload__payment_id="PAY-P10B",
+    ).exists()
+
+
+def test_skip_crm_create_when_phone_source_is_customer():
+    Customer.objects.create(
+        id="C-P10B-CUSTOMER-SOURCE",
+        name="P10B Customer",
+        phone="+919559991205",
+        state="Delhi",
+        city="Delhi",
+        language="Hindi",
+        product_interest="Nirogidhara",
+    )
+    _make_order(phone="")
+    _make_payment(customer_phone="")
+
+    with mock.patch(
+        "apps.crm.models.Customer.objects.get_or_create"
+    ) as get_or_create:
+        prepared = build_payment_reminder_attempt(payment_id="PAY-P10B")
+
+    get_or_create.assert_not_called()
+    assert prepared.phone_source == "customer"
+    assert prepared.crm_customer_auto_created is False
+
+
+def test_crm_create_failure_is_nonfatal():
+    _make_order(phone="+919559991206")
+    _make_payment(customer_phone="")
+
+    with mock.patch(
+        "apps.crm.models.Customer.objects.get_or_create",
+        side_effect=Exception("database temporarily unavailable"),
+    ):
+        prepared = build_payment_reminder_attempt(payment_id="PAY-P10B")
+
+    assert prepared.phone_source == "order"
+    assert prepared.crm_customer_auto_created is False
+    assert Phase7ELiveBRealCustomerSendGate.objects.filter(
+        pk=prepared.gate_id
+    ).exists()
 
 
 # ---------------------------------------------------------------------------
@@ -307,6 +398,7 @@ def test_cli_happy_path_exits_clean_with_attempt_summary():
     output = out.getvalue()
     assert "Phase 10B" in output
     assert "Phase 7E-Live-B gate id" in output
+    assert "CRM customer auto-created" in output
     # Gate row exists.
     assert Phase7ELiveBRealCustomerSendGate.objects.count() == 1
 
@@ -337,6 +429,7 @@ def test_cli_json_output_for_happy_path():
     assert payload["phase"] == "10B"
     assert payload["gate_id"] > 0
     assert payload["template_name"] == DEFAULT_TEMPLATE_NAME
+    assert payload["crm_customer_auto_created"] is True
 
 
 def test_cli_json_output_for_refusal():
@@ -391,8 +484,9 @@ def test_no_outbound_under_cli_happy_path():
     ship_create.assert_not_called()
     assert Payment.objects.count() == pre_payments
     assert Order.objects.count() == pre_orders
-    assert Customer.objects.count() == pre_customers
-    # Phase 7E-Live-B gate row is the only new artefact.
+    assert Customer.objects.count() == pre_customers + 1
+    # Phase 7E-Live-B gate row plus the CRM customer bridge are the only new
+    # artefacts; no outbound/provider path is touched.
     assert Phase7ELiveBRealCustomerSendGate.objects.count() == 1
     gate = Phase7ELiveBRealCustomerSendGate.objects.get()
     # Gate is still DRAFT — Phase 10B never approves or executes it.

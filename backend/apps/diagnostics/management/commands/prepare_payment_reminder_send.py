@@ -2,10 +2,11 @@
 
 Stage-aware preparer that creates a Phase 7E-Live-B real-customer
 send gate row pre-filled with payment-reminder template params.
-This command NEVER sends WhatsApp / makes a call / mutates business
-state. Director still has to run the existing Phase 7E-Live-B
-approve + execute commands (with structured UTC window + runtime
-env flags) for an actual send.
+This command NEVER sends WhatsApp or makes a call. It may idempotently
+create a missing CRM Customer bridge row for Payment/Order phone fallback;
+Director still has to run the existing Phase 7E-Live-B approve + execute
+commands (with structured UTC window + runtime env flags) for an actual
+send.
 """
 from __future__ import annotations
 
@@ -111,6 +112,15 @@ class Command(BaseCommand):
         self.stdout.write(
             f"  Customer name           : {prepared.target_customer_name}"
         )
+        if prepared.crm_customer_auto_created:
+            self.stdout.write(
+                "  CRM customer auto-created : Yes "
+                f"(phone_source={prepared.phone_source})"
+            )
+        else:
+            self.stdout.write(
+                "  CRM customer              : already registered"
+            )
         if prepared.warning_emitted:
             self.stdout.write(
                 "  WARNING                 : --force used at WARN stage; "

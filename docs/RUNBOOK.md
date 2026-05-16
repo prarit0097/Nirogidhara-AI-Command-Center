@@ -3647,6 +3647,12 @@ Full Director payment-recovery playbook:
      `payment_url` non-empty.
    - Phone must resolve via Payment → Order → Customer fallback
      AND not be the internal sandbox placeholder `"0000000000"`.
+   - `prepare_payment_reminder_send` auto-creates `crm.Customer`
+     for Order-only or Payment-only phones (`phone_source=order` /
+     `phone_source=payment`). Manual Customer creation is no longer
+     needed. When this happens, audit event
+     `phase10b.crm_customer.auto_created` is written. Existing
+     Customer-sourced phones are reused and skipped.
    - On success: prints the new Phase 7E-Live-B gate id and the
      exact next commands. The `phase10b.payment_reminder.prepared`
      audit row records the prepare event with the gate id, stage,
@@ -3725,9 +3731,12 @@ Safety contract for Phase 10B specifically:
   `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
   or Vapi. The defensive safety test patches all four and runs the
   CLI happy path; assert_not_called everywhere.
-- NEVER mutates `Payment` / `Order` / `Customer` / `Lead` /
-  `Shipment` rows (asserted with before/after counts).
-- The ONE side-effect is the Phase 7E-Live-B gate row creation.
+- NEVER mutates `Payment` / `Order` / `Lead` / `Shipment` rows
+  (asserted with before/after counts). It may idempotently create a
+  missing `crm.Customer` bridge row for Payment/Order phone fallback
+  so Phase 7E-Live-B execute can resolve the target customer.
+- The side-effects are limited to optional CRM Customer bridge
+  creation and the Phase 7E-Live-B gate row creation.
   Phase 7E-Live-B itself is a *governance* table — its `draft`
   status carries no live-customer action.
 - Stage-aware refusals never create a gate row.
