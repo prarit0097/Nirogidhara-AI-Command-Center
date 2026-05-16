@@ -77,6 +77,20 @@ def build_beat_schedule() -> dict:
     ceo_orch_minute = getattr(
         settings, "AI_CEO_ORCHESTRATION_DAILY_MINUTE", 0
     )
+    # Phase 11A - Transcript Ingestion Pipeline V1. Pulls Vapi
+    # transcripts for backlogged Call rows. 23:00 IST default — end of
+    # day so all completed calls have time to flush their webhooks
+    # before the active pull runs. Never sends WhatsApp / makes a
+    # call / dispatches a shipment.
+    transcript_ingest_hour = getattr(
+        settings, "TRANSCRIPT_INGESTION_DAILY_HOUR", 23
+    )
+    transcript_ingest_minute = getattr(
+        settings, "TRANSCRIPT_INGESTION_DAILY_MINUTE", 0
+    )
+    transcript_ingest_limit = getattr(
+        settings, "TRANSCRIPT_INGESTION_DAILY_LIMIT", 100
+    )
 
     return {
         "ai-daily-briefing-morning": {
@@ -119,6 +133,14 @@ def build_beat_schedule() -> dict:
             "schedule": crontab(
                 hour=ceo_orch_hour, minute=ceo_orch_minute
             ),
+        },
+        "transcript-ingestion-daily": {
+            "task": "apps.calls.tasks.ingest_transcript_backlog_daily",
+            "schedule": crontab(
+                hour=transcript_ingest_hour,
+                minute=transcript_ingest_minute,
+            ),
+            "args": (transcript_ingest_limit,),
         },
     }
 

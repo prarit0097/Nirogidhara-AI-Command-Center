@@ -57,6 +57,13 @@ class Call(models.Model):
     ended_at = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
     raw_response = models.JSONField(default=dict, blank=True)
+    # Phase 11A — Transcript Ingestion Pipeline V1.
+    # Set by ``apps.calls.transcript_ingestion`` after a successful Vapi
+    # REST pull stores the per-utterance lines. Phase 9E Calling Team
+    # Leader's transcript_backlog_count uses these denormalized fields
+    # in preference to the more expensive ``exclude pk__in (...)`` query.
+    transcript_ingested_at = models.DateTimeField(null=True, blank=True)
+    transcript_line_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

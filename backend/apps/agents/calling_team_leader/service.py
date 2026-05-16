@@ -244,7 +244,18 @@ def compute_agent_breakdown_30d(
 def compute_transcript_backlog(
     *, now: datetime | None = None
 ) -> int:
-    """Count Calls older than 24h with no transcript lines."""
+    """Count Calls older than 24h with no transcript lines.
+
+    Phase 11A added denormalized ``Call.transcript_ingested_at`` /
+    ``Call.transcript_line_count`` to make the daily ingest sweep
+    cheap to query. We use both signals so this counter stays
+    correct against pre-Phase-11A historical rows (where the new
+    fields are NULL/0 but transcript lines may already exist from
+    the Phase 2D webhook path) AND post-Phase-11A rows. A call is
+    "transcribed" if it has either a ``CallTranscriptLine`` linked
+    OR ``transcript_ingested_at`` is set with a non-zero line
+    count.
+    """
     now = now or timezone.now()
     cutoff_24h = _cutoff(now, 1)
     transcribed_call_ids = (
@@ -252,11 +263,14 @@ def compute_transcript_backlog(
         .values_list("call_id", flat=True)
         .distinct()
     )
-    return (
-        Call.objects.filter(created_at__lt=cutoff_24h)
-        .exclude(pk__in=list(transcribed_call_ids))
-        .count()
+    backlog_qs = Call.objects.filter(created_at__lt=cutoff_24h).exclude(
+        pk__in=list(transcribed_call_ids)
     )
+    # Phase 11A — also exclude calls whose denormalized count is > 0
+    # (covers the edge case where the transcript-lines join could miss
+    # a freshly bulk_created row inside the same transaction window).
+    backlog_qs = backlog_qs.exclude(transcript_line_count__gt=0)
+    return backlog_qs.count()
 
 
 def detect_anomalies(

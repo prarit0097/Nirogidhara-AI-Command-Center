@@ -69,5 +69,9 @@ urlpatterns = [
         "api/v1/diagnostics/",
         include("apps.diagnostics.urls"),
     ),
+    path(
+        "api/v1/calls/",
+        include("apps.calls.v1_urls"),
+    ),
     path("api/", include(api_patterns)),
 ]

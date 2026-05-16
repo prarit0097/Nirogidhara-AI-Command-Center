@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import APIException, NotFound
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -10,12 +11,16 @@ from apps.crm.models import Lead
 
 from . import services
 from .integrations.vapi_client import VapiClientError
-from .models import ActiveCall, Call
+from .models import ActiveCall, Call, CallTranscriptLine
 from .serializers import (
     ActiveCallSerializer,
     CallSerializer,
     CallTriggerSerializer,
     TranscriptLineSerializer,
+)
+from .transcript_ingestion import (
+    DEFAULT_WINDOW_DAYS,
+    get_backlog_overview,
 )
 
 
@@ -103,4 +108,105 @@ class CallTriggerView(APIView):
                 "providerCallId": call.provider_call_id,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+# ----- Phase 11A — Transcript ingestion read-only views -----
+
+
+class _AdminTranscriptPermission(BasePermission):
+    """Admin / director / owner / superuser only. Read-only routes."""
+
+    def has_permission(self, request, view) -> bool:  # type: ignore[override]
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        role = getattr(user, "role", "") or ""
+        return role.lower() in {"admin", "director", "owner"}
+
+
+def _parse_window_days(raw, default: int = DEFAULT_WINDOW_DAYS) -> int:
+    try:
+        value = int(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(180, value))
+
+
+class TranscriptBacklogView(APIView):
+    """``GET /api/v1/calls/transcript-backlog/?window_days=N``.
+
+    Read-only backlog summary for the Director / operator dashboard.
+    Returns total calls in window, ingested count, backlog count,
+    backlog ratio, oldest + newest backlog, plus top-10 backlog ids
+    (masked: id + created_at + provider_call_id last-4 only). No
+    PII. Admin+ only. POST/PATCH/DELETE → 405.
+    """
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request):
+        overview = get_backlog_overview(
+            window_days=_parse_window_days(
+                request.query_params.get("window_days")
+            )
+        )
+        # Datetime → ISO strings so the JSON renderer sees a clean shape.
+        result = dict(overview)
+        for key in (
+            "now",
+            "window_start",
+            "grace_cutoff_utc",
+            "oldest_backlog_at",
+            "newest_backlog_at",
+        ):
+            value = result.get(key)
+            if value is not None:
+                result[key] = value.isoformat()
+        result["top_backlog"] = [
+            {
+                "callId": row["call_id"],
+                "createdAt": row["created_at"].isoformat()
+                if row["created_at"] is not None
+                else None,
+                "providerCallIdLast4": row["provider_call_id_last4"],
+            }
+            for row in overview["top_backlog"]
+        ]
+        return Response(result)
+
+
+class CallTranscriptDetailView(APIView):
+    """``GET /api/v1/calls/transcripts/<call_id>/``.
+
+    Read-only list of ``CallTranscriptLine`` rows for one Call. Admin+
+    only. POST/PATCH/DELETE → 405.
+    """
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, _request, call_id: str):
+        call = Call.objects.filter(pk=call_id).first()
+        if call is None:
+            raise NotFound(f"Call {call_id} not found")
+        lines = (
+            CallTranscriptLine.objects.filter(call=call)
+            .order_by("order")
+        )
+        return Response(
+            {
+                "callId": call.id,
+                "providerCallIdLast4": (call.provider_call_id or "")[-4:],
+                "transcriptIngestedAt": (
+                    call.transcript_ingested_at.isoformat()
+                    if call.transcript_ingested_at is not None
+                    else None
+                ),
+                "transcriptLineCount": int(call.transcript_line_count or 0),
+                "lines": TranscriptLineSerializer(lines, many=True).data,
+            }
         )

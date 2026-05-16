@@ -3448,6 +3448,114 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 11A — Transcript Ingestion Pipeline V1
+
+Phase 11A pulls Vapi call transcripts via the REST API and persists
+them as `CallTranscriptLine` rows so the Phase 9E Calling Team
+Leader's `transcript_backlog_count` reflects the truth (and the
+`high_transcript_backlog` alert clears). Phase 2D already persists
+transcripts that arrive via Vapi webhook; Phase 11A handles the
+backlog case — calls that completed without a webhook landing.
+
+Phase 11A NEVER sends WhatsApp / makes a call / dispatches a
+shipment / mutates `Customer` / `Order` / `Payment` / `Lead` /
+`Shipment` / `DiscountOfferLog`. The only side effects are
+`CallTranscriptLine` row creation + `Call.transcript_ingested_at` /
+`Call.transcript_line_count` updates + `transcript.*` audit rows.
+
+#### Read-only inspection
+
+```bash
+# Read-only backlog summary (Director / operator dashboard).
+python manage.py inspect_transcript_backlog [--window-days N=30] [--json]
+```
+
+Reports `total_calls_in_window` / `ingested_count` / `backlog_count`
+/ `backlog_ratio` / `oldest_backlog_at` / `newest_backlog_at` /
+top-10 backlog `Call.id` rows with `provider_call_id` masked to
+last-4. Never touches Vapi. Never mutates.
+
+#### On-demand ingestion (one call or batch)
+
+```bash
+# One specific call.
+python manage.py ingest_call_transcripts --call-id <CALL_ID> [--dry-run] [--json]
+
+# Backlog mode (default up to 50 calls).
+python manage.py ingest_call_transcripts [--limit N=50] [--dry-run] [--json]
+```
+
+`--dry-run` fetches the Vapi transcript but persists nothing. On
+real runs, transcript lines are written inside a `transaction.atomic()`
+block (existing lines for the same call are dropped first, then the
+fresh REST shape is `bulk_create`d); `Call.transcript_ingested_at`
++ `transcript_line_count` are set; one `transcript.ingested` audit
+row is written carrying the `call_id`, `line_count`, and
+`vapi_call_id_last4` ONLY (never the full provider id).
+
+Skip outcomes (never an error):
+
+| Reason | Cause |
+| --- | --- |
+| `no_vapi_id` | `Call.provider_call_id` is empty — call never went through `services.trigger_call_for_lead` (legacy / seed data). |
+| `already_ingested` | `Call.transcript_ingested_at` is already set. |
+| `no_transcript_from_vapi` | Vapi returned 404 / 4xx / 5xx / empty body / no utterances. |
+| `call_not_found` | The supplied `--call-id` does not exist locally. |
+| `ingest_error` | DB error during persistence — atomic rollback already happened; row stays in backlog. |
+
+#### Daily Celery sweep
+
+Beat schedule entry `transcript-ingestion-daily` runs
+`apps.calls.tasks.ingest_transcript_backlog_daily(limit=100)` at
+**23:00 IST** by default (end-of-day so all webhooks have time to
+land first). Env-shiftable via `TRANSCRIPT_INGESTION_DAILY_HOUR`,
+`_MINUTE`, `_LIMIT`.
+
+The task refuses with a `transcript.daily_ingest.blocked` audit
+row when any of these guards trip:
+
+| Guard | Refusal reason |
+| --- | --- |
+| Postgres-safe `RuntimeKillSwitch` disabled | `kill_switch_off` |
+| `apps.ai_governance.sandbox.is_sandbox_enabled()` | `sandbox_mode` |
+| `settings.VAPI_API_KEY` empty | `vapi_api_key_missing` |
+
+Successful runs (including zero-ingested) write a
+`transcript.daily_ingest.completed` audit row with the rolling
+counts (the per-call `results` list is stripped from the payload).
+
+#### Audit kinds
+
+- `transcript.ingested` — per-call success.
+- `transcript.daily_ingest.completed` — per-sweep success.
+- `transcript.daily_ingest.blocked` — per-sweep refusal (kill
+  switch / sandbox / missing API key).
+
+All payloads scrub the full `provider_call_id` and surface only
+`vapi_call_id_last4` plus the local `Call.id`.
+
+#### Admin-only read API (no POST)
+
+```text
+GET /api/v1/calls/transcript-backlog/?window_days=N
+GET /api/v1/calls/transcripts/<call_id>/
+```
+
+Admin / director / owner / superuser only. Anonymous → 401/403.
+POST / PATCH / DELETE → 405.
+
+#### Why some calls stay "skipped_no_id" forever
+
+The pre-Phase-11A backlog (e.g. the 22 seed/test calls on the
+VPS) was created outside `services.trigger_call_for_lead`, so
+`Call.provider_call_id` is empty for those rows. Vapi cannot
+return a transcript for a call it never received. The value of
+Phase 11A is the **infrastructure for future real calls**, not
+retroactive backlog clearing of seed data. Once production
+starts routing real Vapi calls, the 23:00 IST sweep will catch
+any webhook misses automatically and the Phase 9E
+`high_transcript_backlog` alert will stop firing.
+
 ### Phase 10C — Razorpay Payment Link Refresh Gate
 
 Phase 10C is the **heavyweight CLI workflow that creates a fresh
