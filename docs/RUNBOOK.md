@@ -3256,6 +3256,13 @@ Phase 7E-Live-B is the **CLI-only real-customer WhatsApp one-shot
 gate**. It may send exactly one approved Phase 5A template to
 exactly one real customer for each approved gate. There is no
 rollback because WhatsApp messages cannot be unsent.
+Phase 7E-Live-B Hotfix-2 scopes the prior-executed guard to the same
+target phone + template + execution context (for `payment_reminder`,
+the payment context is `payment_id` when present, otherwise
+`payment_url`). A successful prior send to a different customer no
+longer blocks a new separately approved gate; an exact repeat to the
+same target context still refuses with
+`phase7e_live_b_duplicate_executed_gate_exists`.
 
 Safety contract:
 - No frontend approve / execute / cancel buttons.
@@ -3266,7 +3273,8 @@ Safety contract:
   `delivery_reminder`, `rto_rescue`, `reorder_reminder`,
   `payment_reminder`, and `usage_explanation`.
 - Approval and execute require kill switch enabled, explicit
-  confirmation, non-empty operator, no prior executed gate, and a
+  confirmation, non-empty operator, no prior executed duplicate for
+  the same target phone + template + execution context, and a
   Director signoff containing `phase7e_live_b_gate_id_<ID>`,
   `target_phone_<last4>`, `template_<name>`,
   `phase7eLiveBApproval`, plus structured `BEGIN_UTC=` /
@@ -3739,6 +3747,10 @@ Safety contract for Phase 10B specifically:
   creation and the Phase 7E-Live-B gate row creation.
   Phase 7E-Live-B itself is a *governance* table — its `draft`
   status carries no live-customer action.
+- Phase 7E-Live-B approval/execute blocks duplicate executed sends
+  only for the same target phone + template + payment context, so a
+  previous live send to another customer does not block a new
+  Director-approved payment reminder gate.
 - Stage-aware refusals never create a gate row.
 
 ### Phase 10A — Pending Payments Drilldown (Diagnostics V1)

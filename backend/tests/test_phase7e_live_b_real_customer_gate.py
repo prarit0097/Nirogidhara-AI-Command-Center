@@ -26,6 +26,7 @@ pytestmark = pytest.mark.django_db
 
 
 PHONE = "+919999991203"
+SECOND_PHONE = "+919999994506"
 
 
 def _json_call(command: str, *args: str) -> dict:
@@ -34,17 +35,27 @@ def _json_call(command: str, *args: str) -> dict:
     return json.loads(out.getvalue())
 
 
-def _prepare_gate(*, template_name: str = "payment_reminder") -> Phase7ELiveBRealCustomerSendGate:
+def _prepare_gate(
+    *,
+    phone: str = PHONE,
+    customer_name: str = "Real Customer",
+    template_name: str = "payment_reminder",
+    template_params: dict[str, str] | None = None,
+) -> Phase7ELiveBRealCustomerSendGate:
+    params = template_params or {
+        "customer_name": customer_name,
+        "payment_url": "https://rzp.io/test/p7e-live-b",
+    }
     report = _json_call(
         "prepare_phase7e_live_b_real_customer_gate",
         "--target-phone",
-        PHONE,
+        phone,
         "--target-customer-name",
-        "Real Customer",
+        customer_name,
         "--template-name",
         template_name,
         "--template-params",
-        '{"customer_name": "Real Customer"}',
+        json.dumps(params),
         "--operator-name",
         "Prarit Sidana",
     )
@@ -62,6 +73,11 @@ def _window(*, before_minutes: int = 1, after_minutes: int = 10) -> tuple[str, s
     return start, end
 
 
+def _last4(phone: str) -> str:
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    return digits[-4:]
+
+
 def _signoff(gate: Phase7ELiveBRealCustomerSendGate, *, outside: bool = False) -> str:
     if outside:
         begin = (timezone.now() + timedelta(minutes=10)).strftime(
@@ -74,7 +90,7 @@ def _signoff(gate: Phase7ELiveBRealCustomerSendGate, *, outside: bool = False) -
         begin, end = _window()
     return (
         f"phase7e_live_b_gate_id_{gate.pk} "
-        f"target_phone_1203 template_{gate.template_name} "
+        f"target_phone_{_last4(gate.target_phone)} template_{gate.template_name} "
         f"phase7eLiveBApproval BEGIN_UTC={begin} END_UTC={end}"
     )
 
@@ -335,3 +351,95 @@ def test_cancel_valid_and_after_executed_refused():
     )
     assert refused["ok"] is False
     assert "phase7e_live_b_executed_gate_cannot_be_cancelled" in refused["blockers"]
+
+
+@override_settings(PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=True)
+def test_prior_executed_gate_for_different_phone_does_not_block_approval():
+    executed = _prepare_gate()
+    executed.status = Phase7ELiveBRealCustomerSendGate.Status.EXECUTED
+    executed.save(update_fields=["status", "updated_at"])
+
+    gate = _prepare_gate(
+        phone=SECOND_PHONE,
+        customer_name="Kavita Joshi",
+        template_params={
+            "customer_name": "Kavita Joshi",
+            "payment_url": "https://rzp.io/test/kavita",
+        },
+    )
+    report = _json_call(
+        "approve_phase7e_live_b_real_customer_gate",
+        "--gate-id",
+        str(gate.pk),
+        "--director-signoff",
+        _signoff(gate),
+        "--operator-name",
+        "Prarit Sidana",
+        "--confirm-phase7e-live-b-real-customer-send",
+    )
+
+    assert report["ok"] is True
+    assert "phase7e_live_b_duplicate_executed_gate_exists" not in report["blockers"]
+
+
+@override_settings(PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=True)
+def test_prior_executed_same_phone_and_payment_context_blocks_duplicate():
+    executed = _prepare_gate(
+        template_params={
+            "customer_name": "Real Customer",
+            "payment_url": "https://rzp.io/test/duplicate",
+        }
+    )
+    executed.status = Phase7ELiveBRealCustomerSendGate.Status.EXECUTED
+    executed.save(update_fields=["status", "updated_at"])
+
+    gate = _prepare_gate(
+        template_params={
+            "customer_name": "Real Customer",
+            "payment_url": "https://rzp.io/test/duplicate",
+        }
+    )
+    report = _json_call(
+        "approve_phase7e_live_b_real_customer_gate",
+        "--gate-id",
+        str(gate.pk),
+        "--director-signoff",
+        _signoff(gate),
+        "--operator-name",
+        "Prarit Sidana",
+        "--confirm-phase7e-live-b-real-customer-send",
+    )
+
+    assert report["ok"] is False
+    assert "phase7e_live_b_duplicate_executed_gate_exists" in report["blockers"]
+
+
+@override_settings(PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=True)
+def test_prior_executed_same_phone_different_payment_context_is_allowed():
+    executed = _prepare_gate(
+        template_params={
+            "customer_name": "Real Customer",
+            "payment_url": "https://rzp.io/test/old-link",
+        }
+    )
+    executed.status = Phase7ELiveBRealCustomerSendGate.Status.EXECUTED
+    executed.save(update_fields=["status", "updated_at"])
+
+    gate = _prepare_gate(
+        template_params={
+            "customer_name": "Real Customer",
+            "payment_url": "https://rzp.io/test/new-link",
+        }
+    )
+    report = _json_call(
+        "approve_phase7e_live_b_real_customer_gate",
+        "--gate-id",
+        str(gate.pk),
+        "--director-signoff",
+        _signoff(gate),
+        "--operator-name",
+        "Prarit Sidana",
+        "--confirm-phase7e-live-b-real-customer-send",
+    )
+
+    assert report["ok"] is True

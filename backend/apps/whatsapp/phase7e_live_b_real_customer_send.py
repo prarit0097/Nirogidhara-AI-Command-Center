@@ -1,7 +1,7 @@
-"""Phase 7E-Live-B real-customer WhatsApp one-shot send gate.
+"""Phase 7E-Live-B real-customer WhatsApp send gate.
 
-This module owns the CLI-only governance flow for exactly one approved
-template send to exactly one real customer phone. It never exposes an
+This module owns the CLI-only governance flow for one approved template
+send per gate to one real customer phone. It never exposes an
 approve/execute API surface and never edits ``.env*`` files.
 """
 from __future__ import annotations
@@ -101,6 +101,10 @@ def _last4(phone: str) -> str:
     return digits[-4:] if len(digits) >= 4 else digits
 
 
+def _normalise_phone(phone: str) -> str:
+    return "".join(ch for ch in (phone or "") if ch.isdigit())
+
+
 def _mask_phone(phone: str) -> str:
     last = _last4(phone)
     return f"***{last}" if last else ""
@@ -108,6 +112,34 @@ def _mask_phone(phone: str) -> str:
 
 def _hash_signoff(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8", "replace")).hexdigest()
+
+
+def _execution_context_key(gate: Phase7ELiveBRealCustomerSendGate) -> str:
+    params = dict(gate.template_params or {})
+    if gate.template_name == "payment_reminder":
+        return str(params.get("payment_id") or params.get("payment_url") or "").strip()
+    return json.dumps(params, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _prior_executed_duplicate_gate_exists(
+    gate: Phase7ELiveBRealCustomerSendGate,
+) -> bool:
+    target_phone = _normalise_phone(gate.target_phone)
+    target_context = _execution_context_key(gate)
+    candidates = (
+        Phase7ELiveBRealCustomerSendGate.objects.filter(
+            status=Phase7ELiveBRealCustomerSendGate.Status.EXECUTED,
+            template_name=gate.template_name,
+        )
+        .exclude(pk=gate.pk)
+        .only("target_phone", "template_name", "template_params")
+    )
+    for existing in candidates:
+        if _normalise_phone(existing.target_phone) != target_phone:
+            continue
+        if _execution_context_key(existing) == target_context:
+            return True
+    return False
 
 
 def _gate_counts() -> dict[str, int]:
@@ -305,10 +337,8 @@ def _approval_blockers(
         blockers.append(f"phase7e_live_b_gate_status_{gate.status}_not_{required_status}")
     if gate.template_name not in APPROVED_TEMPLATE_NAMES:
         blockers.append("phase7e_live_b_template_name_not_approved")
-    if Phase7ELiveBRealCustomerSendGate.objects.filter(
-        status=Phase7ELiveBRealCustomerSendGate.Status.EXECUTED
-    ).exclude(pk=gate.pk).exists():
-        blockers.append("phase7e_live_b_prior_executed_gate_exists")
+    if _prior_executed_duplicate_gate_exists(gate):
+        blockers.append("phase7e_live_b_duplicate_executed_gate_exists")
     signoff = director_signoff or ""
     required = [
         f"phase7e_live_b_gate_id_{gate.pk}",
