@@ -70,6 +70,10 @@ urlpatterns = [
         include("apps.diagnostics.urls"),
     ),
     path(
+        "api/v1/caio/",
+        include("apps.caio.urls"),
+    ),
+    path(
         "api/v1/calls/",
         include("apps.calls.v1_urls"),
     ),

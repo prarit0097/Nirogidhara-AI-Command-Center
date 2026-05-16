@@ -104,6 +104,12 @@ def build_beat_schedule() -> dict:
     call_quality_limit = getattr(
         settings, "CALL_QUALITY_SCORING_DAILY_LIMIT", 100
     )
+    # Phase 11C - CAIO Audit Agent V1 (governance, recommendations-only).
+    # 14:00 IST default — after CEO Orchestration at 13:00 so it reads
+    # the fresh CEO snapshot. NEVER triggers outbound side effects.
+    caio_audit_hour = getattr(settings, "CAIO_AUDIT_DAILY_HOUR", 14)
+    caio_audit_minute = getattr(settings, "CAIO_AUDIT_DAILY_MINUTE", 0)
+    caio_audit_window = getattr(settings, "CAIO_AUDIT_DAILY_WINDOW_DAYS", 30)
 
     return {
         "ai-daily-briefing-morning": {
@@ -162,6 +168,14 @@ def build_beat_schedule() -> dict:
                 minute=call_quality_minute,
             ),
             "args": (call_quality_limit,),
+        },
+        "caio-audit-daily": {
+            "task": "apps.caio.tasks.run_caio_audit_agent_daily",
+            "schedule": crontab(
+                hour=caio_audit_hour,
+                minute=caio_audit_minute,
+            ),
+            "kwargs": {"window_days": int(caio_audit_window)},
         },
     }
 

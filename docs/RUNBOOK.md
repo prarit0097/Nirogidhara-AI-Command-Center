@@ -3448,6 +3448,108 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 11C — CAIO Audit Agent V1 (governance, recommendations-only)
+
+Phase 11C is the **first governance layer** above the Phase 9
+business agents and the Phase 11A/11B calls pipeline. **CAIO has NO
+direct execution power** (Master Blueprint §26 #2 hard stop:
+*"CAIO Agent never executes business actions. Monitor / audit /
+suggest only."*).
+
+CAIO NEVER sends WhatsApp / makes a call / dispatches a shipment /
+mutates `Customer` / `Order` / `Payment` / `Lead` / `Shipment` /
+`DiscountOfferLog` / any Phase 9 snapshot row, NEVER modifies any
+agent's prompts or configurations, NEVER creates an
+`ApprovalRequest`, NEVER executes any `ApprovalMatrix` action.
+
+The only mutations CAIO performs:
+
+- One `CaioAuditSnapshot` row per daily run.
+- One `AgentRun` row (`agent=CAIO`, `model=deterministic_v1`,
+  `provider=disabled`, `cost_usd=0`, `dry_run=True`).
+- Audit rows (`caio.audit.*`).
+
+#### Severity cascade
+
+| Trigger | Severity |
+| --- | --- |
+| Phase 11B `compliance_violation` in any scored call (last 30d) | **red** |
+| 3+ Phase 9 agents with no snapshot in last 48h | **red** |
+| Any weak learning indicator | **amber** |
+| Any agent anomaly flag fires | **amber** |
+| Transcript backlog > 20 | **amber** |
+| Call quality trend = `down` (this 7d < prior 7d − 5%) | **amber** |
+| None of the above | **green** |
+
+#### Daily Celery sweep
+
+Beat entry `caio-audit-daily` runs
+`apps.caio.tasks.run_caio_audit_agent_daily(window_days=30)` at
+**14:00 IST** (env-shiftable via `CAIO_AUDIT_DAILY_HOUR=14` /
+`_MINUTE=0` / `_WINDOW_DAYS=30`). Runs 1 hour after Phase 9F CEO
+Orchestration at 13:00 so CAIO reads the fresh CEO snapshot.
+
+Refusal path:
+
+| Guard | Reason | Audit kind |
+| --- | --- | --- |
+| Postgres-safe `RuntimeKillSwitch` disabled | `runtime_kill_switch_disabled` | `caio.audit.daily_run.blocked` |
+
+**Sandbox mode does NOT block CAIO** — governance must run even in
+sandbox to catch hallucinations / weak learning during sandboxed
+dry-runs. `snapshot.sandbox=True` AND `AgentRun.sandbox_mode=True`
+propagate when sandbox is active.
+
+#### Manual command
+
+```bash
+# Run a one-off audit (writes a CaioAuditSnapshot + AgentRun + audit rows).
+python manage.py shell -c "from apps.caio.tasks import run_caio_audit_agent_daily; import json; print(json.dumps(run_caio_audit_agent_daily(), indent=2, default=str))"
+```
+
+#### Audit kinds
+
+- `caio.audit.snapshot.created` — per-run snapshot creation.
+  Payload carries `phase="11C"`, `severity`, `compliance_risk_call_count`,
+  `agent_data_gaps`, `transcript_backlog_count`, `call_quality_trend`,
+  `anomaly_agent_count`, `weak_learning_count`, `agent_run_id`,
+  `sandbox`.
+- `caio.audit.daily_run.completed` — per-sweep success with
+  `duration_ms`.
+- `caio.audit.daily_run.blocked` — kill-switch refusal.
+
+#### Admin-only read API
+
+```text
+GET /api/v1/caio/snapshots/?limit=N          # capped at 200
+GET /api/v1/caio/snapshots/latest/           # 404 when none
+GET /api/v1/caio/snapshots/<int:pk>/         # detail with full recommendation_text
+```
+
+Auth: admin / director / owner / superuser only. POST/PATCH/DELETE → 405.
+
+Response shape carries the snapshot's full set of camelCased fields
+including `severity`, `complianceRiskCallCount`,
+`complianceRiskAgentLabels`, `transcriptBacklogCount`,
+`callQualityTrend`, `agentDataGapNames`, `agentAnomalyFlags`,
+`weakLearningIndicators`, `ceoAuditNotes`, `recommendationText`,
+`auditedAgents`, `sandbox`.
+
+#### What CAIO reads (audit chain)
+
+1. **Phase 11B `CallQualityScore`** → compliance risk + 7d quality trend.
+2. **Phase 11A `get_backlog_overview`** → transcript backlog count.
+3. **Phase 9A `CustomerSuccessSnapshot`** → (informational only in V1).
+4. **Phase 9B `RtoRiskSnapshot`** → 24h cohort high/critical tier count.
+5. **Phase 9C `CfoFinancialSnapshot`** → CFO `alerts` codes.
+6. **Phase 9D `DataAnalystSnapshot`** → funnel + Data Analyst `alerts`.
+7. **Phase 9E `CallingTeamLeaderSnapshot`** → Calling Team Leader `alerts` + `call_count_7d`.
+8. **Phase 9F `CeoOrchestrationSnapshot`** → CEO health tier + cross-cutting alerts + agent_status_summary.
+
+If any of the above is missing or > 48h stale, CAIO surfaces it as
+an `agent_data_gap` and lifts the severity accordingly. Director
+actions are explicit in `recommendation_text` — CAIO never executes.
+
 ### Phase 11B — Call Quality Scorer V1
 
 Phase 11B scores ingested call transcripts (the Phase 11A

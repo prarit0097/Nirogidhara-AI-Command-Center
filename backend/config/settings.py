@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "apps.saas",
     "apps.mcp_gateway",
     "apps.diagnostics",
+    "apps.caio",
 ]
 
 MIDDLEWARE = [

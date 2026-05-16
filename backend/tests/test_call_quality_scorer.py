@@ -708,4 +708,6 @@ def test_beat_schedule_has_call_quality_scoring_daily():
     assert "call-quality-scoring-daily" in schedule
     entry = schedule["call-quality-scoring-daily"]
     assert entry["task"] == "apps.calls.tasks.score_call_transcripts_daily"
-    assert len(schedule) == 10
+    # Phase 11B added the 10th entry; Phase 11C raised this to 11 with
+    # ``caio-audit-daily``. Assert >= 10 so future additions are tolerated.
+    assert len(schedule) >= 10
