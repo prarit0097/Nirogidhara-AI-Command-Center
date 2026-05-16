@@ -3440,6 +3440,176 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 10C — Razorpay Payment Link Refresh Gate
+
+Phase 10C is the **heavyweight CLI workflow that creates a fresh
+Razorpay payment link for a specified `Payment` record and updates
+`Payment.payment_url`**. Test mode is the default; live mode is
+gated behind every Director directive guard (runtime env flag,
+15-min structured UTC window, kill switch, explicit confirmation,
+runtime `RAZORPAY_MODE=live`).
+
+Phase 10C never sends WhatsApp / makes calls / dispatches shipments
+on its own — it only mutates `Payment.payment_url`. The refreshed
+link is delivered to the customer ONLY via the separate Phase
+7E-Live-B `payment_reminder` send (which Phase 10B prepares the
+gate row for). 10A → 10B → 10C compose:
+
+1. **Phase 10A** — Director reviews pending payments (read-only).
+2. **Phase 10C (here)** — refresh the stale Razorpay link →
+   `Payment.payment_url` mutated to the new URL.
+3. **Phase 10B** — prepare a Phase 7E-Live-B gate row pre-filled
+   with the new `payment_url` as a template param.
+4. **Phase 7E-Live-B** — Director approves + executes the gate
+   inside a 15-min structured UTC window; customer receives the
+   refreshed link via approved Meta template.
+
+#### Test mode (default; safe — no live Razorpay write to production keys)
+
+```bash
+# 1. PREPARE — creates a Phase10CPaymentLinkRefreshGate row in draft
+python manage.py prepare_phase10c_payment_link_refresh_gate \
+    PAY-30125 \
+    --mode test \
+    --operator-name "Prarit Sidana" \
+    --operator-note "Stale link from 2026-04-12; customer ready to pay"
+
+# Use --force-replace if Payment.payment_url already has a non-empty value
+# (the old URL is archived to gate.previous_payment_url for rollback).
+
+# 2. APPROVE — test mode does NOT require a UTC window
+python manage.py approve_phase10c_payment_link_refresh_gate \
+    --gate-id 17 \
+    --operator-name "Prarit Sidana" \
+    --intent "Refresh stale link for customer Suresh K. — order NRG-20435"
+
+# 3. EXECUTE — actually calls Razorpay (mock returns deterministic URL;
+# test returns a real Razorpay TEST API plink_id). Refuses if runtime
+# RAZORPAY_MODE=live (mismatch safety).
+python manage.py execute_phase10c_payment_link_refresh_gate \
+    --gate-id 17 \
+    --operator-name "Prarit Sidana"
+
+# After execute: Payment.payment_url is the new short_url;
+# gate.previous_payment_url is the archived old URL;
+# gate.razorpay_link_id is the new plink_id;
+# gate.status = "executed".
+
+# 4. ROLLBACK (optional) — restores Payment.payment_url AND tries to
+# cancel the new Razorpay link. Cancel may legitimately refuse if
+# the customer already paid; the rollback proceeds either way.
+python manage.py rollback_phase10c_payment_link_refresh_gate \
+    --gate-id 17 \
+    --operator-name "Prarit Sidana"
+
+# 5. CANCEL (only before execute) — flips gate to cancelled without
+# touching Razorpay or Payment.payment_url.
+python manage.py cancel_phase10c_payment_link_refresh_gate \
+    --gate-id 17 \
+    --operator-name "Prarit Sidana" \
+    --reason "Director changed approach; will request UPI instead"
+
+# 6. INSPECT — read-only summary of any gate
+python manage.py inspect_phase10c_payment_link_refresh_gate 17 --json
+```
+
+#### Live mode (production Razorpay LIVE keys)
+
+**Do NOT run live mode without Director directive AND a 15-minute
+structured UTC window.** All five guards must hold simultaneously:
+
+1. `PHASE10C_PAYMENT_LINK_REFRESH_ENABLED=true` runtime env prefix
+   (NEVER edit `.env.production`).
+2. Postgres-safe kill switch enabled (`RuntimeKillSwitch` global
+   scope row with `enabled=True`; an `enabled=False` row anywhere
+   refuses).
+3. Approval carries structured `BEGIN_UTC=...Z END_UTC=...Z`
+   markers; window ≤ 15 minutes; `now ∈ [BEGIN_UTC, END_UTC]` at
+   execute time.
+4. `--confirm-phase10c-payment-link-refresh-live` flag on the
+   execute command.
+5. Runtime `RAZORPAY_MODE=live` at execute time.
+
+```bash
+# 1. PREPARE — same as test mode but --mode live
+python manage.py prepare_phase10c_payment_link_refresh_gate \
+    PAY-30125 \
+    --mode live \
+    --operator-name "Prarit Sidana"
+
+# 2. APPROVE — must include structured UTC window (15-min cap)
+python manage.py approve_phase10c_payment_link_refresh_gate \
+    --gate-id 17 \
+    --operator-name "Prarit Sidana" \
+    --intent "Refresh stale live link for paying customer" \
+    --director-signoff "BEGIN_UTC=2026-05-16T10:00:00Z END_UTC=2026-05-16T10:14:00Z"
+
+# 3. EXECUTE — inside the approved window, all flags set
+PHASE10C_PAYMENT_LINK_REFRESH_ENABLED=true \
+RAZORPAY_MODE=live \
+python manage.py execute_phase10c_payment_link_refresh_gate \
+    --gate-id 17 \
+    --operator-name "Prarit Sidana" \
+    --confirm-phase10c-payment-link-refresh-live
+```
+
+#### Stage matrix (matches Phase 10B)
+
+ALLOWED (refresh proceeds without warning):
+- `Confirmed`
+- `Order Punched`
+- `Interested`
+- `Confirmation Pending`
+
+BLOCKED (refused with exit 1; no gate row created):
+- `RTO`
+- `Out for Delivery`
+- `Cancelled`
+- `Delivered`
+- `Dispatched`
+- `Payment Link Sent`
+- `New Lead`
+- `internal_sandbox`
+
+#### Idempotency / safety
+
+- A non-empty `Payment.payment_url` refuses prepare unless
+  `--force-replace` is passed; the old URL is archived to
+  `gate.previous_payment_url` (used by rollback).
+- Test mode refuses if runtime `RAZORPAY_MODE=live` (no
+  accidental live mutation from a test-mode gate).
+- The Razorpay helper (`create_payment_link_for_refresh`) forces
+  `notify.sms=False`, `notify.email=False`, `reminder_enable=False`
+  so Razorpay NEVER auto-notifies the customer — delivery is
+  exclusively Phase 7E-Live-B's responsibility.
+- `cancel_payment_link` never raises; rollback records the result
+  honestly (`cancelled` / `mocked` / `rejected` / `error`) and
+  always restores `Payment.payment_url` from the archived value.
+
+#### Audit kinds
+
+- `phase10c.gate.prepared`
+- `phase10c.gate.approved`
+- `phase10c.gate.execute.requested`
+- `phase10c.gate.execute.success`
+- `phase10c.gate.execute.failed`
+- `phase10c.gate.rollback.success`
+- `phase10c.gate.rollback.failed`
+- `phase10c.gate.cancelled`
+- `phase10c.live_mode.refused`
+
+#### Hard safety contract for Phase 10C
+
+- Phase 10C NEVER sends WhatsApp, NEVER makes a call, NEVER
+  dispatches a shipment, NEVER touches Meta Cloud / Delhivery /
+  Vapi. The only state Phase 10C may mutate is `Payment.payment_url`
+  (plus `Phase10CPaymentLinkRefreshGate` rows for evidence).
+- Defensive safety tests patch `queue_template_message`,
+  `send_freeform_text_message`, `trigger_call_for_lead`, and
+  `create_shipment` and assert `assert_not_called` across the full
+  prepare → approve → execute → rollback lifecycle.
+- Sandbox mode propagates: `is_sandbox_enabled()` → `gate.sandbox=True`.
+
 ### Phase 10B — Targeted Payment Reminder Preparer
 
 Phase 10B is a **stage-aware CLI wrapper** around the existing

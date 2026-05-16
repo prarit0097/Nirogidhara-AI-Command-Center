@@ -5241,3 +5241,97 @@ class RazorpayRealCustomerPaymentOrderControlledMutationRollback(models.Model):
             f"Phase8F-RealCustomerControlledMutationRollback[id={self.pk} "
             f"attempt={self.attempt_id} status={self.status}]"
         )
+
+
+class Phase10CPaymentLinkRefreshGate(models.Model):
+    """Phase 10C — Razorpay payment-link refresh gate.
+
+    Test mode is the default; live mode is gated with the same
+    structured Director directive + UTC window + runtime env flag
+    pattern as Phase 7E-Live-B / 7G-Live. The previous
+    ``Payment.payment_url`` is archived to ``previous_payment_url``
+    on execute so rollback can restore it.
+
+    Phase 10C NEVER sends WhatsApp / makes a call / dispatches a
+    shipment — only Razorpay is touched (and only inside
+    ``execute_gate``).
+    """
+
+    class Mode(models.TextChoices):
+        TEST = "test", "test"
+        LIVE = "live", "live"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "draft"
+        APPROVED = "approved", "approved"
+        EXECUTED = "executed", "executed"
+        ROLLED_BACK = "rolled_back", "rolled_back"
+        CANCELLED = "cancelled", "cancelled"
+        FAILED = "failed", "failed"
+
+    payment = models.ForeignKey(
+        "payments.Payment",
+        on_delete=models.PROTECT,
+        related_name="phase10c_link_refresh_gates",
+    )
+    mode = models.CharField(
+        max_length=8,
+        choices=Mode.choices,
+        default=Mode.TEST,
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    operator_name = models.CharField(max_length=120, blank=True, default="")
+    operator_note = models.TextField(blank=True, default="")
+    intent = models.TextField(blank=True, default="")
+    director_signoff = models.TextField(blank=True, default="")
+    recorded_signoff_window_start_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_end_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_valid = models.BooleanField(default=False)
+    previous_payment_url = models.TextField(blank=True, default="")
+    new_payment_url = models.TextField(blank=True, default="")
+    razorpay_link_id = models.CharField(max_length=120, blank=True, default="")
+    razorpay_short_url = models.TextField(blank=True, default="")
+    force_replace = models.BooleanField(default=False)
+    prepared_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    sandbox = models.BooleanField(default=False)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(
+                fields=("payment", "-created_at"),
+                name="p10c_gate_pay_created_idx",
+            ),
+            models.Index(
+                fields=("status", "-created_at"),
+                name="p10c_gate_status_created_idx",
+            ),
+            models.Index(
+                fields=("mode", "-created_at"),
+                name="p10c_gate_mode_created_idx",
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover
+        return (
+            f"Phase10CPaymentLinkRefreshGate[id={self.pk} "
+            f"payment={self.payment_id} mode={self.mode} "
+            f"status={self.status}]"
+        )

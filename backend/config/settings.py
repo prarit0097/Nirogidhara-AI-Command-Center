@@ -424,6 +424,14 @@ PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED = _razorpay_webhook_bool(
 PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_ENABLED = _razorpay_webhook_bool(
     "PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_ENABLED"
 )
+# `PHASE10C_PAYMENT_LINK_REFRESH_ENABLED` controls the Phase 10C
+# Razorpay payment-link refresh gate's LIVE-mode execute path.
+# Defaults LOCKED OFF. Test-mode execute does NOT require this flag.
+# Live-mode execute additionally requires `--confirm-phase10c-...`
+# + structured Director UTC window + `RAZORPAY_MODE=live` at runtime.
+PHASE10C_PAYMENT_LINK_REFRESH_ENABLED = _razorpay_webhook_bool(
+    "PHASE10C_PAYMENT_LINK_REFRESH_ENABLED"
+)
 # `PHASE8A_PAYMENT_ORDER_MUTATION_SANDBOX_ENABLED` controls the
 # Phase 8A Payment -> Order Mutation Sandbox Gate. Defaults LOCKED
 # OFF. Phase 8A is sandbox / dry-run ONLY: it never mutates real
