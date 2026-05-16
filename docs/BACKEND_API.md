@@ -1272,3 +1272,129 @@ approved,executed,rollback_recorded,rejected,archived,blocked,
 failed}`, each ≤ 64 chars). **Phase 7E-Live-B (real customer
 WhatsApp send) and Phase 7G-Live (real customer courier execution)
 remain NOT approved.**
+
+---
+
+## Phase 9 AI Agent APIs (Tier-2 deterministic agents — recommendations-only)
+
+All Phase 9 endpoints are **read-only** (GET / HEAD / OPTIONS only;
+POST / PATCH / PUT / DELETE return 405). Auth: admin / director /
+superuser only — same permission class as the Phase 6E SaaS admin
+endpoints. None of these endpoints trigger calls, WhatsApp,
+payments, or shipments — they surface the snapshot rows the Celery
+beat schedule (08:00 → 13:00 IST) writes.
+
+### Phase 9A — Customer Success / Reorder Agent
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/customer-success/snapshots/` | Paginated list of `CustomerSuccessSnapshot` rows. |
+| GET | `/api/v1/customer-success/snapshots/latest/` | Latest single snapshot row. |
+| GET | `/api/v1/customer-success/snapshots/<int:pk>/` | Single snapshot detail. |
+| GET | `/api/v1/customer-success/cohorts/` | Aggregate counts: `fresh_delivery`, `early_usage`, `mid_usage`, `reorder_window`, `late_reorder`, `lapsed`, `at_risk_count`, `reorder_candidate_count`. |
+
+### Phase 9B — RTO Prevention Agent
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/rto-prevention/snapshots/` | Paginated `RtoRiskSnapshot` rows for in-flight orders. |
+| GET | `/api/v1/rto-prevention/snapshots/<int:pk>/` | Single risk snapshot detail. |
+| GET | `/api/v1/rto-prevention/cohorts/` | Aggregate counts: `low`, `medium`, `high`, `critical` tier breakdown. |
+
+### Phase 9C — CFO Agent
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/cfo/snapshots/` | Paginated `CfoFinancialSnapshot` rows. |
+| GET | `/api/v1/cfo/snapshots/latest/` | Latest daily financial snapshot. |
+| GET | `/api/v1/cfo/snapshots/<int:pk>/` | Single snapshot detail. |
+
+### Phase 9D — Data Analyst Agent
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/data-analyst/snapshots/` | Paginated `DataAnalystSnapshot` rows. |
+| GET | `/api/v1/data-analyst/snapshots/latest/` | Latest daily funnel snapshot. |
+| GET | `/api/v1/data-analyst/snapshots/<int:pk>/` | Single snapshot detail. |
+
+### Phase 9E — Calling Team Leader Agent
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/calling-team-leader/snapshots/` | Paginated `CallingTeamLeaderSnapshot` rows. |
+| GET | `/api/v1/calling-team-leader/snapshots/latest/` | Latest daily call-performance snapshot. |
+| GET | `/api/v1/calling-team-leader/snapshots/<int:pk>/` | Single snapshot detail. |
+
+### Phase 9F — CEO AI Orchestration (synthesis over 9A-9E)
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/ceo-orchestration/snapshots/` | Paginated `CeoOrchestrationSnapshot` rows. |
+| GET | `/api/v1/ceo-orchestration/snapshots/latest/` | Latest composite snapshot — business health score, tier, top-3 priorities, cross-cutting alerts, agent status summary, deterministic briefing text. |
+| GET | `/api/v1/ceo-orchestration/snapshots/<int:pk>/` | Single composite snapshot detail. |
+
+Phase 9F does NOT touch the legacy `ai_governance.CeoBriefing`
+model or its `ai-daily-briefing-morning` / `ai-daily-briefing-evening`
+beat entries; it ships alongside as a new synthesis layer.
+
+---
+
+## Phase 10 Diagnostics APIs (read-only Director review)
+
+Phase 10 is the first **diagnostics** module under `apps/diagnostics/`
+(service-only Django app — no models, no migrations).
+
+### Phase 10A — Pending Payments Drilldown
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/diagnostics/pending-payments/?include_partial=true|false&limit=N&state=Delhi` | Read-only list of `Payment` rows with status `Pending` (and `Partial` when `include_partial=true`), joined with `Order` + `crm.Customer` + last outbound `WhatsAppMessage` + last `Call`. |
+
+Auth: admin / director / superuser only. `http_method_names = ["get",
+"head", "options"]` — POST / PATCH / PUT / DELETE return 405.
+
+Query params:
+
+| Param | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `include_partial` | bool | `true` | Include `Payment.status = Partial` rows. |
+| `limit` | int | `100` (max `500`) | Cap on result rows. |
+| `state` | str | none | Case-insensitive `Order.state` filter. |
+
+Response shape `{count, filters, results}`. Each row carries:
+`payment_id`, `payment_status`, `amount` (integer rupees),
+`payment_link_url`, `gateway_reference_id`, `created_at`,
+`days_since_creation`, `order_id`, `order_state`, `order_status`,
+`customer_name`, `customer_phone`, `phone_source`,
+`last_whatsapp_at`, `last_call_at`, `last_call_outcome`. Sorted
+oldest-first.
+
+Phase 10A NEVER mutates state, NEVER calls Razorpay / Meta Cloud /
+Delhivery / Vapi, NEVER sends or queues WhatsApp. Action on the
+returned rows still requires the existing Phase 7E-Live-B Director
+directive.
+
+### Phase 10B — Payment Reminder Preparer (CLI-only)
+
+Phase 10B is a stage-aware CLI wrapper around Phase 7E-Live-B; **no
+API endpoint is exposed**. The only entrypoint is:
+
+```bash
+python manage.py prepare_payment_reminder_send <payment_id> [--template-id NAME] [--force] [--operator-note TEXT] [--operator-name NAME] [--json]
+```
+
+The output is a Phase 7E-Live-B gate row in `draft` status; Director
+still has to run the existing `inspect_/approve_/execute_phase7e_live_b_real_customer_gate`
+commands.
+
+### Phase 10C — Razorpay Payment Link Refresh Gate (CLI-only)
+
+Phase 10C is a CLI-only heavyweight gate; **no API endpoint is
+exposed for `Phase10CPaymentLinkRefreshGate`**. The 6 entrypoints
+are `prepare_/approve_/execute_/rollback_/cancel_/inspect_phase10c_payment_link_refresh_gate`.
+
+Phase 10C never sends WhatsApp / makes a call / dispatches a
+shipment — it only mutates `Payment.payment_url` and writes a
+`Phase10CPaymentLinkRefreshGate` row for evidence. The refreshed
+link is delivered to the customer only via the separate Phase
+7E-Live-B `payment_reminder` template send.

@@ -1534,6 +1534,55 @@ Acceptance criteria:
 - Per-tenant settings, integrations, claim vault.
 - Billing.
 
+## ✅ Phase 9 — Tier-2 deterministic AI agents (SHIPPED 2026-05)
+
+Six business-level deterministic daily Celery snapshots, all
+**recommendations-only**. None call WhatsApp / Meta Cloud /
+Delhivery / Razorpay / Vapi or mutate `Order` / `Payment` /
+`Shipment` / `Customer` / `Lead` / `DiscountOfferLog`. Kill switch
+follows the Phase 7E-Live-B Hotfix-1 Postgres-safe pattern. Sandbox
+mode propagates to both `Snapshot.sandbox=True` and
+`AgentRun.sandbox_mode=True`.
+
+| Phase | Agent | Beat cron (IST) | Commit | Status |
+| --- | --- | --- | --- | --- |
+| 9A | Customer Success / Reorder Agent V1 | 08:00 | `c6ee842` | ✅ SHIPPED |
+| 9B | RTO Prevention Agent V1 | 09:00 | `3645740` | ✅ SHIPPED |
+| 9C | CFO Agent V1 | 10:00 | `0686d7f` | ✅ SHIPPED |
+| 9D | Data Analyst Agent V1 | 11:00 | `f4714d5` | ✅ SHIPPED |
+| 9E | Calling Team Leader Agent V1 | 12:00 | `8090f5c` | ✅ SHIPPED |
+| 9F | CEO AI Orchestration V1 (synthesis over 9A-9E) | 13:00 | `039ab1a` | ✅ SHIPPED |
+
+**Tier-2 layer is complete.** Each agent writes one
+`AgentRun` (`model="deterministic_v1"`, `provider="disabled"`,
+`cost_usd=0`, `dry_run=True`) + one summary `AuditEvent` per run.
+
+## ✅ Phase 10 — Operational drilldowns + payment recovery workflow (SHIPPED 2026-05)
+
+| Phase | Module | Commit(s) | Status |
+| --- | --- | --- | --- |
+| 10A | Pending Payments Drilldown (read-only `/api/v1/diagnostics/pending-payments/` + `inspect_pending_payments` CLI + `/operations/pending-payments` page) | `5b33c47` | ✅ SHIPPED |
+| 10A Hotfix-1 | Phone fallback chain Payment → Order → Customer-by-name | `95f9b63` | ✅ SHIPPED |
+| 10B | Targeted Payment Reminder Preparer (CLI-only stage-aware wrapper around Phase 7E-Live-B) | `5f1587c` | ✅ SHIPPED |
+| 10B Hotfix-1 | Auto-create `crm.Customer` for Order-only phone fallback | `cde213f` | ✅ SHIPPED |
+| 10B Hotfix-2 | Fix `template_params` to match approved `nrg_payment_reminder` Meta template (`{customer_name, context}`) | `47ac3ac` | ✅ SHIPPED |
+| 10C | Razorpay Payment Link Refresh Gate (heavyweight CLI workflow; test default, live gated) | `553b1a9` | ✅ SHIPPED |
+| 10C Hotfix-1 | Razorpay webhook reconciliation for refreshed links — persist `Payment.gateway_reference_id` at execute; webhook resolver falls back via `Phase10CPaymentLinkRefreshGate.razorpay_link_id` | `5a0fee2` | ✅ SHIPPED |
+| 7E-Live-B scope fix | Prior executed gate guard corrected | `492efe9` | ✅ SHIPPED |
+
+The Phase 10 family composes into the Director payment-recovery
+workflow: **10A diagnose → 10C refresh stale link → 10B prepare
+reminder → 7E-Live-B Director approve + execute**. None of Phase 10
+sends WhatsApp; only the final 7E-Live-B execute does, inside the
+same structured 15-minute UTC window the Director signed.
+
+## Current test baseline (post-Phase 10B Hotfix-2)
+
+**2466 backend tests + 82 frontend tests.** `makemigrations --check
+--dry-run` reports `No changes detected`; `python manage.py check`
+identifies no issues; frontend lint reports 0 errors / 8 pre-existing
+shadcn warnings; `npm test` runs 82/82; `npm run build` succeeds.
+
 ## Out of scope forever (or until explicitly requested)
 
 - Implementing the full reward formula in JS / pushing it to the frontend.

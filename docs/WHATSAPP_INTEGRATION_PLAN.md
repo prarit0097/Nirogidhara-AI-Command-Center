@@ -2007,3 +2007,133 @@ is still single-tenant. Missing Phase 7 guardrails are documented in
 `docs/FUTURE_BACKEND_PLAN.md`: tenant/organization model, branch model,
 queryset scoping middleware, per-org feature flags, per-org WhatsApp
 settings, and audit org/branch context.
+
+---
+
+## Phase 10B — Payment Reminder Integration (2026-05)
+
+Phase 10B is the Director payment-recovery workflow's
+WhatsApp-template entrypoint. It is a **stage-aware CLI wrapper**
+around Phase 7E-Live-B; it NEVER sends WhatsApp on its own.
+
+### Contract
+
+| Surface | Contract |
+| --- | --- |
+| CLI | `python manage.py prepare_payment_reminder_send <payment_id> [--template-id NAME] [--force] [--operator-note TEXT] [--operator-name NAME] [--json]` |
+| Service | `apps.diagnostics.payment_reminder_service.build_payment_reminder_attempt(*, payment_id, template_id="payment_reminder", force=False, operator_note="", operator_name="phase10b_preparer") -> PreparedReminder` |
+| Output | Creates a `Phase7ELiveBRealCustomerSendGate` row in `draft` status, pre-filled with `template_name="payment_reminder"` and `template_params={"customer_name": ..., "context": ...}`. |
+| Sends? | **NO.** Director must still run the existing `inspect_/approve_/execute_phase7e_live_b_real_customer_gate` commands with full structured UTC window + runtime env flags. |
+
+### Template used
+
+- **Action key:** `whatsapp.payment_reminder`
+- **Template name (Meta):** `nrg_payment_reminder` (APPROVED in the live
+  WABA; locale `hi`, category UTILITY)
+- **Body:** `{{1}} {{2}}` (two positional variables only)
+- **`variables_schema.order`:** `["customer_name", "context"]`
+
+### Rendered body
+
+```
+<customer_name> ji, aapka ₹<amount> ka payment pending hai. Isi link se pay karein: <payment_url>
+```
+
+### Template params built by Phase 10B Hotfix-2 (current)
+
+```python
+template_params = {
+    "customer_name": target_customer_name,
+    "context": (
+        f"ji, aapka ₹{payment.amount} ka payment pending hai. "
+        f"Isi link se pay karein: {payment.payment_url}"
+    ),
+}
+```
+
+The previous three-key dict (`{customer_name, amount, payment_url}`)
+triggered Meta error #132001 because the `{{2}}` slot bound to the
+wrong key. Phase 10B Hotfix-2 collapses amount + URL into the single
+`context` string the template actually renders. If the live WABA
+later adopts a richer `nrg_payment_reminder` template with more
+positional variables, edit this dict AND re-sync the template's
+`variables_schema.order` via `python manage.py sync_whatsapp_templates`.
+
+### Stage-aware validation (matches Phase 10C)
+
+| Stage list | Stages | Behaviour |
+| --- | --- | --- |
+| **ALLOWED** | `Confirmed`, `Order Punched` | Proceed without warning. |
+| **WARN** | `Interested`, `Confirmation Pending` | Proceed only with `--force`; writes `phase10b.payment_reminder.warn_forced` audit row. |
+| **BLOCKED** | `RTO`, `Out for Delivery`, `Cancelled`, `Delivered`, `Dispatched`, `Payment Link Sent`, `New Lead`, `internal_sandbox` | Refuse with exit 1; no gate row created. |
+
+Payment validation: `status ∈ {Pending, Partial}`, `amount > 0`,
+non-empty `payment_url`. Phone validation: resolved phone (via the
+Phase 10A Hotfix-1 fallback chain `Payment.customer_phone →
+Order.phone → Customer.phone by name`) must be non-empty AND not the
+internal-sandbox placeholder `"0000000000"`.
+
+### Phase 10B Hotfix-1 — auto-create `crm.Customer` bridge row
+
+When the phone is resolved via the Order fallback (`phone_source ∈
+{"order", "payment"}`), Phase 10B idempotently calls
+`Customer.objects.get_or_create(phone=...)` so the later
+Phase 7E-Live-B execute path can find the matching CRM record
+(7E-Live-B refuses with `phase7e_live_b_target_customer_not_found`
+when the row is missing). `phone_source == "customer"` skips the
+create (Customer already exists). Unexpected create failures are
+**non-fatal** — Phase 10B still prepares the gate row and the later
+execute remains the final blocker if the bridge row is somehow
+missing. One audit kind: `phase10b.crm_customer.auto_created` (payload
+carries `phone_last4` only, never the full E.164).
+
+### Dependency chain
+
+```
+Phase 10C (refresh stale Payment.payment_url via Razorpay)
+  → Phase 10B (prepare Phase 7E-Live-B gate with new payment_url)
+    → Phase 7E-Live-B (Director approve + execute → live WhatsApp send)
+```
+
+Phase 10B requires `Payment.payment_url` to be non-empty AND
+reachable. If the live link has expired, run Phase 10C
+(`prepare_/approve_/execute_phase10c_payment_link_refresh_gate`)
+first to install a fresh `plink_*` URL on `Payment.payment_url`,
+then run `prepare_payment_reminder_send`.
+
+### What Phase 10B does NOT do
+
+- **NEVER sends WhatsApp.** Only Phase 7E-Live-B execute does, and
+  only after Director approve + structured 15-min UTC window + all env
+  flags.
+- **NEVER mutates** `Payment`, `Order`, `Shipment`, `DiscountOfferLog`,
+  `Lead`, `WhatsAppMessage`, `Call`, `WhatsAppConsent`,
+  `WhatsAppHandoffToCall`, or `WhatsAppLifecycleEvent`.
+- **NEVER calls** Razorpay / Meta Cloud / Delhivery / Vapi.
+- **NEVER edits** `.env.production`.
+
+The defensive safety test patches `queue_template_message`,
+`send_freeform_text_message`, `trigger_call_for_lead`, and
+`create_shipment` and asserts `assert_not_called` across the CLI
+happy path.
+
+---
+
+## Phase 7E-Live-B note — template allowlist + scope fix
+
+The `APPROVED_TEMPLATE_NAMES` allowlist in
+`apps.whatsapp.phase7e_live_b_real_customer_send` includes
+`payment_reminder` (confirmed approved in the live Meta WABA as
+`nrg_payment_reminder` per `DEFAULT_TEMPLATE_NAMES`) alongside
+`confirmation_reminder` / `delivery_reminder` / `rto_rescue` /
+`reorder_reminder` / `usage_explanation`.
+
+**Phase 7E-Live-B scope fix (commit `492efe9`):** the prior
+"already-executed gate exists" guard was corrected to scope by
+target phone + template name rather than globally — so the first real
+customer's reminder for `payment_reminder` no longer falsely trips on
+an unrelated executed gate for a different template / phone. The full
+structured UTC window + runtime env prefix
+(`PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true`) +
+`WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` + explicit
+`--confirm-phase7e-live-b-real-customer-send` flag remain mandatory.

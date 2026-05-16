@@ -14,9 +14,9 @@
 | Author of record | Prarit Sidana (Director, Nirogidhara Private Limited) |
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
-| Completed phase range | Phase 1 → **Test Hygiene Hotfix-1** (Phase 8F framework + Phase 8F-Hotfix-1/-2 shipped; Phase 8F gate id=1 recovered/approved on the VPS, execute NOT run) |
-| Latest pushed commit | `046875d` on `origin/main` (Test Hygiene Hotfix-1 baseline) |
-| Last verified test baseline | **2188 backend tests · 82 frontend tests** · local SQLite and VPS Postgres full-suite runs green · `makemigrations --check` clean · `manage.py check` clean · frontend lint/tests/build green |
+| Completed phase range | Phase 1 → **Phase 10B Hotfix-2** (Tier-2 AI agent layer 9A-9F complete; Phase 10A-10C payment-recovery workflow complete) |
+| Latest pushed commit | `47ac3ac` on `origin/main` (Phase 10B Hotfix-2 — `nrg_payment_reminder` template schema fix) |
+| Last verified test baseline | **2466 backend tests · 82 frontend tests** · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors / 8 pre-existing shadcn warnings · `npm test` 82/82 · `npm run build` green |
 | Next planned phase | **Phase 8F live execute on the VPS — NOT approved.** Requires a separate dated Director directive, all three Phase 8F env flags true, and a 15-minute structured UTC window naming the actual Phase 8F gate id / attempt id / Phase 8E gate id 1 / target Order `NRG-20435` / target Payment `PAY-30125`. Phase 7E-Live-B and Phase 7G-Live remain NOT approved. |
 | Smoke + provider state | All earlier 5E / 5F gates green. Phase 6A → 6M shipped on top: SaaS multi-tenant scaffold (Phase 6A), default-org backfill (6B), org-scoped read APIs (6C), org-aware write paths (6D), SaaS Admin foundation + integration settings metadata (6E), per-org runtime routing preview (6F), controlled runtime routing dry run + AI provider routing preview (6G), controlled runtime live audit gate (6H), single internal live gate simulation (6I), single internal provider test plan (6J), single internal Razorpay test-mode execution gate (6K-A) + manual VPS one-shot pass (6K-B → `pex_8f309650e9644cfaae4418f9` → `order_Sks3KPf0vntKhf`, ₹1.00, rolled back), Razorpay test execution audit review + webhook readiness plan (6L), MCP Gateway foundation (6M-0, dormant), and Razorpay test-mode webhook handler (6M, dormant). Runtime providers still use env/config; `RuntimeKillSwitch` enabled; no MCP tools active; no broad-automation flags flipped. |
 | Live deployment stack | Docker Compose (six containers) on Hostinger VPS, host port 18020 → host Nginx + Certbot SSL |
@@ -1092,7 +1092,60 @@ flowchart LR
 
 ## 26. Final Note
 
-Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 5F-Gate Internal Allowed-Number Cohort Tooling. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
+### Tier-2 AI Agent Layer + Operational Drilldowns (2026-05)
+
+The build timeline now extends through the recommendations-only
+Tier-2 layer and the Director payment-recovery workflow:
+
+**Tier-2 deterministic AI agents (Phase 9A → Phase 9F):**
+
+- Phase 9A — Customer Success / Reorder Agent V1 (08:00 IST)
+- Phase 9B — RTO Prevention Agent V1 (09:00 IST)
+- Phase 9C — CFO Agent V1 (10:00 IST)
+- Phase 9D — Data Analyst Agent V1 (11:00 IST)
+- Phase 9E — Calling Team Leader Agent V1 (12:00 IST)
+- Phase 9F — CEO AI Orchestration V1 (13:00 IST — synthesis layer)
+
+Every agent writes a deterministic daily snapshot + `AgentRun`
+(`model="deterministic_v1"`, `provider="disabled"`, `cost_usd=0`,
+`dry_run=True`) + summary `AuditEvent`. None call WhatsApp / Meta
+Cloud / Delhivery / Razorpay / Vapi or mutate business state. Kill
+switch reuses the Phase 7E-Live-B Hotfix-1 Postgres-safe pattern.
+Sandbox propagates to `Snapshot.sandbox` AND `AgentRun.sandbox_mode`.
+**Beat schedule now carries 8 daily entries** (2 legacy CEO Briefing
+twins + 6 new Tier-2 snapshots).
+
+**Tier-2.5 Operational Drilldowns + Payment Recovery (Phase 10A → 10C):**
+
+- Phase 10A — Pending Payments Drilldown (read-only diagnostic surface; `apps/diagnostics/` Django app, no models)
+  - Hotfix-1: phone fallback chain Payment → Order → Customer-by-name
+- Phase 10B — Targeted Payment Reminder Preparer (CLI-only stage-aware wrapper around Phase 7E-Live-B)
+  - Hotfix-1: auto-create `crm.Customer` for Order-only phone fallback
+  - Hotfix-2: fix `template_params` to match approved `nrg_payment_reminder` Meta template (`{customer_name, context}`)
+- Phase 10C — Razorpay Payment Link Refresh Gate (heavyweight CLI workflow; test default, live gated)
+  - Hotfix-1: Razorpay webhook reconciliation — persist `Payment.gateway_reference_id` at execute
+
+Director payment-recovery workflow: **10A diagnose → 10C refresh
+stale link → 10B prepare reminder → 7E-Live-B Director approve +
+execute**. None of Phase 10 sends WhatsApp; only the final
+7E-Live-B execute does, inside the same structured 15-minute UTC
+window the Director signed.
+
+### Template registry fix (2026-05-16)
+
+Phase 10B Hotfix-2 corrected the `template_params` shape for the
+live Meta-approved `nrg_payment_reminder` template. The template
+body is `{{1}} {{2}}` with `variables_schema.order = ["customer_name",
+"context"]`. The previous dict (`{customer_name, amount, payment_url}`)
+left the `{{2}}` slot bound to the wrong key and triggered Meta error
+#132001 on the VPS. The fix collapses amount + URL into a single
+positional Hindi string under `context`. The full rendered message
+becomes `<customer_name> ji, aapka ₹<amount> ka payment pending hai.
+Isi link se pay karein: <payment_url>`.
+
+---
+
+Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 10B Hotfix-2. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
 
 Whenever the system grows, this blueprint must grow with it: new phases, new flags, new audit kinds, new gaps. The contract is — **`nd.md` is the live source of truth; this blueprint is the Director-facing strategic mirror of it.**
 

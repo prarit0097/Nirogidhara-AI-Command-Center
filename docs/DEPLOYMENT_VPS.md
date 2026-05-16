@@ -1554,6 +1554,138 @@ verification commands above to confirm posture stayed locked.
 
 ---
 
+## 11. Phase 9-10 Production Posture (current baseline as of 2026-05-16)
+
+**Test baseline:** 2466 backend tests + 82 frontend tests. All green
+after Phase 10B Hotfix-2.
+
+**VPS path / compose / env:** `/opt/nirogidhara-command`,
+`docker-compose.prod.yml`, `.env.production` (never committed, never
+edited by automation). Host port `18020 → 80`.
+
+### Beat schedule (8 daily entries as of Phase 9F)
+
+The Celery beat container runs the legacy CEO Briefing twin plus six
+new Tier-2 deterministic snapshots, staggered hourly so the CEO
+orchestrator sees fresh upstream data at 13:00 IST.
+
+| Beat task name | Cron (IST) | Source |
+| --- | --- | --- |
+| `ai-daily-briefing-morning` | morning | legacy `ai_governance.CeoBriefing` |
+| `ai-daily-briefing-evening` | evening | legacy `ai_governance.CeoBriefing` |
+| `customer-success-daily` | 08:00 | `apps.agents.customer_success.tasks` |
+| `rto-prevention-daily` | 09:00 | `apps.agents.rto_prevention.tasks` |
+| `cfo-daily` | 10:00 | `apps.agents.cfo.tasks` |
+| `data-analyst-daily` | 11:00 | `apps.agents.data_analyst.tasks` |
+| `calling-team-leader-daily` | 12:00 | `apps.agents.calling_team_leader.tasks` |
+| `ceo-orchestration-daily` | 13:00 | `apps.agents.ceo_orchestration.tasks` (synthesis over 9A-9E) |
+
+Every task is **recommendations-only**. None send WhatsApp, place
+calls, mutate payments, or dispatch shipments. Each refuses to run
+when the Postgres-safe kill switch is off (Phase 7E-Live-B Hotfix-1
+pattern — `RuntimeKillSwitch.enabled=False` row ordered by `-pk`
+wins). Sandbox mode propagates to both `Snapshot.sandbox=True` AND
+`AgentRun.sandbox_mode=True`.
+
+### Migration chains (latest per app, as of 2026-05-16)
+
+```text
+apps/agents/migrations/
+  0001_initial.py
+  0002_customer_success_snapshot.py
+  0003_rto_risk_snapshot.py
+  0004_cfo_financial_snapshot.py
+  0005_data_analyst_snapshot.py
+  0006_calling_team_leader_snapshot.py
+  0007_ceo_orchestration_snapshot.py
+
+apps/payments/migrations/
+  ...
+  0026_phase10c_payment_link_refresh_gate.py   # Phase 10C
+
+apps/ai_governance/migrations/
+  ...
+  0010_phase9e_add_calling_team_leader_agent.py   # Phase 9E
+
+apps/diagnostics/   # Phase 10A — service-only app, no models
+  (no migrations)
+```
+
+`python manage.py makemigrations --check --dry-run` must report
+`No changes detected` at every commit. If migrations drift after a
+`git pull`, run `docker compose exec backend python manage.py migrate`
+inside the running stack — never edit `.env.production` to bypass.
+
+### Director payment-recovery workflow (Phase 10 family CLI commands)
+
+The Phase 10 chain is `10A diagnose → 10C refresh link → 10B prepare
+reminder → 7E-Live-B Director approve+execute`. None of the Phase 10
+commands send WhatsApp; only the final 7E-Live-B execute does (inside
+the same 15-min UTC window the Director signed).
+
+```bash
+# 10A — read-only drilldown
+python manage.py inspect_pending_payments [--limit N] [--include-partial] [--json]
+
+# 10C — refresh stale Razorpay payment link (test default, live gated)
+python manage.py prepare_phase10c_payment_link_refresh_gate <payment_id> --mode test --operator-name "Prarit Sidana"
+python manage.py prepare_phase10c_payment_link_refresh_gate <payment_id> --mode live --operator-name "Prarit Sidana"   # LIVE
+python manage.py approve_phase10c_payment_link_refresh_gate --gate-id N --operator-name "Prarit Sidana" --intent "..." --director-signoff "BEGIN_UTC=...Z END_UTC=...Z"
+python manage.py execute_phase10c_payment_link_refresh_gate --gate-id N --operator-name "Prarit Sidana" [--confirm-phase10c-payment-link-refresh-live]
+python manage.py rollback_phase10c_payment_link_refresh_gate --gate-id N --operator-name "Prarit Sidana"
+python manage.py cancel_phase10c_payment_link_refresh_gate --gate-id N --operator-name "Prarit Sidana" --reason "..."
+python manage.py inspect_phase10c_payment_link_refresh_gate <gate_id> [--json]
+
+# 10B — prepare Phase 7E-Live-B reminder gate (stage-aware)
+python manage.py prepare_payment_reminder_send <payment_id> [--operator-name "Prarit Sidana"] [--force] [--json]
+
+# 7E-Live-B — Director approve + execute (LIVE WhatsApp send)
+python manage.py inspect_phase7e_live_b_real_customer_gate
+python manage.py approve_phase7e_live_b_real_customer_gate --gate-id N --director-signoff "...BEGIN_UTC=...Z END_UTC=...Z..." --operator-name "..." --confirm-phase7e-live-b-real-customer-send
+python manage.py execute_phase7e_live_b_real_customer_send --gate-id N --director-signoff "<same>" --operator-name "..." --confirm-phase7e-live-b-real-customer-send
+```
+
+### Live-mode env baseline (current `.env.production` posture)
+
+| Setting | Value | Notes |
+| --- | --- | --- |
+| `RAZORPAY_MODE` | `live` | Live keys (`rzp_live_*`); test/live mismatch-safety enforced at Phase 10C execute |
+| `WHATSAPP_PROVIDER` | `meta_cloud` | Live Meta Cloud API |
+| `WHATSAPP_LIVE_META_LIMITED_TEST_MODE` | `true` | Limited allow-list still gates every send |
+| `WHATSAPP_AI_AUTO_REPLY_ENABLED` | `false` | Auto-reply OFF post-soak |
+| `DELHIVERY_MODE` | mock or test | Phase 7G-Live not approved |
+| `VAPI_MODE` | mock | Phase 5D call-handoff stays gated |
+| `PHASE10C_PAYMENT_LINK_REFRESH_ENABLED` | `false` | Runtime env prefix only when running a live refresh |
+| `PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED` | `false` | Runtime env prefix only when executing a live send |
+| `RuntimeKillSwitch` (global) | `enabled=True` | `enabled=False` row ordered by `-pk` always wins |
+
+`.env.production` is NEVER edited by a Phase 10 workflow — live-mode
+flips happen only by prefixing the relevant CLI command with the
+runtime env var (e.g. `PHASE10C_PAYMENT_LINK_REFRESH_ENABLED=true
+RAZORPAY_MODE=live python manage.py execute_phase10c_...`).
+
+### Verification after deploy (Phase 9-10 specific)
+
+```bash
+# Confirm migrations clean
+docker compose exec backend python manage.py makemigrations --check --dry-run
+
+# Confirm beat schedule sees all 8 entries
+docker compose exec beat python manage.py shell -c "from django_celery_beat.models import PeriodicTask; print(PeriodicTask.objects.values_list('name', flat=True))"
+
+# Confirm CEO Orchestration latest snapshot reachable (admin-only)
+curl -sS https://ai.nirogidhara.com/api/v1/ceo-orchestration/snapshots/latest/ -H "Authorization: Bearer <admin token>" | jq
+
+# Read-only diagnostics surface
+curl -sS "https://ai.nirogidhara.com/api/v1/diagnostics/pending-payments/?limit=10" -H "Authorization: Bearer <admin token>" | jq
+
+# Phase 10C / Phase 7E-Live-B are CLI-only (no API endpoints) — verify
+# their CLI registration:
+docker compose exec backend python manage.py help | grep -E "phase10c|payment_reminder|phase7e_live_b"
+```
+
+---
+
 ## 10. What's intentionally NOT here
 
 This deployment scaffold ships through Phase 6N (planning-only). The

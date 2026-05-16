@@ -134,3 +134,58 @@ every Phase 6 → Phase 8F surface. It does not render send, create-payment,
 create-shipment, place-call, run-live, replay-webhook, apply-mutation,
 or activate-connector controls.
 Current total: 23 pages. Sidebar groups include Overview, Sales, Operations, AI Layer, Governance, Insights, Messaging, and System.
+
+## Phase 9-10 Frontend Additions (as of Phase 10B Hotfix-2 baseline)
+
+**Test baseline:** 82 frontend tests (unchanged across Phase 9-10 —
+new UI cards land in `/saas-admin` which is rendered read-only and
+its existing assertions cover the absence of execute / send / mutate
+buttons).
+
+### New `/saas-admin` cards (all read-only, no action buttons)
+
+Each Phase 9 agent surfaces its latest deterministic snapshot in a
+read-only card; none expose a "Run Agent" / "Approve Priority" /
+"Send Briefing" / "Trigger Workflow" / "Apply Recommendation" /
+"Send WhatsApp" / "Send Reminder" button. The CEO Orchestration
+card sits at the **top** of the agent stack because it is the
+synthesis layer over the other five.
+
+| Card | Phase | Source data shape |
+| --- | --- | --- |
+| CEO AI — Daily Director Briefing | 9F | health score / health tier badge / 5-row agent status table / top-3 priorities ordered list / severity-tagged cross-cutting alerts / scrollable deterministic briefing text |
+| Customer Success Agent V1 | 9A | cohort counts (`fresh_delivery` → `lapsed`), reorder candidate count, at-risk count |
+| RTO Prevention Agent V1 | 9B | risk tier breakdown (`low` / `medium` / `high` / `critical`), in-flight order count, top risk reasons |
+| CFO Agent V1 | 9C | revenue 24h / 7d / 30d, paid / pending / partial breakdown, RTO 30d ₹ loss, AOV, customer mix, **plus a "View pending payments →" link to `/operations/pending-payments`** |
+| Data Analyst Agent V1 | 9D | 30-day funnel counts (lead → call → confirmed → delivered → reorder), 4 conversion rates, top-5 states by volume + ₹ revenue, day-of-week distribution |
+| Calling Team Leader Agent V1 | 9E | call counts (24h / 7d / 30d), connection rate, avg duration, outcome breakdown, top-10 per-agent table, transcript backlog |
+
+### New page
+
+| Route | Page | Phase | Notes |
+| --- | --- | --- | --- |
+| `/operations/pending-payments` | `PendingPayments.tsx` | 10A | Read-only Director review surface. Sortable table with columns Order / Customer / Phone / Amount / Status / State / Days Pending / Last WhatsApp / Last Call / Last Call Outcome. Client-side search box (customer / phone / order / state). "Include Partial" toggle (default on). Loading / empty / error states. Permanent "Read-only diagnostic" banner at the bottom. **No "Send Reminder" / "Mark Paid" / "Refund" / "Cancel" / "Trigger Call" buttons exist on the page** (asserted in the safety test). Linked from the CFO `/saas-admin` card. |
+
+Current total: **24 pages** after the Phase 10A page lands.
+
+### What is NOT on the frontend (intentionally)
+
+- Phase 10B (`prepare_payment_reminder_send`) has no UI — CLI-only
+  for the Director SSH workflow.
+- Phase 10C (`prepare_/approve_/execute_/rollback_/cancel_/inspect_phase10c_payment_link_refresh_gate`)
+  has no UI — CLI-only heavyweight gate. The refreshed `Payment.payment_url`
+  surfaces in the existing Phase 10A drilldown table via its
+  `payment_link_url` column.
+- Phase 9F priorities are surfaced **as text** in the
+  `/saas-admin` card; no "Acknowledge" / "Dispatch action" /
+  "Approve priority" button.
+
+### Phase 10B Hotfix-2 — no frontend change
+
+Phase 10B Hotfix-2 fixed only the backend `template_params` dict in
+`apps.diagnostics.payment_reminder_service.build_payment_reminder_attempt`
+to match the live Meta-approved `nrg_payment_reminder` template
+schema (`{{1}} {{2}}` body, `variables_schema.order = ["customer_name",
+"context"]`). No TypeScript types or pages changed; the existing
+Phase 7E-Live-B gate-row consumer renders the corrected
+`template_params` shape verbatim.
