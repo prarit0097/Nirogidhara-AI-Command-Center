@@ -3630,6 +3630,39 @@ BLOCKED (refused with exit 1; no gate row created):
   prepare → approve → execute → rollback lifecycle.
 - Sandbox mode propagates: `is_sandbox_enabled()` → `gate.sandbox=True`.
 
+### Phase 10B Hotfix-2 — `nrg_payment_reminder` template schema
+
+The live Meta-approved `nrg_payment_reminder` template body is
+`{{1}} {{2}}` with `variables_schema.order = ["customer_name",
+"context"]`. Phase 10B Hotfix-2 collapses the previous three-key
+dict (`{customer_name, amount, payment_url}` — which triggered
+Meta error #132001) into the two positional variables the
+template actually renders:
+
+```python
+template_params = {
+    "customer_name": target_customer_name,
+    "context": (
+        f"ji, aapka ₹{payment.amount} ka payment pending hai. "
+        f"Isi link se pay karein: {payment.payment_url}"
+    ),
+}
+```
+
+Rendered output:
+
+```
+<customer_name> ji, aapka ₹<amount> ka payment pending hai. Isi link se pay karein: <payment_url>
+```
+
+If the live WABA later adopts a richer `nrg_payment_reminder`
+template with more positional variables, edit the dict here AND
+re-sync the template's `variables_schema.order` via
+`python manage.py sync_whatsapp_templates`. Phase 10B Hotfix-2
+itself never sends — the Director's existing Phase 7E-Live-B
+approve + execute commands remain the only path to a live
+WhatsApp dispatch.
+
 ### Phase 10B — Targeted Payment Reminder Preparer
 
 Phase 10B is a **stage-aware CLI wrapper** around the existing

@@ -114,8 +114,15 @@ def test_happy_path_confirmed_stage_creates_attempt_no_outbound():
     gate = Phase7ELiveBRealCustomerSendGate.objects.get(pk=prepared.gate_id)
     assert gate.template_name == DEFAULT_TEMPLATE_NAME
     assert gate.status == Phase7ELiveBRealCustomerSendGate.Status.DRAFT
-    assert gate.template_params["payment_url"] == "https://rzp.io/test/p10b"
-    assert gate.template_params["amount"] == "3000"
+    # Phase 10B Hotfix-2: nrg_payment_reminder uses positional vars
+    # {{1}}={{customer_name}}, {{2}}={{context}}. ``context`` is a single
+    # rendered Hindi string carrying amount + payment_url.
+    assert set(gate.template_params.keys()) == {"customer_name", "context"}
+    assert gate.template_params["customer_name"] == "P10B Customer"
+    context = gate.template_params["context"]
+    assert "3000" in context
+    assert "https://rzp.io/test/p10b" in context
+    assert "payment pending" in context
     assert gate.target_customer_name == "P10B Customer"
     assert prepared.phone_source == "payment"
     assert prepared.forced is False

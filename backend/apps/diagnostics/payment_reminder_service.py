@@ -362,8 +362,17 @@ def build_payment_reminder_attempt(
 
     template_params = {
         "customer_name": target_customer_name,
-        "amount": str(payment.amount),
-        "payment_url": (payment.payment_url or "").strip(),
+        # Phase 10B Hotfix-2: nrg_payment_reminder body is "{{1}} {{2}}" with
+        # variables_schema.order = [customer_name, context]. The previous
+        # three-key dict ({customer_name, amount, payment_url}) triggered Meta
+        # error #132001 because the {{2}} positional slot resolved to the
+        # wrong key. Collapsed amount + payment_url into the single ``context``
+        # string the template actually renders.
+        "context": (
+            f"ji, aapka ₹{payment.amount} ka payment pending hai. "
+            f"Isi link se pay karein: "
+            f"{(payment.payment_url or '').strip()}"
+        ),
     }
 
     # Lazy import keeps the static-import surface of this module tiny
