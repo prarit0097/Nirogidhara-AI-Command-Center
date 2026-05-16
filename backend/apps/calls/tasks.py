@@ -17,6 +17,7 @@ from django.conf import settings
 from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 
+from .quality_scorer import score_backlog
 from .transcript_ingestion import ingest_backlog
 
 
@@ -121,4 +122,56 @@ def ingest_transcript_backlog_daily(limit: int = 100) -> dict[str, Any]:
     return summary
 
 
-__all__ = ("ingest_transcript_backlog_daily",)
+@shared_task(name="apps.calls.tasks.score_call_transcripts_daily")
+def score_call_transcripts_daily(limit: int = 100) -> dict[str, Any]:
+    """Phase 11B daily 23:30 IST sweep — score ingested transcripts.
+
+    Runs 30 minutes after `ingest_transcript_backlog_daily` so the
+    newest transcripts get scored the same evening. Refuses (with
+    `call_quality.daily_scoring.blocked` audit) when the runtime
+    kill switch is off or sandbox mode is active. Successful runs
+    (including zero-scored) write
+    `call_quality.daily_scoring.completed`.
+
+    NEVER sends WhatsApp, makes a call, dispatches a shipment, or
+    mutates `Customer` / `Order` / `Payment` / `Lead` / `Shipment` /
+    `DiscountOfferLog`.
+    """
+    if _kill_switch_blocked():
+        write_event(
+            kind="call_quality.daily_scoring.blocked",
+            text="Phase 11B daily scoring blocked: runtime kill switch off.",
+            tone=AuditEvent.Tone.WARNING,
+            payload={"phase": "11B", "reason": "kill_switch_off"},
+        )
+        return {"ok": False, "skipped": True, "reason": "kill_switch_off"}
+
+    if _sandbox_active():
+        write_event(
+            kind="call_quality.daily_scoring.blocked",
+            text="Phase 11B daily scoring blocked: sandbox mode active.",
+            tone=AuditEvent.Tone.INFO,
+            payload={"phase": "11B", "reason": "sandbox_mode"},
+        )
+        return {"ok": False, "skipped": True, "reason": "sandbox_mode"}
+
+    summary = score_backlog(limit=int(limit or 100))
+    audit_payload = {k: v for k, v in summary.items() if k != "results"}
+    audit_payload["phase"] = "11B"
+    write_event(
+        kind="call_quality.daily_scoring.completed",
+        text=(
+            f"Phase 11B daily scoring swept {summary['total']} calls "
+            f"(scored={summary['scored']}, errors={summary['errors']}, "
+            f"avg_composite={summary['avg_composite_score']})."
+        ),
+        tone=AuditEvent.Tone.SUCCESS,
+        payload=audit_payload,
+    )
+    return summary
+
+
+__all__ = (
+    "ingest_transcript_backlog_daily",
+    "score_call_transcripts_daily",
+)

@@ -142,6 +142,81 @@ class CallTranscriptLine(models.Model):
         ordering = ("order",)
 
 
+class CallQualityScore(models.Model):
+    """Phase 11B — Call Quality Scorer V1 (deterministic, no LLM).
+
+    One row per scored Call. The 5 dimension scores + the composite
+    feed the Phase 11C CAIO Audit Agent. ``raw_signals`` holds the
+    diagnostic counters CAIO uses to write its commentary (utterance
+    counts, found keywords, greeting/closing booleans).
+
+    Scoring is recommendations-only — this row NEVER triggers an
+    outbound call, WhatsApp send, payment, or shipment, and NEVER
+    mutates `Customer` / `Order` / `Payment` / `Lead` / `Shipment`.
+    """
+
+    class Flag(models.TextChoices):
+        COMPLIANCE_VIOLATION = "compliance_violation", "compliance_violation"
+        NO_GREETING = "no_greeting", "no_greeting"
+        WEAK_PRODUCT_KNOWLEDGE = (
+            "weak_product_knowledge",
+            "weak_product_knowledge",
+        )
+        NO_OBJECTION_RESPONSE = (
+            "no_objection_response",
+            "no_objection_response",
+        )
+        SHORT_CALL = "short_call", "short_call"
+        ZERO_AGENT_UTTERANCES = (
+            "zero_agent_utterances",
+            "zero_agent_utterances",
+        )
+        NO_TRANSCRIPT = "no_transcript", "no_transcript"
+
+    call = models.OneToOneField(
+        Call,
+        on_delete=models.CASCADE,
+        related_name="quality_score",
+    )
+    scored_at = models.DateTimeField()
+    scoring_version = models.CharField(
+        max_length=40, default="deterministic_v1"
+    )
+    line_count = models.IntegerField(default=0)
+    # Denormalized snapshots so the summary API can group/avg cheaply.
+    agent_label = models.CharField(max_length=80, blank=True, default="")
+    duration_raw = models.CharField(max_length=16, blank=True, default="")
+
+    connection_score = models.IntegerField(default=0)
+    product_knowledge_score = models.IntegerField(default=0)
+    compliance_score = models.IntegerField(default=0)
+    objection_handling_score = models.IntegerField(default=0)
+    tonality_score = models.IntegerField(default=0)
+    composite_score = models.IntegerField(default=0)
+
+    flags = models.JSONField(default=list, blank=True)
+    # Diagnostic data the Phase 11C CAIO Audit Agent will consume —
+    # never customer-facing.
+    raw_signals = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-scored_at",)
+        indexes = [
+            models.Index(fields=["scored_at"], name="p11b_score_scored_at_idx"),
+            models.Index(
+                fields=["composite_score"],
+                name="p11b_score_composite_idx",
+            ),
+            models.Index(
+                fields=["agent_label"],
+                name="p11b_score_agent_label_idx",
+            ),
+        ]
+
+
 class WebhookEvent(models.Model):
     """Idempotency log for Vapi webhooks. Phase 2D.
 

@@ -91,6 +91,19 @@ def build_beat_schedule() -> dict:
     transcript_ingest_limit = getattr(
         settings, "TRANSCRIPT_INGESTION_DAILY_LIMIT", 100
     )
+    # Phase 11B - Call Quality Scorer V1. Runs 30 minutes after the
+    # Phase 11A transcript ingest so newly-ingested transcripts get
+    # scored the same evening. Recommendations-only; never sends
+    # WhatsApp / makes a call / mutates business state.
+    call_quality_hour = getattr(
+        settings, "CALL_QUALITY_SCORING_DAILY_HOUR", 23
+    )
+    call_quality_minute = getattr(
+        settings, "CALL_QUALITY_SCORING_DAILY_MINUTE", 30
+    )
+    call_quality_limit = getattr(
+        settings, "CALL_QUALITY_SCORING_DAILY_LIMIT", 100
+    )
 
     return {
         "ai-daily-briefing-morning": {
@@ -141,6 +154,14 @@ def build_beat_schedule() -> dict:
                 minute=transcript_ingest_minute,
             ),
             "args": (transcript_ingest_limit,),
+        },
+        "call-quality-scoring-daily": {
+            "task": "apps.calls.tasks.score_call_transcripts_daily",
+            "schedule": crontab(
+                hour=call_quality_hour,
+                minute=call_quality_minute,
+            ),
+            "args": (call_quality_limit,),
         },
     }
 

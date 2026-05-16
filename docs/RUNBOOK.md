@@ -3448,6 +3448,119 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 11B — Call Quality Scorer V1
+
+Phase 11B scores ingested call transcripts (the Phase 11A
+`CallTranscriptLine` rows) on 5 deterministic dimensions and
+persists one `CallQualityScore` row per Call. V1 is **pure
+rules-based — no LLM call**. Output feeds the Phase 11C CAIO
+Audit Agent (next planned).
+
+Phase 11B NEVER sends WhatsApp / makes a call / dispatches a
+shipment / mutates `Customer` / `Order` / `Payment` / `Lead` /
+`Shipment` / `DiscountOfferLog`. The only side effects are
+`CallQualityScore` row create/update + `call_quality.*` audit
+rows.
+
+#### Scoring dimensions
+
+| Dimension | Weight | Algorithm |
+| --- | --- | --- |
+| `connection_score` | 0.20 | Missed/Failed=0, Queued/Live=30, Completed=60 +10 per duration tier (>=30s/90s/180s/300s = 70/80/90/100). |
+| `product_knowledge_score` | 0.25 | `min(len(found_keywords) * 12, 100)` against a 24-keyword V1 hardcoded list. Phase 11C will fold in the Claim Vault. |
+| `compliance_score` | 0.25 | `max(100 - len(forbidden_phrases) * 25, 0)` against an 18-phrase blocklist (Master Blueprint §26 hard stops). |
+| `objection_handling_score` | 0.15 | `int(handled / total * 100)` where "handled" = next agent line contains a response keyword. 70 if no objections fired. |
+| `tonality_score` | 0.15 | base 50 + 20 (greeting) + min(positive*5, 20) + 10 (closing). |
+
+Composite = `int(round(0.20*conn + 0.25*prod + 0.25*comp + 0.15*obj + 0.15*tone))`, clamped [0, 100].
+
+#### Forbidden phrases (operator awareness)
+
+Any of these in an agent utterance drops `compliance_score` by 25
+and raises the `compliance_violation` flag:
+
+```
+guarantee, guaranteed, garanti
+cure, theek kar, thik kar, ilaaj
+medicine, dawa, dawai
+doctor, doctor ne kaha, physician
+clinically proven, clinical trial
+100%, 100 percent
+no side effect, koi side effect nahi
+fda, drug
+```
+
+#### Flag codes
+
+- `compliance_violation` — any forbidden phrase landed.
+- `no_greeting` — first agent utterance has no greeting.
+- `weak_product_knowledge` — score < 40.
+- `no_objection_response` — objections fired AND score < 40.
+- `short_call` — Completed call AND duration < 30s.
+- `zero_agent_utterances` — no agent lines in transcript.
+- `no_transcript` — call has no ingested transcript.
+
+#### Read-only inspection
+
+```bash
+python manage.py inspect_quality_scoring_backlog [--window-days N=30] [--json]
+```
+
+Reports `total_scored` / `backlog_count` / `avg_composite` /
+`low_compliance_count` / top-5 flag codes / per-agent averages
+(call_count, avg_composite, avg_compliance). Read-only.
+
+#### On-demand scoring (one call or batch)
+
+```bash
+# One specific call.
+python manage.py score_call_transcripts --call-id <CALL_ID> [--dry-run] [--json]
+
+# Backlog mode (default up to 50 calls).
+python manage.py score_call_transcripts [--limit N=50] [--dry-run] [--json]
+```
+
+`--dry-run` computes scores but persists no rows. `--call-id`
+overrides backlog mode. Idempotent via OneToOneField + `update_or_create`.
+
+#### Daily Celery sweep
+
+Beat entry `call-quality-scoring-daily` runs
+`apps.calls.tasks.score_call_transcripts_daily(limit=100)` at
+**23:30 IST** (30 min after Phase 11A's 23:00 transcript ingest).
+Env-shiftable via `CALL_QUALITY_SCORING_DAILY_HOUR=23` /
+`_MINUTE=30` / `_LIMIT=100`.
+
+Refusal cases (written as `call_quality.daily_scoring.blocked`):
+
+| Guard | Refusal reason |
+| --- | --- |
+| Postgres-safe `RuntimeKillSwitch` disabled | `kill_switch_off` |
+| `apps.ai_governance.sandbox.is_sandbox_enabled()` | `sandbox_mode` |
+
+Success writes `call_quality.daily_scoring.completed` with the
+rolling counts.
+
+#### Audit kinds
+
+- `call_quality.scored` — per-call success. Payload carries
+  `agent_label_suffix` (last-20 chars only — no full PII).
+- `call_quality.daily_scoring.completed` — per-sweep success.
+- `call_quality.daily_scoring.blocked` — per-sweep refusal.
+
+#### Admin-only read API
+
+```text
+GET /api/v1/calls/quality-scores/?limit=N        # capped at 200
+GET /api/v1/calls/quality-scores/<call_id>/       # full raw_signals
+GET /api/v1/calls/quality-scores/summary/?window_days=N
+```
+
+The summary endpoint is shaped for the Phase 11C CAIO Audit
+Agent — `totalScored`, `avgComposite`, `lowComplianceCount`,
+`topFlags`, `avgByAgent`. Admin / director / owner / superuser
+only. POST / PATCH / DELETE → 405.
+
 ### Phase 11A — Transcript Ingestion Pipeline V1
 
 Phase 11A pulls Vapi call transcripts via the REST API and persists

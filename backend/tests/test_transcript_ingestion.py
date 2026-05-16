@@ -619,4 +619,8 @@ def test_beat_schedule_has_transcript_ingestion_daily():
         entry["task"]
         == "apps.calls.tasks.ingest_transcript_backlog_daily"
     )
-    assert len(schedule) == 9
+    # Phase 11A added the 9th entry; Phase 11B raised this to 10 with
+    # ``call-quality-scoring-daily``. Assert ≥ 9 so adding future
+    # daily entries doesn't break the Phase 11A regression suite.
+    assert len(schedule) >= 9
+    assert "call-quality-scoring-daily" in schedule

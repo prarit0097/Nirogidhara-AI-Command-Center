@@ -11,7 +11,8 @@ from apps.crm.models import Lead
 
 from . import services
 from .integrations.vapi_client import VapiClientError
-from .models import ActiveCall, Call, CallTranscriptLine
+from .models import ActiveCall, Call, CallQualityScore, CallTranscriptLine
+from .quality_scorer import get_scoring_overview
 from .serializers import (
     ActiveCallSerializer,
     CallSerializer,
@@ -208,5 +209,102 @@ class CallTranscriptDetailView(APIView):
                 ),
                 "transcriptLineCount": int(call.transcript_line_count or 0),
                 "lines": TranscriptLineSerializer(lines, many=True).data,
+            }
+        )
+
+
+# ----- Phase 11B — Call quality scoring read-only views -----
+
+
+def _serialize_quality_score(row: CallQualityScore) -> dict:
+    return {
+        "callId": row.call_id,
+        "scoredAt": row.scored_at.isoformat() if row.scored_at else None,
+        "scoringVersion": row.scoring_version,
+        "lineCount": int(row.line_count or 0),
+        "agentLabel": row.agent_label or "",
+        "durationRaw": row.duration_raw or "",
+        "connectionScore": int(row.connection_score or 0),
+        "productKnowledgeScore": int(row.product_knowledge_score or 0),
+        "complianceScore": int(row.compliance_score or 0),
+        "objectionHandlingScore": int(row.objection_handling_score or 0),
+        "tonalityScore": int(row.tonality_score or 0),
+        "compositeScore": int(row.composite_score or 0),
+        "flags": list(row.flags or []),
+        "rawSignals": dict(row.raw_signals or {}),
+    }
+
+
+class CallQualityScoresListView(APIView):
+    """``GET /api/v1/calls/quality-scores/`` — paginated list. Admin+ only."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 50)
+        except (TypeError, ValueError):
+            limit = 50
+        limit = max(1, min(200, limit))
+        rows = list(CallQualityScore.objects.all()[:limit])
+        return Response(
+            {
+                "count": len(rows),
+                "results": [_serialize_quality_score(r) for r in rows],
+            }
+        )
+
+
+class CallQualityScoreDetailView(APIView):
+    """``GET /api/v1/calls/quality-scores/<call_id>/`` — single score detail."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, _request, call_id: str):
+        row = CallQualityScore.objects.filter(call_id=call_id).first()
+        if row is None:
+            raise NotFound(f"Quality score for call {call_id} not found")
+        return Response(_serialize_quality_score(row))
+
+
+class CallQualityScoresSummaryView(APIView):
+    """``GET /api/v1/calls/quality-scores/summary/?window_days=N``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request):
+        try:
+            window_days = int(request.query_params.get("window_days") or 30)
+        except (TypeError, ValueError):
+            window_days = 30
+        window_days = max(1, min(180, window_days))
+        overview = get_scoring_overview(window_days=window_days)
+        # Convert datetime + snake_case for JSON shape consumers.
+        avg_by_agent = [
+            {
+                "agentLabel": row["agent_label"],
+                "callCount": row["call_count"],
+                "avgComposite": row["avg_composite"],
+                "avgCompliance": row["avg_compliance"],
+            }
+            for row in overview["avg_by_agent"]
+        ]
+        top_flags = [
+            {"flagCode": row["flag_code"], "count": row["count"]}
+            for row in overview["top_flags"]
+        ]
+        return Response(
+            {
+                "now": overview["now"].isoformat(),
+                "windowDays": overview["window_days"],
+                "totalScored": overview["total_scored"],
+                "backlogCount": overview["backlog_count"],
+                "avgComposite": overview["avg_composite"],
+                "lowComplianceCount": overview["low_compliance_count"],
+                "topFlags": top_flags,
+                "avgByAgent": avg_by_agent,
             }
         )
