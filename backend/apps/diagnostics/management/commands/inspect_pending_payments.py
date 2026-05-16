@@ -27,7 +27,7 @@ COLUMNS = (
     ("order_state", "State"),
     ("order_status", "Stage"),
     ("customer_name", "Customer"),
-    ("customer_phone", "Phone"),
+    ("__phone_with_source", "Phone"),
     ("last_whatsapp_at", "Last WA"),
     ("last_call_at", "Last Call"),
     ("last_call_outcome", "Call Status"),
@@ -40,6 +40,14 @@ def _format_cell(value: Any) -> str:
     if hasattr(value, "strftime"):
         return value.strftime("%Y-%m-%d %H:%M")
     return str(value)
+
+
+def _format_phone_with_source(row: dict[str, Any]) -> str:
+    phone = row.get("customer_phone")
+    source = row.get("phone_source") or "none"
+    if not phone:
+        return "—"
+    return f"{phone} ({source})"
 
 
 class Command(BaseCommand):
@@ -87,9 +95,13 @@ class Command(BaseCommand):
         self.stdout.write(header)
         self.stdout.write("-" * min(len(header), 200))
         for row in rows:
-            self.stdout.write(
-                " | ".join(_format_cell(row.get(key)) for key, _ in COLUMNS)
-            )
+            cells = []
+            for key, _ in COLUMNS:
+                if key == "__phone_with_source":
+                    cells.append(_format_phone_with_source(row))
+                else:
+                    cells.append(_format_cell(row.get(key)))
+            self.stdout.write(" | ".join(cells))
         self.stdout.write(
             f"\nTotal: {len(rows)} pending payment(s) (read-only)."
         )

@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/services/api";
 import type {
+  PendingPaymentPhoneSource,
   PendingPaymentRow,
   PendingPaymentsDrilldownResponse,
 } from "@/types/domain";
+
+function formatPhoneSourceCaption(
+  source: PendingPaymentPhoneSource | undefined,
+): string {
+  if (!source || source === "none") return "";
+  if (source === "payment") return "from payment";
+  if (source === "order") return "from order";
+  if (source === "customer") return "from customer";
+  return `from ${source}`;
+}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -61,7 +72,7 @@ export default function PendingPaymentsPage() {
     return data.results.filter((row) => {
       const fields = [
         row.customer_name,
-        row.customer_phone,
+        row.customer_phone ?? "",
         row.order_id,
         row.payment_id,
         row.order_state ?? "",
@@ -165,7 +176,24 @@ export default function PendingPaymentsPage() {
                 >
                   <td className="px-4 py-2">{row.order_id}</td>
                   <td className="px-4 py-2">{row.customer_name}</td>
-                  <td className="px-4 py-2">{row.customer_phone}</td>
+                  <td className="px-4 py-2">
+                    {row.customer_phone ? (
+                      <div className="flex flex-col">
+                        <span>{row.customer_phone}</span>
+                        {row.phone_source &&
+                          row.phone_source !== "none" && (
+                            <span
+                              className="text-[10px] text-muted-foreground"
+                              data-testid="pending-payments-phone-source"
+                            >
+                              {formatPhoneSourceCaption(row.phone_source)}
+                            </span>
+                          )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2">{formatAmount(row.amount)}</td>
                   <td className="px-4 py-2">{row.payment_status}</td>
                   <td className="px-4 py-2">{row.order_state ?? "—"}</td>

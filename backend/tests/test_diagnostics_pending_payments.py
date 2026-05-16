@@ -70,16 +70,20 @@ def _make_payment(
     *,
     payment_id: str,
     order_id: str,
-    phone: str,
+    phone: str = "",
+    customer_name: str | None = None,
     status: str = Payment.Status.PENDING.value,
     amount: int = 3000,
     payment_url: str = "https://rzp.io/test/pending-001",
     created_offset_days: int = 1,
 ) -> Payment:
+    label = customer_name or (
+        f"Customer {phone[-4:]}" if phone else "Customer"
+    )
     payment = Payment.objects.create(
         id=payment_id,
         order_id=order_id,
-        customer=f"Customer {phone[-4:]}",
+        customer=label,
         customer_phone=phone,
         amount=amount,
         status=status,
@@ -470,3 +474,172 @@ def test_diagnostics_does_not_send_or_mutate(auth_client, admin_user):
 
 def test_service_default_limit_constant_is_safe():
     assert DEFAULT_LIMIT == 100
+
+
+# ---------------------------------------------------------------------------
+# Phase 10A Hotfix-1: phone fallback chain
+# ---------------------------------------------------------------------------
+
+
+def test_phone_source_is_payment_when_payment_phone_present():
+    _make_order(order_id="NRG-FB-P", phone="+919999991100")
+    _make_payment(
+        payment_id="PAY-FB-P",
+        order_id="NRG-FB-P",
+        phone="+919999991100",
+    )
+    rows = list_pending_payments_drilldown()
+    assert rows[0]["customer_phone"] == "+919999991100"
+    assert rows[0]["phone_source"] == "payment"
+
+
+def test_phone_source_falls_back_to_order_phone_when_payment_phone_empty():
+    _make_order(order_id="NRG-FB-O", phone="+919999991200")
+    _make_payment(
+        payment_id="PAY-FB-O",
+        order_id="NRG-FB-O",
+        phone="",  # empty payment_phone forces fallback
+    )
+    rows = list_pending_payments_drilldown()
+    assert rows[0]["customer_phone"] == "+919999991200"
+    assert rows[0]["phone_source"] == "order"
+
+
+def test_phone_source_falls_back_to_customer_phone_via_name_match():
+    # Order has no phone, Payment has no phone, but the customer
+    # name resolves to a crm.Customer record that does have a phone.
+    Customer.objects.create(
+        id="C-FB-CUST",
+        name="Fallback Customer",
+        phone="+919999991300",
+        state="Delhi",
+        city="Delhi",
+        language="Hindi",
+        product_interest="Nirogidhara",
+    )
+    _make_order(order_id="NRG-FB-C", phone="")
+    _make_payment(
+        payment_id="PAY-FB-C",
+        order_id="NRG-FB-C",
+        phone="",
+        customer_name="Fallback Customer",
+    )
+    rows = list_pending_payments_drilldown()
+    assert rows[0]["customer_phone"] == "+919999991300"
+    assert rows[0]["phone_source"] == "customer"
+
+
+def test_phone_source_none_when_no_chain_match():
+    _make_order(order_id="NRG-FB-N", phone="")
+    _make_payment(
+        payment_id="PAY-FB-N",
+        order_id="NRG-FB-N",
+        phone="",
+        customer_name="Ghost Customer",
+    )
+    rows = list_pending_payments_drilldown()
+    assert rows[0]["customer_phone"] is None
+    assert rows[0]["phone_source"] == "none"
+
+
+def test_phone_source_communication_lookup_uses_resolved_phone():
+    # Payment.customer_phone is empty; Order.phone supplies the phone.
+    # The last-call lookup must still find the call against that phone.
+    _make_order(order_id="NRG-FB-COMM", phone="+919999991400")
+    _make_payment(
+        payment_id="PAY-FB-COMM",
+        order_id="NRG-FB-COMM",
+        phone="",
+    )
+    _make_call(
+        call_id="CL-FB-COMM",
+        phone="+919999991400",
+        status=Call.Status.COMPLETED.value,
+        created_offset_hours=3,
+    )
+    rows = list_pending_payments_drilldown()
+    assert rows[0]["phone_source"] == "order"
+    assert rows[0]["last_call_at"] is not None
+    assert rows[0]["last_call_outcome"] == Call.Status.COMPLETED.value
+
+
+def test_api_response_includes_phone_source(auth_client, admin_user):
+    _make_order(order_id="NRG-FB-API", phone="+919999991500")
+    _make_payment(
+        payment_id="PAY-FB-API",
+        order_id="NRG-FB-API",
+        phone="",  # forces order fallback
+    )
+    client = auth_client(admin_user)
+    response = client.get(reverse("diagnostics:pending-payments"))
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    row = payload["results"][0]
+    assert row["customer_phone"] == "+919999991500"
+    assert row["phone_source"] == "order"
+
+
+def test_cli_command_shows_phone_source_caption():
+    _make_order(order_id="NRG-FB-CLI", phone="+919999991600")
+    _make_payment(
+        payment_id="PAY-FB-CLI",
+        order_id="NRG-FB-CLI",
+        phone="",
+    )
+    out = StringIO()
+    call_command("inspect_pending_payments", stdout=out)
+    output = out.getvalue()
+    assert "+919999991600 (order)" in output
+
+
+def test_no_outbound_when_phone_fallback_active(
+    auth_client, admin_user
+):
+    Customer.objects.create(
+        id="C-FB-SAFE",
+        name="Fallback Safe",
+        phone="+919999991700",
+        state="Delhi",
+        city="Delhi",
+        language="Hindi",
+        product_interest="Nirogidhara",
+    )
+    _make_order(order_id="NRG-FB-SAFE", phone="")
+    _make_payment(
+        payment_id="PAY-FB-SAFE",
+        order_id="NRG-FB-SAFE",
+        phone="",
+        customer_name="Fallback Safe",
+    )
+    pre_payments = Payment.objects.count()
+    pre_orders = Order.objects.count()
+    pre_customers = Customer.objects.count()
+    with (
+        mock.patch(
+            "apps.whatsapp.services.queue_template_message"
+        ) as wa_queue,
+        mock.patch(
+            "apps.whatsapp.services.send_freeform_text_message"
+        ) as wa_freeform,
+        mock.patch(
+            "apps.calls.services.trigger_call_for_lead"
+        ) as call_trigger,
+        mock.patch(
+            "apps.shipments.services.create_shipment"
+        ) as ship_create,
+    ):
+        client = auth_client(admin_user)
+        response = client.get(reverse("diagnostics:pending-payments"))
+        assert response.status_code == 200
+        out = StringIO()
+        call_command("inspect_pending_payments", stdout=out)
+    wa_queue.assert_not_called()
+    wa_freeform.assert_not_called()
+    call_trigger.assert_not_called()
+    ship_create.assert_not_called()
+    assert Payment.objects.count() == pre_payments
+    assert Order.objects.count() == pre_orders
+    assert Customer.objects.count() == pre_customers
+    payload = response.json()
+    assert payload["results"][0]["phone_source"] == "customer"

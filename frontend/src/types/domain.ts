@@ -5533,6 +5533,12 @@ export interface CeoOrchestrationSnapshotsResponse {
 
 // ---------- Phase 10A — Diagnostics: Pending Payments Drilldown ----------
 
+export type PendingPaymentPhoneSource =
+  | "payment"
+  | "order"
+  | "customer"
+  | "none";
+
 export interface PendingPaymentRow {
   payment_id: string;
   payment_status: "Pending" | "Partial" | string;
@@ -5545,7 +5551,8 @@ export interface PendingPaymentRow {
   order_state: string | null;
   order_status: string | null;
   customer_name: string;
-  customer_phone: string;
+  customer_phone: string | null;
+  phone_source: PendingPaymentPhoneSource;
   last_whatsapp_at: string | null;
   last_call_at: string | null;
   last_call_outcome: string | null;

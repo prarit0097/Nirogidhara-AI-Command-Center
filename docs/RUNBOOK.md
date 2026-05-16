@@ -3477,6 +3477,28 @@ Field availability (discovered before coding):
 - `WhatsAppMessage.direction` is the inbound/outbound/system enum;
   the last-WhatsApp lookup filters to `OUTBOUND` only.
 
+Phone-source fallback (Phase 10A Hotfix-1):
+- `Payment.customer_phone` is empty for most real pending payments
+  (the VPS smoke test surfaced this — only the test sandbox payment
+  carried a phone). The drilldown therefore walks a fallback chain
+  per row:
+  1. `Payment.customer_phone` → `phone_source = "payment"`
+  2. `Order.phone` → `phone_source = "order"`
+  3. `crm.Customer.phone` (resolved by phone-or-name match) →
+     `phone_source = "customer"`
+  4. nothing found → `customer_phone = null`,
+     `phone_source = "none"`
+- The first non-empty value wins; empty string and `None` are
+  treated identically as missing.
+- Each row carries a `phone_source` field so the operator can see
+  which join surfaced the number. The CLI prints
+  ``+91XXXXXXXXXX (order)`` etc.; the frontend renders a small gray
+  caption ``from order`` / ``from customer`` under the phone cell.
+- The last-Call lookup uses the resolved phone (not just
+  `Payment.customer_phone`); the last-WhatsApp lookup uses the
+  resolved `crm.Customer`. Both lookups are batched per resolved
+  customer / phone to keep the join cost flat.
+
 Safety contract:
 - The module NEVER imports / calls
   `apps.whatsapp.services.queue_template_message`,
