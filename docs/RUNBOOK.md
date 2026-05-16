@@ -3440,6 +3440,128 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 10B — Targeted Payment Reminder Preparer
+
+Phase 10B is a **stage-aware CLI wrapper** around the existing
+Phase 7E-Live-B real-customer WhatsApp gate. It NEVER sends. It
+creates a `Phase7ELiveBRealCustomerSendGate` row in `draft` status
+pre-filled with payment-reminder template params; Director still
+runs the existing approve + execute commands (full structured UTC
+window + runtime env flags) to send.
+
+Full Director payment-recovery playbook:
+
+1. **Inspect the pending-payment cohort.**
+   ```
+   python manage.py inspect_pending_payments
+   ```
+   Surfaces every pending / partial payment with phone (via the
+   Phase 10A Hotfix-1 fallback chain), days-pending, and last-comm
+   metadata. Pick the candidate `payment_id`.
+
+2. **Prepare the Phase 7E-Live-B gate.**
+   ```
+   python manage.py prepare_payment_reminder_send PAY-30125
+   ```
+   Stage-aware validation runs here:
+   - **ALLOWED stages** (`Confirmed`, `Order Punched`) — proceeds
+     silently.
+   - **WARN stages** (`Interested`, `Confirmation Pending`) —
+     refuses unless `--force` is passed. With `--force` a
+     `phase10b.payment_reminder.warn_forced` audit row is written.
+   - **BLOCKED stages** (`RTO`, `Out for Delivery`, `Cancelled`,
+     `Delivered`, `Dispatched`, `Payment Link Sent`, `New Lead`,
+     `internal_sandbox`) — refuses with exit 1; no gate row is
+     created.
+   - Payment must be `Pending` or `Partial`, amount > 0,
+     `payment_url` non-empty.
+   - Phone must resolve via Payment → Order → Customer fallback
+     AND not be the internal sandbox placeholder `"0000000000"`.
+   - On success: prints the new Phase 7E-Live-B gate id and the
+     exact next commands. The `phase10b.payment_reminder.prepared`
+     audit row records the prepare event with the gate id, stage,
+     and operator note.
+
+3. **Inspect the prepared gate.**
+   ```
+   python manage.py inspect_phase7e_live_b_real_customer_gate
+   ```
+   Verifies the gate is in `draft` status and that every blocker
+   (env flag off, kill switch, etc.) is visible before approval.
+
+4. **Approve with structured UTC window + Director signoff.**
+   ```
+   PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true \
+   python manage.py approve_phase7e_live_b_real_customer_gate \
+     --gate-id <GATE_ID> \
+     --director-signoff 'phase7e_live_b_gate_id_<GATE_ID> target_phone_<LAST4> template_payment_reminder phase7eLiveBApproval BEGIN_UTC=<ISO> END_UTC=<ISO>' \
+     --operator-name '<DIRECTOR_NAME>' \
+     --confirm-phase7e-live-b-real-customer-send
+   ```
+   Director signoff must literally contain all four phrases plus
+   structured `BEGIN_UTC=` / `END_UTC=` markers; 15-minute cap;
+   now-inside-window required.
+
+5. **Execute the one-shot send.**
+   ```
+   PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true \
+   python manage.py execute_phase7e_live_b_real_customer_send \
+     --gate-id <GATE_ID> \
+     --director-signoff '<SAME STRUCTURED SIGNOFF>' \
+     --operator-name '<DIRECTOR_NAME>' \
+     --confirm-phase7e-live-b-real-customer-send
+   ```
+   Execute is the only step that actually queues the WhatsApp
+   message. It calls `queue_template_message(...,
+   override_limited_test_mode=True)` for this one CLI path only;
+   consent / approved-template / Claim Vault / approval matrix /
+   CAIO / idempotency / audit gates all stay in force. No rollback
+   exists because WhatsApp cannot be unsent.
+
+Phase 7E-Live-B CLI signatures (for reference):
+
+```
+inspect_phase7e_live_b_real_customer_gate [--no-audit] [--json]
+prepare_phase7e_live_b_real_customer_gate
+    --target-phone +91XXXXXXXXXX
+    --target-customer-name "..."
+    --template-name payment_reminder
+    [--template-params '{"customer_name": "...", ...}']
+    --operator-name "..."
+    [--json]
+approve_phase7e_live_b_real_customer_gate
+    --gate-id <ID>
+    --director-signoff "..."
+    --operator-name "..."
+    --confirm-phase7e-live-b-real-customer-send
+    [--json]
+execute_phase7e_live_b_real_customer_send
+    --gate-id <ID>
+    --director-signoff "..."
+    --operator-name "..."
+    --confirm-phase7e-live-b-real-customer-send
+    [--json]
+cancel_phase7e_live_b_real_customer_gate
+    --gate-id <ID>
+    --reason "..."
+    --operator-name "..."
+    [--json]
+```
+
+Safety contract for Phase 10B specifically:
+- NEVER calls `apps.whatsapp.services.queue_template_message`,
+  `apps.whatsapp.services.send_freeform_text_message`,
+  `apps.calls.services.trigger_call_for_lead`,
+  `apps.shipments.services.create_shipment`, Razorpay, Meta Cloud,
+  or Vapi. The defensive safety test patches all four and runs the
+  CLI happy path; assert_not_called everywhere.
+- NEVER mutates `Payment` / `Order` / `Customer` / `Lead` /
+  `Shipment` rows (asserted with before/after counts).
+- The ONE side-effect is the Phase 7E-Live-B gate row creation.
+  Phase 7E-Live-B itself is a *governance* table — its `draft`
+  status carries no live-customer action.
+- Stage-aware refusals never create a gate row.
+
 ### Phase 10A — Pending Payments Drilldown (Diagnostics V1)
 
 Phase 10A is the first module under the new `apps/diagnostics/`
