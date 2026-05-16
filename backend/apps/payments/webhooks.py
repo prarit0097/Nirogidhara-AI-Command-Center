@@ -35,7 +35,7 @@ from apps.audit.signals import write_event
 from apps.orders.models import Order
 
 from .integrations.razorpay_client import verify_webhook_signature
-from .models import Payment, WebhookEvent
+from .models import Payment, Phase10CPaymentLinkRefreshGate, WebhookEvent
 
 EventHandler = Callable[[dict[str, Any], Payment | None, Order | None], None]
 
@@ -105,6 +105,18 @@ def _resolve_targets(event: dict[str, Any]) -> tuple[Payment | None, Order | Non
     payment: Payment | None = None
     if plink_id:
         payment = Payment.objects.filter(gateway_reference_id=plink_id).first()
+        if payment is None:
+            phase10c_gate = (
+                Phase10CPaymentLinkRefreshGate.objects.filter(
+                    razorpay_link_id=plink_id,
+                    status=Phase10CPaymentLinkRefreshGate.Status.EXECUTED,
+                )
+                .select_related("payment")
+                .order_by("-executed_at", "-pk")
+                .first()
+            )
+            if phase10c_gate is not None:
+                payment = phase10c_gate.payment
 
     order: Order | None = None
     if payment is not None:
@@ -115,11 +127,23 @@ def _resolve_targets(event: dict[str, Any]) -> tuple[Payment | None, Order | Non
 # ----- Per-event handlers -----
 
 
+def _extract_plink_id(event: dict[str, Any]) -> str:
+    payload = event.get("payload", {}) or {}
+    plink_entity = (payload.get("payment_link") or {}).get("entity") or {}
+    payment_entity = (payload.get("payment") or {}).get("entity") or {}
+    return plink_entity.get("id") or payment_entity.get("payment_link_id") or ""
+
+
 def _handle_paid(event, payment, order):
     if payment is None:
         return
+    plink_id = _extract_plink_id(event)
+    update_fields = ["status", "updated_at"]
     payment.status = Payment.Status.PAID
-    payment.save(update_fields=["status", "updated_at"])
+    if plink_id and not (payment.gateway_reference_id or "").strip():
+        payment.gateway_reference_id = plink_id
+        update_fields.append("gateway_reference_id")
+    payment.save(update_fields=update_fields)
     if order is not None:
         order.payment_status = Order.PaymentStatus.PAID
         order.advance_paid = True
@@ -138,6 +162,7 @@ def _handle_paid(event, payment, order):
             "order_id": payment.order_id,
             "gateway": payment.gateway,
             "via": "webhook",
+            "gateway_reference_id": payment.gateway_reference_id,
         },
     )
 

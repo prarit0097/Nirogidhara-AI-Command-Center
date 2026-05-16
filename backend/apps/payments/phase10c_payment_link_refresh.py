@@ -3,16 +3,18 @@
 Test mode is the default; live mode is gated with the same structured
 Director directive + UTC window + runtime env flag pattern as Phase
 7E-Live-B / 7G-Live. Phase 10C is the only path to write
-``Payment.payment_url`` from a fresh Razorpay link; the previous URL
-is archived to ``Phase10CPaymentLinkRefreshGate.previous_payment_url``
-so rollback can restore it.
+``Payment.payment_url`` and ``Payment.gateway_reference_id`` from a fresh
+Razorpay link; the previous URL is archived to
+``Phase10CPaymentLinkRefreshGate.previous_payment_url`` so rollback can
+restore it.
 
 Phase 10C NEVER:
 - Sends WhatsApp / freeform messages (Phase 7E-Live-B owns delivery).
 - Makes a call.
 - Mutates ``Order`` state or any other business row beyond
-  ``Payment.payment_url`` (asserted in tests by checking row counts +
-  patching the outbound funcs).
+  ``Payment.payment_url`` / ``Payment.gateway_reference_id`` for webhook
+  reconciliation (asserted in tests by checking row counts + patching the
+  outbound funcs).
 """
 from __future__ import annotations
 
@@ -576,12 +578,33 @@ def execute_gate(
             gate.executed_at = timezone.now()
             gate.metadata = {
                 **(gate.metadata or {}),
+                "previous_gateway_reference_id": (
+                    payment.gateway_reference_id or ""
+                ),
                 "razorpay_status": result.status,
                 "executed_runtime_mode": _runtime_razorpay_mode(),
             }
             gate.save()
+            raw_response = payment.raw_response
+            if not isinstance(raw_response, dict):
+                raw_response = {}
+            raw_response["phase10c_payment_link_refresh"] = {
+                "gate_id": gate.pk,
+                "razorpay_link_id": result.plink_id,
+                "razorpay_short_url": result.short_url,
+                "razorpay_status": result.status,
+            }
             payment.payment_url = result.short_url
-            payment.save(update_fields=["payment_url", "updated_at"])
+            payment.gateway_reference_id = result.plink_id
+            payment.raw_response = raw_response
+            payment.save(
+                update_fields=[
+                    "payment_url",
+                    "gateway_reference_id",
+                    "raw_response",
+                    "updated_at",
+                ]
+            )
     except RazorpayClientError as exc:
         gate.status = Phase10CPaymentLinkRefreshGate.Status.FAILED
         gate.metadata = {
@@ -682,7 +705,16 @@ def rollback_gate(
     payment = gate.payment
     with transaction.atomic():
         payment.payment_url = gate.previous_payment_url or ""
-        payment.save(update_fields=["payment_url", "updated_at"])
+        payment.gateway_reference_id = (
+            (gate.metadata or {}).get("previous_gateway_reference_id") or ""
+        )
+        payment.save(
+            update_fields=[
+                "payment_url",
+                "gateway_reference_id",
+                "updated_at",
+            ]
+        )
         gate.status = Phase10CPaymentLinkRefreshGate.Status.ROLLED_BACK
         gate.rolled_back_at = timezone.now()
         gate.operator_name = (operator_name or "").strip()[:120]

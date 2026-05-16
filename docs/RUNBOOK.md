@@ -3452,20 +3452,23 @@ Safety contract:
 
 Phase 10C is the **heavyweight CLI workflow that creates a fresh
 Razorpay payment link for a specified `Payment` record and updates
-`Payment.payment_url`**. Test mode is the default; live mode is
+`Payment.payment_url` + `Payment.gateway_reference_id`**. Test mode is
+the default; live mode is
 gated behind every Director directive guard (runtime env flag,
 15-min structured UTC window, kill switch, explicit confirmation,
 runtime `RAZORPAY_MODE=live`).
 
 Phase 10C never sends WhatsApp / makes calls / dispatches shipments
-on its own — it only mutates `Payment.payment_url`. The refreshed
-link is delivered to the customer ONLY via the separate Phase
+on its own — it only mutates `Payment.payment_url` and
+`Payment.gateway_reference_id` so Razorpay webhooks can reconcile the
+refreshed `plink_*`. The refreshed link is delivered to the customer ONLY via the separate Phase
 7E-Live-B `payment_reminder` send (which Phase 10B prepares the
 gate row for). 10A → 10B → 10C compose:
 
 1. **Phase 10A** — Director reviews pending payments (read-only).
 2. **Phase 10C (here)** — refresh the stale Razorpay link →
-   `Payment.payment_url` mutated to the new URL.
+   `Payment.payment_url` mutated to the new URL and
+   `Payment.gateway_reference_id` mutated to the new `plink_*`.
 3. **Phase 10B** — prepare a Phase 7E-Live-B gate row pre-filled
    with the new `payment_url` as a template param.
 4. **Phase 7E-Live-B** — Director approves + executes the gate
@@ -3499,6 +3502,7 @@ python manage.py execute_phase10c_payment_link_refresh_gate \
     --operator-name "Prarit Sidana"
 
 # After execute: Payment.payment_url is the new short_url;
+# Payment.gateway_reference_id is the new plink_id;
 # gate.previous_payment_url is the archived old URL;
 # gate.razorpay_link_id is the new plink_id;
 # gate.status = "executed".
@@ -3590,6 +3594,13 @@ BLOCKED (refused with exit 1; no gate row created):
   `notify.sms=False`, `notify.email=False`, `reminder_enable=False`
   so Razorpay NEVER auto-notifies the customer — delivery is
   exclusively Phase 7E-Live-B's responsibility.
+- Execute persists the new Razorpay `plink_*` into
+  `Payment.gateway_reference_id`; the production Razorpay webhook
+  resolver matches `payment_link.paid` by this field. As a defensive
+  recovery path, the webhook resolver also falls back to an executed
+  Phase 10C gate by `gate.razorpay_link_id` and self-fills a missing
+  `Payment.gateway_reference_id` before marking `Payment` / `Order`
+  paid.
 - `cancel_payment_link` never raises; rollback records the result
   honestly (`cancelled` / `mocked` / `rejected` / `error`) and
   always restores `Payment.payment_url` from the archived value.
@@ -3611,7 +3622,8 @@ BLOCKED (refused with exit 1; no gate row created):
 - Phase 10C NEVER sends WhatsApp, NEVER makes a call, NEVER
   dispatches a shipment, NEVER touches Meta Cloud / Delhivery /
   Vapi. The only state Phase 10C may mutate is `Payment.payment_url`
-  (plus `Phase10CPaymentLinkRefreshGate` rows for evidence).
+  and `Payment.gateway_reference_id` (plus
+  `Phase10CPaymentLinkRefreshGate` rows for evidence).
 - Defensive safety tests patch `queue_template_message`,
   `send_freeform_text_message`, `trigger_call_for_lead`, and
   `create_shipment` and assert `assert_not_called` across the full

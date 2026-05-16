@@ -23,7 +23,11 @@ from rest_framework.test import APIClient
 from apps.audit.models import AuditEvent
 from apps.orders.models import Order
 from apps.payments.integrations.razorpay_client import PaymentLinkResult
-from apps.payments.models import Payment, WebhookEvent
+from apps.payments.models import (
+    Payment,
+    Phase10CPaymentLinkRefreshGate,
+    WebhookEvent,
+)
 
 WEBHOOK_SECRET = "test-webhook-secret"
 
@@ -259,6 +263,48 @@ def test_webhook_payment_link_paid_updates_payment(settings) -> None:
     assert order.advance_amount == payment.amount
     # The idempotency table now has the event recorded.
     assert WebhookEvent.objects.filter(event_id="evt_paid_demo").exists()
+
+
+def test_webhook_payment_link_paid_resolves_phase10c_gate_when_gateway_ref_missing(
+    settings,
+) -> None:
+    settings.RAZORPAY_MODE = "mock"
+    settings.RAZORPAY_WEBHOOK_SECRET = WEBHOOK_SECRET
+    order = _make_order(id="NRG-RZP-P10C-WEBHOOK")
+    payment = _create_payment(
+        order,
+        id="PAY-RZP-P10C-WEBHOOK",
+        gateway_reference_id="",
+        payment_url="https://rzp.io/rzp/p10c",
+    )
+    Phase10CPaymentLinkRefreshGate.objects.create(
+        payment=payment,
+        mode=Phase10CPaymentLinkRefreshGate.Mode.LIVE,
+        status=Phase10CPaymentLinkRefreshGate.Status.EXECUTED,
+        operator_name="Director",
+        previous_payment_url="",
+        new_payment_url=payment.payment_url,
+        razorpay_link_id="plink_p10c_webhook",
+        razorpay_short_url=payment.payment_url,
+    )
+    event = {
+        "id": "evt_paid_p10c_webhook",
+        "event": "payment_link.paid",
+        "payload": {
+            "payment_link": {"entity": {"id": "plink_p10c_webhook"}}
+        },
+    }
+
+    res = _post_webhook(APIClient(), event)
+
+    assert res.status_code == 200
+    payment.refresh_from_db()
+    assert payment.status == Payment.Status.PAID
+    assert payment.gateway_reference_id == "plink_p10c_webhook"
+    order.refresh_from_db()
+    assert order.payment_status == Order.PaymentStatus.PAID
+    assert order.advance_paid is True
+    assert order.advance_amount == payment.amount
 
 
 # ---------- 6. Webhook: duplicate event is idempotent ----------

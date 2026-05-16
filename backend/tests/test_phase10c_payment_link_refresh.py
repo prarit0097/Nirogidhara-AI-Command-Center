@@ -74,6 +74,7 @@ def _make_payment(
     amount: int = 3000,
     status: str = Payment.Status.PENDING.value,
     payment_url: str = "",
+    gateway_reference_id: str = "",
 ) -> Payment:
     return Payment.objects.create(
         id=payment_id,
@@ -83,6 +84,7 @@ def _make_payment(
         amount=amount,
         status=status,
         payment_url=payment_url,
+        gateway_reference_id=gateway_reference_id,
         gateway=Payment.Gateway.RAZORPAY,
     )
 
@@ -329,6 +331,13 @@ def test_execute_test_mode_happy_path_updates_payment_url():
     assert gate.razorpay_link_id == "plink_fresh_PAY-P10C"
     payment = Payment.objects.get(pk="PAY-P10C")
     assert payment.payment_url == gate.new_payment_url
+    assert payment.gateway_reference_id == gate.razorpay_link_id
+    assert payment.raw_response["phase10c_payment_link_refresh"] == {
+        "gate_id": gate.pk,
+        "razorpay_link_id": gate.razorpay_link_id,
+        "razorpay_short_url": gate.razorpay_short_url,
+        "razorpay_status": "created",
+    }
     assert AuditEvent.objects.filter(kind=AUDIT_EXECUTE_SUCCESS).exists()
 
 
@@ -352,7 +361,10 @@ def test_execute_test_mode_refused_when_runtime_is_live():
 @override_settings(RAZORPAY_MODE="mock")
 def test_execute_archives_previous_payment_url():
     _make_order()
-    _make_payment(payment_url="https://razorpay.example/old")
+    _make_payment(
+        payment_url="https://razorpay.example/old",
+        gateway_reference_id="plink_old",
+    )
     prep = prepare_gate(
         payment_id="PAY-P10C",
         operator_name="Director",
@@ -368,8 +380,10 @@ def test_execute_archives_previous_payment_url():
         execute_gate(gate_id=prep.gate_id, operator_name="Director")
     gate = Phase10CPaymentLinkRefreshGate.objects.get(pk=prep.gate_id)
     assert gate.previous_payment_url == "https://razorpay.example/old"
+    assert gate.metadata["previous_gateway_reference_id"] == "plink_old"
     payment = Payment.objects.get(pk="PAY-P10C")
     assert payment.payment_url == gate.new_payment_url
+    assert payment.gateway_reference_id == gate.razorpay_link_id
 
 
 # ---------------------------------------------------------------------------
@@ -507,7 +521,10 @@ def test_execute_refuses_when_gate_not_approved():
 @override_settings(RAZORPAY_MODE="mock")
 def test_rollback_happy_path_restores_previous_url():
     _make_order()
-    _make_payment(payment_url="https://razorpay.example/original")
+    _make_payment(
+        payment_url="https://razorpay.example/original",
+        gateway_reference_id="plink_original",
+    )
     prep = prepare_gate(
         payment_id="PAY-P10C",
         operator_name="Director",
@@ -534,6 +551,7 @@ def test_rollback_happy_path_restores_previous_url():
     assert gate.status == Phase10CPaymentLinkRefreshGate.Status.ROLLED_BACK
     payment = Payment.objects.get(pk="PAY-P10C")
     assert payment.payment_url == "https://razorpay.example/original"
+    assert payment.gateway_reference_id == "plink_original"
     assert AuditEvent.objects.filter(kind=AUDIT_ROLLBACK_SUCCESS).exists()
 
 
