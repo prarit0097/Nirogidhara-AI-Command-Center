@@ -18,6 +18,7 @@ from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 
 from .outcome_classifier import classify_recent_calls
+from .post_call_followup import bulk_identify_and_queue
 from .quality_scorer import score_backlog
 from .transcript_ingestion import ingest_backlog
 
@@ -225,8 +226,67 @@ def classify_call_outcomes_daily(hours: int = 26) -> dict[str, Any]:
     return summary
 
 
+@shared_task(name="apps.calls.tasks.queue_post_call_followups_daily")
+def queue_post_call_followups_daily(hours: int = 26) -> dict[str, Any]:
+    """Phase 12C daily 08:30 IST sweep — queue WhatsApp follow-ups
+    for connected_converted / connected_callback CallOutcomeRecord
+    rows.
+
+    Runs 90 minutes after the Phase 12B classifier so freshly-classified
+    outcomes get queued the same morning. Refuses with
+    ``call_followup.daily_queue.blocked`` when the Postgres-safe runtime
+    kill switch is off OR sandbox mode is active. Sandbox refusal is
+    deliberate — we don't queue real-customer follow-ups from synthetic
+    data. Success writes ``call_followup.daily_queue.completed``.
+
+    NEVER sends WhatsApp, makes a call, dispatches a shipment, or
+    mutates ``Customer`` / ``Order`` / ``Payment`` / ``Lead`` /
+    ``Shipment``. The actual Phase 7E-Live-B gate prep happens via a
+    separate Director-triggered CLI command — and even that only writes
+    a draft-status gate row.
+    """
+    if _kill_switch_blocked():
+        write_event(
+            kind="call_followup.daily_queue.blocked",
+            text=(
+                "Phase 12C daily queue blocked: runtime kill switch off."
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={"phase": "12C", "reason": "kill_switch_off"},
+        )
+        return {"ok": False, "skipped": True, "reason": "kill_switch_off"}
+
+    if _sandbox_active():
+        write_event(
+            kind="call_followup.daily_queue.blocked",
+            text=(
+                "Phase 12C daily queue blocked: sandbox mode active."
+            ),
+            tone=AuditEvent.Tone.INFO,
+            payload={"phase": "12C", "reason": "sandbox_mode"},
+        )
+        return {"ok": False, "skipped": True, "reason": "sandbox_mode"}
+
+    summary = bulk_identify_and_queue(hours=int(hours or 26), sandbox=False)
+    audit_payload = {"phase": "12C", **summary}
+    write_event(
+        kind="call_followup.daily_queue.completed",
+        text=(
+            f"Phase 12C daily queue swept "
+            f"{summary['total_found']} outcomes "
+            f"(queued={summary['queued']}, "
+            f"already_existed={summary['already_existed']}, "
+            f"errors={summary['errors']})."
+        ),
+        tone=AuditEvent.Tone.SUCCESS,
+        payload=audit_payload,
+    )
+    return summary
+
+
 __all__ = (
     "ingest_transcript_backlog_daily",
     "score_call_transcripts_daily",
     "classify_call_outcomes_daily",
+    "queue_post_call_followups_daily",
 )

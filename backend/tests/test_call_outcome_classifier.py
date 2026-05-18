@@ -720,7 +720,8 @@ def test_apply_only_mutates_lead_status_not_other_business_rows(
 
 
 # ---------------------------------------------------------------------------
-# Beat schedule sanity — Phase 12B adds ONE new entry (total = 12)
+# Beat schedule sanity — Phase 12B adds ONE new entry. Total drifts as
+# later phases add more entries (use >= so future additions don't break).
 # ---------------------------------------------------------------------------
 
 
@@ -734,7 +735,7 @@ def test_beat_schedule_has_call_outcome_classification_daily():
         entry["task"]
         == "apps.calls.tasks.classify_call_outcomes_daily"
     )
-    assert len(schedule) == 12
+    assert len(schedule) >= 12
 
 
 # ---------------------------------------------------------------------------

@@ -18,8 +18,10 @@ from .models import (
     CallOutcomeRecord,
     CallQualityScore,
     CallTranscriptLine,
+    PostCallFollowUpQueue,
 )
 from .outcome_classifier import get_outcomes_summary as _get_outcomes_summary
+from .post_call_followup import get_followups_summary as _get_followups_summary
 from .quality_scorer import get_scoring_overview
 from .serializers import (
     ActiveCallSerializer,
@@ -507,5 +509,91 @@ class CallQualityScoresSummaryView(APIView):
                 "lowComplianceCount": overview["low_compliance_count"],
                 "topFlags": top_flags,
                 "avgByAgent": avg_by_agent,
+            }
+        )
+
+
+# ----- Phase 12C — Post-call WhatsApp follow-up queue read-only views -----
+
+
+def _serialize_followup(row: PostCallFollowUpQueue) -> dict:
+    return {
+        "id": row.pk,
+        "callOutcomeId": row.call_outcome_id,
+        "leadId": row.lead_id,
+        "phoneLast4": row.lead_phone_last4,
+        "followUpType": row.follow_up_type,
+        "status": row.status,
+        "customerFound": bool(row.customer_found),
+        "phase7eGateId": row.phase7e_gate_id,
+        "operatorNote": row.operator_note or "",
+        "dispatchedAt": (
+            row.dispatched_at.isoformat() if row.dispatched_at else None
+        ),
+        "dispatchedBy": row.dispatched_by or "",
+        "metadata": dict(row.metadata or {}),
+        "createdAt": (
+            row.created_at.isoformat() if row.created_at else None
+        ),
+        "updatedAt": (
+            row.updated_at.isoformat() if row.updated_at else None
+        ),
+    }
+
+
+class PostCallFollowUpListView(APIView):
+    """``GET /api/v1/calls/followups/?status=&type=&limit=N``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request):
+        qs = PostCallFollowUpQueue.objects.all()
+        status_filter = (request.query_params.get("status") or "").strip()
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        type_filter = (request.query_params.get("type") or "").strip()
+        if type_filter:
+            qs = qs.filter(follow_up_type=type_filter)
+        try:
+            limit = int(request.query_params.get("limit") or 50)
+        except (TypeError, ValueError):
+            limit = 50
+        limit = max(1, min(200, limit))
+        rows = list(qs.order_by("-created_at")[:limit])
+        return Response(
+            {
+                "count": len(rows),
+                "results": [_serialize_followup(r) for r in rows],
+            }
+        )
+
+
+class PostCallFollowUpDetailView(APIView):
+    """``GET /api/v1/calls/followups/<int:pk>/``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, _request, pk: int):
+        row = PostCallFollowUpQueue.objects.filter(pk=pk).first()
+        if row is None:
+            raise NotFound(f"PostCallFollowUpQueue {pk} not found.")
+        return Response(_serialize_followup(row))
+
+
+class PostCallFollowUpSummaryView(APIView):
+    """``GET /api/v1/calls/followups/summary/``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, _request):
+        summary = _get_followups_summary()
+        return Response(
+            {
+                "total": summary["total"],
+                "byStatus": summary["by_status"],
+                "byFollowUpType": summary["by_follow_up_type"],
             }
         )

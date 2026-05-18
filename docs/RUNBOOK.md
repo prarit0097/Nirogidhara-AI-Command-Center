@@ -3579,6 +3579,132 @@ the requirement. Director MUST record what was actually done — both
 for audit and for future-Director context (so re-reading the
 proposal six months later still tells you what changed).
 
+## Phase 12C — Post-Call WhatsApp Follow-up Director Playbook
+
+Phase 12C is the next link in the Tier-4 calling stack after Phase 12B.
+When the classifier marks a `CallOutcomeRecord` as `connected_converted`
+(customer agreed → payment link due) or `connected_callback`
+(customer asked us to call back), Phase 12C queues a WhatsApp
+follow-up SUGGESTION. **The actual WhatsApp send is NEVER triggered
+automatically** — Phase 12C only writes a draft-status
+`Phase7ELiveBRealCustomerSendGate` row at the operator's CLI request;
+the Director still owns the approve + execute via the existing
+Phase 7E-Live-B CLI commands.
+
+**Phase 12C NEVER sends WhatsApp / makes a call / dispatches a
+shipment / mutates Order / Payment / Customer / Lead / Shipment /
+DiscountOfferLog / calls Razorpay / Meta Cloud / Delhivery / Vapi /
+edits `.env.production`.** Asserted across every path by patching
+all 4 outbound entrypoints + Phase 7E-Live-B `prepare_gate` in the
+sandbox path.
+
+### Tier-4 daily morning workflow
+
+The full Tier-4 calling chain runs in this order each weekday:
+
+1. **07:00 IST — Phase 12B** `classify_call_outcomes_daily` reads
+   Vapi-webhook-landed Call + CallTranscriptLine rows from the
+   previous 26h and writes `CallOutcomeRecord` suggestions.
+2. **08:30 IST — Phase 12C** `queue_post_call_followups_daily`
+   picks up the new `connected_converted` + `connected_callback`
+   records and queues `PostCallFollowUpQueue` rows. **No WhatsApp
+   sent.**
+3. **Director (manual)** — runs `python manage.py
+   list_post_call_followups --status pending` to review the queue.
+4. **Director (manual)** — for each row Director wants to send:
+   ```bash
+   python manage.py prepare_post_call_followup_gate <id> --operator-name "Prarit"
+   ```
+   This calls Phase 7E-Live-B `prepare_gate` and creates a draft
+   gate row (no send yet).
+5. **Director (manual)** — separately runs the existing
+   Phase 7E-Live-B commands to inspect + approve + execute the
+   gate (kill switch, structured UTC window, `--confirm-...` flag
+   all required there — Phase 12C bypasses none of those).
+6. **Director (manual)** — once the customer actually receives the
+   WhatsApp, Director runs:
+   ```bash
+   python manage.py mark_followup_dispatched <id> --operator-name "Prarit" --note "..."
+   ```
+   This flips status to `dispatched` and records the operator.
+7. **Director (manual)** — to discard a queued row:
+   ```bash
+   python manage.py skip_post_call_followup <id> --operator-name "Prarit" --reason "..."
+   ```
+
+### CLI commands (Phase 12C)
+
+```bash
+# 1. Review the queue (read-only)
+python manage.py list_post_call_followups --status pending --json
+
+# 2. Prepare the Phase 7E-Live-B gate for one queued row
+python manage.py prepare_post_call_followup_gate <follow_up_id> \
+    --operator-name "Prarit"
+
+# 3. After Phase 7E-Live-B approve + execute lands the WA message
+python manage.py mark_followup_dispatched <follow_up_id> \
+    --operator-name "Prarit" --note "executed via phase7e gate 42"
+
+# 4. Skip a queued row (terminal)
+python manage.py skip_post_call_followup <follow_up_id> \
+    --operator-name "Prarit" --reason "duplicate"
+```
+
+### What Phase 12C does NOT do
+
+- NEVER sends WhatsApp itself — only creates a Phase 7E-Live-B
+  draft gate row that the Director must separately approve +
+  execute.
+- NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi.
+- NEVER mutates `Order` / `Payment` / `Customer` / `Lead` /
+  `Shipment` / `DiscountOfferLog` (asserted in defensive tests).
+- NEVER auto-creates a `Customer` row — if the Lead's phone has
+  no Customer yet, the queue row flips to `needs_customer_setup`
+  and the Director must run Phase 10B Hotfix-1 first.
+- NEVER stores full E.164 — phone last-4 only on every queue row
+  and audit payload.
+- NEVER edits `.env.production`.
+
+### Audit kinds (all ≤ 64 chars)
+
+- `call_followup.queued` — entry created.
+- `call_followup.gate_prepared` — Phase 7E-Live-B draft gate
+  created; carries the opaque `phase7e_gate_id`.
+- `call_followup.needs_customer_setup` — no Customer row for the
+  phone; Director must run Phase 10B Hotfix-1 first.
+- `call_followup.gate_prep_failed` — Phase 7E-Live-B raised OR
+  returned `ok=False`; row in terminal `gate_prep_failed` state.
+- `call_followup.dispatched` — Director confirmed WA send landed.
+- `call_followup.skipped` — operator skipped manually.
+- `call_followup.sandbox_skipped` — sandbox mode prevented gate
+  prep.
+- `call_followup.daily_queue.completed` — per-sweep success.
+- `call_followup.daily_queue.blocked` — per-sweep refusal (kill
+  switch off OR sandbox mode active).
+
+### Admin-only read API (no POST)
+
+```text
+GET /api/v1/calls/followups/?status=&type=&limit=N
+GET /api/v1/calls/followups/<int:pk>/   # detail
+GET /api/v1/calls/followups/summary/    # totals + byStatus + byFollowUpType
+```
+
+Auth: admin / director / owner / superuser only. POST/PATCH/DELETE → 405.
+
+### Env vars (defaults locked safe)
+
+```text
+POST_CALL_FOLLOWUP_DAILY_HOUR=8       # 08:30 IST sweep default
+POST_CALL_FOLLOWUP_DAILY_MINUTE=30
+POST_CALL_FOLLOWUP_DAILY_HOURS=26     # rolling window for identify
+```
+
+Beat schedule entry: `post-call-followup-daily` (13 total).
+
+---
+
 ## Phase 12B — Call Outcome Classifier Director Playbook
 
 Phase 12B closes the Tier-4 calling loop started by Phase 12A. After

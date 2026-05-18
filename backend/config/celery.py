@@ -123,6 +123,20 @@ def build_beat_schedule() -> dict:
     call_outcome_window_hours = getattr(
         settings, "CALL_OUTCOME_CLASSIFICATION_DAILY_HOURS", 26
     )
+    # Phase 12C - Post-Call WhatsApp Follow-up queue. 08:30 IST default
+    # (90 minutes after the Phase 12B classifier), 26h window so the
+    # freshly-classified outcomes from this morning's sweep get queued
+    # the same morning. NEVER sends WhatsApp / makes a call / mutates
+    # Order / Payment / Shipment / Customer / Lead.
+    call_followup_hour = getattr(
+        settings, "POST_CALL_FOLLOWUP_DAILY_HOUR", 8
+    )
+    call_followup_minute = getattr(
+        settings, "POST_CALL_FOLLOWUP_DAILY_MINUTE", 30
+    )
+    call_followup_window_hours = getattr(
+        settings, "POST_CALL_FOLLOWUP_DAILY_HOURS", 26
+    )
 
     return {
         "ai-daily-briefing-morning": {
@@ -197,6 +211,14 @@ def build_beat_schedule() -> dict:
                 minute=call_outcome_minute,
             ),
             "args": (int(call_outcome_window_hours),),
+        },
+        "post-call-followup-daily": {
+            "task": "apps.calls.tasks.queue_post_call_followups_daily",
+            "schedule": crontab(
+                hour=call_followup_hour,
+                minute=call_followup_minute,
+            ),
+            "args": (int(call_followup_window_hours),),
         },
     }
 

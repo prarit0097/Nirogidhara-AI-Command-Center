@@ -20,6 +20,9 @@ from .views import (
     CallQualityScoresListView,
     CallQualityScoresSummaryView,
     CallTranscriptDetailView,
+    PostCallFollowUpDetailView,
+    PostCallFollowUpListView,
+    PostCallFollowUpSummaryView,
     TranscriptBacklogView,
 )
 
@@ -88,5 +91,23 @@ urlpatterns = [
         "outcomes/<int:pk>/",
         CallOutcomeRecordDetailView.as_view(),
         name="phase12b-outcome-detail",
+    ),
+    # Phase 12C — Post-Call Follow-up Queue (read-only).
+    # ``summary/`` is registered BEFORE the dynamic ``<int:pk>`` route
+    # so it is never captured as a follow-up id.
+    path(
+        "followups/summary/",
+        PostCallFollowUpSummaryView.as_view(),
+        name="phase12c-followups-summary",
+    ),
+    path(
+        "followups/",
+        PostCallFollowUpListView.as_view(),
+        name="phase12c-followups-list",
+    ),
+    path(
+        "followups/<int:pk>/",
+        PostCallFollowUpDetailView.as_view(),
+        name="phase12c-followup-detail",
     ),
 ]

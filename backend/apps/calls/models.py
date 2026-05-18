@@ -407,6 +407,90 @@ class CallOutcomeRecord(models.Model):
         )
 
 
+class PostCallFollowUpQueue(models.Model):
+    """Phase 12C — Post-Call WhatsApp Follow-up Queue V1.
+
+    One row per CallOutcomeRecord that warrants a WhatsApp follow-up
+    (`connected_converted` → payment reminder; `connected_callback`
+    → callback confirmation). This table is a **suggestion queue
+    only** — it never sends a WhatsApp message. The actual send path
+    is the existing Phase 7E-Live-B gate flow: Phase 12C creates the
+    Phase 7E-Live-B gate row in `draft` status, then Director
+    approves + executes that gate via the existing CLI commands.
+
+    Idempotent via the one-to-one FK on `CallOutcomeRecord`. Sandbox
+    mode short-circuits gate creation with `sandbox_skipped` status.
+    Phase 12C NEVER queues a campaign / broadcast / freeform send.
+    """
+
+    class FollowUpType(models.TextChoices):
+        PAYMENT_REMINDER = "payment_reminder", "payment_reminder"
+        CALLBACK_CONFIRMATION = (
+            "callback_confirmation",
+            "callback_confirmation",
+        )
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "pending"
+        NEEDS_CUSTOMER_SETUP = (
+            "needs_customer_setup",
+            "needs_customer_setup",
+        )
+        GATE_PREPARED = "gate_prepared", "gate_prepared"
+        DISPATCHED = "dispatched", "dispatched"
+        SKIPPED = "skipped", "skipped"
+        GATE_PREP_FAILED = "gate_prep_failed", "gate_prep_failed"
+        SANDBOX_SKIPPED = "sandbox_skipped", "sandbox_skipped"
+
+    call_outcome = models.OneToOneField(
+        CallOutcomeRecord,
+        on_delete=models.CASCADE,
+        related_name="follow_up",
+    )
+    lead_id = models.CharField(max_length=32, blank=True, default="")
+    # Masked last-4 only — full phone never lives on the queue row.
+    lead_phone_last4 = models.CharField(
+        max_length=4, blank=True, default=""
+    )
+    follow_up_type = models.CharField(
+        max_length=24,
+        choices=FollowUpType.choices,
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=24,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    phase7e_gate_id = models.IntegerField(null=True, blank=True)
+    customer_found = models.BooleanField(default=False)
+    operator_note = models.TextField(blank=True, default="")
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+    dispatched_by = models.CharField(max_length=120, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status",), name="pcfu_status_idx"),
+            models.Index(
+                fields=("follow_up_type",), name="pcfu_followup_type_idx"
+            ),
+            models.Index(
+                fields=("-created_at",), name="pcfu_created_at_idx"
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return (
+            f"PostCallFollowUpQueue {self.pk} - {self.follow_up_type} - "
+            f"{self.status}"
+        )
+
+
 class WebhookEvent(models.Model):
     """Idempotency log for Vapi webhooks. Phase 2D.
 
