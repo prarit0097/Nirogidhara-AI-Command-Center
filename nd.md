@@ -154,14 +154,14 @@
 
 ---
 
-## Current Working Memory — Phase 7E-Live-B Gate Baseline
+## Current Working Memory — Phase 12D Baseline
 
 > Single point of truth for "where are we right now". Re-read this block at the start of every new session before touching anything.
 
 - **Project:** Nirogidhara AI Command Center (multi-tenant SaaS scaffold over a single-tenant Ayurvedic D2C operations stack).
 - **Production URL:** <https://ai.nirogidhara.com>
 - **VPS path:** `/opt/nirogidhara-command` (Hostinger VPS; six namespaced containers; host port `18020 → 80`; host Ubuntu Nginx + Certbot terminate TLS).
-- **Latest completed change:** **Phase 7E-Live-B — Real Customer WhatsApp One-Shot Controlled Send Gate (shipped; CLI-only gate; no live customer send run in this change).** Adds `whatsapp.Phase7ELiveBRealCustomerSendGate`, migration `whatsapp.0007_phase7e_live_b_real_customer_send_gate`, service helper `apps.whatsapp.phase7e_live_b_real_customer_send`, five management commands (`inspect`, `prepare`, `approve`, `execute`, `cancel`), read-only SaaS endpoint `/api/v1/saas/phase7e-live-b/gates/`, and a read-only `/saas-admin` card. Execute is one gate / one real customer / one approved template only, requires runtime `PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true`, structured Director UTC window, runtime kill switch enabled, explicit confirm, and signoff phrases. Hotfix-2 scopes prior-executed duplicate blocking to the same target phone + template + execution context, so a prior send to another customer no longer blocks a fresh Director-approved gate. It uses `queue_template_message(..., override_limited_test_mode=True)` only inside the CLI execute path so `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` remains the production default and `.env.production` is not edited.
+- **Latest completed change:** **Phase 12D — Tier-4 AI Calling Performance Dashboard (frontend-only, read-only; commit `dbe8a7b`).** Closes the Tier-4 calling loop with a Director review surface for Phase 12A campaigns + Phase 12B outcomes + Phase 12C follow-ups. No backend changes — frontend consumes existing `/api/v1/calls/{campaigns,outcomes,outcomes/summary,followups,followups/summary}/` endpoints already shipped in Phase 12A/B/C. New TS types in `frontend/src/types/domain.ts` mirror backend serializer output (camelCase + nested `byOutcome` / `byStatus` maps). New api methods `getCallingCampaigns / getCallOutcomes / getCallOutcomesSummary / getPostCallFollowUps / getPostCallFollowUpSummary` with deterministic mock fallback. New "Tier-4 AI Calling — Campaign Performance" card on `/saas-admin` after the Phase 9E Calling Team Leader card; new `/operations/calling-dashboard` page (`frontend/src/pages/CallingDashboard.tsx`, 4 sections: Campaign History / Call Outcomes / WhatsApp Follow-up Queue / CLI Reference). **Read-only end-to-end** — no "Run Campaign" / "Send WhatsApp" / "Approve" / "Apply" / "Trigger Call" / "Reassign Agent" / "Auto-dial" buttons exist anywhere. All state changes still happen exclusively via Phase 12A/B/C CLI commands. Verification baseline unchanged at **2730 backend tests + 82 frontend tests** (no new backend tests added in 12D; npm lint + test + build green).
 - **Phase 7E-Live-B safety posture:** no broadcast, campaign, bulk send, AI freeform, frontend execute/approve/cancel button, business mutation, Order/Payment mutation, courier call, or rollback. WhatsApp cannot be unsent, so executed gates cannot be cancelled. Every action writes an audit event; execute keeps `payment_mutation_made`, `order_mutation_made`, and `courier_called` false.
 - **Previous completed live mechanism proof:** **Phase 8F Live Execute + Rollback Reading 1 (2026-05-14; mechanism proof, no lasting change).** Execute ran on the VPS for attempt id=1 / gate id=1 / source Phase 8E gate id=1 / Order `NRG-20435` / Payment `PAY-30125` with operator `Prarit Sidana` and Director signoff window `BEGIN_UTC=2026-05-14T09:32:29Z` to `END_UTC=2026-05-14T09:45:29Z`. Result: `ok=True`, `status=executed`; `Order.payment_status -> Paid`, `Payment.status -> Paid`; all locked-False flags stayed False and there was no provider call, WhatsApp send, customer notification, shipment/AWB, or `Order.state` mutation.
 - **Rollback Reading 1 result:** rollback returned `ok=True`, `status=rollback_recorded`, `rollbackId=1`; psql confirmed Order `NRG-20435` restored to `payment_status="Partial"` and Payment `PAY-30125` restored to `status="Pending"`. Health endpoint returned `{"status": "ok"}`.
@@ -238,21 +238,22 @@
   - Claim Vault: `version="demo-v2"` rows are seeded for the eight categories; **doctor-approved final claims are NOT yet committed**. Lifecycle messages requiring Claim coverage still fail closed for any category whose final approved claims are missing.
   - WhatsApp customer pilot soak was an accelerated rehearsal, not a full multi-day soak — the dashboard remains the source of truth before any flag flip.
 
-### Docs Sync Status (Phase 7E-Live-B gate baseline)
+### Docs Sync Status (Phase 12D baseline)
 
 | Doc | Status | Notes |
 | --- | --- | --- |
-| `nd.md` | ✅ synced | TL;DR §0 + Working Memory record Phase 7E-Live-B gate shipped; no live customer send run by this change. |
-| `CLAUDE.md` | ✅ synced | §0 status block carries Phase 7E-Live-B gate entry; expected test baseline is 2208 backend / 82 frontend. |
-| `AGENTS.md` | ✅ synced | Current status marks Phase 7E-Live-B gate shipped and keeps Phase 8F Reading 1 post-rollback state. |
-| `README.md` | ✅ synced | Current baseline and test counts were synced before this docs-only Reading 1 record; no README edit requested in this phase. |
-| `docs/MASTER_BLUEPRINT_V2.md` | ✅ synced | Document Control table + Completed Build Timeline updated through Phase 8F hotfixes + Test Hygiene Hotfix-1. |
-| `docs/RUNBOOK.md` | ✅ synced | Phase 7E-Live-B section records CLI inspect/prepare/approve/execute/cancel flow, runtime env prefix, no rollback, and no frontend controls. |
-| `docs/BACKEND_API.md` | ✅ synced | Top baseline note updated; Phase 8E candidate-pool endpoint + Phase 8F read-only endpoints listed. |
-| `docs/FRONTEND_AUDIT.md` | ✅ synced | `/saas-admin` Phase 8E candidate-pool subsection + Phase 8F section listed. |
-| `docs/FUTURE_BACKEND_PLAN.md` | ✅ synced | Stale for this docs-only Reading 1 record; no edit requested in this phase. |
-| `docs/DEPLOYMENT_VPS.md` | ⚠ recheck | Phase 8F-Hotfix-1 production posture (migration `payments.0025` applied; recovery-only approval CLI; no execute flags flipped) should be documented. |
-| `docs/WHATSAPP_INTEGRATION_PLAN.md` | ✅ synced | Top-of-file status note unchanged (Phase 8F does not touch WhatsApp). |
+| `nd.md` | ✅ synced | Working Memory header, §6 page count (27), §8 timeline range (Phase 1 → Phase 12D), Docs Sync table, and Recommended next action all updated by commit C1. TL;DR §0 already current. |
+| `README.md` (root) | ⚠ recheck | Root-level README (79 KB on VPS, last edit 2026-05-14). Verify Phase 11/12 entries + current commit hash (`dbe8a7b`) + test baseline (2730/82). Addressed by commit C2. |
+| `CLAUDE.md` | ⚠ recheck | §0 status block already has Phase 12D / 12C / 12B / 12A / 11D / 11C / 11B / 11A / 10C / 10B-Hotfix-2 / 10B / 10A entries; verify "Where things live" rows still current. Addressed by commit C2. |
+| `AGENTS.md` | ⚠ recheck | Current baseline reads "Phase 12C"; bump current → Phase 12D and demote 12C to "Previous baseline". Addressed by commit C2. |
+| `docs/README.md` | ⚠ recheck | Says "Master Blueprint reflects Phase 5E-Hotfix-2" + "RUNBOOK Phase 5E-Hotfix-2 cheatsheet" — both very stale. Addressed by commit C2. |
+| `docs/MASTER_BLUEPRINT_V2.md` | ⚠ recheck | Document Control says "Phase 1 → Phase 10B Hotfix-2" + commit `47ac3ac` + 2188 tests; needs Phase 12D + commit `dbe8a7b` + 2730 tests + Phase 10C / 11A / 11B / 11C / 11D / 12A / 12B / 12C / 12D timeline rows. Addressed by commit C3. |
+| `docs/RUNBOOK.md` | ⚠ recheck | Already has Phase 11D + Phase 12D sections; verify baseline note and Phase 11A/B/C + 12A/B/C entries are present. Addressed by commit C5. |
+| `docs/BACKEND_API.md` | ⚠ recheck | "Test Hygiene Hotfix-1 baseline" + 2188 tests; needs Phase 12D baseline + 2730 tests + endpoint sections for `/api/v1/calling-team-leader/` (9E), `/api/v1/caio/` (11C), `/api/v1/learning/` (11D), `/api/v1/calls/{transcript-backlog,transcripts/<id>,quality-scores,outcomes,followups,campaigns}/` (11A/B + 12A/B/C). Addressed by commit C4. |
+| `docs/FRONTEND_AUDIT.md` | ⚠ recheck | "Test Hygiene Hotfix-1 baseline" + "Phase 10B Hotfix-2" + "24 pages"; needs Phase 12D baseline + **27 pages** (CallingDashboard added in Phase 12D). Addressed by commit C5. |
+| `docs/FUTURE_BACKEND_PLAN.md` | ⚠ recheck | "Current baseline is Test Hygiene Hotfix-1" + 2188 tests + no Phase 11/12 entries; needs Phase 12D + 2730 tests + ✅ shipped sections for Phase 11A/B/C/D + Phase 12A/B/C/D. Addressed by commit C4. |
+| `docs/DEPLOYMENT_VPS.md` | ⚠ recheck | "Phase 9-10 Production Posture (2026-05-16)" + 2466 tests after Phase 10B Hotfix-2; needs Phase 12D production posture + 2730 tests + migrations `calls.0004-0008` + `learning.0001` + `caio.0001` + `shipments.0005` + `whatsapp.0007` + `agents.0006`. Addressed by commit C5. |
+| `docs/WHATSAPP_INTEGRATION_PLAN.md` | ⚠ recheck | "Current status (2026-05-04, Phase 6M baseline)" — very stale; needs Phase 12D baseline note + Phase 12C post-call follow-up section. Addressed by commit C5. |
 
 ### Phase 8F Live Execute Reading 1 completion summary
 
@@ -276,7 +277,19 @@ Phase 8F-Hotfix-1 (commit `2ffb3ca`) ships migration `payments.0025_phase8f_hotf
 
 ### Recommended next action
 
-NEEDS VERIFICATION after Phase 8F Reading 1. This docs record does not approve any additional live execution. Any future Phase 8F-related live command must have a separate Director directive before runtime env flags are passed. Phase 7E-Live-B (real customer WhatsApp send) and Phase 7G-Live (real customer courier execution) remain **NOT approved**.
+**Doc sync v2 in progress.** This commit (C1) updates `nd.md` only. Commits C2–C5 will bring the remaining 11 docs to the same Phase 12D baseline. **No runtime change ships in C1–C5.**
+
+After doc sync, the next live-execute decisions remain gated and each requires a separate dated Director directive:
+
+- **Phase 7E-Live-B** (real customer WhatsApp one-shot send) — gate framework SHIPPED; no live customer send has ever run. Requires `PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true` runtime env prefix + 15-min UTC window + `--confirm-phase7e-live-b-real-customer-send` + non-empty operator + kill switch enabled.
+- **Phase 7G-Live** (real customer Delhivery one-shot dispatch) — gate framework SHIPPED; no live customer dispatch has ever run. Requires `PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_ENABLED=true` + `DELHIVERY_MODE=live` runtime env prefix + 15-min UTC window + `--confirm-phase7g-live-real-customer-dispatch` + non-empty operator + kill switch enabled.
+- **Phase 12A live execute** (AI calling campaign) — gate framework SHIPPED; no live Vapi outbound has ever run from this gate. Requires `AI_CALLING_ENABLED=true` + `VAPI_MODE=live` + 30-min UTC window + `--confirm-ai-calling-campaign` + non-empty operator + kill switch enabled.
+
+Phase 8F live execute on the VPS already happened once as Reading 1 (2026-05-14 mechanism proof, rolled back the same hour to Partial+Pending); any future Phase 8F live execute requires its own separate directive.
+
+**Remaining integration gaps:** PayU adapter still missing; Vapi `phone_number_id` + `webhook_secret` still missing in `.env.production`; Claim Vault doctor-approved final claims still pending (demo-v2 in place).
+
+## After all 8 edits land — run these greps inside the repo
 ### Do not do next
 
 - Do **not** flip any of the three Phase 8F env flags (`PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED`, `PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION`, `PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION`) without a separate dated Director directive that names the exact Phase 8F gate id, attempt id, source Phase 8E gate id, target Order id, target Payment id, AND a 15-min structured UTC window.
@@ -531,7 +544,7 @@ The seed command intentionally **disconnects the signal receivers** during bulk 
 
 ---
 
-## 6. Frontend pages (24)
+## 6. Frontend pages (27)
 
 All under `frontend/src/pages/`. Each one calls **only** `import { api } from "@/services/api"` — never `mockData.ts`.
 
@@ -624,9 +637,9 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far — Phase 1 → Phase 8F-Hotfix-1 — every checkpoint we shipped
+## 8. What's done so far — Phase 1 → Phase 12D — every checkpoint we shipped
 
-> This section is a chronological reference for the earliest phases. The latest checkpoints (Phase 5 → Phase 8F-Hotfix-1) are summarised in the §0 TL;DR + the §11 phase roadmap. Read those first for the current state.
+> This section is a chronological reference for the earliest phases. The latest checkpoints (Phase 5 → Phase 12D) are summarised in the §0 TL;DR + the §11 phase roadmap. Read those first for the current state.
 
 
 ### ✅ Frontend (was already in place when we started; we wired it to the backend)
