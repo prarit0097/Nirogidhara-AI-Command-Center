@@ -10,16 +10,16 @@ reward/penalty engine, and the human-call learning loop.
 
 ```
 nirogidhara-command/
-  frontend/   # React 18 + Vite + TS + shadcn UI (23 pages)
-  backend/    # Django 5 + DRF — 16 apps, implements the api.ts contract
+  frontend/   # React 18 + Vite + TS + shadcn UI (27 pages)
+  backend/    # Django 5 + DRF — 22 apps, implements the api.ts contract
   docs/       # RUNBOOK, BACKEND_API, FRONTEND_AUDIT, FUTURE_BACKEND_PLAN
 ```
 
 ## Current SaaS foundation status
 
-- **Current baseline:** Test Hygiene Hotfix-1 is shipped at origin/main commit `046875d`. Phase 8F framework + Phase 8F-Hotfix-1/-2 are shipped; Phase 8F gate id=1 was recovered/approved on the VPS on 2026-05-14 and attempt id=1 was minted, but execute was NOT run. Order `NRG-20435` remains Partial and Payment `PAY-30125` remains Pending.
-- **Verification baseline:** 2188 backend tests + 82 frontend tests are green on local SQLite and the VPS Postgres full-suite run. Test Hygiene Hotfix-1 only pins integration modes to mock for tests; it did not touch production code, models, migrations, services, views, env flags, `.env*` files, or frontend.
-- **Next planned item:** Phase 8F live execute on the VPS remains NOT approved. Phase 7E-Live-B and Phase 7G-Live also remain NOT approved.
+- **Current baseline:** Phase 12D (Tier-4 AI Calling Performance Dashboard, frontend-only) is shipped at origin/main commit `dbe8a7b`. Phase 8F Live Execute Reading 1 ran on the VPS on 2026-05-14 and was rolled back the same hour (mechanism proof; no lasting business-row change). Order `NRG-20435` is back to Partial; Payment `PAY-30125` is back to Pending.
+- **Verification baseline:** **2730 backend tests + 82 frontend tests** are green on local SQLite and the VPS Postgres full-suite run. Test Hygiene Hotfix-1 still pins integration modes to mock for tests; production code, models, migrations, services, views, env flags, `.env*` files, and frontend remain untouched by that hotfix.
+- **Next planned items:** Phase 7E-Live-B (real customer WhatsApp one-shot send), Phase 7G-Live (real customer Delhivery one-shot dispatch), and Phase 12A live execute (AI calling campaign) all remain **NOT approved** — their frameworks are shipped but no live customer mutation has been performed by any of them. Phase 8F Reading 1 already completed and rolled back on 2026-05-14; any future Phase 8F live execute requires its own separate Director directive.
 - Phase 6D org-aware write assignment is **FULL PASS**: safe create paths inherit or fall back to the default `nirogidhara` organization without changing request payloads.
 - Phase 6E adds the `/saas-admin` read-only control panel, admin SaaS readiness APIs, and `OrganizationIntegrationSetting` for per-org integration readiness.
 - Phase 6F adds a read-only per-provider runtime preview + secret-ref helpers; live runtime stays on env/config.
@@ -114,7 +114,7 @@ a Django REST endpoint documented in [`docs/BACKEND_API.md`](docs/BACKEND_API.md
 # Backend migration drift gate — MUST report "No changes detected"
 cd backend && python manage.py makemigrations --check --dry-run
 
-# Backend (pytest, 2188 tests)
+# Backend (pytest, 2730 tests)
 cd backend && python -m pytest -q
 
 # Frontend (vitest, 82 tests)
@@ -125,7 +125,43 @@ cd frontend && npm test
 
 **Done:**
 
-- ✅ **Current completed baseline** — Phase 6T, Phase 7B → 7I with hotfixes, Phase 8A → 8F with hotfixes, and Test Hygiene Hotfix-1 are shipped. Phase 8F gate id=1 is recovered/approved on the VPS, attempt id=1 exists, and execute has NOT run.
+- ✅ **Current completed baseline** — Phase 12D is the latest shipped (commit `dbe8a7b`, **2730 backend tests + 82 frontend tests** green on local SQLite and VPS Postgres). Phase 8F Live Execute Reading 1 ran on the VPS on 2026-05-14 and was rolled back the same hour (mechanism proof; no lasting business-row change — Order `NRG-20435` + Payment `PAY-30125` back to Partial/Pending). Phase 7E-Live-B (real customer WhatsApp), Phase 7G-Live (real customer Delhivery), and Phase 12A live execute frameworks are all SHIPPED but have NEVER been run live.
+- ✅ **Phase 12D** — Tier-4 AI Calling Performance Dashboard (frontend-only, read-only). Director review surface for Phase 12A campaigns + 12B outcomes + 12C follow-ups; new `/saas-admin` Tier-4 card + new `/operations/calling-dashboard` page (4 sections). No backend changes. **2730 backend + 82 frontend, all green** (no new tests in 12D).
+- ✅ **Phase 12C** — Post-Call WhatsApp Follow-up Automation V1 (Director-triggered, queue-only). When the Phase 12B classifier marks an outcome as `connected_converted` or `connected_callback`, queues a Phase 7E-Live-B follow-up suggestion. **Never auto-sends.** **2730 backend + 82 frontend, all green** (46 new tests).
+- ✅ **Phase 12B** — Call Outcome Classifier V1 (deterministic, recommendations-only). Reads Phase 11A transcripts; classifies 6 business outcomes; suggests `Lead.status` update; Director must approve + apply via separate CLI. **2684 backend + 82 frontend, all green** (40 new tests).
+- ✅ **Phase 12A** — AI Calling Campaign Gate V1 (Director-approved Vapi outbound). Wraps `trigger_call_for_lead` in a campaign gate with `draft → approved → executing → completed | failed | cancelled` lifecycle. Defaults LOCKED off. **Never run live yet.** **2644 backend + 82 frontend, all green** (39 new tests).
+- ✅ **Phase 11D** — Learning Loop Gate V1 (Director-approved, human-reviewed paper trail). New `apps.learning` + `LearningProposal` model. CAIO auto-creates proposals from RED audits; Director approves + manually implements; the implement command only records what was done. **Never auto-implements.** **2605 backend + 82 frontend, all green** (35 new tests).
+- ✅ **Phase 11C** — CAIO Audit Agent V1 (governance layer, deterministic, no LLM). New `apps.caio` + `CaioAuditSnapshot` model. Reads Phase 11A/11B + Phase 9 snapshots; writes daily `severity ∈ {green, amber, red}` audit at 14:00 IST. **CAIO has NO direct execution power.** **2570 backend + 82 frontend, all green** (34 new tests).
+- ✅ **Phase 11B** — Call Quality Scorer V1 (deterministic, no LLM). Scores Phase 11A transcript rows on 5 dimensions (connection / product_knowledge / compliance / objection_handling / tonality); 7 flag codes. Daily Celery sweep at 23:30 IST. **2536 backend + 82 frontend, all green** (40 new tests).
+- ✅ **Phase 11A** — Transcript Ingestion Pipeline V1 (Vapi REST-pull backlog clearer). Active-pull layer for legacy/missing transcripts; populates existing `CallTranscriptLine` model. Daily Celery sweep at 23:00 IST. **2496 backend + 82 frontend, all green** (30 new tests).
+- ✅ **Phase 10C-Hotfix-1** — Razorpay refreshed-link webhook reconciliation. Phase 10C now persists fresh `plink_*` on `Payment.gateway_reference_id`; webhook resolver falls back to Phase 10C gate by `razorpay_link_id` and self-fills missing `gateway_reference_id`. **2466 backend + 82 frontend, all green** (2 new regression tests).
+- ✅ **Phase 10C** — Razorpay Payment Link Refresh Gate. Heavyweight CLI workflow creating a fresh Razorpay payment link and updating `Payment.payment_url`. Test mode default; live mode gated by `PHASE10C_PAYMENT_LINK_REFRESH_ENABLED=true` + structured UTC window + `--confirm` flag. **2458 backend + 82 frontend, all green** (38 new tests).
+- ✅ **Phase 10B-Hotfix-2** — `nrg_payment_reminder` template schema fix. Fixes Meta error #132001 by collapsing amount + URL into a single `context` positional variable matching the live template's `{{1}} {{2}}` body. **2466 backend + 82 frontend, all green** (1 assertion updated).
+- ✅ **Phase 10B / Phase 10B-Hotfix-1** — Targeted Payment Reminder Preparer. Stage-aware CLI wrapper around Phase 7E-Live-B; creates a `Phase7ELiveBRealCustomerSendGate` row in `draft` status. Hotfix-1 idempotently auto-creates a missing `crm.Customer` bridge row. **Never sends.** **2462 backend + 82 frontend, all green.**
+- ✅ **Phase 10A** — Pending Payments Drilldown (first **diagnostics** module — read-only Director review surface). New `apps/diagnostics/` Django app + `GET /api/v1/diagnostics/pending-payments/` + CLI + `/operations/pending-payments` frontend page. No mutations. **2382 backend + 82 frontend, all green.**
+- ✅ **Phase 9F** — CEO Orchestration Agent V1 (deterministic daily Celery snapshot at 13:00 IST). Reads all Phase 9A-9E agent snapshots; computes business-health tier; writes daily Director briefing.
+- ✅ **Phase 9E** — Calling Team Leader Agent V1 (call-performance lens, recommendations-only). Daily snapshot at 12:00 IST covering call counts (24h/7d/30d), connection rate, avg duration, outcome + per-agent breakdown, transcript backlog. New `agents.CallingTeamLeaderSnapshot` model. **2332 backend + 82 frontend, all green.**
+- ✅ **Phase 9A → 9D** — Sales Growth / Customer Success-Reorder / Data Analyst / CFO agents V1 — four deterministic daily Celery snapshots under `apps.agents.*`, each writing its own snapshot model + `AgentRun` + audit rows. Recommendations-only — none of them mutate Order/Payment/Customer/Shipment.
+- ✅ **Test Hygiene Hotfix-1** — Pin integration modes in `backend/tests/conftest.py` (`RAZORPAY_MODE`, `WHATSAPP_PROVIDER`, `DELHIVERY_MODE`, `VAPI_MODE`, `META_MODE` → `"mock"`; `WHATSAPP_LIVE_META_LIMITED_TEST_MODE` → `False`) for VPS-safe full-suite runs. **Test-only fix; no production code touched.** **2188 backend + 82 frontend, all green.**
+- ✅ **Phase 8F Live Execute + Rollback Reading 1 (2026-05-14)** — Phase 8F live execute ran on the VPS for the first time and was rolled back the same hour as mechanism proof. Order `NRG-20435.payment_status` Partial → Paid → Partial; Payment `PAY-30125.status` Pending → Paid → Pending. No provider call, no WhatsApp, no customer notification, no shipment, no `Order.state` mutation. The three `PHASE8F_*` flags were passed via runtime env prefix only; `.env.production` was NOT edited.
+- ✅ **Phase 8F-Hotfix-3** — Attempt-level recovery command for blocked Phase 8F attempt (`recover_phase8f_attempt_to_approved`). Governance-only CLI used between refused placeholder-signoff runs.
+- ✅ **Phase 8F-Hotfix-2** — Make Phase 8F execute/rollback tests Postgres-safe (test-only fix; dynamic `phase8e_gate_id` injected into the test signoff strings).
+- ✅ **Phase 8F-Hotfix-1** — Recover blocked approval gate + sync migration drift. Migration `payments.0025_phase8f_hotfix_rename_indexes` (pure `RenameIndex` ×8); narrowly-scoped service patch enabling `blocked → approved_for_one_shot_real_customer_mutation` recovery for the missing-env-flag case only. **2188 backend + 82 frontend, all green.**
+- ✅ **Phase 8F** — Controlled Real Customer Payment → Order Mutation Gate framework (CLI-only one-shot). New `payments.RazorpayRealCustomerPaymentOrder{ControlledMutationGate,ControlledMutationAttempt,ControlledMutationRollback}` models + migration `payments.0024_phase8f_real_customer_controlled_mutation`. 8 strictly-CLI management commands. Defaults LOCKED OFF. **2180 backend + 82 frontend, all green** (32 new tests).
+- ✅ **Phase 8E-Hotfix-1** — Candidate pool inspector + accept `Partial`+`Pending` review-only candidate (live VPS pool has 0 strict Pending+Pending pairs; 6 Partial+Pending pairs).
+- ✅ **Phase 8E** — Real Customer Payment → Order Mutation Pilot Gate (review / dry-run only against one real-customer Order + Payment candidate). CLI-only review state changes; approval flips to `approved_for_future_phase8f_real_customer_controlled_mutation`.
+- ✅ **Phase 8D-Hotfix-1** — Resolve Phase 8C source attempt via rollback record (not `attempt.status`).
+- ✅ **Phase 8D** — Phase 8C Controlled Mutation Evidence Lock (lock-only meta-audit over Phase 8C executed + rolled-back chain).
+- ✅ **Phase 8C-Hotfix-1** — Sandbox fixture seed (`Order.id=phase8c-controlled-order-001` / `Payment.id=phase8c-controlled-payment-001`).
+- ✅ **Phase 8C** — Controlled Real Payment → Order Mutation framework (CLI-only one-shot; executed only against the seeded sandbox fixture, then rolled back). **NEVER run against real customer rows.**
+- ✅ **Phase 8B** — Payment → Order Mutation Review Gate (review-only, CLI-only review state changes).
+- ✅ **Phase 8A** — Payment → Order Mutation Sandbox Gate (sandbox-only).
+- ✅ **Phase 7I** — Final Phase 7 Payment + WhatsApp + Courier Audit Lock (lock-only meta-audit over Phase 7D + 7E-Live-A + 7G + 7H).
+- ✅ **Phase 7H** — Phase 7G Courier Execution Evidence Lock (lock-only meta-audit).
+- ✅ **Phase 7G-Live** — Real Customer Delhivery One-Shot Controlled Dispatch Gate framework (CLI-only; one gate / one confirmed real-customer order / one Delhivery AWB only). **Never run live yet.** **2217 backend + 82 frontend, all green** (9 new tests).
+- ✅ **Phase 7G / 7G-Hotfix-1/2** — Delhivery Courier One-Shot TEST/MOCK Execution Gate. One real TEST/MOCK AWB `DLH35391376` created on the VPS, then rolled back record-only. Hotfix-1 added UTC window guard; Hotfix-2 added safe-retry.
+- ✅ **Phase 7E-Live-B** — Real Customer WhatsApp One-Shot Controlled Send Gate framework (CLI-only; one gate / one real customer / one approved Phase 5A template only). **Never run live yet.** Hotfix-2 scopes prior-executed duplicate blocking to the same target phone + template + execution context. **2208 backend + 82 frontend, all green** (8 new tests).
+- ✅ **Phase 7E-Live-A + Hotfix-1/2/3** — Internal Allowed-List WhatsApp One-Shot Send. One real Meta template send to an internal allowed test number, then rolled back record-only. Hotfix-2/3 added safe-retry support for wrapper-failure and no-provider paths.
 - ✅ **Phase 1** — 14 Django apps, 25 read endpoints, JWT auth, CORS, Master Event Ledger via signals, seed command (42 leads, 60 orders, 18 calls, 19 agents, etc.), frontend wired with mock fallback.
 - ✅ **Phase 2A** — 14 write endpoints, role-based permissions (`apps/accounts/permissions.py`), order workflow state machine (`apps/orders/services.py`), service-layer pattern across CRM / orders / payments / shipments.
 - ✅ **Phase 2B** — Razorpay payment-link integration with mock / test / live modes (`apps/payments/integrations/razorpay_client.py`) and HMAC-verified, idempotent webhook receiver at `/api/webhooks/razorpay/`.
@@ -184,8 +220,11 @@ cd frontend && npm test
 
 **Next:**
 
-- ⏭ **Phase 8F live execute on the VPS** — NOT approved. Requires separate Director directive, all three Phase 8F env flags true, and a 15-minute structured UTC window naming the actual gate/attempt/source/target ids.
-- ⏭ **Phase 7E-Live-B / Phase 7G-Live** — real customer WhatsApp send and real customer courier execution remain NOT approved.
+- ⏭ **Phase 7E-Live-B** (real customer WhatsApp one-shot send) — gate framework SHIPPED; **NEVER run live**. Requires a separate Director directive + `PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true` runtime env prefix + 15-min UTC window + `--confirm-phase7e-live-b-real-customer-send` + non-empty operator + kill switch enabled.
+- ⏭ **Phase 7G-Live** (real customer Delhivery one-shot dispatch) — gate framework SHIPPED; **NEVER run live**. Requires a separate Director directive + `PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_ENABLED=true` + `DELHIVERY_MODE=live` runtime env prefix + 15-min UTC window + `--confirm-phase7g-live-real-customer-dispatch` + non-empty operator + kill switch enabled.
+- ⏭ **Phase 12A live execute** (AI calling campaign) — gate framework SHIPPED; no live Vapi outbound has ever run from this gate. Requires `AI_CALLING_ENABLED=true` + `VAPI_MODE=live` + 30-min UTC window + `--confirm-ai-calling-campaign` + non-empty operator + kill switch enabled.
+- ⏭ **Phase 8F future live execute** — Reading 1 already completed and rolled back on 2026-05-14. Any new Phase 8F live execute requires its own separate Director directive + all three `PHASE8F_*` env flags true + 15-min structured UTC window.
+- ⏭ **Integration gaps** — PayU adapter missing; Vapi `phone_number_id` + `webhook_secret` missing in `.env.production`; Claim Vault doctor-approved final claims still pending (demo-v2 in place).
 
 ## Documentation index
 
