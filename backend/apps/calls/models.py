@@ -293,6 +293,120 @@ class AiCallCampaignGate(models.Model):
         return f"AiCallCampaignGate {self.pk} - {self.status}"
 
 
+class CallOutcomeRecord(models.Model):
+    """Phase 12B — Call Outcome Classifier V1 (recommendations-only).
+
+    One row per classified Call. Idempotent via the OneToOne FK.
+    The classifier reads transcript text deterministically (keyword
+    match against Hinglish-aware signal lists) and proposes a
+    `Lead.status` update — but NEVER applies the update without an
+    explicit Director CLI command (`apply_call_outcome_updates`).
+
+    Phase 12B never sends WhatsApp, makes a call, dispatches a
+    shipment, or calls Razorpay / Meta Cloud / Delhivery. The only
+    side effect outside this table is `Lead.status` mutation inside
+    `apply_call_outcome_updates`, gated by `--confirm-outcome-apply`
+    + `review_status="approved"`.
+    """
+
+    class DetectedOutcome(models.TextChoices):
+        CONNECTED_CONVERTED = (
+            "connected_converted",
+            "connected_converted",
+        )
+        CONNECTED_CALLBACK = (
+            "connected_callback",
+            "connected_callback",
+        )
+        CONNECTED_NOT_INTERESTED = (
+            "connected_not_interested",
+            "connected_not_interested",
+        )
+        CONNECTED_UNCLEAR = (
+            "connected_unclear",
+            "connected_unclear",
+        )
+        NOT_CONNECTED = "not_connected", "not_connected"
+        NO_TRANSCRIPT = "no_transcript", "no_transcript"
+
+    class Confidence(models.TextChoices):
+        HIGH = "high", "high"
+        MEDIUM = "medium", "medium"
+        LOW = "low", "low"
+
+    class ReviewStatus(models.TextChoices):
+        PENDING = "pending", "pending"
+        APPROVED = "approved", "approved"
+        SKIPPED = "skipped", "skipped"
+        APPLIED = "applied", "applied"
+
+    call = models.OneToOneField(
+        Call,
+        on_delete=models.CASCADE,
+        related_name="outcome_record",
+    )
+    campaign_gate = models.ForeignKey(
+        AiCallCampaignGate,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="outcome_records",
+    )
+    lead_id = models.CharField(max_length=32, blank=True, default="")
+    current_lead_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    detected_outcome = models.CharField(
+        max_length=32,
+        choices=DetectedOutcome.choices,
+        db_index=True,
+    )
+    suggested_lead_status = models.CharField(
+        max_length=32, blank=True, default=""
+    )
+    confidence = models.CharField(
+        max_length=8,
+        choices=Confidence.choices,
+        default=Confidence.LOW,
+    )
+    evidence = models.JSONField(default=dict, blank=True)
+    review_status = models.CharField(
+        max_length=12,
+        choices=ReviewStatus.choices,
+        default=ReviewStatus.PENDING,
+        db_index=True,
+    )
+    applied_at = models.DateTimeField(null=True, blank=True)
+    applied_by = models.CharField(max_length=120, blank=True, default="")
+    classified_at = models.DateTimeField()
+    scoring_version = models.CharField(
+        max_length=40, default="deterministic_v1"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-classified_at",)
+        indexes = (
+            models.Index(
+                fields=("review_status",), name="cor_review_status_idx"
+            ),
+            models.Index(
+                fields=("detected_outcome",),
+                name="cor_detected_outcome_idx",
+            ),
+            models.Index(
+                fields=("-classified_at",), name="cor_classified_at_idx"
+            ),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return (
+            f"CallOutcomeRecord {self.pk} - {self.detected_outcome} - "
+            f"{self.review_status}"
+        )
+
+
 class WebhookEvent(models.Model):
     """Idempotency log for Vapi webhooks. Phase 2D.
 

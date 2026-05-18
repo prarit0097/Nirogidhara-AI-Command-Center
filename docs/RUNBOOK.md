@@ -3579,6 +3579,133 @@ the requirement. Director MUST record what was actually done — both
 for audit and for future-Director context (so re-reading the
 proposal six months later still tells you what changed).
 
+## Phase 12B — Call Outcome Classifier Director Playbook
+
+Phase 12B closes the Tier-4 calling loop started by Phase 12A. After
+Vapi webhooks land Call + CallTranscriptLine rows, Phase 12B reads
+them deterministically (zero LLM call) and **suggests** a `Lead.status`
+update. **V1 has NO auto-apply path.** Director reviews + approves
++ manually applies via separate CLI.
+
+**Phase 12B NEVER sends WhatsApp / dispatches a shipment / mutates
+Order / Payment / Customer / Shipment / DiscountOfferLog / calls
+Razorpay / Meta Cloud / Delhivery. `Lead.status` is mutated ONLY by
+`apply_call_outcome_updates`** with all guards satisfied.
+
+### Post-campaign workflow
+
+```bash
+# Step 1 — Classify a specific campaign's calls (or all recent).
+python manage.py classify_call_outcomes --campaign-id <campaign_gate_id>
+# or:
+python manage.py classify_call_outcomes --hours 24
+# or one specific call:
+python manage.py classify_call_outcomes --call-id <call_id>
+
+# Step 2 — Review suggestions (READ-ONLY).
+python manage.py review_call_outcomes --status pending [--campaign-id N]
+
+# Step 3 — Director approves selected suggestions (one at a time).
+python manage.py approve_call_outcome <outcome_record_id> \
+    --operator-name "Prarit"
+
+# Step 4 — Apply approved suggestions to Lead.status (REQUIRES --confirm).
+python manage.py apply_call_outcome_updates \
+    --operator-name "Prarit" \
+    --confirm-outcome-apply
+# or filter to specific records:
+python manage.py apply_call_outcome_updates \
+    --outcome-record-id 42 \
+    --outcome-record-id 43 \
+    --operator-name "Prarit" \
+    --confirm-outcome-apply
+```
+
+### Outcome → Lead.status mapping
+
+| Detected outcome | Suggested Lead.status | Confidence |
+| --- | --- | --- |
+| `connected_converted` | `Payment Link Sent` | high (multi-signal) / medium (single signal) |
+| `connected_callback` | `Callback Required` | medium |
+| `connected_not_interested` | `Not Interested` | high |
+| `connected_unclear` | _(blank — no change)_ | low |
+| `not_connected` | _(blank — Missed / Failed / Queued)_ | high |
+| `no_transcript` | _(blank — Completed but no transcript)_ | low |
+
+### Cascade priority
+
+`rejection → conversion → callback → unclear`. Rejection FIRST because
+Hinglish negations like `nahi chahiye` / `mujhe nahi` embed the
+conversion keyword `chahiye`/`lena` inside an explicit refusal — an
+explicit "no" must always beat an incidental "yes" keyword match.
+
+### Signal lists (deterministic V1, Hinglish-aware)
+
+Conversion (18): `haan` / `bilkul` / `zaroor` / `le lunga` / `le lungi` /
+`order` / `khareed` / `buy` / `payment` / `link bhejo` / `confirm` /
+`lena hai` / `chahiye` / `mangwa` / `mangwana` / `ok bhai` / `theek hai` /
+`kar lete hain`. *(The standalone 2-char `ha` is intentionally NOT in
+the list because it false-matches inside `raha`/`raha hoon`.)*
+
+Callback (16): `baad mein/me` / `call karo/karein` / `phir baat` /
+`thodi der` / `abhi busy/nahi` / `kal` / `shaam ko` / `subah` /
+`raat ko` / `ghar aake` / `callback` / `call back` / `later`.
+
+Rejection (15): `nahi chahiye` / `nahi lena` / `mujhe nahi` /
+`interested nahi` / `not interested` / `no` / `nahi` / `band karo` /
+`mat karo` / `number hatao` / `dnd` / `remove` / `koi zaroorat nahi` /
+`paise nahi` / `mehnga`.
+
+### Daily Celery sweep
+
+Beat entry `call-outcome-classification-daily` runs
+`apps.calls.tasks.classify_call_outcomes_daily(hours=26)` at **07:00 IST**
+(before any Phase 12A morning campaign). 26h window catches late Vapi
+webhooks from the prior evening. Env-shiftable via
+`CALL_OUTCOME_CLASSIFICATION_DAILY_HOUR=7` / `_MINUTE=0` / `_HOURS=26`.
+
+Refusal cases (write `call_outcome.daily_classification.blocked` audit):
+
+| Guard | Reason |
+| --- | --- |
+| Postgres-safe `RuntimeKillSwitch` disabled | `kill_switch_off` |
+| `apps.ai_governance.sandbox.is_sandbox_enabled() = True` | `sandbox_mode` |
+
+Sandbox refusal is deliberate — governance-state rows shouldn't be
+derived from synthetic data. Success writes
+`call_outcome.daily_classification.completed`.
+
+### What Phase 12B does NOT do
+
+- NEVER auto-applies any Lead.status update — Director must run
+  `apply_call_outcome_updates --confirm-outcome-apply` explicitly.
+- NEVER mutates `Order` / `Payment` / `Customer` / `Shipment` /
+  `DiscountOfferLog` (asserted in defensive tests).
+- NEVER calls Vapi / WhatsApp / Razorpay / Meta Cloud / Delhivery.
+- NEVER edits `.env.production`.
+- `review_call_outcomes` is strictly read-only.
+
+### Audit kinds
+
+All ≤ 64 chars:
+
+- `call_outcome.classified` — per-call classification.
+- `call_outcome.applied` — per-record apply (carries `previous_lead_status` + `applied_lead_status`).
+- `call_outcome.daily_classification.completed` — per-sweep success.
+- `call_outcome.daily_classification.blocked` — per-sweep refusal.
+
+### Admin-only read API (no POST)
+
+```text
+GET /api/v1/calls/outcomes/?review_status=&outcome=&campaign_gate_id=&limit=N
+GET /api/v1/calls/outcomes/<int:pk>/   # detail with full evidence JSON
+GET /api/v1/calls/outcomes/summary/    # counts by review_status + by_outcome map
+```
+
+Auth: admin / director / owner / superuser only. POST/PATCH/DELETE → 405.
+
+---
+
 ## Phase 12A — AI Calling Campaign Director Playbook
 
 Phase 12A is the first **Tier-4** piece. It wraps the existing

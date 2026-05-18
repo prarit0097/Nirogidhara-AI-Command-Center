@@ -15,9 +15,11 @@ from .models import (
     ActiveCall,
     AiCallCampaignGate,
     Call,
+    CallOutcomeRecord,
     CallQualityScore,
     CallTranscriptLine,
 )
+from .outcome_classifier import get_outcomes_summary as _get_outcomes_summary
 from .quality_scorer import get_scoring_overview
 from .serializers import (
     ActiveCallSerializer,
@@ -322,6 +324,103 @@ def _serialize_campaign_gate(gate: AiCallCampaignGate) -> dict:
             gate.created_at.isoformat() if gate.created_at else None
         ),
     }
+
+
+def _serialize_outcome_record(row: CallOutcomeRecord) -> dict:
+    return {
+        "id": row.pk,
+        "callId": row.call_id,
+        "campaignGateId": row.campaign_gate_id,
+        "leadId": row.lead_id,
+        "currentLeadStatus": row.current_lead_status,
+        "detectedOutcome": row.detected_outcome,
+        "suggestedLeadStatus": row.suggested_lead_status,
+        "confidence": row.confidence,
+        "reviewStatus": row.review_status,
+        "evidence": dict(row.evidence or {}),
+        "scoringVersion": row.scoring_version,
+        "classifiedAt": (
+            row.classified_at.isoformat() if row.classified_at else None
+        ),
+        "appliedAt": (
+            row.applied_at.isoformat() if row.applied_at else None
+        ),
+        "appliedBy": row.applied_by,
+        "createdAt": (
+            row.created_at.isoformat() if row.created_at else None
+        ),
+    }
+
+
+class CallOutcomeRecordsListView(APIView):
+    """``GET /api/v1/calls/outcomes/?review_status=&outcome=&limit=N``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request):
+        qs = CallOutcomeRecord.objects.all()
+        review_status = (
+            request.query_params.get("review_status") or ""
+        ).strip()
+        if review_status:
+            qs = qs.filter(review_status=review_status)
+        detected_outcome = (
+            request.query_params.get("outcome") or ""
+        ).strip()
+        if detected_outcome:
+            qs = qs.filter(detected_outcome=detected_outcome)
+        campaign_gate_id = request.query_params.get("campaign_gate_id")
+        if campaign_gate_id:
+            try:
+                qs = qs.filter(campaign_gate_id=int(campaign_gate_id))
+            except (TypeError, ValueError):
+                pass
+        try:
+            limit = int(request.query_params.get("limit") or 50)
+        except (TypeError, ValueError):
+            limit = 50
+        limit = max(1, min(200, limit))
+        rows = list(qs.order_by("-classified_at")[:limit])
+        return Response(
+            {
+                "count": len(rows),
+                "results": [_serialize_outcome_record(r) for r in rows],
+            }
+        )
+
+
+class CallOutcomeRecordDetailView(APIView):
+    """``GET /api/v1/calls/outcomes/<int:pk>/``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, _request, pk: int):
+        row = CallOutcomeRecord.objects.filter(pk=pk).first()
+        if row is None:
+            raise NotFound(f"CallOutcomeRecord {pk} not found.")
+        return Response(_serialize_outcome_record(row))
+
+
+class CallOutcomeRecordsSummaryView(APIView):
+    """``GET /api/v1/calls/outcomes/summary/``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, _request):
+        summary = _get_outcomes_summary()
+        return Response(
+            {
+                "total": summary["total"],
+                "pendingCount": summary["pending_count"],
+                "approvedCount": summary["approved_count"],
+                "appliedCount": summary["applied_count"],
+                "skippedCount": summary["skipped_count"],
+                "byOutcome": summary["by_outcome"],
+            }
+        )
 
 
 class AiCallCampaignGateListView(APIView):

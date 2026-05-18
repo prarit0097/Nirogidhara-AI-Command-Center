@@ -13,6 +13,9 @@ from .views import (
     AiCallCampaignGateDetailView,
     AiCallCampaignGateLatestView,
     AiCallCampaignGateListView,
+    CallOutcomeRecordDetailView,
+    CallOutcomeRecordsListView,
+    CallOutcomeRecordsSummaryView,
     CallQualityScoreDetailView,
     CallQualityScoresListView,
     CallQualityScoresSummaryView,
@@ -67,5 +70,23 @@ urlpatterns = [
         "campaigns/<int:pk>/",
         AiCallCampaignGateDetailView.as_view(),
         name="phase12a-campaign-detail",
+    ),
+    # Phase 12B — Call Outcome Records (read-only).
+    # ``summary/`` is registered BEFORE the dynamic ``<int:pk>`` route
+    # so it is never captured as a record id.
+    path(
+        "outcomes/summary/",
+        CallOutcomeRecordsSummaryView.as_view(),
+        name="phase12b-outcomes-summary",
+    ),
+    path(
+        "outcomes/",
+        CallOutcomeRecordsListView.as_view(),
+        name="phase12b-outcomes-list",
+    ),
+    path(
+        "outcomes/<int:pk>/",
+        CallOutcomeRecordDetailView.as_view(),
+        name="phase12b-outcome-detail",
     ),
 ]

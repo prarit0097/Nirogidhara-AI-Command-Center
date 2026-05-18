@@ -17,6 +17,7 @@ from django.conf import settings
 from apps.audit.models import AuditEvent
 from apps.audit.signals import write_event
 
+from .outcome_classifier import classify_recent_calls
 from .quality_scorer import score_backlog
 from .transcript_ingestion import ingest_backlog
 
@@ -171,7 +172,61 @@ def score_call_transcripts_daily(limit: int = 100) -> dict[str, Any]:
     return summary
 
 
+@shared_task(name="apps.calls.tasks.classify_call_outcomes_daily")
+def classify_call_outcomes_daily(hours: int = 26) -> dict[str, Any]:
+    """Phase 12B daily 07:00 IST sweep — classify recent calls.
+
+    26h window (overlaps with the previous day's calling sweep to
+    catch late Vapi webhooks). Refuses with
+    ``call_outcome.daily_classification.blocked`` audit when the
+    Postgres-safe runtime kill switch is off OR sandbox mode is
+    active. Sandbox refusal is deliberate — sandbox mode means we
+    shouldn't be creating governance-state rows from synthetic data.
+    Success writes ``call_outcome.daily_classification.completed``.
+
+    NEVER auto-applies a Lead.status update. Director must run
+    ``apply_call_outcome_updates`` separately.
+    """
+    if _kill_switch_blocked():
+        write_event(
+            kind="call_outcome.daily_classification.blocked",
+            text=(
+                "Phase 12B daily classification blocked: runtime kill "
+                "switch off."
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            payload={"phase": "12B", "reason": "kill_switch_off"},
+        )
+        return {"ok": False, "skipped": True, "reason": "kill_switch_off"}
+
+    if _sandbox_active():
+        write_event(
+            kind="call_outcome.daily_classification.blocked",
+            text=(
+                "Phase 12B daily classification blocked: sandbox mode "
+                "active."
+            ),
+            tone=AuditEvent.Tone.INFO,
+            payload={"phase": "12B", "reason": "sandbox_mode"},
+        )
+        return {"ok": False, "skipped": True, "reason": "sandbox_mode"}
+
+    summary = classify_recent_calls(hours=int(hours or 26))
+    audit_payload = {"phase": "12B", **summary}
+    write_event(
+        kind="call_outcome.daily_classification.completed",
+        text=(
+            f"Phase 12B daily classification swept "
+            f"{summary['total']} calls (errors={summary['errors']})."
+        ),
+        tone=AuditEvent.Tone.SUCCESS,
+        payload=audit_payload,
+    )
+    return summary
+
+
 __all__ = (
     "ingest_transcript_backlog_daily",
     "score_call_transcripts_daily",
+    "classify_call_outcomes_daily",
 )

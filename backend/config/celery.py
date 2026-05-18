@@ -110,6 +110,19 @@ def build_beat_schedule() -> dict:
     caio_audit_hour = getattr(settings, "CAIO_AUDIT_DAILY_HOUR", 14)
     caio_audit_minute = getattr(settings, "CAIO_AUDIT_DAILY_MINUTE", 0)
     caio_audit_window = getattr(settings, "CAIO_AUDIT_DAILY_WINDOW_DAYS", 30)
+    # Phase 12B - Call Outcome Classifier daily sweep. 07:00 IST default
+    # (before any Phase 12A calling campaign starts), 26h window so late
+    # Vapi webhooks from the previous evening are caught. Never mutates
+    # Lead.status — Director runs apply_call_outcome_updates separately.
+    call_outcome_hour = getattr(
+        settings, "CALL_OUTCOME_CLASSIFICATION_DAILY_HOUR", 7
+    )
+    call_outcome_minute = getattr(
+        settings, "CALL_OUTCOME_CLASSIFICATION_DAILY_MINUTE", 0
+    )
+    call_outcome_window_hours = getattr(
+        settings, "CALL_OUTCOME_CLASSIFICATION_DAILY_HOURS", 26
+    )
 
     return {
         "ai-daily-briefing-morning": {
@@ -176,6 +189,14 @@ def build_beat_schedule() -> dict:
                 minute=caio_audit_minute,
             ),
             "kwargs": {"window_days": int(caio_audit_window)},
+        },
+        "call-outcome-classification-daily": {
+            "task": "apps.calls.tasks.classify_call_outcomes_daily",
+            "schedule": crontab(
+                hour=call_outcome_hour,
+                minute=call_outcome_minute,
+            ),
+            "args": (int(call_outcome_window_hours),),
         },
     }
 
