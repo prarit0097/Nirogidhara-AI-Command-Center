@@ -46,6 +46,9 @@ import type {
   DataAnalystLatestResponse,
   CallingTeamLeaderLatestResponse,
   CeoOrchestrationLatestResponse,
+  CaioAuditSnapshot,
+  LearningProposalsListResponse,
+  LearningProposalSummary,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -307,6 +310,20 @@ export default function SaasAdminPage() {
     ceoOrchestrationLatest,
     setCeoOrchestrationLatest,
   ] = useState<CeoOrchestrationLatestResponse | null>(null);
+  // Phase 11C — CAIO Audit Agent (read-only).
+  const [
+    caioLatestSnapshot,
+    setCaioLatestSnapshot,
+  ] = useState<CaioAuditSnapshot | null>(null);
+  // Phase 11D — Learning Loop Gate (read-only).
+  const [
+    learningProposals,
+    setLearningProposals,
+  ] = useState<LearningProposalsListResponse | null>(null);
+  const [
+    learningProposalSummary,
+    setLearningProposalSummary,
+  ] = useState<LearningProposalSummary | null>(null);
   const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
@@ -440,6 +457,9 @@ export default function SaasAdminPage() {
       api.getDataAnalystLatest(),
       api.getCallingTeamLeaderLatest(),
       api.getCeoOrchestrationLatest(),
+      api.getCaioLatestSnapshot(),
+      api.getLearningProposals({ status: "pending", limit: 5 }),
+      api.getLearningProposalSummary(),
       api.getSaasPhase7IFinalAuditLockReadiness(),
       api.getSaasPhase7IFinalAuditLocks(25),
       api.getSaasPhase8APaymentOrderMutationSandboxReadiness(),
@@ -510,6 +530,9 @@ export default function SaasAdminPage() {
           p9dLatest,
           p9eLatest,
           p9fLatest,
+          p11cCaio,
+          p11dProposals,
+          p11dSummary,
           p7iRead,
           p7iLocks,
           p8aRead,
@@ -578,6 +601,9 @@ export default function SaasAdminPage() {
           setDataAnalystLatest(p9dLatest);
           setCallingTeamLeaderLatest(p9eLatest);
           setCeoOrchestrationLatest(p9fLatest);
+          setCaioLatestSnapshot(p11cCaio);
+          setLearningProposals(p11dProposals);
+          setLearningProposalSummary(p11dSummary);
           setPhase7iFinalAuditLockReadiness(p7iRead);
           setPhase7iFinalAuditLocks(p7iLocks);
           setPhase8aPaymentOrderMutationSandboxReadiness(p8aRead);
@@ -5604,6 +5630,270 @@ export default function SaasAdminPage() {
             <strong>Recommendations-only.</strong> No "Approve
             Priority" / "Trigger Workflow" / "Send Briefing" / "Run
             Agent" / "Apply Recommendation" buttons exist on this
+            page.
+          </div>
+        </section>
+      )}
+
+      {/* Phase 11C — CAIO Audit Agent V1 (read-only). */}
+      {caioLatestSnapshot && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="caio-audit-agent-v1-section"
+        >
+          <div className="border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                CAIO — AI Governance Audit
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Reads Phase 9A–9F + Phase 11A/11B. Reports to Director.
+                No execution power.
+              </p>
+            </div>
+            <span
+              data-testid="caio-severity-badge"
+              className={
+                caioLatestSnapshot.severity === "red"
+                  ? "rounded-full px-3 py-1 text-xs font-semibold bg-red-100 text-red-800"
+                  : caioLatestSnapshot.severity === "amber"
+                  ? "rounded-full px-3 py-1 text-xs font-semibold bg-amber-100 text-amber-800"
+                  : "rounded-full px-3 py-1 text-xs font-semibold bg-green-100 text-green-800"
+              }
+            >
+              {caioLatestSnapshot.severity.toUpperCase()}
+            </span>
+          </div>
+          <div className="px-6 py-3 text-xs text-muted-foreground">
+            Last audit:{" "}
+            {caioLatestSnapshot.snapshot_at
+              ? new Date(caioLatestSnapshot.snapshot_at).toLocaleString()
+              : "—"}
+          </div>
+          <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+            <KeyValue
+              label="Compliance risk calls"
+              value={String(
+                caioLatestSnapshot.compliance_risk_call_count,
+              )}
+            />
+            <KeyValue
+              label="Transcript backlog"
+              value={String(caioLatestSnapshot.transcript_backlog_count)}
+            />
+            <KeyValue
+              label="Agent data gaps"
+              value={String(caioLatestSnapshot.agent_data_gaps)}
+            />
+            <KeyValue
+              label="Quality trend"
+              value={caioLatestSnapshot.call_quality_trend}
+            />
+          </div>
+          {Object.keys(caioLatestSnapshot.agent_anomaly_flags || {})
+            .length > 0 && (
+            <div
+              className="border-t border-border px-6 py-4"
+              data-testid="caio-agent-anomalies"
+            >
+              <p className="text-xs font-medium mb-2">Agent anomalies</p>
+              <ul className="space-y-1 text-xs">
+                {Object.entries(caioLatestSnapshot.agent_anomaly_flags)
+                  .slice(0, 5)
+                  .map(([agent, codes]) => (
+                    <li key={agent}>
+                      <strong>{agent}:</strong> {codes.join(", ")}
+                    </li>
+                  ))}
+                {Object.keys(caioLatestSnapshot.agent_anomaly_flags)
+                  .length > 5 && (
+                  <li className="text-muted-foreground">
+                    +
+                    {Object.keys(caioLatestSnapshot.agent_anomaly_flags)
+                      .length - 5}{" "}
+                    more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+          {caioLatestSnapshot.weak_learning_indicators.length > 0 && (
+            <div
+              className="border-t border-border px-6 py-4"
+              data-testid="caio-weak-learning"
+            >
+              <p className="text-xs font-medium mb-2">
+                Weak learning indicators
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {caioLatestSnapshot.weak_learning_indicators.map(
+                  (code) => (
+                    <span
+                      key={code}
+                      className="rounded-full border border-border bg-muted/30 px-2 py-1 text-xs"
+                    >
+                      {code}
+                    </span>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+          {caioLatestSnapshot.ceo_audit_notes.length > 0 && (
+            <div
+              className="border-t border-border px-6 py-4"
+              data-testid="caio-ceo-audit"
+            >
+              <p className="text-xs font-medium mb-1">CEO AI audit</p>
+              <p className="text-xs italic text-muted-foreground">
+                {caioLatestSnapshot.ceo_audit_notes[0]}
+              </p>
+            </div>
+          )}
+          {caioLatestSnapshot.recommendation_text && (
+            <div
+              className="border-t border-border px-6 py-4"
+              data-testid="caio-recommendation"
+            >
+              <p className="text-xs font-medium mb-2">Recommendation</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line">
+                {caioLatestSnapshot.recommendation_text.slice(0, 200)}
+                {caioLatestSnapshot.recommendation_text.length > 200
+                  ? "…"
+                  : ""}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                See full report via:{" "}
+                <code className="rounded bg-muted/30 px-1">
+                  GET /api/v1/caio/snapshots/latest/
+                </code>
+              </p>
+            </div>
+          )}
+          <div className="border-t border-border px-6 py-3 text-xs">
+            <a
+              href="/operations/learning-proposals"
+              className="text-primary underline"
+              data-testid="caio-view-learning-proposals-link"
+            >
+              View learning proposals →
+            </a>
+          </div>
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="caio-read-only-banner"
+          >
+            <strong>Internal governance report — CLI-only management.</strong>{" "}
+            No "Run Audit" / "Force Refresh" / "Apply Recommendation"
+            buttons exist on this page.
+          </div>
+        </section>
+      )}
+
+      {/* Phase 11D — Learning Proposals mini-card (read-only). */}
+      {learningProposalSummary && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="learning-proposals-mini-card"
+        >
+          <div className="border-b border-border px-6 py-4">
+            <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              Learning Proposals
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+              CAIO-generated governance improvement proposals awaiting
+              Director review.
+            </p>
+          </div>
+          <div className="px-6 py-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+            <KeyValue
+              label="Pending"
+              value={String(learningProposalSummary.pending)}
+            />
+            <KeyValue
+              label="Approved"
+              value={String(learningProposalSummary.approved)}
+            />
+            <KeyValue
+              label="Implemented"
+              value={String(learningProposalSummary.implemented)}
+            />
+            <KeyValue
+              label="High-impact pending"
+              value={String(learningProposalSummary.high_impact_pending)}
+            />
+          </div>
+          <div className="border-t border-border px-6 py-4">
+            <p className="text-xs font-medium mb-2">
+              Top pending proposals
+            </p>
+            {learningProposals &&
+            learningProposals.results.filter((p) => p.status === "pending")
+              .length > 0 ? (
+              <ul className="space-y-2 text-xs">
+                {learningProposals.results
+                  .filter((p) => p.status === "pending")
+                  .slice(0, 3)
+                  .map((p) => (
+                    <li
+                      key={p.id}
+                      data-testid="learning-proposal-row"
+                      className="flex items-start justify-between gap-3 rounded border border-border px-3 py-2"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium">{p.title}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                          <span className="rounded-full border border-border px-2 py-0.5">
+                            {p.proposal_type}
+                          </span>
+                          <span
+                            className={
+                              p.impact_scope === "high"
+                                ? "rounded-full bg-red-100 text-red-800 px-2 py-0.5"
+                                : p.impact_scope === "medium"
+                                ? "rounded-full bg-amber-100 text-amber-800 px-2 py-0.5"
+                                : "rounded-full bg-muted/40 px-2 py-0.5"
+                            }
+                          >
+                            {p.impact_scope}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {new Date(p.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p
+                className="text-xs text-emerald-700"
+                data-testid="learning-proposals-empty"
+              >
+                ✓ No pending proposals. System is current.
+              </p>
+            )}
+          </div>
+          <div className="border-t border-border px-6 py-3 text-xs">
+            <a
+              href="/operations/learning-proposals"
+              className="text-primary underline"
+              data-testid="learning-proposals-view-all-link"
+            >
+              View all proposals →
+            </a>
+          </div>
+          <div
+            className="border-t border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground"
+            data-testid="learning-proposals-read-only-banner"
+          >
+            <strong>Review and act via CLI:</strong>{" "}
+            <code className="rounded bg-muted/30 px-1">
+              python manage.py list_learning_proposals
+            </code>{" "}
+            — no Approve / Reject / Implement buttons exist on this
             page.
           </div>
         </section>

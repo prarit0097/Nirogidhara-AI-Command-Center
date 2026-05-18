@@ -188,6 +188,9 @@ import type {
   CeoOrchestrationLatestResponse,
   CeoOrchestrationSnapshotsResponse,
   PendingPaymentsDrilldownResponse,
+  CaioAuditSnapshot,
+  LearningProposalsListResponse,
+  LearningProposalSummary,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1894,6 +1897,63 @@ export const api = {
         M.DIAGNOSTICS_PENDING_PAYMENTS as PendingPaymentsDrilldownResponse,
     );
   },
+
+  // ---------- Phase 11C — CAIO Audit Agent V1 (read-only) ----------
+
+  /**
+   * Returns the most recent CAIO audit snapshot, or ``null`` when the
+   * backend responds with a clean 404 (no snapshot has ever been
+   * persisted). Falls back to deterministic mock data on transport
+   * failures so the dashboard always renders something.
+   */
+  getCaioLatestSnapshot: async (): Promise<CaioAuditSnapshot | null> => {
+    const path = "/v1/caio/snapshots/latest/";
+    try {
+      const res = await fetch(`${BASE}${path}`, {
+        headers: { Accept: "application/json", ...authHeaders() },
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} for ${path}`);
+      }
+      return (await res.json()) as CaioAuditSnapshot;
+    } catch (error) {
+      if (!warnedPaths.has(path)) {
+        warnedPaths.add(path);
+        console.warn(
+          `[api] Falling back to mock data for ${path}: ${
+            (error as Error).message
+          }`,
+        );
+      }
+      return M.CAIO_LATEST_SNAPSHOT as CaioAuditSnapshot;
+    }
+  },
+
+  // ---------- Phase 11D — Learning Loop Gate V1 (read-only) ----------
+
+  getLearningProposals: (
+    params: { status?: string; limit?: number; type?: string } = {},
+  ): Promise<LearningProposalsListResponse> => {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.type) q.set("type", params.type);
+    if (params.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/learning/proposals/?${qs}`
+      : "/v1/learning/proposals/";
+    return safeFetch<LearningProposalsListResponse>(
+      url,
+      () => M.LEARNING_PROPOSALS as LearningProposalsListResponse,
+    );
+  },
+
+  getLearningProposalSummary: (): Promise<LearningProposalSummary> =>
+    safeFetch<LearningProposalSummary>(
+      "/v1/learning/proposals/summary/",
+      () => M.LEARNING_PROPOSAL_SUMMARY as LearningProposalSummary,
+    ),
 
   // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------
 

@@ -3579,6 +3579,64 @@ the requirement. Director MUST record what was actually done — both
 for audit and for future-Director context (so re-reading the
 proposal six months later still tells you what changed).
 
+## Phase 11D — Learning Loop Gate Director Playbook
+
+CAIO auto-creates `LearningProposal` rows at 14:00 IST when it finds
+RED findings. Director workflow (the gate):
+
+**Step 1 — List pending proposals:**
+
+```bash
+python manage.py list_learning_proposals --status pending [--json]
+```
+
+**Step 2 — Review a proposal (approve or reject):**
+
+```bash
+python manage.py review_learning_proposal <id> \
+    --decision approved \
+    --operator-name "Prarit" \
+    --note "Reason for decision"
+```
+
+(or `--decision rejected`)
+
+**Step 3 — Manually implement the approved change (outside the platform):**
+
+e.g., update calling script, coach agent, adjust process.
+
+**Step 4 — Record the implementation (REQUIRED — `implementation-note` must be non-blank):**
+
+```bash
+python manage.py implement_learning_proposal <id> \
+    --operator-name "Prarit" \
+    --implementation-note "What was done (e.g. Updated Anil call window 10am-2pm)"
+```
+
+**API access (read-only, admin+):**
+
+```text
+GET /api/v1/learning/proposals/          — all proposals paginated
+GET /api/v1/learning/proposals/pending/  — shortcut: pending only
+GET /api/v1/learning/proposals/<id>/     — proposal detail
+GET /api/v1/learning/proposals/summary/  — counts by status
+```
+
+**Safety invariant:** `implement_learning_proposal` NEVER auto-applies
+any change. It records that Director manually implemented.
+`PromptVersion` rows are never mutated by any Phase 11D path.
+
+**Proposal types and when CAIO creates them:**
+
+| Type | Trigger |
+| --- | --- |
+| `compliance_remediation` | when `compliance_violation` in `agent_anomaly_flags` |
+| `script_review` | when `declining_call_quality` in `weak_learning_indicators` |
+| `process_improvement` | when `no_recent_calls` in `weak_learning_indicators` |
+| `agent_coaching` | when `zero_agent_utterances` in top quality flags (i.e. `all_agent_utterances_missing` indicator) |
+
+---
+
 ### Phase 11C — CAIO Audit Agent V1 (governance, recommendations-only)
 
 Phase 11C is the **first governance layer** above the Phase 9

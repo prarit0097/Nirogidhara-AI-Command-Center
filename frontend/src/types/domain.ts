@@ -6805,3 +6805,94 @@ export interface SaasPhase8FRealCustomerControlledMutationGatesResponse {
   phase8FMutatesDiscountOfferLog: false;
   phase8FMutatesWhatsAppMessage: false;
 }
+
+
+// ---------------------------------------------------------------------------
+// Phase 11C — CAIO Audit Agent V1 (read-only)
+// ---------------------------------------------------------------------------
+
+export type CaioSeverity = "green" | "amber" | "red";
+export type CaioTrend = "up" | "flat" | "down" | "no_data";
+
+export interface CaioAgentAnomaly {
+  [agentName: string]: string[];
+}
+
+export interface CaioAuditSnapshot {
+  id: number;
+  snapshot_at: string;
+  window_days: number;
+  severity: CaioSeverity;
+  compliance_risk_call_count: number;
+  compliance_risk_agent_labels: string[];
+  transcript_backlog_count: number;
+  call_quality_trend: CaioTrend;
+  agent_data_gaps: number;
+  agent_data_gap_names: string[];
+  agent_anomaly_flags: CaioAgentAnomaly;
+  weak_learning_indicators: string[];
+  ceo_audit_notes: string[];
+  recommendation_text: string;
+  audited_agents: string[];
+  sandbox: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11D — Learning Loop Gate V1 (read-only)
+// ---------------------------------------------------------------------------
+
+export type LearningProposalType =
+  | "compliance_remediation"
+  | "script_review"
+  | "knowledge_gap"
+  | "process_improvement"
+  | "agent_coaching";
+
+export type LearningProposalStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "implemented"
+  | "cancelled";
+
+export type LearningProposalImpactScope = "low" | "medium" | "high";
+
+export type LearningProposalDirectorDecision =
+  | "pending"
+  | "approved"
+  | "rejected";
+
+export interface LearningProposal {
+  id: number;
+  source_agent: string;
+  proposal_type: LearningProposalType;
+  title: string;
+  status: LearningProposalStatus;
+  impact_scope: LearningProposalImpactScope;
+  evidence: Record<string, unknown>;
+  proposed_change_text: string;
+  director_decision: LearningProposalDirectorDecision;
+  director_note: string;
+  reviewed_by: string;
+  reviewed_at: string | null;
+  implementation_note: string;
+  implemented_at: string | null;
+  implemented_by: string;
+  caio_snapshot_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LearningProposalsListResponse {
+  count: number;
+  results: LearningProposal[];
+}
+
+export interface LearningProposalSummary {
+  pending: number;
+  approved: number;
+  rejected: number;
+  implemented: number;
+  cancelled: number;
+  high_impact_pending: number;
+}

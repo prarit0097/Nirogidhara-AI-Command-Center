@@ -6560,3 +6560,111 @@ export const SAAS_RAZORPAY_BUSINESS_MUTATION_SANDBOX_PLAN: Record<
     },
   ],
 };
+
+
+// ---------- Phase 11C — CAIO Audit Agent V1 ----------
+
+export const CAIO_LATEST_SNAPSHOT: Record<string, unknown> = {
+  id: 1,
+  snapshot_at: "2026-05-16T08:30:00Z",
+  window_days: 30,
+  severity: "amber",
+  compliance_risk_call_count: 0,
+  compliance_risk_agent_labels: [],
+  transcript_backlog_count: 4,
+  call_quality_trend: "no_data",
+  agent_data_gaps: 1,
+  agent_data_gap_names: ["rto_prevention"],
+  agent_anomaly_flags: {
+    cfo: ["high_pending_payments"],
+    calling_team_leader: ["low_connection_rate"],
+  },
+  weak_learning_indicators: ["no_recent_calls"],
+  ceo_audit_notes: [
+    "CEO health tier is poor (score 36). Top priorities: high_pending_payments.",
+  ],
+  recommendation_text:
+    "CAIO severity: AMBER\nWhy AMBER: see weak learning / agent anomalies below.\n\nCompliance risk: 0 call(s) with violations in last 30 days.\nTranscript backlog: 4 call(s) awaiting ingestion.\nCall quality trend (7d vs prior 7d): no_data\n\nAgent data gaps: rto_prevention (no snapshot in last 48h).\n\nAgent anomalies:\n  - cfo: high_pending_payments\n  - calling_team_leader: low_connection_rate\n\nWeak learning indicators:\n  - no_recent_calls\n\nCEO AI audit:\n  - CEO health tier is poor (score 36). Top priorities: high_pending_payments.\n\nRecommended Director actions (no auto-execution):\n  - Continue monitoring; no action needed today.",
+  audited_agents: [
+    "phase9a_customer_success",
+    "phase9b_rto_prevention",
+    "phase9c_cfo",
+    "phase9d_data_analyst",
+    "phase9e_calling_team_leader",
+    "phase9f_ceo_orchestration",
+    "phase11a_transcript_ingestion",
+    "phase11b_call_quality_scorer",
+  ],
+  sandbox: false,
+};
+
+
+// ---------- Phase 11D — Learning Loop Gate V1 ----------
+
+export const LEARNING_PROPOSALS: Record<string, unknown> = {
+  count: 2,
+  results: [
+    {
+      id: 12,
+      source_agent: "caio_v1",
+      proposal_type: "process_improvement",
+      title:
+        "No calls made in last 7 days — calling process needs review",
+      status: "pending",
+      impact_scope: "medium",
+      evidence: {
+        caio_snapshot_id: 1,
+        severity: "amber",
+        weak_learning: ["no_recent_calls"],
+      },
+      proposed_change_text:
+        "Phase 9E Calling Team Leader reports 0 calls in the last 7 days. Verify: lead pipeline is feeding the dialer, calling agents are staffed, Vapi assistant is healthy, no upstream process gate has paused outbound. If intentional pause, mark this proposal as cancelled with reason.",
+      director_decision: "pending",
+      director_note: "",
+      reviewed_by: "",
+      reviewed_at: null,
+      implementation_note: "",
+      implemented_at: null,
+      implemented_by: "",
+      caio_snapshot_id: 1,
+      created_at: "2026-05-16T08:30:05Z",
+      updated_at: "2026-05-16T08:30:05Z",
+    },
+    {
+      id: 11,
+      source_agent: "caio_v1",
+      proposal_type: "compliance_remediation",
+      title: "Compliance violation detected in recent calls",
+      status: "approved",
+      impact_scope: "high",
+      evidence: {
+        caio_snapshot_id: 0,
+        severity: "red",
+        compliance_risk_call_count: 2,
+        compliance_risk_agent_labels: ["Calling AI · Vapi"],
+      },
+      proposed_change_text:
+        "Review call recordings flagged for forbidden phrases (guarantee / cure / medicine / doctor / clinically proven / 100% / fda). Provide coaching to flagged agents. Update calling script to replace forbidden language with approved Claim Vault phrases.",
+      director_decision: "approved",
+      director_note:
+        "Coach Anil 1:1 this week; rewrite script lines 14-22.",
+      reviewed_by: "Prarit Sidana",
+      reviewed_at: "2026-05-15T11:00:00Z",
+      implementation_note: "",
+      implemented_at: null,
+      implemented_by: "",
+      caio_snapshot_id: 0,
+      created_at: "2026-05-15T08:30:00Z",
+      updated_at: "2026-05-15T11:00:00Z",
+    },
+  ],
+};
+
+export const LEARNING_PROPOSAL_SUMMARY: Record<string, unknown> = {
+  pending: 1,
+  approved: 1,
+  rejected: 0,
+  implemented: 0,
+  cancelled: 0,
+  high_impact_pending: 0,
+};
