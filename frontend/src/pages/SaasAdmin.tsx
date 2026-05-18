@@ -49,6 +49,10 @@ import type {
   CaioAuditSnapshot,
   LearningProposalsListResponse,
   LearningProposalSummary,
+  AiCallCampaignGate,
+  AiCallCampaignGatesListResponse,
+  CallOutcomeRecordsSummary,
+  PostCallFollowUpSummary,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -324,6 +328,19 @@ export default function SaasAdminPage() {
     learningProposalSummary,
     setLearningProposalSummary,
   ] = useState<LearningProposalSummary | null>(null);
+  // Phase 12D — Tier-4 AI Calling Performance Dashboard (read-only).
+  const [
+    callingCampaigns,
+    setCallingCampaigns,
+  ] = useState<AiCallCampaignGatesListResponse | null>(null);
+  const [
+    callOutcomesSummary,
+    setCallOutcomesSummary,
+  ] = useState<CallOutcomeRecordsSummary | null>(null);
+  const [
+    postCallFollowUpSummary,
+    setPostCallFollowUpSummary,
+  ] = useState<PostCallFollowUpSummary | null>(null);
   const [
     phase7iFinalAuditLockReadiness,
     setPhase7iFinalAuditLockReadiness,
@@ -475,6 +492,10 @@ export default function SaasAdminPage() {
       api.getSaasPhase8ERealCustomerCandidatePool(50, false),
       api.getSaasPhase8FRealCustomerControlledMutationReadiness(),
       api.getSaasPhase8FRealCustomerControlledMutationGates(25),
+      // Phase 12D — Tier-4 Calling Performance Dashboard (read-only).
+      api.getCallingCampaigns({ limit: 5 }),
+      api.getCallOutcomesSummary(),
+      api.getPostCallFollowUpSummary(),
     ])
       .then(
         ([
@@ -548,6 +569,9 @@ export default function SaasAdminPage() {
           p8ePool,
           p8fRead,
           p8fGates,
+          p12dCampaigns,
+          p12dOutcomesSummary,
+          p12dFollowupSummary,
         ]) => {
           setOverview(ov);
           setRouting(rt);
@@ -619,6 +643,9 @@ export default function SaasAdminPage() {
           setPhase8eRealCustomerCandidatePool(p8ePool);
           setPhase8fRealCustomerControlledMutationReadiness(p8fRead);
           setPhase8fRealCustomerControlledMutationGates(p8fGates);
+          setCallingCampaigns(p12dCampaigns);
+          setCallOutcomesSummary(p12dOutcomesSummary);
+          setPostCallFollowUpSummary(p12dFollowupSummary);
           // Auto-load the audit review for the latest succeeded
           // execution if present.
           const latestSucceeded = wbr?.latestSucceededExecutionId;
@@ -6660,6 +6687,77 @@ export default function SaasAdminPage() {
         </section>
       )}
 
+      {(callingCampaigns ||
+        callOutcomesSummary ||
+        postCallFollowUpSummary) && (
+        <section
+          className="mt-6 surface-card overflow-hidden"
+          data-testid="tier4-calling-performance-section"
+        >
+          <div className="border-b border-border px-6 py-4">
+            <h3 className="flex items-center gap-2 font-display text-lg font-semibold">
+              <Workflow className="h-5 w-5 text-primary" />
+              Tier-4 AI Calling — Campaign Performance
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+              Gate-approved Vapi outbound campaigns (Phase 12A) →
+              deterministic outcome classification (Phase 12B) →
+              WhatsApp follow-up queue (Phase 12C). Read-only summary
+              for Director review.{" "}
+              <strong>
+                Calling managed via CLI — Phase 12A/B/C commands.
+              </strong>
+            </p>
+          </div>
+
+          <div className="px-6 py-4 space-y-5">
+            {/* Latest campaign tile */}
+            {callingCampaigns &&
+              callingCampaigns.results.length > 0 && (
+                <Tier4LatestCampaignTile
+                  campaign={callingCampaigns.results[0]}
+                />
+              )}
+            {callingCampaigns &&
+              callingCampaigns.results.length === 0 && (
+                <div
+                  className="rounded-md border border-dashed border-border bg-muted/10 px-4 py-6 text-center text-xs text-muted-foreground"
+                  data-testid="tier4-latest-campaign-empty"
+                >
+                  No campaigns yet. Use the Phase 12A CLI to prepare
+                  a campaign.
+                </div>
+              )}
+
+            {/* Outcome breakdown */}
+            {callOutcomesSummary && (
+              <Tier4OutcomeBreakdown summary={callOutcomesSummary} />
+            )}
+
+            {/* Follow-up queue tiles */}
+            {postCallFollowUpSummary && (
+              <Tier4FollowUpTiles summary={postCallFollowUpSummary} />
+            )}
+          </div>
+
+          <div className="border-t border-border bg-muted/20 px-6 py-3 flex items-center justify-between text-xs text-muted-foreground gap-3 flex-wrap">
+            <div>
+              Review outcomes via CLI:{" "}
+              <code className="rounded bg-muted/40 px-1 py-0.5">
+                python manage.py review_call_outcomes
+              </code>
+            </div>
+            <a
+              href="/operations/calling-dashboard"
+              className="text-primary hover:underline whitespace-nowrap"
+              data-testid="tier4-calling-dashboard-link"
+            >
+              View full dashboard →
+            </a>
+          </div>
+        </section>
+      )}
+
       {(phase7iFinalAuditLockReadiness || phase7iFinalAuditLocks) && (
         <section
           className="mt-6 surface-card overflow-hidden"
@@ -8199,6 +8297,277 @@ function Phase6OReviewRow({
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Phase 12D — Tier-4 AI Calling Performance helper components (read-only).
+// ---------------------------------------------------------------------------
+
+function campaignStatusTone(
+  status: AiCallCampaignGateStatus,
+): "amber" | "blue" | "green" | "red" | "muted" {
+  switch (status) {
+    case "draft":
+      return "muted";
+    case "approved":
+      return "blue";
+    case "executing":
+      return "amber";
+    case "completed":
+      return "green";
+    case "failed":
+      return "red";
+    case "cancelled":
+      return "muted";
+    default:
+      return "muted";
+  }
+}
+
+function formatDateTimeOrDash(value: string | null): string {
+  if (!value) return "—";
+  try {
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return value;
+    return dt.toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function Tier4LatestCampaignTile({
+  campaign,
+}: {
+  campaign: AiCallCampaignGate;
+}) {
+  return (
+    <div
+      className="rounded-md border border-border bg-muted/10 p-4 space-y-2"
+      data-testid="tier4-latest-campaign-tile"
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            Latest campaign
+          </span>
+          <span className="font-mono text-xs">#{campaign.id}</span>
+          <StatusPill
+            tone={campaignStatusTone(campaign.status)}
+            label={campaign.status}
+          />
+          {campaign.sandbox && (
+            <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px]">
+              sandbox
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Last activity:{" "}
+          {formatDateTimeOrDash(
+            campaign.completedAt ||
+              campaign.executedAt ||
+              campaign.approvedAt ||
+              campaign.preparedAt,
+          )}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div>
+          <div className="text-muted-foreground">Stage filter</div>
+          <div className="font-medium">
+            {(campaign.stageFilter || []).join(", ") || "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">Max leads</div>
+          <div className="font-medium">{campaign.maxLeads}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">Dispatched</div>
+          <div className="font-medium">{campaign.callsDispatched}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">Skipped</div>
+          <div className="font-medium">{campaign.callsSkipped}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">Operator</div>
+          <div className="font-medium">
+            {campaign.operatorName || "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">Vapi mode</div>
+          <div className="font-medium">
+            {campaign.vapiModeAtExecute || "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">
+            Assistant (last 4)
+          </div>
+          <div className="font-medium font-mono">
+            {campaign.aiAssistantIdLast4 || "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">Selected</div>
+          <div className="font-medium">
+            {campaign.leadsSelectedCount}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Tier4OutcomeBreakdown({
+  summary,
+}: {
+  summary: CallOutcomeRecordsSummary;
+}) {
+  const outcomes = summary.byOutcome || {};
+  const pills: Array<{
+    label: string;
+    count: number;
+    className: string;
+    testId: string;
+  }> = [
+    {
+      label: "Converted",
+      count: outcomes.connected_converted || 0,
+      className: "bg-green-100 text-green-800",
+      testId: "tier4-outcome-converted",
+    },
+    {
+      label: "Callback",
+      count: outcomes.connected_callback || 0,
+      className: "bg-amber-100 text-amber-800",
+      testId: "tier4-outcome-callback",
+    },
+    {
+      label: "Not interested",
+      count: outcomes.connected_not_interested || 0,
+      className: "bg-red-100 text-red-800",
+      testId: "tier4-outcome-not-interested",
+    },
+    {
+      label: "Unclear",
+      count: outcomes.connected_unclear || 0,
+      className: "bg-muted/40 text-foreground",
+      testId: "tier4-outcome-unclear",
+    },
+    {
+      label: "Not connected",
+      count: outcomes.not_connected || 0,
+      className: "bg-muted/40 text-muted-foreground",
+      testId: "tier4-outcome-not-connected",
+    },
+    {
+      label: "No transcript",
+      count: outcomes.no_transcript || 0,
+      className: "bg-muted/30 text-muted-foreground",
+      testId: "tier4-outcome-no-transcript",
+    },
+  ];
+  return (
+    <div
+      className="space-y-2"
+      data-testid="tier4-outcome-breakdown"
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+          Outcome breakdown
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Total classified:{" "}
+          <span className="font-medium">{summary.total}</span>
+          {" · "}Pending review:{" "}
+          <span className="font-medium">{summary.pendingCount}</span>
+          {" · "}Applied:{" "}
+          <span className="font-medium">{summary.appliedCount}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {pills.map((pill) => (
+          <div
+            key={pill.label}
+            className={`rounded-full px-3 py-1 text-xs ${pill.className}`}
+            data-testid={pill.testId}
+          >
+            <span className="font-medium">{pill.label}:</span>{" "}
+            <span className="font-mono">{pill.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Tier4FollowUpTiles({
+  summary,
+}: {
+  summary: PostCallFollowUpSummary;
+}) {
+  const byStatus = summary.byStatus || {};
+  const tiles: Array<{
+    label: string;
+    count: number;
+    testId: string;
+  }> = [
+    {
+      label: "Pending",
+      count: byStatus.pending || 0,
+      testId: "tier4-followup-pending",
+    },
+    {
+      label: "Gate prepared",
+      count: byStatus.gate_prepared || 0,
+      testId: "tier4-followup-gate-prepared",
+    },
+    {
+      label: "Dispatched",
+      count: byStatus.dispatched || 0,
+      testId: "tier4-followup-dispatched",
+    },
+    {
+      label: "Needs setup",
+      count: byStatus.needs_customer_setup || 0,
+      testId: "tier4-followup-needs-setup",
+    },
+  ];
+  return (
+    <div
+      className="space-y-2"
+      data-testid="tier4-followup-tiles"
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+          WhatsApp follow-up queue
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Total queued:{" "}
+          <span className="font-medium">{summary.total}</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {tiles.map((t) => (
+          <div
+            key={t.label}
+            className="rounded-md border border-border bg-muted/10 px-3 py-2"
+            data-testid={t.testId}
+          >
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              {t.label}
+            </div>
+            <div className="text-lg font-semibold font-mono">
+              {t.count}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function MetricCard({
   icon: Icon,

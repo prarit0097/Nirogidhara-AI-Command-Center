@@ -6896,3 +6896,147 @@ export interface LearningProposalSummary {
   cancelled: number;
   high_impact_pending: number;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 12D — Tier-4 AI Calling Performance Dashboard (read-only, frontend-only)
+//
+// Field names mirror the backend serializers exactly:
+//   - apps.calls.views._serialize_campaign_gate (Phase 12A)
+//   - apps.calls.views._serialize_outcome_record + CallOutcomeRecordsSummaryView (Phase 12B)
+//   - apps.calls.views._serialize_followup + PostCallFollowUpSummaryView (Phase 12C)
+//
+// camelCase + nested map shapes (byOutcome / byStatus / byFollowUpType) match
+// the JSON payload the DRF endpoints emit. No remapping layer.
+// ---------------------------------------------------------------------------
+
+export type AiCallCampaignGateStatus =
+  | "draft"
+  | "approved"
+  | "executing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface AiCallCampaignGate {
+  id: number;
+  status: AiCallCampaignGateStatus;
+  operatorName: string;
+  stageFilter: string[];
+  maxLeads: number;
+  leadsSelectedCount: number;
+  leadsAttemptedCount: number;
+  callsAttempted: number;
+  callsDispatched: number;
+  callsSkipped: number;
+  aiAssistantIdLast4: string;
+  recordedSignoffWindowStartUtc: string | null;
+  recordedSignoffWindowEndUtc: string | null;
+  recordedSignoffWindowValid: boolean;
+  preparedAt: string | null;
+  approvedAt: string | null;
+  executedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  vapiModeAtExecute: string;
+  sandbox: boolean;
+  createdAt: string | null;
+}
+
+export interface AiCallCampaignGatesListResponse {
+  count: number;
+  results: AiCallCampaignGate[];
+}
+
+export type CallOutcomeDetected =
+  | "connected_converted"
+  | "connected_callback"
+  | "connected_not_interested"
+  | "connected_unclear"
+  | "not_connected"
+  | "no_transcript";
+
+export type CallOutcomeConfidence = "high" | "medium" | "low";
+
+export type CallOutcomeReviewStatus =
+  | "pending"
+  | "approved"
+  | "applied"
+  | "skipped";
+
+export interface CallOutcomeRecord {
+  id: number;
+  callId: string;
+  campaignGateId: number | null;
+  leadId: string;
+  currentLeadStatus: string;
+  detectedOutcome: CallOutcomeDetected;
+  suggestedLeadStatus: string;
+  confidence: CallOutcomeConfidence;
+  reviewStatus: CallOutcomeReviewStatus;
+  evidence: Record<string, unknown>;
+  scoringVersion: string;
+  classifiedAt: string | null;
+  appliedAt: string | null;
+  appliedBy: string;
+  createdAt: string | null;
+}
+
+export interface CallOutcomeRecordsListResponse {
+  count: number;
+  results: CallOutcomeRecord[];
+}
+
+// Matches Phase 12B `CallOutcomeRecordsSummaryView` exactly:
+//   { total, pendingCount, approvedCount, appliedCount, skippedCount,
+//     byOutcome: { connected_converted: N, ... } }
+export interface CallOutcomeRecordsSummary {
+  total: number;
+  pendingCount: number;
+  approvedCount: number;
+  appliedCount: number;
+  skippedCount: number;
+  byOutcome: Partial<Record<CallOutcomeDetected, number>>;
+}
+
+export type PostCallFollowUpType =
+  | "payment_reminder"
+  | "callback_confirmation";
+
+export type PostCallFollowUpStatus =
+  | "pending"
+  | "needs_customer_setup"
+  | "gate_prepared"
+  | "dispatched"
+  | "skipped"
+  | "gate_prep_failed"
+  | "sandbox_skipped";
+
+export interface PostCallFollowUp {
+  id: number;
+  callOutcomeId: number;
+  leadId: string;
+  phoneLast4: string;
+  followUpType: PostCallFollowUpType;
+  status: PostCallFollowUpStatus;
+  customerFound: boolean;
+  phase7eGateId: number | null;
+  operatorNote: string;
+  dispatchedAt: string | null;
+  dispatchedBy: string;
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface PostCallFollowUpListResponse {
+  count: number;
+  results: PostCallFollowUp[];
+}
+
+// Matches Phase 12C `PostCallFollowUpSummaryView` exactly:
+//   { total, byStatus: { pending: N, ... }, byFollowUpType: { ... } }
+export interface PostCallFollowUpSummary {
+  total: number;
+  byStatus: Partial<Record<PostCallFollowUpStatus, number>>;
+  byFollowUpType: Partial<Record<PostCallFollowUpType, number>>;
+}

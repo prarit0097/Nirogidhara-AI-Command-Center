@@ -3579,6 +3579,54 @@ the requirement. Director MUST record what was actually done — both
 for audit and for future-Director context (so re-reading the
 proposal six months later still tells you what changed).
 
+## Phase 12D — Tier-4 AI Calling Performance Dashboard (frontend-only)
+
+Phase 12D adds a read-only dashboard surface for the full Tier-4
+calling pipeline. No backend changes; the dashboard simply consumes
+the existing Phase 12A/B/C admin-only DRF endpoints.
+
+**Where to look**
+
+- **`/saas-admin`** — new "Tier-4 AI Calling — Campaign Performance"
+  card after the Calling Team Leader (Phase 9E) card. Shows the
+  latest campaign (status badge, stages, dispatched/skipped, operator,
+  Vapi mode, masked assistant id), outcome-breakdown pills, and
+  follow-up-queue mini-tiles. Footer link → `/operations/calling-dashboard`.
+- **`/operations/calling-dashboard`** — full page with four sections:
+  1. **Campaign History** — sortable table of Phase 12A gates
+     (status, stage filter, leads, dispatched/skipped, assistant
+     last 4, mode, operator, prepared timestamp).
+  2. **Call Outcomes** — Phase 12B classifications. Summary tiles +
+     status tabs (All / Pending Review / Approved / Applied /
+     Skipped) + client-side search by `call_id` or `lead_id` +
+     colour-badged outcome / confidence / review-status table.
+  3. **WhatsApp Follow-up Queue** — Phase 12C queue. Summary tiles +
+     status tabs (All / Pending / Gate Prepared / Dispatched) +
+     masked-phone-last-4 table.
+  4. **CLI Reference** — read-only code block with the Phase 12A/B/C
+     commands the Director runs to mutate state.
+
+**Read-only — no UI buttons mutate anything.** No "Run Campaign" /
+"Send WhatsApp" / "Approve" / "Apply" / "Trigger Call" / "Reassign
+Agent" / "Auto-dial" buttons exist on either surface. Every state
+change still goes through Phase 12A/B/C CLI commands. The dashboard
+is purely a Director review surface.
+
+**Endpoints consumed (all existing)**
+
+```text
+GET /api/v1/calls/campaigns/?limit=25
+GET /api/v1/calls/outcomes/?review_status=&limit=100
+GET /api/v1/calls/outcomes/summary/
+GET /api/v1/calls/followups/?status=&limit=100
+GET /api/v1/calls/followups/summary/
+```
+
+All require admin/director/owner/superuser auth. POST/PATCH/DELETE →
+405 on every endpoint.
+
+---
+
 ## Phase 12C — Post-Call WhatsApp Follow-up Director Playbook
 
 Phase 12C is the next link in the Tier-4 calling stack after Phase 12B.

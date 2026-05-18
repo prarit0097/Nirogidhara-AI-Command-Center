@@ -191,6 +191,11 @@ import type {
   CaioAuditSnapshot,
   LearningProposalsListResponse,
   LearningProposalSummary,
+  AiCallCampaignGatesListResponse,
+  CallOutcomeRecordsListResponse,
+  CallOutcomeRecordsSummary,
+  PostCallFollowUpListResponse,
+  PostCallFollowUpSummary,
   SaasPhase7IFinalAuditLockReadiness,
   SaasPhase7IFinalAuditLocksResponse,
   SaasPhase8APaymentOrderMutationSandboxReadiness,
@@ -1953,6 +1958,72 @@ export const api = {
     safeFetch<LearningProposalSummary>(
       "/v1/learning/proposals/summary/",
       () => M.LEARNING_PROPOSAL_SUMMARY as LearningProposalSummary,
+    ),
+
+  // ---------- Phase 12D — Tier-4 Calling Performance Dashboard (read-only) ----------
+
+  getCallingCampaigns: (
+    params: { limit?: number } = {},
+  ): Promise<AiCallCampaignGatesListResponse> => {
+    const q = new URLSearchParams();
+    if (params.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/calls/campaigns/?${qs}`
+      : "/v1/calls/campaigns/";
+    return safeFetch<AiCallCampaignGatesListResponse>(
+      url,
+      () =>
+        M.CALLING_CAMPAIGNS_RESPONSE as AiCallCampaignGatesListResponse,
+    );
+  },
+
+  getCallOutcomes: (
+    params: { status?: string; outcome?: string; limit?: number } = {},
+  ): Promise<CallOutcomeRecordsListResponse> => {
+    const q = new URLSearchParams();
+    if (params.status) q.set("review_status", params.status);
+    if (params.outcome) q.set("outcome", params.outcome);
+    if (params.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    const url = qs ? `/v1/calls/outcomes/?${qs}` : "/v1/calls/outcomes/";
+    return safeFetch<CallOutcomeRecordsListResponse>(
+      url,
+      () =>
+        M.CALL_OUTCOMES_RESPONSE as CallOutcomeRecordsListResponse,
+    );
+  },
+
+  getCallOutcomesSummary: (): Promise<CallOutcomeRecordsSummary> =>
+    safeFetch<CallOutcomeRecordsSummary>(
+      "/v1/calls/outcomes/summary/",
+      () =>
+        M.CALL_OUTCOMES_SUMMARY as CallOutcomeRecordsSummary,
+    ),
+
+  getPostCallFollowUps: (
+    params: { status?: string; type?: string; limit?: number } = {},
+  ): Promise<PostCallFollowUpListResponse> => {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.type) q.set("type", params.type);
+    if (params.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    const url = qs
+      ? `/v1/calls/followups/?${qs}`
+      : "/v1/calls/followups/";
+    return safeFetch<PostCallFollowUpListResponse>(
+      url,
+      () =>
+        M.POST_CALL_FOLLOWUPS_RESPONSE as PostCallFollowUpListResponse,
+    );
+  },
+
+  getPostCallFollowUpSummary: (): Promise<PostCallFollowUpSummary> =>
+    safeFetch<PostCallFollowUpSummary>(
+      "/v1/calls/followups/summary/",
+      () =>
+        M.POST_CALL_FOLLOWUP_SUMMARY as PostCallFollowUpSummary,
     ),
 
   // ---------- Phase 7I - Final Phase 7 Payment + WhatsApp + Courier Audit Lock ----------

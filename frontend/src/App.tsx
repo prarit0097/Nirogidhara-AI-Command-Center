@@ -30,6 +30,7 @@ import WhatsAppMonitoringPage from "./pages/WhatsAppMonitoring";
 import SaasAdminPage from "./pages/SaasAdmin";
 import PendingPaymentsPage from "./pages/PendingPayments";
 import LearningProposalsPage from "./pages/LearningProposals";
+import CallingDashboardPage from "./pages/CallingDashboard";
 
 const queryClient = new QueryClient();
 
@@ -70,6 +71,10 @@ const App = () => (
             <Route
               path="/operations/learning-proposals"
               element={<LearningProposalsPage />}
+            />
+            <Route
+              path="/operations/calling-dashboard"
+              element={<CallingDashboardPage />}
             />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
