@@ -11,7 +11,13 @@ from apps.crm.models import Lead
 
 from . import services
 from .integrations.vapi_client import VapiClientError
-from .models import ActiveCall, Call, CallQualityScore, CallTranscriptLine
+from .models import (
+    ActiveCall,
+    AiCallCampaignGate,
+    Call,
+    CallQualityScore,
+    CallTranscriptLine,
+)
 from .quality_scorer import get_scoring_overview
 from .serializers import (
     ActiveCallSerializer,
@@ -267,6 +273,102 @@ class CallQualityScoreDetailView(APIView):
         if row is None:
             raise NotFound(f"Quality score for call {call_id} not found")
         return Response(_serialize_quality_score(row))
+
+
+def _serialize_campaign_gate(gate: AiCallCampaignGate) -> dict:
+    return {
+        "id": gate.pk,
+        "status": gate.status,
+        "operatorName": gate.operator_name,
+        "stageFilter": list(gate.stage_filter or []),
+        "maxLeads": int(gate.max_leads or 0),
+        "leadsSelectedCount": len(gate.leads_selected or []),
+        "leadsAttemptedCount": len(gate.leads_attempted or []),
+        "callsAttempted": int(gate.calls_attempted or 0),
+        "callsDispatched": int(gate.calls_dispatched or 0),
+        "callsSkipped": int(gate.calls_skipped or 0),
+        "aiAssistantIdLast4": (gate.ai_assistant_id or "")[-4:],
+        "recordedSignoffWindowStartUtc": (
+            gate.recorded_signoff_window_start_utc.isoformat()
+            if gate.recorded_signoff_window_start_utc
+            else None
+        ),
+        "recordedSignoffWindowEndUtc": (
+            gate.recorded_signoff_window_end_utc.isoformat()
+            if gate.recorded_signoff_window_end_utc
+            else None
+        ),
+        "recordedSignoffWindowValid": bool(
+            gate.recorded_signoff_window_valid
+        ),
+        "preparedAt": (
+            gate.prepared_at.isoformat() if gate.prepared_at else None
+        ),
+        "approvedAt": (
+            gate.approved_at.isoformat() if gate.approved_at else None
+        ),
+        "executedAt": (
+            gate.executed_at.isoformat() if gate.executed_at else None
+        ),
+        "completedAt": (
+            gate.completed_at.isoformat() if gate.completed_at else None
+        ),
+        "cancelledAt": (
+            gate.cancelled_at.isoformat() if gate.cancelled_at else None
+        ),
+        "vapiModeAtExecute": gate.vapi_mode_at_execute,
+        "sandbox": bool(gate.sandbox),
+        "createdAt": (
+            gate.created_at.isoformat() if gate.created_at else None
+        ),
+    }
+
+
+class AiCallCampaignGateListView(APIView):
+    """``GET /api/v1/calls/campaigns/?limit=N``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit") or 30)
+        except (TypeError, ValueError):
+            limit = 30
+        limit = max(1, min(200, limit))
+        rows = list(AiCallCampaignGate.objects.all()[:limit])
+        return Response(
+            {
+                "count": len(rows),
+                "results": [_serialize_campaign_gate(r) for r in rows],
+            }
+        )
+
+
+class AiCallCampaignGateLatestView(APIView):
+    """``GET /api/v1/calls/campaigns/latest/``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, _request):
+        row = AiCallCampaignGate.objects.first()
+        if row is None:
+            raise NotFound("No AI calling campaign gates yet.")
+        return Response(_serialize_campaign_gate(row))
+
+
+class AiCallCampaignGateDetailView(APIView):
+    """``GET /api/v1/calls/campaigns/<int:pk>/``."""
+
+    permission_classes = [_AdminTranscriptPermission]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, _request, pk: int):
+        row = AiCallCampaignGate.objects.filter(pk=pk).first()
+        if row is None:
+            raise NotFound(f"AiCallCampaignGate {pk} not found.")
+        return Response(_serialize_campaign_gate(row))
 
 
 class CallQualityScoresSummaryView(APIView):

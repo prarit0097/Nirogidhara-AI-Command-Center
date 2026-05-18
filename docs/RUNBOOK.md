@@ -3579,6 +3579,132 @@ the requirement. Director MUST record what was actually done — both
 for audit and for future-Director context (so re-reading the
 proposal six months later still tells you what changed).
 
+## Phase 12A — AI Calling Campaign Director Playbook
+
+Phase 12A is the first **Tier-4** piece. It wraps the existing
+`trigger_call_for_lead` (Phase 2D) in a Director-approved gate so AI
+outbound Vapi calls land on real Leads only after explicit Director
+sign-off + a 30-minute UTC window.
+
+**Phase 12A NEVER sends WhatsApp / dispatches a shipment / mutates
+Order / Payment / Customer / Shipment / DiscountOfferLog. The only
+side effect is `trigger_call_for_lead` per eligible Lead in the
+live path. Cannot un-make a Vapi call — there is no rollback.**
+
+### Step 1 — Prepare the campaign
+
+```bash
+python manage.py prepare_ai_calling_campaign \
+    --stage "Interested" \
+    --stage "Callback Required" \
+    --max-leads 10 \
+    --operator-name "Prarit"
+```
+
+Defaults: `--stage` empty uses `{New, AI Calling Started, Interested,
+Callback Required}`. Blocked stages (`Payment Link Sent`, `Order
+Punched`, `Not Interested`, `Invalid`) are refused outright. Frequency
+filter (24h, configurable via `AI_CALLING_FREQUENCY_LIMIT_HOURS`)
+excludes leads with a `Call` row in the last day. Only one active
+gate at a time.
+
+### Step 2 — Inspect
+
+```bash
+python manage.py inspect_ai_calling_campaign <gate_id>
+```
+
+Shows gate details + per-lead **masked phone (last-4 only)** + current
+Lead.status + recently-called boolean. Read-only.
+
+### Step 3 — Approve (Director)
+
+```bash
+python manage.py approve_ai_calling_campaign <gate_id> \
+    --operator-name "Prarit" \
+    --intent "Outbound AI call to 10 Interested leads - first Tier-4 live batch" \
+    --director-signoff "ai_calling_campaign_<gate_id> phase12a ai_vaani3 BEGIN_UTC=2026-05-18T11:00:00Z END_UTC=2026-05-18T11:30:00Z"
+```
+
+Window must be ≤ 30 minutes. Approve allows a future window (Director
+can approve ahead of the window opening). Window length > 30 min,
+missing markers, malformed timestamps, or end ≤ start all refuse.
+
+### Step 4 — Execute (within the approved window)
+
+```bash
+AI_CALLING_ENABLED=true VAPI_MODE=live \
+    python manage.py execute_ai_calling_campaign <gate_id> \
+        --operator-name "Prarit" \
+        --confirm-ai-calling-campaign
+```
+
+ALL of the following must hold or execute refuses:
+
+- Gate status `approved`.
+- `--confirm-ai-calling-campaign` flag present.
+- `AI_CALLING_ENABLED=true` in runtime env (defaults locked off;
+  NEVER edit `.env.production`).
+- Postgres-safe `RuntimeKillSwitch` enabled.
+- `now ∈ [window_start_utc, window_end_utc]`.
+- `VAPI_MODE=live` (mock / test paths skip Vapi but record per-lead
+  `vapi_not_live_skip` audits).
+
+Per-lead behaviour at execute time:
+
+- Lead stage changed since prepare → `stage_no_longer_eligible` skip.
+- Lead called within frequency window → `recently_called` skip.
+- Sandbox mode active → `sandbox_skip` (NO Vapi call).
+- `VAPI_MODE in {mock, test}` → `vapi_not_live_skip` (NO real Vapi call).
+- Vapi exception during dispatch → `vapi_error` skip (loop continues).
+- Success → `trigger_call_for_lead` runs; `ai_calling.campaign.lead.dispatched`
+  audit with phone last-4 only.
+
+### Step 5 — Cancel (only before execution)
+
+```bash
+python manage.py cancel_ai_calling_campaign <gate_id> \
+    --operator-name "Prarit" \
+    --reason "Director postponed batch"
+```
+
+Allowed from `draft` or `approved` only. Refused after execution starts.
+
+### Audit kinds
+
+All ≤ 64 chars:
+
+- `ai_calling.campaign.prepared`
+- `ai_calling.campaign.approved`
+- `ai_calling.campaign.executed` (rolling counts + skip_reasons map)
+- `ai_calling.campaign.cancelled`
+- `ai_calling.campaign.refused` (per-blocker)
+- `ai_calling.campaign.lead.dispatched` (per-lead success — phone last-4)
+- `ai_calling.campaign.lead.skipped` (per-lead skip with `reason`)
+
+### Admin-only read API (no POST)
+
+```text
+GET /api/v1/calls/campaigns/?limit=N    # capped at 200
+GET /api/v1/calls/campaigns/latest/     # 404 when none
+GET /api/v1/calls/campaigns/<int:pk>/   # detail
+```
+
+Auth: admin / director / owner / superuser only.
+
+### What Phase 12A does NOT do
+
+- NO new Celery beat task — beat schedule stays at 11 entries.
+  Campaigns are Director-triggered, not automated.
+- NO rollback — Vapi calls cannot be unsent. Call results land on
+  `Call` rows via the existing Phase 2D Vapi webhook.
+- NO WhatsApp / shipment / payment / Razorpay side effect ever
+  (asserted in defensive tests).
+- NO `.env.production` edits — `AI_CALLING_ENABLED` and friends are
+  only flipped via runtime env prefix on the exact command.
+
+---
+
 ## Phase 11D — Learning Loop Gate Director Playbook
 
 CAIO auto-creates `LearningProposal` rows at 14:00 IST when it finds

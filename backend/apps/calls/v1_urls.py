@@ -10,6 +10,9 @@ from __future__ import annotations
 from django.urls import path
 
 from .views import (
+    AiCallCampaignGateDetailView,
+    AiCallCampaignGateLatestView,
+    AiCallCampaignGateListView,
     CallQualityScoreDetailView,
     CallQualityScoresListView,
     CallQualityScoresSummaryView,
@@ -46,5 +49,23 @@ urlpatterns = [
         "quality-scores/<str:call_id>/",
         CallQualityScoreDetailView.as_view(),
         name="phase11b-quality-score-detail",
+    ),
+    # Phase 12A — AI Calling Campaign Gates (read-only).
+    # ``latest/`` is registered BEFORE the dynamic ``<int:pk>`` route
+    # so "latest" is never captured as a campaign id.
+    path(
+        "campaigns/latest/",
+        AiCallCampaignGateLatestView.as_view(),
+        name="phase12a-campaign-latest",
+    ),
+    path(
+        "campaigns/",
+        AiCallCampaignGateListView.as_view(),
+        name="phase12a-campaigns-list",
+    ),
+    path(
+        "campaigns/<int:pk>/",
+        AiCallCampaignGateDetailView.as_view(),
+        name="phase12a-campaign-detail",
     ),
 ]

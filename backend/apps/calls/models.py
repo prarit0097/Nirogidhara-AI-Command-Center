@@ -217,6 +217,82 @@ class CallQualityScore(models.Model):
         ]
 
 
+class AiCallCampaignGate(models.Model):
+    """Phase 12A — AI Calling Campaign Gate V1 (Director-approved Vapi outbound).
+
+    One gate row per Director-approved outbound calling campaign. The
+    gate authorises ``trigger_call_for_lead`` to fire for a vetted set
+    of Leads inside a structured 30-minute UTC window. Mirrors the
+    Phase 7E-Live-B safety pattern (draft → approved → executed) with
+    an extra ``executing`` intermediate state because a campaign loops
+    over multiple leads.
+
+    NEVER sends WhatsApp, mutates Order/Payment/Shipment, or calls
+    Razorpay/Meta Cloud/Delhivery. The only side effect on execute is
+    calling ``apps.calls.services.trigger_call_for_lead`` per eligible
+    Lead — and only when every guard (env flag + UTC window + kill
+    switch + ``VAPI_MODE=live``) is satisfied.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "draft"
+        APPROVED = "approved", "approved"
+        EXECUTING = "executing", "executing"
+        COMPLETED = "completed", "completed"
+        FAILED = "failed", "failed"
+        CANCELLED = "cancelled", "cancelled"
+
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
+    ai_assistant_id = models.CharField(max_length=120, blank=True, default="")
+    stage_filter = models.JSONField(default=list, blank=True)
+    max_leads = models.IntegerField(default=20)
+    leads_selected = models.JSONField(default=list, blank=True)
+    leads_attempted = models.JSONField(default=list, blank=True)
+    calls_attempted = models.IntegerField(default=0)
+    calls_dispatched = models.IntegerField(default=0)
+    calls_skipped = models.IntegerField(default=0)
+    operator_name = models.CharField(max_length=120, blank=True, default="")
+    operator_note = models.TextField(blank=True, default="")
+    intent = models.TextField(blank=True, default="")
+    director_signoff = models.TextField(blank=True, default="")
+    recorded_signoff_window_start_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_end_utc = models.DateTimeField(
+        null=True, blank=True
+    )
+    recorded_signoff_window_valid = models.BooleanField(default=False)
+    prepared_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    sandbox = models.BooleanField(default=False)
+    # Recorded for audit at execute time so future replay knows which
+    # backend (mock / test / live) the campaign ran against.
+    vapi_mode_at_execute = models.CharField(
+        max_length=20, blank=True, default=""
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = (
+            models.Index(fields=("status",), name="aicc_status_idx"),
+            models.Index(fields=("-prepared_at",), name="aicc_prepared_at_idx"),
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"AiCallCampaignGate {self.pk} - {self.status}"
+
+
 class WebhookEvent(models.Model):
     """Idempotency log for Vapi webhooks. Phase 2D.
 

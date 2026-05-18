@@ -617,6 +617,18 @@ DELHIVERY_WEBHOOK_SECRET = os.environ.get("DELHIVERY_WEBHOOK_SECRET", "")
 #   Never inject free-style medical text from this codebase. CAIO never
 #   executes business actions.
 VAPI_MODE = (os.environ.get("VAPI_MODE") or "mock").lower()
+# Phase 12A — AI Calling Campaign Gate V1 (Director-approved Vapi outbound).
+# Defaults LOCKED off. Runtime env prefix is the only way to flip these;
+# `.env.production` is NEVER edited.
+AI_CALLING_ENABLED = (
+    (os.environ.get("AI_CALLING_ENABLED") or "false").strip().lower() == "true"
+)
+AI_CALLING_MAX_PER_CAMPAIGN = int(
+    os.environ.get("AI_CALLING_MAX_PER_CAMPAIGN") or 20
+)
+AI_CALLING_FREQUENCY_LIMIT_HOURS = int(
+    os.environ.get("AI_CALLING_FREQUENCY_LIMIT_HOURS") or 24
+)
 VAPI_API_BASE_URL = os.environ.get("VAPI_API_BASE_URL", "")
 VAPI_API_KEY = os.environ.get("VAPI_API_KEY", "")
 VAPI_ASSISTANT_ID = os.environ.get("VAPI_ASSISTANT_ID", "")
