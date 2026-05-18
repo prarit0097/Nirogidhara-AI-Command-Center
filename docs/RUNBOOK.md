@@ -3448,6 +3448,137 @@ Safety contract:
   an explicit `scope="global", enabled=False` row always wins over
   any seeded enabled default, ordered by `-pk` for determinism.
 
+### Phase 11D — Learning Loop Gate V1 (Director-approved, human-reviewed)
+
+Phase 11D closes the nd.md learning chain (*transcript → QA scoring →
+compliance review → CAIO audit → CEO/approved workflow before changing
+live prompts/playbooks*) by adding the **gate** at the "approved
+workflow" step. V1 is a **paper trail** — no auto-execution.
+
+**This is the gate. Without Director approval at Step 4 below,
+NOTHING changes in production — ever.**
+
+#### Five-step Director playbook
+
+```text
+Step 1: CAIO writes a CaioAuditSnapshot daily at 14:00 IST.
+        On RED severity findings, CAIO auto-creates LearningProposal
+        rows (idempotent — duplicate pending proposals are reused).
+
+Step 2: Director runs:
+          python manage.py list_learning_proposals --status pending
+
+Step 3: Director reviews:
+          - evidence JSON (caio_snapshot_id, severity, compliance metrics, etc.)
+          - proposed_change_text (INTERNAL ONLY — what to consider changing)
+
+Step 4: Director runs ONE of:
+          python manage.py review_learning_proposal <id> \
+              --decision approved \
+              --operator-name "Prarit Sidana" \
+              --note "Looks good. Worth coaching Anil 1:1."
+        OR:
+          python manage.py review_learning_proposal <id> \
+              --decision rejected \
+              --operator-name "Prarit Sidana" \
+              --note "Out of scope for this quarter."
+
+Step 5: For APPROVED proposals only:
+        Director MANUALLY implements the change outside the platform
+        (updates the script, coaches the agent, fixes the process).
+        Then records what was done:
+          python manage.py implement_learning_proposal <id> \
+              --operator-name "Prarit Sidana" \
+              --implementation-note "Updated agent script v3.2 lines 14-22; coached Anil 1:1 about forbidden phrases."
+```
+
+#### What Phase 11D NEVER does
+
+- NEVER auto-applies any change (`implement_proposal` only records
+  what Director did manually outside the platform).
+- NEVER mutates `PromptVersion` (asserted in tests by snapshotting
+  `PromptVersion` row count across the full CAIO → approve →
+  implement flow).
+- NEVER touches Vapi prompt config.
+- NEVER triggers WhatsApp / makes a call / dispatches a shipment.
+- NEVER mutates `Customer` / `Order` / `Payment` / `Lead` /
+  `Shipment` / `DiscountOfferLog`.
+- NEVER reads or writes `ApprovalRequest` (Phase 4C surface
+  untouched).
+- NEVER edits `.env.production`.
+- NEVER adds a new Celery beat task — proposals are created on
+  demand by the existing `caio-audit-daily` (14:00 IST) hook.
+
+#### LearningProposal lifecycle
+
+```text
+                    pending
+                   /   |   \
+            approved rejected cancelled
+                |
+          implemented
+```
+
+Transitions:
+
+- `pending → approved`: `review_learning_proposal --decision approved`
+- `pending → rejected`: `review_learning_proposal --decision rejected`
+- `pending → cancelled`: `cancel_proposal` (service only — no CLI in V1)
+- `approved → implemented`: `implement_learning_proposal` (non-blank `--implementation-note` required)
+- `approved → cancelled`: `cancel_proposal`
+- `implemented → ANYTHING`: REFUSED
+- `rejected → ANYTHING`: REFUSED
+
+#### CAIO auto-creation triggers (idempotent)
+
+| CAIO finding | Proposal type | Impact |
+| --- | --- | --- |
+| `compliance_violation` in any `agent_anomaly_flags` value OR `compliance_risk_call_count > 0` | `compliance_remediation` | **high** |
+| `declining_call_quality` in `weak_learning_indicators` | `script_review` | medium |
+| `no_recent_calls` in `weak_learning_indicators` | `process_improvement` | medium |
+| `all_agent_utterances_missing` in `weak_learning_indicators` | `agent_coaching` | medium |
+
+Idempotency: if a PENDING proposal with the same `(source_agent,
+proposal_type)` already exists, the auto-creator reuses it (returns
+`(existing, False)`). Sandbox mode (`is_sandbox_enabled() = True`)
+skips proposal creation entirely with a
+`learning.proposal.skipped_sandbox` audit.
+
+#### Audit kinds
+
+All ≤ 64 chars:
+
+- `learning.proposal.created`
+- `learning.proposal.approved`
+- `learning.proposal.rejected`
+- `learning.proposal.implemented`
+- `learning.proposal.cancelled`
+- `learning.proposal.skipped_sandbox`
+
+Audit payloads carry `proposal_id` / `proposal_type` / `status` /
+`source_agent` / `impact_scope` / `title[:120]` — never raw
+customer names, phones, or addresses.
+
+#### Admin-only read API (no POST/PATCH/DELETE)
+
+```text
+GET /api/v1/learning/proposals/?status=&type=&limit=N      # capped 200
+GET /api/v1/learning/proposals/pending/                    # shortcut
+GET /api/v1/learning/proposals/<int:pk>/                   # full detail
+GET /api/v1/learning/proposals/summary/                    # counts
+```
+
+Auth: admin / director / owner / superuser only.
+
+#### Why `implement_proposal` requires a non-blank note
+
+Defence in depth. The CLI rejects a blank `--implementation-note`
+with exit 1 AND the service-layer `implement_proposal` rejects it
+with `LearningProposalStateError` so a bug in the CLI cannot bypass
+the requirement. Director MUST record what was actually done — both
+for audit and for future-Director context (so re-reading the
+proposal six months later still tells you what changed).
+
 ### Phase 11C — CAIO Audit Agent V1 (governance, recommendations-only)
 
 Phase 11C is the **first governance layer** above the Phase 9

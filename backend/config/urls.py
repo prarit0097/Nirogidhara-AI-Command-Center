@@ -74,6 +74,10 @@ urlpatterns = [
         include("apps.caio.urls"),
     ),
     path(
+        "api/v1/learning/",
+        include("apps.learning.urls"),
+    ),
+    path(
         "api/v1/calls/",
         include("apps.calls.v1_urls"),
     ),

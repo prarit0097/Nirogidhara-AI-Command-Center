@@ -197,6 +197,25 @@ def run_caio_audit_agent_daily(
             "reason": "persist_failed",
         }
 
+    # Phase 11D — auto-create LearningProposal rows from the snapshot's
+    # findings. Idempotent (existing PENDING proposals are reused), and
+    # skipped entirely under sandbox mode. NEVER mutates business or
+    # Phase 9 snapshot rows; only writes to the apps.learning surface +
+    # audit events.
+    proposal_summary: dict[str, Any] = {
+        "skipped": False,
+        "created_count": 0,
+        "reused_count": 0,
+    }
+    try:
+        from apps.learning.service import create_proposals_from_audit
+
+        proposal_summary = create_proposals_from_audit(
+            snapshot, sandbox=bool(snapshot.sandbox)
+        )
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("phase11d learning proposal hook failed")
+
     write_event(
         kind=AUDIT_KIND_SNAPSHOT,
         text=(
@@ -244,6 +263,7 @@ def run_caio_audit_agent_daily(
         "snapshot": _serialize_snapshot(snapshot),
         "duration_ms": duration_ms,
         "sandbox": sandbox,
+        "learning_proposals": proposal_summary,
     }
 
 
