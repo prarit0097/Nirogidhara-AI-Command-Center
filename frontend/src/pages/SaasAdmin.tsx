@@ -751,11 +751,11 @@ export default function SaasAdminPage() {
           />
           <KeyValue
             label="Scoped models"
-            value={String(orgReadiness.scopedModels.length)}
+            value={String((orgReadiness.scopedModels ?? []).length)}
           />
           <KeyValue
             label="Unscoped APIs"
-            value={String(orgReadiness.unscopedApis.length)}
+            value={String((orgReadiness.unscopedApis ?? []).length)}
           />
           <StatusPill
             tone={boolTone(orgReadiness.safeToStartPhase6D)}
@@ -774,12 +774,12 @@ export default function SaasAdminPage() {
               label="Covered paths"
               value={String(
                 writeReadiness.coveredSafeCreatePaths?.length ??
-                  writeReadiness.safeCreatePathsCovered.length,
+                  (writeReadiness.safeCreatePathsCovered ?? []).length,
               )}
             />
             <KeyValue
               label="Deferred paths"
-              value={String(writeReadiness.deferredCreatePaths.length)}
+              value={String((writeReadiness.deferredCreatePaths ?? []).length)}
             />
             <KeyValue
               label="Recent unscoped"
@@ -843,7 +843,7 @@ export default function SaasAdminPage() {
               </tr>
             </thead>
             <tbody>
-              {overview.integrationReadiness.providers.map((provider) => (
+              {(overview.integrationReadiness.providers ?? []).map((provider) => (
                 <ProviderRow key={provider.providerType} provider={provider} />
               ))}
             </tbody>
@@ -911,7 +911,7 @@ export default function SaasAdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {routing.providers.map((provider) => (
+                {(routing.providers ?? []).map((provider) => (
                   <RuntimeProviderRow
                     key={provider.providerType}
                     provider={provider}
@@ -953,7 +953,7 @@ export default function SaasAdminPage() {
             </StatusPill>
           </div>
           <div className="grid gap-3 px-6 py-4 sm:grid-cols-4">
-            <KeyValue label="Operations" value={String(dryRun.operations.length)} />
+            <KeyValue label="Operations" value={String((dryRun.operations ?? []).length)} />
             <KeyValue
               label="Live execution"
               value="false (Phase 6G)"
@@ -979,7 +979,7 @@ export default function SaasAdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {dryRun.operations.map((op) => (
+                {(dryRun.operations ?? []).map((op) => (
                   <RuntimeOperationRow
                     key={op.operationType}
                     decision={op}
@@ -1060,15 +1060,15 @@ export default function SaasAdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {aiRouting.tasks.map((task) => (
+                {(aiRouting.tasks ?? []).map((task) => (
                   <AiTaskRow key={task.taskType} task={task} />
                 ))}
               </tbody>
             </table>
           </div>
-          {aiRouting.blockers.length > 0 && (
+          {(aiRouting.blockers ?? []).length > 0 && (
             <div className="border-t border-border bg-warning/5 px-6 py-3 text-xs text-muted-foreground">
-              {aiRouting.blockers.join(" · ")}
+              {(aiRouting.blockers ?? []).join(" · ")}
             </div>
           )}
         </section>
@@ -1135,7 +1135,7 @@ export default function SaasAdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {liveGate.operationPolicies.map((policy) => (
+                {(liveGate.operationPolicies ?? []).map((policy) => (
                   <LiveGatePolicyRow
                     key={policy.operationType}
                     policy={policy}
@@ -1174,12 +1174,12 @@ export default function SaasAdminPage() {
                 <ShieldCheck className="h-4 w-4 text-primary" />
                 Recent Gate Audit Events
               </h4>
-              {liveGate.recentGateAuditEvents.length === 0 ? (
+              {(liveGate.recentGateAuditEvents ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No live gate audit events yet.
                 </p>
               ) : (
-                liveGate.recentGateAuditEvents.map((event) => (
+                (liveGate.recentGateAuditEvents ?? []).map((event) => (
                   <div
                     key={event.id}
                     className="rounded-md border border-border bg-muted/20 p-3"
@@ -1258,7 +1258,7 @@ export default function SaasAdminPage() {
               </h4>
               <KeyValue
                 label="Allowed operations"
-                value={String(simulations.allowedOperations.length)}
+                value={String((simulations.allowedOperations ?? []).length)}
               />
               <KeyValue
                 label="Simulations"
@@ -1295,7 +1295,7 @@ export default function SaasAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {simulations.simulations.map((simulation) => (
+                  {(simulations.simulations ?? []).map((simulation) => (
                     <LiveGateSimulationRow
                       key={simulation.id}
                       simulation={simulation}
@@ -1307,7 +1307,7 @@ export default function SaasAdminPage() {
           </div>
 
           <div className="border-t border-border bg-warning/5 px-6 py-3 text-xs text-muted-foreground">
-            Allowed operations: {simulations.allowedOperations.join(", ")}.
+            Allowed operations: {(simulations.allowedOperations ?? []).join(", ")}.
             Global kill switch remains active; all execution flags remain
             false.
           </div>
@@ -1688,7 +1688,7 @@ export default function SaasAdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {razorpayBusinessMutationSandboxPlan.eventMappings.map(
+                    {(razorpayBusinessMutationSandboxPlan.eventMappings ?? []).map(
                       (row) => (
                         <tr
                           key={row.razorpayEventName}
@@ -1754,7 +1754,7 @@ export default function SaasAdminPage() {
                   className="text-xs space-y-1 list-disc pl-5"
                   data-testid="phase6n-manual-review-list"
                 >
-                  {razorpayBusinessMutationSandboxPlan.manualReviewChecklist.map(
+                  {(razorpayBusinessMutationSandboxPlan.manualReviewChecklist ?? []).map(
                     (entry) => (
                       <li key={entry.key} className="text-muted-foreground">
                         <strong>{entry.key}</strong> — {entry.description}
@@ -1769,7 +1769,7 @@ export default function SaasAdminPage() {
                   className="text-xs space-y-1 list-decimal pl-5"
                   data-testid="phase6n-rollback-list"
                 >
-                  {razorpayBusinessMutationSandboxPlan.rollbackPlan.rollbackSteps.map(
+                  {(razorpayBusinessMutationSandboxPlan.rollbackPlan.rollbackSteps ?? []).map(
                     (step) => (
                       <li key={step.order} className="text-muted-foreground">
                         {step.action}
@@ -1792,7 +1792,7 @@ export default function SaasAdminPage() {
                 className="flex flex-wrap gap-1 text-[11px]"
                 data-testid="phase6n-forbidden-actions"
               >
-                {razorpayBusinessMutationSandboxPlan.forbiddenActions.map(
+                {(razorpayBusinessMutationSandboxPlan.forbiddenActions ?? []).map(
                   (action) => (
                     <span
                       key={action}
@@ -1945,7 +1945,7 @@ export default function SaasAdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {razorpaySandboxStatusMappingReadiness.eventMappings.map(
+                    {(razorpaySandboxStatusMappingReadiness.eventMappings ?? []).map(
                       (row) => (
                         <tr
                           key={row.razorpayEventName}
@@ -1987,9 +1987,9 @@ export default function SaasAdminPage() {
           {razorpaySandboxStatusReviews && (
             <div className="px-6 pb-4">
               <h4 className="text-sm font-semibold mb-2">
-                Sandbox status reviews ({razorpaySandboxStatusReviews.items.length})
+                Sandbox status reviews ({(razorpaySandboxStatusReviews.items ?? []).length})
               </h4>
-              {razorpaySandboxStatusReviews.items.length === 0 ? (
+              {(razorpaySandboxStatusReviews.items ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   No reviews prepared yet. Reviews are created via the
                   backend CLI / API only — there is no "Apply Mutation"
@@ -2014,7 +2014,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {razorpaySandboxStatusReviews.items.map((row) => (
+                      {(razorpaySandboxStatusReviews.items ?? []).map((row) => (
                         <Phase6OReviewRow
                           key={row.id}
                           row={row}
@@ -2037,7 +2037,7 @@ export default function SaasAdminPage() {
                                 load();
                               } else {
                                 setPhase6oActionMessage(
-                                  `Action blocked: ${result.blockers.join(", ") || "see backend logs"}`,
+                                  `Action blocked: ${(result.blockers ?? []).join(", ") || "see backend logs"}`,
                                 );
                               }
                             } finally {
@@ -2068,7 +2068,7 @@ export default function SaasAdminPage() {
                   className="text-xs space-y-1 list-disc pl-5"
                   data-testid="phase6o-manual-review-list"
                 >
-                  {razorpaySandboxStatusMappingReadiness.manualReviewChecklist.map(
+                  {(razorpaySandboxStatusMappingReadiness.manualReviewChecklist ?? []).map(
                     (entry) => (
                       <li key={entry.key} className="text-muted-foreground">
                         <strong>{entry.key}</strong> — {entry.description}
@@ -2083,7 +2083,7 @@ export default function SaasAdminPage() {
                   className="flex flex-wrap gap-1 text-[11px]"
                   data-testid="phase6o-forbidden-actions"
                 >
-                  {razorpaySandboxStatusMappingReadiness.forbiddenActions.map(
+                  {(razorpaySandboxStatusMappingReadiness.forbiddenActions ?? []).map(
                     (action) => (
                       <span
                         key={action}
@@ -2256,7 +2256,7 @@ export default function SaasAdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {razorpaySandboxPaidStatusReadiness.eventMappings.map(
+                    {(razorpaySandboxPaidStatusReadiness.eventMappings ?? []).map(
                       (row) => (
                         <tr
                           key={row.razorpayEventName}
@@ -2299,9 +2299,9 @@ export default function SaasAdminPage() {
             <div className="px-6 pb-4">
               <h4 className="text-sm font-semibold mb-2">
                 Sandbox mutation attempts
-                ({razorpaySandboxPaidStatusAttempts.items.length})
+                ({(razorpaySandboxPaidStatusAttempts.items ?? []).length})
               </h4>
-              {razorpaySandboxPaidStatusAttempts.items.length === 0 ? (
+              {(razorpaySandboxPaidStatusAttempts.items ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   No attempts yet. Attempts are created and executed
                   exclusively via the Phase 6P CLI commands —{" "}
@@ -2330,7 +2330,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {razorpaySandboxPaidStatusAttempts.items.map((row) => (
+                      {(razorpaySandboxPaidStatusAttempts.items ?? []).map((row) => (
                         <tr
                           key={row.id}
                           className="border-t border-border"
@@ -2416,7 +2416,7 @@ export default function SaasAdminPage() {
                   className="flex flex-wrap gap-1 text-[11px]"
                   data-testid="phase6p-forbidden-actions"
                 >
-                  {razorpaySandboxPaidStatusReadiness.forbiddenActions.map(
+                  {(razorpaySandboxPaidStatusReadiness.forbiddenActions ?? []).map(
                     (action) => (
                       <span
                         key={action}
@@ -2590,7 +2590,7 @@ export default function SaasAdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {razorpayPaymentOrderWorkflowReadiness.workflowContract.map(
+                    {(razorpayPaymentOrderWorkflowReadiness.workflowContract ?? []).map(
                       (row) => (
                         <tr
                           key={row.razorpayEventName}
@@ -2633,9 +2633,9 @@ export default function SaasAdminPage() {
             <div className="px-6 pb-4">
               <h4 className="text-sm font-semibold mb-2">
                 Workflow gate review records (
-                {razorpayPaymentOrderWorkflowGates.items.length})
+                {(razorpayPaymentOrderWorkflowGates.items ?? []).length})
               </h4>
-              {razorpayPaymentOrderWorkflowGates.items.length === 0 ? (
+              {(razorpayPaymentOrderWorkflowGates.items ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   No gate reviews yet. Gate reviews are prepared,
                   approved, rejected, and archived exclusively via
@@ -2665,7 +2665,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {razorpayPaymentOrderWorkflowGates.items.map((row) => (
+                      {(razorpayPaymentOrderWorkflowGates.items ?? []).map((row) => (
                         <tr
                           key={row.id}
                           className="border-t border-border"
@@ -2747,7 +2747,7 @@ export default function SaasAdminPage() {
                   className="flex flex-wrap gap-1 text-[11px]"
                   data-testid="phase6q-forbidden-actions"
                 >
-                  {razorpayPaymentOrderWorkflowReadiness.forbiddenActions.map(
+                  {(razorpayPaymentOrderWorkflowReadiness.forbiddenActions ?? []).map(
                     (action) => (
                       <span
                         key={action}
@@ -2918,7 +2918,7 @@ export default function SaasAdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {razorpayPaymentDispatchReadiness.readinessContract.map(
+                    {(razorpayPaymentDispatchReadiness.readinessContract ?? []).map(
                       (row) => (
                         <tr
                           key={row.razorpayEventName}
@@ -2951,9 +2951,9 @@ export default function SaasAdminPage() {
             <div className="px-6 pb-4">
               <h4 className="text-sm font-semibold mb-2">
                 Recent readiness gates ({" "}
-                {razorpayPaymentDispatchReadinessGates.items.length})
+                {(razorpayPaymentDispatchReadinessGates.items ?? []).length})
               </h4>
-              {razorpayPaymentDispatchReadinessGates.items.length === 0 ? (
+              {(razorpayPaymentDispatchReadinessGates.items ?? []).length === 0 ? (
                 <div className="rounded border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
                   No readiness gates recorded yet. Run the Phase 6R CLI
                   commands —{" "}
@@ -2989,7 +2989,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {razorpayPaymentDispatchReadinessGates.items.map(
+                      {(razorpayPaymentDispatchReadinessGates.items ?? []).map(
                         (row) => (
                           <tr
                             key={row.id}
@@ -3033,7 +3033,7 @@ export default function SaasAdminPage() {
                   WhatsApp readiness checklist
                 </h4>
                 <ul className="space-y-2 text-xs">
-                  {razorpayPaymentDispatchReadiness.whatsAppReadinessChecklist.map(
+                  {(razorpayPaymentDispatchReadiness.whatsAppReadinessChecklist ?? []).map(
                     (item) => (
                       <li
                         key={item.key}
@@ -3055,7 +3055,7 @@ export default function SaasAdminPage() {
                   Courier readiness checklist
                 </h4>
                 <ul className="space-y-2 text-xs">
-                  {razorpayPaymentDispatchReadiness.courierReadinessChecklist.map(
+                  {(razorpayPaymentDispatchReadiness.courierReadinessChecklist ?? []).map(
                     (item) => (
                       <li
                         key={item.key}
@@ -3077,7 +3077,7 @@ export default function SaasAdminPage() {
                   Dispatch readiness checklist
                 </h4>
                 <ul className="space-y-2 text-xs">
-                  {razorpayPaymentDispatchReadiness.dispatchReadinessChecklist.map(
+                  {(razorpayPaymentDispatchReadiness.dispatchReadinessChecklist ?? []).map(
                     (item) => (
                       <li
                         key={item.key}
@@ -3102,11 +3102,11 @@ export default function SaasAdminPage() {
               <details className="text-xs">
                 <summary className="cursor-pointer font-semibold">
                   Phase 6R forbidden actions ({" "}
-                  {razorpayPaymentDispatchReadiness.forbiddenActions.length}
+                  {(razorpayPaymentDispatchReadiness.forbiddenActions ?? []).length}
                   )
                 </summary>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {razorpayPaymentDispatchReadiness.forbiddenActions.map(
+                  {(razorpayPaymentDispatchReadiness.forbiddenActions ?? []).map(
                     (action) => (
                       <span
                         key={action}
@@ -3304,7 +3304,7 @@ export default function SaasAdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {razorpayPaymentDispatchPilotPlanReadiness.pilotContract.map(
+                    {(razorpayPaymentDispatchPilotPlanReadiness.pilotContract ?? []).map(
                       (row) => (
                         <tr
                           key={row.razorpayEventName}
@@ -3341,9 +3341,9 @@ export default function SaasAdminPage() {
             <div className="px-6 pb-4">
               <h4 className="text-sm font-semibold mb-2">
                 Recent pilot plans (
-                {razorpayPaymentDispatchPilotPlans.items.length})
+                {(razorpayPaymentDispatchPilotPlans.items ?? []).length})
               </h4>
-              {razorpayPaymentDispatchPilotPlans.items.length === 0 ? (
+              {(razorpayPaymentDispatchPilotPlans.items ?? []).length === 0 ? (
                 <div className="rounded border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
                   No pilot plans recorded yet. Run the Phase 6S CLI
                   commands —{" "}
@@ -3379,7 +3379,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {razorpayPaymentDispatchPilotPlans.items.map(
+                      {(razorpayPaymentDispatchPilotPlans.items ?? []).map(
                         (row) => (
                           <tr
                             key={row.id}
@@ -3423,7 +3423,7 @@ export default function SaasAdminPage() {
                   Internal staff cohort checklist
                 </h4>
                 <ul className="space-y-2 text-xs">
-                  {razorpayPaymentDispatchPilotPlanReadiness.internalStaffCohortChecklist.map(
+                  {(razorpayPaymentDispatchPilotPlanReadiness.internalStaffCohortChecklist ?? []).map(
                     (item) => (
                       <li
                         key={item.key}
@@ -3445,7 +3445,7 @@ export default function SaasAdminPage() {
                   WhatsApp pilot checklist
                 </h4>
                 <ul className="space-y-2 text-xs">
-                  {razorpayPaymentDispatchPilotPlanReadiness.whatsAppPilotChecklist.map(
+                  {(razorpayPaymentDispatchPilotPlanReadiness.whatsAppPilotChecklist ?? []).map(
                     (item) => (
                       <li
                         key={item.key}
@@ -3467,7 +3467,7 @@ export default function SaasAdminPage() {
                   Courier pilot checklist
                 </h4>
                 <ul className="space-y-2 text-xs">
-                  {razorpayPaymentDispatchPilotPlanReadiness.courierPilotChecklist.map(
+                  {(razorpayPaymentDispatchPilotPlanReadiness.courierPilotChecklist ?? []).map(
                     (item) => (
                       <li
                         key={item.key}
@@ -3489,7 +3489,7 @@ export default function SaasAdminPage() {
                   Dispatch pilot checklist
                 </h4>
                 <ul className="space-y-2 text-xs">
-                  {razorpayPaymentDispatchPilotPlanReadiness.dispatchPilotChecklist.map(
+                  {(razorpayPaymentDispatchPilotPlanReadiness.dispatchPilotChecklist ?? []).map(
                     (item) => (
                       <li
                         key={item.key}
@@ -3516,7 +3516,7 @@ export default function SaasAdminPage() {
                   Abort criteria
                 </h4>
                 <ul className="space-y-1 text-xs">
-                  {razorpayPaymentDispatchPilotPlanReadiness.abortCriteria.map(
+                  {(razorpayPaymentDispatchPilotPlanReadiness.abortCriteria ?? []).map(
                     (item) => (
                       <li
                         key={item}
@@ -3533,7 +3533,7 @@ export default function SaasAdminPage() {
                   Verification checklist
                 </h4>
                 <ul className="space-y-2 text-xs">
-                  {razorpayPaymentDispatchPilotPlanReadiness.verificationChecklist.map(
+                  {(razorpayPaymentDispatchPilotPlanReadiness.verificationChecklist ?? []).map(
                     (item) => (
                       <li
                         key={item.key}
@@ -3568,7 +3568,7 @@ export default function SaasAdminPage() {
                   )
                 </summary>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {razorpayPaymentDispatchPilotPlanReadiness.forbiddenActions.map(
+                  {(razorpayPaymentDispatchPilotPlanReadiness.forbiddenActions ?? []).map(
                     (action) => (
                       <span
                         key={action}
@@ -3713,7 +3713,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {razorpayPhase6FinalAuditLockReadiness.auditChain.map(
+                      {(razorpayPhase6FinalAuditLockReadiness.auditChain ?? []).map(
                         (row) => (
                           <tr key={row.phase} className="border-t border-border">
                             <td className="px-3 py-2 font-mono">
@@ -3768,7 +3768,7 @@ export default function SaasAdminPage() {
                     Abort criteria
                   </h4>
                   <ul className="space-y-1 text-xs">
-                    {razorpayPhase6FinalAuditLockReadiness.abortCriteria.map(
+                    {(razorpayPhase6FinalAuditLockReadiness.abortCriteria ?? []).map(
                       (item) => (
                         <li
                           key={`${item.if}-${item.then}`}
@@ -3785,7 +3785,7 @@ export default function SaasAdminPage() {
                     Operator checklist
                   </h4>
                   <ul className="space-y-1 text-xs">
-                    {razorpayPhase6FinalAuditLockReadiness.operatorChecklist.map(
+                    {(razorpayPhase6FinalAuditLockReadiness.operatorChecklist ?? []).map(
                       (item) => (
                         <li
                           key={`${item.step}-${item.surface}`}
@@ -3808,9 +3808,9 @@ export default function SaasAdminPage() {
             >
               <h4 className="text-sm font-semibold mb-2">
                 Final audit lock records (
-                {razorpayPhase6FinalAuditLocks.items.length})
+                {(razorpayPhase6FinalAuditLocks.items ?? []).length})
               </h4>
-              {razorpayPhase6FinalAuditLocks.items.length === 0 ? (
+              {(razorpayPhase6FinalAuditLocks.items ?? []).length === 0 ? (
                 <div className="rounded border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
                   No final audit lock records yet. Use the Phase 6T CLI
                   review commands after an eligible Phase 6S plan exists.
@@ -3828,7 +3828,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {razorpayPhase6FinalAuditLocks.items.map((row) => (
+                      {(razorpayPhase6FinalAuditLocks.items ?? []).map((row) => (
                         <tr key={row.id} className="border-t border-border">
                           <td className="px-3 py-2 font-mono">{row.id}</td>
                           <td className="px-3 py-2 font-mono">
@@ -4009,9 +4009,9 @@ export default function SaasAdminPage() {
             <div className="px-6 pb-4">
               <h4 className="text-sm font-semibold mb-2">
                 Recent controlled pilot gates ({" "}
-                {razorpayControlledPilotGates.items.length})
+                {(razorpayControlledPilotGates.items ?? []).length})
               </h4>
-              {razorpayControlledPilotGates.items.length === 0 ? (
+              {(razorpayControlledPilotGates.items ?? []).length === 0 ? (
                 <div
                   className="rounded border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground"
                   data-testid="phase7b-cli-only-reminder"
@@ -4050,7 +4050,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {razorpayControlledPilotGates.items.map((row) => (
+                      {(razorpayControlledPilotGates.items ?? []).map((row) => (
                         <tr
                           key={row.id}
                           className="border-t border-border"
@@ -4097,7 +4097,7 @@ export default function SaasAdminPage() {
                   )
                 </summary>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {razorpayControlledPilotGateReadiness.forbiddenActions.map(
+                  {(razorpayControlledPilotGateReadiness.forbiddenActions ?? []).map(
                     (action) => (
                       <span
                         key={action}
@@ -4868,7 +4868,7 @@ export default function SaasAdminPage() {
               />
               <KeyValue
                 label="Allowed Delhivery modes"
-                value={razorpayCourierExecutionReadiness.phase7GAllowedDelhiveryModes.join(
+                value={(razorpayCourierExecutionReadiness.phase7GAllowedDelhiveryModes ?? []).join(
                   ", ",
                 )}
               />
@@ -5151,9 +5151,9 @@ export default function SaasAdminPage() {
             </div>
           )}
           {razorpayCourierExecutionEvidenceLocks &&
-            razorpayCourierExecutionEvidenceLocks.items.length > 0 && (
+            (razorpayCourierExecutionEvidenceLocks.items ?? []).length > 0 && (
               <div className="border-t border-border px-6 py-4 text-xs">
-                {razorpayCourierExecutionEvidenceLocks.items.map(
+                {(razorpayCourierExecutionEvidenceLocks.items ?? []).map(
                   (lock) => (
                     <div
                       key={lock.id}
@@ -5369,7 +5369,7 @@ export default function SaasAdminPage() {
               ),
             )}
           </div>
-          {phase7eLiveBRealCustomerGates.items.length > 0 && (
+          {(phase7eLiveBRealCustomerGates.items ?? []).length > 0 && (
             <div className="border-t border-border px-6 py-4 overflow-x-auto">
               <table className="min-w-full text-left text-xs">
                 <thead className="text-muted-foreground">
@@ -5383,7 +5383,7 @@ export default function SaasAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {phase7eLiveBRealCustomerGates.items.map((gate) => (
+                  {(phase7eLiveBRealCustomerGates.items ?? []).map((gate) => (
                     <tr key={gate.id} data-testid="phase7e-live-b-gate-row">
                       <td className="py-2 pr-4">{gate.id}</td>
                       <td className="py-2 pr-4">{gate.status}</td>
@@ -5446,7 +5446,7 @@ export default function SaasAdminPage() {
               ),
             )}
           </div>
-          {phase7gLiveRealCustomerDispatchGates.items.length > 0 && (
+          {(phase7gLiveRealCustomerDispatchGates.items ?? []).length > 0 && (
             <div className="border-t border-border px-6 py-4 overflow-x-auto">
               <table className="min-w-full text-left text-xs">
                 <thead className="text-muted-foreground">
@@ -5460,7 +5460,7 @@ export default function SaasAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {phase7gLiveRealCustomerDispatchGates.items.map((gate) => (
+                  {(phase7gLiveRealCustomerDispatchGates.items ?? []).map((gate) => (
                     <tr
                       key={gate.id}
                       data-testid="phase7g-live-dispatch-gate-row"
@@ -5588,14 +5588,14 @@ export default function SaasAdminPage() {
                   </tbody>
                 </table>
               </div>
-              {ceoOrchestrationLatest.snapshot.top3Priorities.length >
+              {(ceoOrchestrationLatest.snapshot.top3Priorities ?? []).length >
               0 && (
                 <div className="border-t border-border px-6 py-4">
                   <p className="text-xs font-medium mb-2">
                     Top priorities
                   </p>
                   <ol className="space-y-1 text-xs list-decimal pl-5">
-                    {ceoOrchestrationLatest.snapshot.top3Priorities.map(
+                    {(ceoOrchestrationLatest.snapshot.top3Priorities ?? []).map(
                       (entry) => (
                         <li
                           key={entry.priority}
@@ -5610,14 +5610,14 @@ export default function SaasAdminPage() {
                   </ol>
                 </div>
               )}
-              {ceoOrchestrationLatest.snapshot.crossCuttingAlerts.length >
+              {(ceoOrchestrationLatest.snapshot.crossCuttingAlerts ?? []).length >
               0 && (
                 <div className="border-t border-border px-6 py-4">
                   <p className="text-xs font-medium mb-2">
                     Cross-cutting alerts
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {ceoOrchestrationLatest.snapshot.crossCuttingAlerts.map(
+                    {(ceoOrchestrationLatest.snapshot.crossCuttingAlerts ?? []).map(
                       (entry, idx) => (
                         <span
                           key={`${entry.code}-${idx}`}
@@ -5730,7 +5730,7 @@ export default function SaasAdminPage() {
                   .slice(0, 5)
                   .map(([agent, codes]) => (
                     <li key={agent}>
-                      <strong>{agent}:</strong> {codes.join(", ")}
+                      <strong>{agent}:</strong> {(codes ?? []).join(", ")}
                     </li>
                   ))}
                 {Object.keys(caioLatestSnapshot.agent_anomaly_flags)
@@ -5745,7 +5745,7 @@ export default function SaasAdminPage() {
               </ul>
             </div>
           )}
-          {caioLatestSnapshot.weak_learning_indicators.length > 0 && (
+          {(caioLatestSnapshot.weak_learning_indicators ?? []).length > 0 && (
             <div
               className="border-t border-border px-6 py-4"
               data-testid="caio-weak-learning"
@@ -5754,7 +5754,7 @@ export default function SaasAdminPage() {
                 Weak learning indicators
               </p>
               <div className="flex flex-wrap gap-2">
-                {caioLatestSnapshot.weak_learning_indicators.map(
+                {(caioLatestSnapshot.weak_learning_indicators ?? []).map(
                   (code) => (
                     <span
                       key={code}
@@ -5767,7 +5767,7 @@ export default function SaasAdminPage() {
               </div>
             </div>
           )}
-          {caioLatestSnapshot.ceo_audit_notes.length > 0 && (
+          {(caioLatestSnapshot.ceo_audit_notes ?? []).length > 0 && (
             <div
               className="border-t border-border px-6 py-4"
               data-testid="caio-ceo-audit"
@@ -5785,7 +5785,7 @@ export default function SaasAdminPage() {
             >
               <p className="text-xs font-medium mb-2">Recommendation</p>
               <p className="text-xs text-muted-foreground whitespace-pre-line">
-                {caioLatestSnapshot.recommendation_text.slice(0, 200)}
+                {(caioLatestSnapshot.recommendation_text ?? []).slice(0, 200)}
                 {caioLatestSnapshot.recommendation_text.length > 200
                   ? "…"
                   : ""}
@@ -5857,7 +5857,7 @@ export default function SaasAdminPage() {
               Top pending proposals
             </p>
             {learningProposals &&
-            learningProposals.results.filter((p) => p.status === "pending")
+            (learningProposals.results ?? []).filter((p) => p.status === "pending")
               .length > 0 ? (
               <ul className="space-y-2 text-xs">
                 {learningProposals.results
@@ -5993,7 +5993,7 @@ export default function SaasAdminPage() {
               </tbody>
             </table>
           </div>
-          {customerSuccessCohorts.topReorderCandidates.length > 0 && (
+          {(customerSuccessCohorts.topReorderCandidates ?? []).length > 0 && (
             <div className="border-t border-border px-6 py-4 overflow-x-auto">
               <p className="text-xs font-medium mb-2">
                 Top reorder candidates (masked customer id)
@@ -6007,7 +6007,7 @@ export default function SaasAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {customerSuccessCohorts.topReorderCandidates.map((c) => (
+                  {(customerSuccessCohorts.topReorderCandidates ?? []).map((c) => (
                     <tr
                       key={c.id}
                       data-testid="customer-success-reorder-row"
@@ -6123,7 +6123,7 @@ export default function SaasAdminPage() {
               </tbody>
             </table>
           </div>
-          {rtoPreventionCohorts.topCriticalOrders.length > 0 && (
+          {(rtoPreventionCohorts.topCriticalOrders ?? []).length > 0 && (
             <div className="border-t border-border px-6 py-4 overflow-x-auto">
               <p className="text-xs font-medium mb-2">
                 Top critical-tier orders (masked order id)
@@ -6137,7 +6137,7 @@ export default function SaasAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rtoPreventionCohorts.topCriticalOrders.map((o) => (
+                  {(rtoPreventionCohorts.topCriticalOrders ?? []).map((o) => (
                     <tr
                       key={o.id}
                       data-testid="rto-prevention-critical-row"
@@ -6241,7 +6241,7 @@ export default function SaasAdminPage() {
               <div className="border-t border-border px-6 py-4 overflow-x-auto">
                 <p className="text-xs font-medium mb-2">Active alerts</p>
                 <div className="flex flex-wrap gap-2">
-                  {cfoLatest.snapshot.alerts.map((alert) => (
+                  {(cfoLatest.snapshot.alerts ?? []).map((alert) => (
                     <span
                       key={alert}
                       data-testid="cfo-alert-pill"
@@ -6379,7 +6379,7 @@ export default function SaasAdminPage() {
                   ).toFixed(1) + "%"}
                 />
               </div>
-              {dataAnalystLatest.snapshot.topStates.length > 0 && (
+              {(dataAnalystLatest.snapshot.topStates ?? []).length > 0 && (
                 <div className="border-t border-border px-6 py-4 overflow-x-auto">
                   <p className="text-xs font-medium mb-2">
                     Top states by order volume (30d)
@@ -6393,7 +6393,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {dataAnalystLatest.snapshot.topStates.map(
+                      {(dataAnalystLatest.snapshot.topStates ?? []).map(
                         (row) => (
                           <tr
                             key={row.state}
@@ -6447,7 +6447,7 @@ export default function SaasAdminPage() {
               <div className="border-t border-border px-6 py-4">
                 <p className="text-xs font-medium mb-2">Active alerts</p>
                 <div className="flex flex-wrap gap-2">
-                  {dataAnalystLatest.snapshot.alerts.map((alert) => (
+                  {(dataAnalystLatest.snapshot.alerts ?? []).map((alert) => (
                     <span
                       key={alert}
                       data-testid="data-analyst-alert-pill"
@@ -6590,7 +6590,7 @@ export default function SaasAdminPage() {
                   </table>
                 </div>
               )}
-              {callingTeamLeaderLatest.snapshot.agentBreakdown.length >
+              {(callingTeamLeaderLatest.snapshot.agentBreakdown ?? []).length >
               0 ? (
                 <div className="border-t border-border px-6 py-4 overflow-x-auto">
                   <p className="text-xs font-medium mb-2">
@@ -6606,7 +6606,7 @@ export default function SaasAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {callingTeamLeaderLatest.snapshot.agentBreakdown.map(
+                      {(callingTeamLeaderLatest.snapshot.agentBreakdown ?? []).map(
                         (row) => (
                           <tr
                             key={row.agent_id || row.agent_label}
@@ -6637,7 +6637,7 @@ export default function SaasAdminPage() {
               <div className="border-t border-border px-6 py-4">
                 <p className="text-xs font-medium mb-2">Active alerts</p>
                 <div className="flex flex-wrap gap-2">
-                  {callingTeamLeaderLatest.snapshot.alerts.map((alert) => (
+                  {(callingTeamLeaderLatest.snapshot.alerts ?? []).map((alert) => (
                     <span
                       key={alert}
                       data-testid="calling-team-leader-alert-pill"
@@ -6713,13 +6713,13 @@ export default function SaasAdminPage() {
           <div className="px-6 py-4 space-y-5">
             {/* Latest campaign tile */}
             {callingCampaigns &&
-              callingCampaigns.results.length > 0 && (
+              (callingCampaigns.results ?? []).length > 0 && (
                 <Tier4LatestCampaignTile
                   campaign={callingCampaigns.results[0]}
                 />
               )}
             {callingCampaigns &&
-              callingCampaigns.results.length === 0 && (
+              (callingCampaigns.results ?? []).length === 0 && (
                 <div
                   className="rounded-md border border-dashed border-border bg-muted/10 px-4 py-6 text-center text-xs text-muted-foreground"
                   data-testid="tier4-latest-campaign-empty"
@@ -6854,9 +6854,9 @@ export default function SaasAdminPage() {
             </div>
           )}
           {phase7iFinalAuditLocks &&
-            phase7iFinalAuditLocks.items.length > 0 && (
+            (phase7iFinalAuditLocks.items ?? []).length > 0 && (
               <div className="border-t border-border px-6 py-4 text-xs">
-                {phase7iFinalAuditLocks.items.map((lock) => (
+                {(phase7iFinalAuditLocks.items ?? []).map((lock) => (
                   <div
                     key={lock.id}
                     className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6 py-1 border-b border-border last:border-0"
@@ -7010,9 +7010,9 @@ export default function SaasAdminPage() {
             </div>
           )}
           {phase8aPaymentOrderMutationSandboxGates &&
-            phase8aPaymentOrderMutationSandboxGates.items.length > 0 && (
+            (phase8aPaymentOrderMutationSandboxGates.items ?? []).length > 0 && (
               <div className="border-t border-border px-6 py-4 text-xs">
-                {phase8aPaymentOrderMutationSandboxGates.items.map(
+                {(phase8aPaymentOrderMutationSandboxGates.items ?? []).map(
                   (gate) => (
                     <div
                       key={gate.id}
@@ -7190,9 +7190,9 @@ export default function SaasAdminPage() {
             </div>
           )}
           {phase8bPaymentOrderMutationReviewGates &&
-            phase8bPaymentOrderMutationReviewGates.items.length > 0 && (
+            (phase8bPaymentOrderMutationReviewGates.items ?? []).length > 0 && (
               <div className="border-t border-border px-6 py-4 text-xs">
-                {phase8bPaymentOrderMutationReviewGates.items.map(
+                {(phase8bPaymentOrderMutationReviewGates.items ?? []).map(
                   (gate) => (
                     <div
                       key={gate.id}
@@ -7377,9 +7377,9 @@ export default function SaasAdminPage() {
             </div>
           )}
           {phase8cPaymentOrderControlledMutationGates &&
-            phase8cPaymentOrderControlledMutationGates.items.length > 0 && (
+            (phase8cPaymentOrderControlledMutationGates.items ?? []).length > 0 && (
               <div className="border-t border-border px-6 py-4 text-xs">
-                {phase8cPaymentOrderControlledMutationGates.items.map(
+                {(phase8cPaymentOrderControlledMutationGates.items ?? []).map(
                   (gate) => (
                     <div
                       key={gate.id}
@@ -7401,9 +7401,9 @@ export default function SaasAdminPage() {
                       </span>
                       <span>
                         old/new=
-                        {gate.proposedOldOrderStatus.slice(0, 18)}
+                        {(gate.proposedOldOrderStatus ?? []).slice(0, 18)}
                         {" → "}
-                        {gate.proposedNewOrderStatus.slice(0, 18)}
+                        {(gate.proposedNewOrderStatus ?? []).slice(0, 18)}
                       </span>
                     </div>
                   ),
@@ -7549,9 +7549,9 @@ export default function SaasAdminPage() {
             </div>
           )}
           {phase8dControlledMutationEvidenceLocks &&
-            phase8dControlledMutationEvidenceLocks.items.length > 0 && (
+            (phase8dControlledMutationEvidenceLocks.items ?? []).length > 0 && (
               <div className="border-t border-border px-6 py-4 text-xs">
-                {phase8dControlledMutationEvidenceLocks.items.map(
+                {(phase8dControlledMutationEvidenceLocks.items ?? []).map(
                   (lock) => (
                     <div
                       key={lock.id}
@@ -7748,10 +7748,10 @@ export default function SaasAdminPage() {
             </div>
           )}
           {phase8eRealCustomerPaymentOrderPilotGates &&
-            phase8eRealCustomerPaymentOrderPilotGates.items.length >
+            (phase8eRealCustomerPaymentOrderPilotGates.items ?? []).length >
               0 && (
               <div className="border-t border-border px-6 py-4 text-xs">
-                {phase8eRealCustomerPaymentOrderPilotGates.items.map(
+                {(phase8eRealCustomerPaymentOrderPilotGates.items ?? []).map(
                   (gate) => (
                     <div
                       key={gate.id}
@@ -7770,7 +7770,7 @@ export default function SaasAdminPage() {
                       <span>
                         candidate=
                         {gate.candidateOrderIdSnapshot
-                          ? `${gate.candidateOrderIdSnapshot.slice(0, 14)}…`
+                          ? `${(gate.candidateOrderIdSnapshot ?? []).slice(0, 14)}…`
                           : "—"}
                       </span>
                       <span>
@@ -7818,7 +7818,7 @@ export default function SaasAdminPage() {
                   )}
                 />
               </div>
-              {phase8eRealCustomerCandidatePool.warnings.length >
+              {(phase8eRealCustomerCandidatePool.warnings ?? []).length >
                 0 && (
                 <ul className="mt-3 space-y-1 text-xs text-amber-700 dark:text-amber-300">
                   {phase8eRealCustomerCandidatePool.warnings
@@ -8068,10 +8068,10 @@ export default function SaasAdminPage() {
             </div>
           )}
           {phase8fRealCustomerControlledMutationGates &&
-            phase8fRealCustomerControlledMutationGates.items.length >
+            (phase8fRealCustomerControlledMutationGates.items ?? []).length >
               0 && (
               <div className="border-t border-border px-6 py-4 text-xs">
-                {phase8fRealCustomerControlledMutationGates.items.map(
+                {(phase8fRealCustomerControlledMutationGates.items ?? []).map(
                   (gate) => (
                     <div
                       key={gate.id}
@@ -8197,13 +8197,13 @@ export default function SaasAdminPage() {
           <IssueList items={overview.warnings} empty="No warnings" />
         </Panel>
         <Panel title="Audit Timeline" icon={CheckCircle2}>
-          {overview.auditTimeline.length === 0 ? (
+          {(overview.auditTimeline ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No SaaS admin audit events yet.
             </p>
           ) : (
             <div className="space-y-3">
-              {overview.auditTimeline.map((event) => (
+              {(overview.auditTimeline ?? []).map((event) => (
                 <div
                   key={event.id}
                   className="rounded-md border border-border bg-muted/20 p-3"
@@ -8488,7 +8488,7 @@ function Tier4OutcomeBreakdown({
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        {pills.map((pill) => (
+        {(pills ?? []).map((pill) => (
           <div
             key={pill.label}
             className={`rounded-full px-3 py-1 text-xs ${pill.className}`}
@@ -8550,7 +8550,7 @@ function Tier4FollowUpTiles({
         </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {tiles.map((t) => (
+        {(tiles ?? []).map((t) => (
           <div
             key={t.label}
             className="rounded-md border border-border bg-muted/10 px-3 py-2"
@@ -8641,7 +8641,7 @@ function ContractList({
             </div>
             <div className="mt-0.5 break-words">
               {Array.isArray(value)
-                ? value.join(", ")
+                ? (value ?? []).join(", ")
                 : typeof value === "object" && value !== null
                   ? JSON.stringify(value)
                   : String(value)}
@@ -8654,12 +8654,12 @@ function ContractList({
 }
 
 function IssueList({ items, empty }: { items: string[]; empty: string }) {
-  if (items.length === 0) {
+  if ((items ?? []).length === 0) {
     return <p className="text-sm text-muted-foreground">{empty}</p>;
   }
   return (
     <ul className="space-y-2 text-sm">
-      {items.map((item) => (
+      {(items ?? []).map((item) => (
         <li key={item} className="rounded-md border border-border p-2">
           {item}
         </li>
@@ -8892,7 +8892,7 @@ function RuntimeProviderRow({
       <td className="py-3">
         <StatusPill tone={provider.secretRefsPresent ? "success" : "warning"}>
           {provider.secretRefsPresent
-            ? `${provider.expectedSecretRefKeys.length - provider.missingSecretRefs.length}/${provider.expectedSecretRefKeys.length} present`
+            ? `${(provider.expectedSecretRefKeys ?? []).length - (provider.missingSecretRefs ?? []).length}/${(provider.expectedSecretRefKeys ?? []).length} present`
             : "Missing"}
         </StatusPill>
       </td>
@@ -8957,7 +8957,7 @@ function ProviderTestPlanInvariants({
         </p>
       ) : (
         <div className="space-y-1.5">
-          {rows.map((row) => {
+          {(rows ?? []).map((row) => {
             const safe =
               row.safeWhenFalse === true ? row.value === false : row.value;
             return (
@@ -9170,7 +9170,7 @@ function ProviderExecutionInvariants({
         </p>
       ) : (
         <div className="space-y-1.5">
-          {rows.map((row) => {
+          {(rows ?? []).map((row) => {
             const safe =
               row.safeWhenFalse === true ? row.value === false : row.value;
             return (
@@ -9205,7 +9205,7 @@ function ProviderExecutionAttemptsTable({
 }: {
   attempts: SaasProviderExecutionAttempt[];
 }) {
-  if (!attempts.length) {
+  if (!(attempts ?? []).length) {
     return (
       <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
         No execution attempts recorded yet.
@@ -9230,7 +9230,7 @@ function ProviderExecutionAttemptsTable({
           </tr>
         </thead>
         <tbody>
-          {attempts.map((attempt) => (
+          {(attempts ?? []).map((attempt) => (
             <tr
               key={attempt.executionId}
               className="border-t border-border/60"
@@ -9322,9 +9322,9 @@ function RazorpayAuditReviewCard({
           value={review.rollbackStatus ?? "n/a"}
         />
       </div>
-      {review.invariantResults && review.invariantResults.length > 0 && (
+      {review.invariantResults && (review.invariantResults ?? []).length > 0 && (
         <div className="mt-4 grid gap-1.5">
-          {review.invariantResults.map((inv) => (
+          {(review.invariantResults ?? []).map((inv) => (
             <div
               key={inv.key}
               className="flex items-center justify-between text-xs"
@@ -9347,7 +9347,7 @@ function RazorpayAuditReviewCard({
           {String(Boolean(review.rawSecretLeakDetected))}
         </span>
       </div>
-      {review.blockers && review.blockers.length > 0 && (
+      {review.blockers && (review.blockers ?? []).length > 0 && (
         <IssueList items={review.blockers} empty="No blockers" />
       )}
     </div>
@@ -9407,7 +9407,7 @@ function RazorpayWebhookReadinessCard({
           </span>
         </span>
       </div>
-      {readiness.blockers && readiness.blockers.length > 0 && (
+      {readiness.blockers && (readiness.blockers ?? []).length > 0 && (
         <IssueList items={readiness.blockers} empty="No blockers" />
       )}
     </div>
@@ -9444,11 +9444,11 @@ function RazorpayWebhookPlanCard({
         />
         <KeyValue
           label="Allowlist size"
-          value={String(plan.eventAllowlist.length)}
+          value={String((plan.eventAllowlist ?? []).length)}
         />
         <KeyValue
           label="Denylist size"
-          value={String(plan.eventDenylist.length)}
+          value={String((plan.eventDenylist ?? []).length)}
         />
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -9457,7 +9457,7 @@ function RazorpayWebhookPlanCard({
             Allowlist
           </div>
           <ul className="space-y-1 font-mono text-[11px]">
-            {plan.eventAllowlist.map((event) => (
+            {(plan.eventAllowlist ?? []).map((event) => (
               <li
                 key={event}
                 data-testid="razorpay-webhook-allowlist-row"
@@ -9472,7 +9472,7 @@ function RazorpayWebhookPlanCard({
             Denylist
           </div>
           <ul className="space-y-1 font-mono text-[11px]">
-            {plan.eventDenylist.map((event) => (
+            {(plan.eventDenylist ?? []).map((event) => (
               <li
                 key={event}
                 data-testid="razorpay-webhook-denylist-row"
@@ -9505,7 +9505,7 @@ function RazorpayWebhookPlanCard({
             Sensitive payload keys scrubbed
           </span>
           <span className="font-mono text-[11px]">
-            {plan.auditLoggingPlan.payloadHandling.sensitiveKeysToScrub.length}
+            {(plan.auditLoggingPlan.payloadHandling.sensitiveKeysToScrub ?? []).length}
           </span>
         </div>
       </div>
@@ -9603,7 +9603,7 @@ function McpSecurityPostureCard({
             Boolean invariants
           </div>
           <div className="space-y-1.5">
-            {rows.map((row) => {
+            {(rows ?? []).map((row) => {
               const safe =
                 row.safeWhenFalse === true ? row.value === false : row.value;
               return (
@@ -9627,7 +9627,7 @@ function McpSecurityPostureCard({
             Counters (must stay 0)
           </div>
           <div className="space-y-1.5">
-            {numericRows.map((row) => (
+            {(numericRows ?? []).map((row) => (
               <div
                 key={row.label}
                 className="flex items-center justify-between text-xs"
@@ -9648,7 +9648,7 @@ function McpSecurityPostureCard({
 }
 
 function McpToolsTable({ response }: { response: McpToolsResponse }) {
-  if (!response.tools.length) {
+  if (!(response.tools ?? []).length) {
     return (
       <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
         No MCP tools registered. Run{" "}
@@ -9671,7 +9671,7 @@ function McpToolsTable({ response }: { response: McpToolsResponse }) {
           </tr>
         </thead>
         <tbody>
-          {response.tools.map((tool) => (
+          {(response.tools ?? []).map((tool) => (
             <McpToolRow key={tool.name} tool={tool} />
           ))}
         </tbody>
@@ -9714,7 +9714,7 @@ function McpToolRow({ tool }: { tool: McpToolDefinitionDto }) {
         </StatusPill>
       </td>
       <td className="px-6 py-3 text-[11px] font-mono text-muted-foreground">
-        {tool.requiredScopes.join(", ")}
+        {(tool.requiredScopes ?? []).join(", ")}
       </td>
     </tr>
   );
@@ -9725,7 +9725,7 @@ function McpInvocationsTable({
 }: {
   response: McpInvocationsResponse;
 }) {
-  if (!response.invocations.length) {
+  if (!(response.invocations ?? []).length) {
     return (
       <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
         No MCP invocations recorded yet.
@@ -9746,7 +9746,7 @@ function McpInvocationsTable({
           </tr>
         </thead>
         <tbody>
-          {response.invocations.map((row) => (
+          {(response.invocations ?? []).map((row) => (
             <McpInvocationRow key={row.invocationId} row={row} />
           ))}
         </tbody>
@@ -9814,7 +9814,7 @@ function RazorpayWebhookHandlerReadinessCard({
         />
         <KeyValue
           label="Allowed events"
-          value={String(readiness.allowedEvents.length)}
+          value={String((readiness.allowedEvents ?? []).length)}
         />
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -9942,7 +9942,7 @@ function RazorpayWebhookHandlerReadinessCard({
           value={String(readiness.blockedEventCount)}
         />
       </div>
-      {readiness.blockers.length > 0 && (
+      {(readiness.blockers ?? []).length > 0 && (
         <IssueList items={readiness.blockers} empty="No blockers" />
       )}
       <div className="mt-3 text-[11px] text-muted-foreground">
@@ -9958,7 +9958,7 @@ function RazorpayWebhookEventsTable({
 }: {
   response: SaasRazorpayWebhookEventsResponse;
 }) {
-  if (!response.events.length) {
+  if (!(response.events ?? []).length) {
     return (
       <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
         No Razorpay webhook events recorded yet. Send a synthetic
@@ -9984,7 +9984,7 @@ function RazorpayWebhookEventsTable({
           </tr>
         </thead>
         <tbody>
-          {response.events.map((row) => (
+          {(response.events ?? []).map((row) => (
             <RazorpayWebhookEventRow key={row.id} row={row} />
           ))}
         </tbody>
