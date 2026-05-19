@@ -1,4 +1,4 @@
-import { Bell, Command, Menu, Power, Search, Sparkles } from "lucide-react";
+import { Bell, Command, LogOut, Menu, Power, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
@@ -108,6 +108,24 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
             <div className="text-[13px] font-semibold">Prarit Sidana</div>
             <div className="text-[10.5px] text-muted-foreground uppercase tracking-wider">Director</div>
           </div>
+          {/* Phase 13A — Logout action. Clears the JWT and dispatches
+              the auth-cleared event, which trips RequireAuth and routes
+              the user back to /login. */}
+          <button
+            type="button"
+            aria-label="Sign out"
+            title="Sign out"
+            data-testid="topbar-logout-button"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.localStorage.removeItem("nirogidhara.jwt");
+                window.dispatchEvent(new Event("nirogidhara:auth-cleared"));
+              }
+            }}
+            className="ml-1 p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </header>
