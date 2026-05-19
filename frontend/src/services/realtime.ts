@@ -22,27 +22,60 @@ import type { ActivityEvent, RealtimeStatus } from "@/types/domain";
 const RAW_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 const RAW_WS_BASE = import.meta.env.VITE_WS_BASE_URL ?? "";
 
+/**
+ * Phase 13B — when the page is loaded over HTTPS, the browser blocks any
+ * `ws://` WebSocket connection as Mixed Content. The previous implementation
+ * happily returned `ws://...` whenever `VITE_WS_BASE_URL` was explicitly set
+ * to a `ws://` URL OR when `VITE_API_BASE_URL` was the production same-origin
+ * relative path `/api` (which fell through to a literal `ws://` with no host).
+ *
+ * This helper now always coerces the result to `wss://` when running in a
+ * browser on an HTTPS page. Local HTTP dev keeps using `ws://` unchanged.
+ */
+function coerceSchemeForHttpsPage(origin: string): string {
+  if (typeof window === "undefined") return origin;
+  const isHttpsPage = window.location.protocol === "https:";
+  if (!isHttpsPage) return origin;
+  if (origin.startsWith("ws://")) {
+    return `wss://${origin.slice("ws://".length)}`;
+  }
+  return origin;
+}
+
 function deriveWsOrigin(rawApiBase: string, rawWsBase: string): string {
   const explicit = (rawWsBase ?? "").trim();
   if (explicit) {
-    return explicit.replace(/\/+$/, "");
+    return coerceSchemeForHttpsPage(explicit.replace(/\/+$/, ""));
   }
   const httpOrigin = (rawApiBase ?? "").trim().replace(/\/+$/, "");
   if (!httpOrigin) {
-    return "ws://localhost:8000";
+    return coerceSchemeForHttpsPage("ws://localhost:8000");
   }
   // Strip any "/api" suffix — the WS path lives at the host root.
   const withoutApi = httpOrigin.replace(/\/api$/i, "");
+  // Production same-origin build sets VITE_API_BASE_URL=/api, so after
+  // stripping /api we have an empty string. Fall back to the current
+  // browser host so wss://ai.nirogidhara.com/ws/... works without any
+  // additional env var.
+  if (!withoutApi) {
+    if (typeof window !== "undefined") {
+      const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+      return `${scheme}://${window.location.host}`;
+    }
+    return "ws://localhost:8000";
+  }
   if (withoutApi.startsWith("https://")) {
     return `wss://${withoutApi.slice("https://".length)}`;
   }
   if (withoutApi.startsWith("http://")) {
-    return `ws://${withoutApi.slice("http://".length)}`;
+    return coerceSchemeForHttpsPage(
+      `ws://${withoutApi.slice("http://".length)}`,
+    );
   }
   if (withoutApi.startsWith("wss://") || withoutApi.startsWith("ws://")) {
-    return withoutApi;
+    return coerceSchemeForHttpsPage(withoutApi);
   }
-  return `ws://${withoutApi}`;
+  return coerceSchemeForHttpsPage(`ws://${withoutApi}`);
 }
 
 export function buildWebSocketUrl(
