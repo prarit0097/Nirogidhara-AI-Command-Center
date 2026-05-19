@@ -5,7 +5,7 @@
 Current baseline is **Test Hygiene Hotfix-1**. Phase 6T, Phase 7B → 7I
 with hotfixes, Phase 8A → 8F with hotfixes, Phase 8F-Hotfix-1,
 Phase 8F-Hotfix-2, and Test Hygiene Hotfix-1 are ✅ shipped.
-Verification baseline is **2188 backend tests +
+Verification baseline is **2730 backend tests +
 82 frontend tests**, green on both local SQLite and the VPS Postgres
 full-suite run. Test Hygiene Hotfix-1 is test-only: it pins integration
 modes to mock inside `backend/tests/conftest.py` so `.env.production`
@@ -1565,7 +1565,7 @@ mode propagates to both `Snapshot.sandbox=True` and
 | 10A Hotfix-1 | Phone fallback chain Payment → Order → Customer-by-name | `95f9b63` | ✅ SHIPPED |
 | 10B | Targeted Payment Reminder Preparer (CLI-only stage-aware wrapper around Phase 7E-Live-B) | `5f1587c` | ✅ SHIPPED |
 | 10B Hotfix-1 | Auto-create `crm.Customer` for Order-only phone fallback | `cde213f` | ✅ SHIPPED |
-| 10B Hotfix-2 | Fix `template_params` to match approved `nrg_payment_reminder` Meta template (`{customer_name, context}`) | `47ac3ac` | ✅ SHIPPED |
+| 10B Hotfix-2 | Fix `template_params` to match approved `nrg_payment_reminder` Meta template (`{customer_name, context}`) | `dbe8a7b` | ✅ SHIPPED |
 | 10C | Razorpay Payment Link Refresh Gate (heavyweight CLI workflow; test default, live gated) | `553b1a9` | ✅ SHIPPED |
 | 10C Hotfix-1 | Razorpay webhook reconciliation for refreshed links — persist `Payment.gateway_reference_id` at execute; webhook resolver falls back via `Phase10CPaymentLinkRefreshGate.razorpay_link_id` | `5a0fee2` | ✅ SHIPPED |
 | 7E-Live-B scope fix | Prior executed gate guard corrected | `492efe9` | ✅ SHIPPED |
@@ -1576,7 +1576,7 @@ reminder → 7E-Live-B Director approve + execute**. None of Phase 10
 sends WhatsApp; only the final 7E-Live-B execute does, inside the
 same structured 15-minute UTC window the Director signed.
 
-## Current test baseline (post-Phase 10B Hotfix-2)
+## Current test baseline (post-Phase 12D)
 
 **2466 backend tests + 82 frontend tests.** `makemigrations --check
 --dry-run` reports `No changes detected`; `python manage.py check`

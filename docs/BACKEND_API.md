@@ -7,9 +7,9 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Test Hygiene Hotfix-1 baseline:** endpoint body is documented
+> **Phase 12D baseline:** endpoint body is documented
 > through Phase 8F read-only surfaces. Current verification baseline:
-> **2188 backend tests + 82 frontend tests**, green on local SQLite
+> **2730 backend tests + 82 frontend tests**, green on local SQLite
 > and VPS Postgres. Phase 8F gate id=1 was recovered/approved on
 > the VPS on 2026-05-14 and attempt id=1 was minted, but **Phase 8F
 > execute was NOT run**. Phase 8F live execute, Phase 7E-Live-B,
