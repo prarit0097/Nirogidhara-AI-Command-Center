@@ -33,6 +33,7 @@ import LearningProposalsPage from "./pages/LearningProposals";
 import CallingDashboardPage from "./pages/CallingDashboard";
 import Login from "@/pages/Login";
 import RequireAuth from "@/components/RequireAuth";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
@@ -71,7 +72,14 @@ const App = () => (
             <Route path="/whatsapp-inbox" element={<WhatsAppInboxPage />} />
             <Route path="/whatsapp-templates" element={<WhatsAppTemplatesPage />} />
             <Route path="/whatsapp-monitoring" element={<WhatsAppMonitoringPage />} />
-            <Route path="/saas-admin" element={<SaasAdminPage />} />
+            <Route
+              path="/saas-admin"
+              element={
+                <ErrorBoundary sectionName="SaaS Admin">
+                  <SaasAdminPage />
+                </ErrorBoundary>
+              }
+            />
             <Route
               path="/operations/pending-payments"
               element={<PendingPaymentsPage />}
