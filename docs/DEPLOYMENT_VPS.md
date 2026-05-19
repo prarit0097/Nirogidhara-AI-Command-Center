@@ -1554,10 +1554,10 @@ verification commands above to confirm posture stayed locked.
 
 ---
 
-## 11. Phase 9-10 Production Posture (current baseline as of 2026-05-16)
+## 11. Phase 12D Production Posture (current baseline as of 2026-05-16)
 
-**Test baseline:** 2466 backend tests + 82 frontend tests. All green
-after Phase 10B Hotfix-2.
+**Test baseline:** 2730 backend tests + 82 frontend tests. All green
+after Phase 12D.
 
 **VPS path / compose / env:** `/opt/nirogidhara-command`,
 `docker-compose.prod.yml`, `.env.production` (never committed, never

@@ -5,7 +5,7 @@ direction.
 
 ## Status (current)
 
-**Test Hygiene Hotfix-1 baseline.** `/saas-admin` now renders the Phase 6 →
+**Phase 12D baseline.** `/saas-admin` now renders the Phase 6 →
 Phase 8F read-only section grid, with no execute buttons and CLI-only
 review/approve banners on every section:
 
@@ -135,7 +135,7 @@ create-shipment, place-call, run-live, replay-webhook, apply-mutation,
 or activate-connector controls.
 Current total: 23 pages. Sidebar groups include Overview, Sales, Operations, AI Layer, Governance, Insights, Messaging, and System.
 
-## Phase 9-10 Frontend Additions (as of Phase 10B Hotfix-2 baseline)
+## Phase 9-10 Frontend Additions (as of Phase 12D baseline)
 
 **Test baseline:** 82 frontend tests (unchanged across Phase 9-10 —
 new UI cards land in `/saas-admin` which is rendered read-only and
@@ -166,7 +166,7 @@ synthesis layer over the other five.
 | --- | --- | --- | --- |
 | `/operations/pending-payments` | `PendingPayments.tsx` | 10A | Read-only Director review surface. Sortable table with columns Order / Customer / Phone / Amount / Status / State / Days Pending / Last WhatsApp / Last Call / Last Call Outcome. Client-side search box (customer / phone / order / state). "Include Partial" toggle (default on). Loading / empty / error states. Permanent "Read-only diagnostic" banner at the bottom. **No "Send Reminder" / "Mark Paid" / "Refund" / "Cancel" / "Trigger Call" buttons exist on the page** (asserted in the safety test). Linked from the CFO `/saas-admin` card. |
 
-Current total: **24 pages** after the Phase 10A page lands.
+Current total: **27 pages** after the Phase 10A page lands.
 
 ### What is NOT on the frontend (intentionally)
 
@@ -180,9 +180,9 @@ Current total: **24 pages** after the Phase 10A page lands.
   `/saas-admin` card; no "Acknowledge" / "Dispatch action" /
   "Approve priority" button.
 
-### Phase 10B Hotfix-2 — no frontend change
+### Phase 12D — no frontend change
 
-Phase 10B Hotfix-2 fixed only the backend `template_params` dict in
+Phase 12D fixed only the backend `template_params` dict in
 `apps.diagnostics.payment_reminder_service.build_payment_reminder_attempt`
 to match the live Meta-approved `nrg_payment_reminder` template
 schema (`{{1}} {{2}}` body, `variables_schema.order = ["customer_name",

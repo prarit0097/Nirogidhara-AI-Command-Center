@@ -4569,11 +4569,11 @@ BLOCKED (refused with exit 1; no gate row created):
   prepare → approve → execute → rollback lifecycle.
 - Sandbox mode propagates: `is_sandbox_enabled()` → `gate.sandbox=True`.
 
-### Phase 10B Hotfix-2 — `nrg_payment_reminder` template schema
+### Phase 12D — `nrg_payment_reminder` template schema
 
 The live Meta-approved `nrg_payment_reminder` template body is
 `{{1}} {{2}}` with `variables_schema.order = ["customer_name",
-"context"]`. Phase 10B Hotfix-2 collapses the previous three-key
+"context"]`. Phase 12D collapses the previous three-key
 dict (`{customer_name, amount, payment_url}` — which triggered
 Meta error #132001) into the two positional variables the
 template actually renders:
@@ -4597,7 +4597,7 @@ Rendered output:
 If the live WABA later adopts a richer `nrg_payment_reminder`
 template with more positional variables, edit the dict here AND
 re-sync the template's `variables_schema.order` via
-`python manage.py sync_whatsapp_templates`. Phase 10B Hotfix-2
+`python manage.py sync_whatsapp_templates`. Phase 12D
 itself never sends — the Director's existing Phase 7E-Live-B
 approve + execute commands remain the only path to a live
 WhatsApp dispatch.

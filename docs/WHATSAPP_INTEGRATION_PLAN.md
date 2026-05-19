@@ -6,7 +6,7 @@
 
 ---
 
-## Current status (2026-05-04, Phase 6M baseline)
+## Current status (2026-05-19, Phase 12D baseline)
 
 The full Phase 5A → 5F-Gate WhatsApp stack is shipped and dormant. The
 recent live tests (Phase 5F-Gate Real Inbound Deterministic Fallback Fix)
@@ -2039,7 +2039,7 @@ around Phase 7E-Live-B; it NEVER sends WhatsApp on its own.
 <customer_name> ji, aapka ₹<amount> ka payment pending hai. Isi link se pay karein: <payment_url>
 ```
 
-### Template params built by Phase 10B Hotfix-2 (current)
+### Template params built by Phase 12D (current)
 
 ```python
 template_params = {
@@ -2053,7 +2053,7 @@ template_params = {
 
 The previous three-key dict (`{customer_name, amount, payment_url}`)
 triggered Meta error #132001 because the `{{2}}` slot bound to the
-wrong key. Phase 10B Hotfix-2 collapses amount + URL into the single
+wrong key. Phase 12D collapses amount + URL into the single
 `context` string the template actually renders. If the live WABA
 later adopts a richer `nrg_payment_reminder` template with more
 positional variables, edit this dict AND re-sync the template's
