@@ -309,6 +309,35 @@ const wait = <T,>(data: T, ms = 0): Promise<T> =>
 // ---------- Service functions ----------
 
 export const api = {
+  // Phase 13A — Director login (JWT).
+  // POSTs to /api/v1/auth/login/. Returns { access, refresh? }.
+  // Sends both `email` and `username` to be safe across USERNAME_FIELD
+  // configurations (this project's User model uses USERNAME_FIELD="username"
+  // but the email column is also unique, so SimpleJWT will accept either).
+  // 401 surfaces as a thrown Error with the detail message preserved.
+  login: (email: string, password: string) =>
+    fetch(`${BASE}/v1/auth/login/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ email, username: email, password }),
+    }).then(async (res) => {
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        let msg = `HTTP ${res.status}`;
+        try {
+          const json = JSON.parse(detail);
+          msg = json.detail || msg;
+        } catch {
+          if (detail) msg = `${msg} — ${detail.slice(0, 200)}`;
+        }
+        throw new Error(msg);
+      }
+      return res.json() as Promise<{ access: string; refresh?: string }>;
+    }),
+
   // Dashboard
   getDashboardMetrics: () =>
     safeFetch<DashboardMetrics>("/dashboard/metrics/", () => M.DASHBOARD_METRICS as DashboardMetrics),

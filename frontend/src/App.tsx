@@ -31,6 +31,7 @@ import SaasAdminPage from "./pages/SaasAdmin";
 import PendingPaymentsPage from "./pages/PendingPayments";
 import LearningProposalsPage from "./pages/LearningProposals";
 import CallingDashboardPage from "./pages/CallingDashboard";
+import Login from "@/pages/Login";
 
 const queryClient = new QueryClient();
 
@@ -78,6 +79,8 @@ const App = () => (
             />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
+          {/* Phase 13A — Director login. Public route, no AppLayout shell. */}
+          <Route path="/login" element={<Login />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
