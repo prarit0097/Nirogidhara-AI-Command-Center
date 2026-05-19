@@ -256,10 +256,39 @@ async function safeFetch<T>(path: string, fallback: () => T | Promise<T>): Promi
       headers: { Accept: "application/json", ...authHeaders() },
     });
     if (!res.ok) {
+      // Phase 13A — 401 interceptor. A 401 means the JWT is missing,
+      // invalid, or expired. Clear it from localStorage and dispatch a
+      // global event so RequireAuth re-evaluates and routes the user
+      // back to /login.
+      if (res.status === 401) {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem("nirogidhara.jwt");
+          window.dispatchEvent(new Event("nirogidhara:auth-cleared"));
+        }
+        throw new Error(`HTTP 401 — session expired or unauthenticated`);
+      }
       throw new Error(`HTTP ${res.status} for ${path}`);
     }
     return (await res.json()) as T;
   } catch (error) {
+    // Phase 13A — production-mode fix. In production we no longer fall
+    // back to mock data on fetch failure — real backend errors must
+    // surface to the user rather than be silently hidden behind a
+    // convincing mock UI. The mock fallback is retained only in dev
+    // (import.meta.env.DEV === true) so designers / offline contributors
+    // can still iterate without a running backend.
+    const env =
+      typeof import.meta !== "undefined"
+        ? (import.meta as { env?: { DEV?: boolean } }).env
+        : undefined;
+    const isDev = env?.DEV === true;
+    if (!isDev) {
+      if (!warnedPaths.has(path)) {
+        warnedPaths.add(path);
+        console.error(`[api] ${path} failed: ${(error as Error).message}`);
+      }
+      throw error;
+    }
     if (!warnedPaths.has(path)) {
       warnedPaths.add(path);
       console.warn(`[api] Falling back to mock data for ${path}: ${(error as Error).message}`);

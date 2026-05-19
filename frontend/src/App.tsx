@@ -32,6 +32,7 @@ import PendingPaymentsPage from "./pages/PendingPayments";
 import LearningProposalsPage from "./pages/LearningProposals";
 import CallingDashboardPage from "./pages/CallingDashboard";
 import Login from "@/pages/Login";
+import RequireAuth from "@/components/RequireAuth";
 
 const queryClient = new QueryClient();
 
@@ -42,7 +43,13 @@ const App = () => (
       <Sonner />
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
-          <Route element={<AppLayout />}>
+          <Route
+            element={
+              <RequireAuth>
+                <AppLayout />
+              </RequireAuth>
+            }
+          >
             <Route path="/" element={<Index />} />
             <Route path="/leads" element={<LeadsPage />} />
             <Route path="/customers" element={<CustomersPage />} />
