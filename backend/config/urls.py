@@ -4,6 +4,10 @@ from __future__ import annotations
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 
 def healthz(_request):
@@ -38,6 +42,19 @@ api_patterns = [
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Phase 13A — Director login flow. Mounts the canonical v1 auth path
+    # alongside the legacy /api/auth/token/ endpoint registered via
+    # apps.accounts.urls. Frontend (api.login) targets /api/v1/auth/login/.
+    path(
+        "api/v1/auth/login/",
+        TokenObtainPairView.as_view(),
+        name="phase13a_token_obtain_pair_v1",
+    ),
+    path(
+        "api/v1/auth/refresh/",
+        TokenRefreshView.as_view(),
+        name="phase13a_token_refresh_v1",
+    ),
     path("api/v1/whatsapp/", include("apps.whatsapp.v1_urls")),
     path("api/v1/saas/", include("apps.saas.urls")),
     path("api/v1/mcp/", include("apps.mcp_gateway.urls")),
