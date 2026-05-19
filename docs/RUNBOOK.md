@@ -9,6 +9,81 @@
 
 How to bring the full stack up locally on Windows / macOS / Linux.
 
+## Director Login (Phase 13A)
+
+Production login UI for the Director account.
+
+**Login URL:** <https://ai.nirogidhara.com/login>
+
+**Login email:** `1995praritsidana@gmail.com`
+
+> The password is **NEVER documented here**. It was set via the Django
+> shell + `getpass()` on the VPS Postgres before Phase 13A shipped.
+> Code, env files, and git history all stay free of the password.
+
+### Rotate the password
+
+Connect to the VPS, exec into the backend container, and run the
+Django shell with `getpass()` to set a new password without echoing
+it to the terminal or shell history:
+
+```bash
+ssh <vps>
+cd /opt/nirogidhara-command
+docker compose -f docker-compose.prod.yml exec backend python manage.py shell
+```
+
+In the shell:
+
+```python
+from django.contrib.auth import get_user_model
+from getpass import getpass
+User = get_user_model()
+u = User.objects.get(email="1995praritsidana@gmail.com")
+u.set_password(getpass("New password: "))
+u.save(update_fields=["password"])
+print("Rotated. has_usable_password =", u.has_usable_password())
+```
+
+After rotation, any existing JWT in the browser's `localStorage` stays
+valid until expiry (12h access lifetime per `SIMPLE_JWT` settings) —
+the user is not forced out until they hit a 401 from any API call.
+
+### Revoke access
+
+Same shell entry as above:
+
+```python
+from django.contrib.auth import get_user_model
+User = get_user_model()
+User.objects.filter(email="1995praritsidana@gmail.com").update(is_active=False)
+```
+
+`is_active=False` immediately blocks new logins via
+`/api/v1/auth/login/` (SimpleJWT refuses inactive users with 401).
+Existing JWTs in browsers stay valid until the 12h access window
+expires; for an immediate cut, rotate the `JWT_SIGNING_KEY` env var
+and restart the backend container (every issued token becomes
+invalid).
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| `/login` redirects to itself in a loop | Browser still has `localStorage["nirogidhara.jwt"]` set but the token is invalid. Open DevTools → Application → Local Storage → delete `nirogidhara.jwt`, then reload. |
+| Every API call returns 401 | Token expired (default 12h access). Click Logout in the Topbar (next to "Director" label) and sign in again. |
+| Login form returns "session expired" | `safeFetch` intercepted a 401 mid-request and cleared the token. Sign in again. |
+| Login returns 401 with correct password | Either (a) user is inactive — check `User.objects.filter(email=...).first().is_active`, or (b) `JWT_SIGNING_KEY` was rotated since the password was set. |
+| Production browser shows mock data | Should not happen in production builds (Phase 13A removed the mock fallback for `import.meta.env.DEV !== true`). If you see mock-looking data on `ai.nirogidhara.com`, that's a real bug — open DevTools console and look for `[api] <path> failed:` errors. |
+
+### Endpoint reference
+
+- `POST /api/v1/auth/login/` — body `{username, email, password}` → `{access, refresh}` on 200, `{detail}` on 401.
+- `POST /api/v1/auth/refresh/` — body `{refresh}` → `{access}` on 200.
+- Legacy: `POST /api/auth/token/` + `POST /api/auth/refresh/` still work (registered via `apps.accounts.urls`); kept for backward compatibility but the v1 paths above are the canonical ones for new clients.
+
+---
+
 ## Prerequisites
 
 - **Node** 18+ (frontend) — verify with `node --version`
