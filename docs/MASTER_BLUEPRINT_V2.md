@@ -14,8 +14,8 @@
 | Author of record | Prarit Sidana (Director, Nirogidhara Private Limited) |
 | Production URL | https://ai.nirogidhara.com |
 | Production status | LIVE — backend `/api/healthz/` returning OK |
-| Completed phase range | Phase 1 → **Phase 10B Hotfix-2** (Tier-2 AI agent layer 9A-9F complete; Phase 10A-10C payment-recovery workflow complete) |
-| Latest pushed commit | `47ac3ac` on `origin/main` (Phase 10B Hotfix-2 — `nrg_payment_reminder` template schema fix) |
+| Completed phase range | Phase 1 → **Phase 12D** (Tier-2 AI agent layer 9A-9F complete; Phase 10A-10C payment-recovery workflow complete) |
+| Latest pushed commit | `dbe8a7b` on `origin/main` (Phase 12D — `nrg_payment_reminder` template schema fix) |
 | Last verified test baseline | **2466 backend tests · 82 frontend tests** · `makemigrations --check` clean · `manage.py check` clean · frontend lint 0 errors / 8 pre-existing shadcn warnings · `npm test` 82/82 · `npm run build` green |
 | Next planned phase | **Phase 8F live execute on the VPS — NOT approved.** Requires a separate dated Director directive, all three Phase 8F env flags true, and a 15-minute structured UTC window naming the actual Phase 8F gate id / attempt id / Phase 8E gate id 1 / target Order `NRG-20435` / target Payment `PAY-30125`. Phase 7E-Live-B and Phase 7G-Live remain NOT approved. |
 | Smoke + provider state | All earlier 5E / 5F gates green. Phase 6A → 6M shipped on top: SaaS multi-tenant scaffold (Phase 6A), default-org backfill (6B), org-scoped read APIs (6C), org-aware write paths (6D), SaaS Admin foundation + integration settings metadata (6E), per-org runtime routing preview (6F), controlled runtime routing dry run + AI provider routing preview (6G), controlled runtime live audit gate (6H), single internal live gate simulation (6I), single internal provider test plan (6J), single internal Razorpay test-mode execution gate (6K-A) + manual VPS one-shot pass (6K-B → `pex_8f309650e9644cfaae4418f9` → `order_Sks3KPf0vntKhf`, ₹1.00, rolled back), Razorpay test execution audit review + webhook readiness plan (6L), MCP Gateway foundation (6M-0, dormant), and Razorpay test-mode webhook handler (6M, dormant). Runtime providers still use env/config; `RuntimeKillSwitch` enabled; no MCP tools active; no broad-automation flags flipped. |
@@ -30,7 +30,7 @@
 framework + Phase 8F-Hotfix-1/-2 + Test Hygiene Hotfix-1. Phase 8F gate id=1
 was recovered/approved on the VPS on 2026-05-14 and attempt id=1 was minted,
 but **Phase 8F execute was NOT run**; Order `NRG-20435` remains `Partial` and
-Payment `PAY-30125` remains `Pending`. Verification baseline is **2188 backend
+Payment `PAY-30125` remains `Pending`. Verification baseline is **2730 backend
 tests + 82 frontend tests**, green on local SQLite and VPS Postgres. Phase
 8F live execute, Phase 7E-Live-B, and Phase 7G-Live remain **NOT approved**.
 
@@ -174,7 +174,7 @@ curl -fsS https://ai.nirogidhara.com/api/healthz/
 
 | Phase | Status | What shipped | Risk / Safety note |
 | --- | --- | --- | --- |
-| Test Hygiene Hotfix-1 | ✅ Shipped (test-only) | `backend/tests/conftest.py` pins integration modes to mock for full-suite runs so `.env.production` values (`RAZORPAY_MODE=test`, `WHATSAPP_PROVIDER=meta_cloud`, limited Meta mode) do not leak into tests. | No production code, model, migration, service, view, env flag, `.env*` file, frontend, provider call, customer notification, or business row touched. 2188 backend + 82 frontend tests green on SQLite and VPS Postgres. |
+| Test Hygiene Hotfix-1 | ✅ Shipped (test-only) | `backend/tests/conftest.py` pins integration modes to mock for full-suite runs so `.env.production` values (`RAZORPAY_MODE=test`, `WHATSAPP_PROVIDER=meta_cloud`, limited Meta mode) do not leak into tests. | No production code, model, migration, service, view, env flag, `.env*` file, frontend, provider call, customer notification, or business row touched. 2730 backend + 82 frontend tests green on SQLite and VPS Postgres. |
 | Phase 8F-Hotfix-2 | ✅ Shipped (test-only) | Phase 8F execute/rollback tests use the dynamic Phase 8E gate id instead of assuming id=1, making the file Postgres-safe. | No production code touched; Phase 8F execute not run. Phase 8F test file 40/40 on VPS. |
 | Phase 8F-Hotfix-1 | ✅ Shipped (approval-only recovery) | Migration `payments.0025_phase8f_hotfix_rename_indexes` plus a narrow recovery path for a Phase 8F gate blocked only by the missing env-flag blocker. VPS gate id=1 recovered to `approved_for_one_shot_real_customer_mutation`; attempt id=1 minted. | Execute not run; every locked-False flag stayed False; Order `NRG-20435` still Partial and Payment `PAY-30125` still Pending. |
 | 8A-8F | ✅ Shipped (framework / review / dry-run; no VPS execute) | Payment → Order mutation sandbox, review, controlled sandbox mutation, evidence lock, real-customer pilot review, candidate-pool hotfix, and Phase 8F controlled real-customer mutation framework. | Phase 8F live execute remains NOT approved and requires a separate Director directive, env flags, and a 15-minute structured UTC window. |
@@ -1133,7 +1133,7 @@ window the Director signed.
 
 ### Template registry fix (2026-05-16)
 
-Phase 10B Hotfix-2 corrected the `template_params` shape for the
+Phase 12D corrected the `template_params` shape for the
 live Meta-approved `nrg_payment_reminder` template. The template
 body is `{{1}} {{2}}` with `variables_schema.order = ["customer_name",
 "context"]`. The previous dict (`{customer_name, amount, payment_url}`)
@@ -1145,7 +1145,7 @@ Isi link se pay karein: <payment_url>`.
 
 ---
 
-Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 10B Hotfix-2. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
+Master Blueprint v2.0 documents the **production reality** of the Nirogidhara AI Command Center as of Phase 12D. Every section reflects what is actually built, where every safety gate lives, and what controlled-rollout work remains before the automation flags can be flipped on with real customers.
 
 Whenever the system grows, this blueprint must grow with it: new phases, new flags, new audit kinds, new gaps. The contract is — **`nd.md` is the live source of truth; this blueprint is the Director-facing strategic mirror of it.**
 
