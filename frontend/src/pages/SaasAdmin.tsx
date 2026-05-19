@@ -4207,7 +4207,7 @@ export default function SaasAdminPage() {
                 label="Lifecycle flag"
                 value={
                   razorpayControlledPilotExecutionReadiness.envFlags
-                    .lifecycleEnabled
+                    ?.lifecycleEnabled
                     ? "Enabled"
                     : "Disabled"
                 }
@@ -4216,7 +4216,7 @@ export default function SaasAdminPage() {
                 label="Director one-shot"
                 value={
                   razorpayControlledPilotExecutionReadiness.envFlags
-                    .directorOneShotApproved
+                    ?.directorOneShotApproved
                     ? "Approved"
                     : "Not approved"
                 }
@@ -4225,7 +4225,7 @@ export default function SaasAdminPage() {
                 label="Allow Razorpay test order"
                 value={
                   razorpayControlledPilotExecutionReadiness.envFlags
-                    .allowRazorpayTestOrder
+                    ?.allowRazorpayTestOrder
                     ? "Allowed"
                     : "Disallowed"
                 }
@@ -4234,14 +4234,14 @@ export default function SaasAdminPage() {
                 label="Razorpay key mode"
                 value={
                   razorpayControlledPilotExecutionReadiness
-                    .razorpayKeyAdvisory.razorpayKeyMode
+                    .razorpayKeyAdvisory?.razorpayKeyMode
                 }
               />
               <KeyValue
                 label="Razorpay key id"
                 value={
                   razorpayControlledPilotExecutionReadiness
-                    .razorpayKeyAdvisory.razorpayKeyIdMasked || "-"
+                    .razorpayKeyAdvisory?.razorpayKeyIdMasked || "-"
                 }
               />
               <KeyValue
@@ -4271,41 +4271,41 @@ export default function SaasAdminPage() {
               <KeyValue
                 label="Draft"
                 value={String(
-                  razorpayControlledPilotExecutionAttempts.counts.draft,
+                  razorpayControlledPilotExecutionAttempts.counts?.draft,
                 )}
               />
               <KeyValue
                 label="Pending sign-off"
                 value={String(
                   razorpayControlledPilotExecutionAttempts.counts
-                    .pendingDirectorSignoff,
+                    ?.pendingDirectorSignoff,
                 )}
               />
               <KeyValue
                 label="Approved one-shot"
                 value={String(
                   razorpayControlledPilotExecutionAttempts.counts
-                    .approvedForOneShotRun,
+                    ?.approvedForOneShotRun,
                 )}
               />
               <KeyValue
                 label="Executed"
                 value={String(
                   razorpayControlledPilotExecutionAttempts.counts
-                    .executed,
+                    ?.executed,
                 )}
               />
               <KeyValue
                 label="Failed"
                 value={String(
-                  razorpayControlledPilotExecutionAttempts.counts.failed,
+                  razorpayControlledPilotExecutionAttempts.counts?.failed,
                 )}
               />
               <KeyValue
                 label="Rolled back"
                 value={String(
                   razorpayControlledPilotExecutionAttempts.counts
-                    .rolledBack,
+                    ?.rolledBack,
                 )}
               />
             </div>
@@ -4417,7 +4417,7 @@ export default function SaasAdminPage() {
                 label="Phase 7E gate flag"
                 value={
                   razorpayWhatsAppInternalNotificationReadiness
-                    .envFlags.phase7eGateEnabled
+                    .envFlags?.phase7eGateEnabled
                     ? "Enabled"
                     : "Disabled"
                 }
