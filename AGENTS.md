@@ -300,6 +300,16 @@ nd.md                               ← full project handoff (read this if you n
 
 ## Conventions
 
+### Phase 11 / 12 conventions (transcript + scoring + calling)
+
+- Transcript ingestion runs via Celery beat (Phase 11A). Daily pulls from Vapi only. Manual single-call ingest is a management command (`python manage.py ingest_call_transcripts --call-id <ID>`), never an unprompted API mutation.
+- Call quality scorer is deterministic five-dimension (Phase 11B). The five dimensions and their weights live in `backend/apps/calls/quality_scorer.py`. DO NOT swap to LLM-only scoring without a Phase 11B-Hotfix proposal.
+- CAIO audit agent (Phase 11C) emits governance recommendations only. CAIO never executes business actions. The runtime payload contains no execution intents. This is enforced at engine + bridge + execute layers and is double-guarded.
+- Learning loop gate (Phase 11D) requires director-approved + human-reviewed pathway for any prompt / playbook / claim vault update to take effect. Auto-promotion of a learning proposal is forbidden.
+- AI calling campaign gate (Phase 12A) is director-approval-only; Vapi outbound respects `VAPI_MODE` and the campaign-level allowlist. The campaign cannot be approved without a named candidate set + Claim Vault grounding + `RuntimeKillSwitch` precondition.
+- Call outcome classifier (Phase 12B) emits lead status SUGGESTIONS only — the director reviews. No auto-promotion of suggested status changes.
+- Post-call WhatsApp followup queue (Phase 12C) is director-triggered. No automatic outbound from queue without director-level enable flag. Director-only CLIs: `list_post_call_followups`, `prepare_post_call_followup_gate`, `mark_followup_dispatched`, `skip_post_call_followup`.
+
 ### Solo-operator design constraint (LOCKED — Phase 14A)
 
 The Nirogidhara AI Command Center is built for a solo-operator model. The Director (Prarit Sidana) is the sole human interacting with the application. All functional roles are performed by AI agents. No internal employee accounts/roles are created. Multi-user support exists for external contractors only (Doctor Review Board, CA, lawyer, 3PL), read-only by default within their domain scope.
