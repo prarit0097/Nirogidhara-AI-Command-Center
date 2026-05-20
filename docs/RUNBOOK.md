@@ -94,6 +94,32 @@ invalid).
 
 ---
 
+## Phase 11 + Phase 12 + Phase 13A — cross-reference
+
+Director playbooks for the calls-observability + AI calling stack +
+Director login flow live in dedicated sections below. Quick jumps:
+
+| Phase | What it does | Section |
+| --- | --- | --- |
+| Phase 10A | Pending Payments Drilldown (read-only diagnostics) | "Phase 10A — Pending Payments Drilldown" |
+| Phase 10B | Targeted Payment Reminder Preparer (CLI-only) | "Phase 10B — Targeted Payment Reminder Preparer" |
+| Phase 10C | Razorpay Payment Link Refresh Gate (CLI-only) | "Phase 10C — Razorpay Payment Link Refresh Gate" |
+| Phase 11A | Transcript Ingestion Pipeline V1 | "Phase 11A — Transcript Ingestion Pipeline V1" |
+| Phase 11B | Call Quality Scorer V1 (deterministic) | "Phase 11B — Call Quality Scorer V1" |
+| Phase 11C | CAIO Audit Agent V1 (governance-only) | "Phase 11C — CAIO Audit Agent V1" |
+| Phase 11D | Learning Loop Gate V1 (Director-approved paper-trail) | "Phase 11D — Learning Loop Gate Director Playbook" |
+| Phase 12A | AI Calling Campaign Gate V1 (Director-approved Vapi outbound) | "Phase 12A — AI Calling Campaign Director Playbook" |
+| Phase 12B | Call Outcome Classifier V1 (suggestions-only) | "Phase 12B — Call Outcome Classifier Director Playbook" |
+| Phase 12C | Post-Call WhatsApp Follow-up Queue V1 | "Phase 12C — Post-Call WhatsApp Follow-up Director Playbook" |
+| Phase 12D | Tier-4 AI Calling Performance Dashboard (frontend-only) | "Phase 12D — Tier-4 AI Calling Performance Dashboard" |
+| Phase 13A | Director Login Flow (JWT-backed) | "Director Login (Phase 13A)" — top of this file |
+
+For the actual API endpoint shapes consumed by the frontend, see
+[`docs/BACKEND_API.md`](BACKEND_API.md) §"Phase 11 / 12 / 13"
+sections.
+
+---
+
 ## Prerequisites
 
 - **Node** 18+ (frontend) — verify with `node --version`

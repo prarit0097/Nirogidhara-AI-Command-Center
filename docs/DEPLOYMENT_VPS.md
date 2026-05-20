@@ -1587,7 +1587,7 @@ pattern — `RuntimeKillSwitch.enabled=False` row ordered by `-pk`
 wins). Sandbox mode propagates to both `Snapshot.sandbox=True` AND
 `AgentRun.sandbox_mode=True`.
 
-### Migration chains (latest per app, as of 2026-05-16)
+### Migration chains (latest per app, as of 2026-05-20)
 
 ```text
 apps/agents/migrations/
@@ -1599,15 +1599,42 @@ apps/agents/migrations/
   0006_calling_team_leader_snapshot.py
   0007_ceo_orchestration_snapshot.py
 
+apps/calls/migrations/
+  0001_initial.py
+  0002_phase2d_vapi_fields.py
+  0003_call_branch_call_organization.py
+  0004_phase11a_transcript_fields.py            # Phase 11A
+  0005_phase11b_call_quality_score.py           # Phase 11B
+  0006_phase12a_ai_call_campaign_gate.py        # Phase 12A
+  0007_phase12b_call_outcome_record.py          # Phase 12B
+  0008_phase12c_post_call_follow_up_queue.py    # Phase 12C
+
+apps/caio/migrations/                            # Phase 11C
+  0001_initial.py
+
+apps/learning/migrations/                        # Phase 11D
+  0001_initial.py
+
 apps/payments/migrations/
   ...
-  0026_phase10c_payment_link_refresh_gate.py   # Phase 10C
+  0024_phase8f_real_customer_controlled_mutation.py   # Phase 8F
+  0025_phase8f_hotfix_rename_indexes.py               # Phase 8F-Hotfix
+  0026_phase10c_payment_link_refresh_gate.py          # Phase 10C
+
+apps/whatsapp/migrations/
+  ...
+  0006_whatsappconsent_organization_and_more.py
+  0007_phase7e_live_b_real_customer_send_gate.py      # Phase 7E-Live-B
+
+apps/shipments/migrations/
+  ...
+  0005_phase7g_live_real_customer_dispatch_gate.py    # Phase 7G-Live
 
 apps/ai_governance/migrations/
   ...
-  0010_phase9e_add_calling_team_leader_agent.py   # Phase 9E
+  0010_phase9e_add_calling_team_leader_agent.py       # Phase 9E
 
-apps/diagnostics/   # Phase 10A — service-only app, no models
+apps/diagnostics/                                     # Phase 10A — service-only app, no models
   (no migrations)
 ```
 
@@ -1615,6 +1642,15 @@ apps/diagnostics/   # Phase 10A — service-only app, no models
 `No changes detected` at every commit. If migrations drift after a
 `git pull`, run `docker compose exec backend python manage.py migrate`
 inside the running stack — never edit `.env.production` to bypass.
+
+**Phase 13A note** — Phase 13A added the SimpleJWT login endpoint
+alias `/api/v1/auth/login/` + `/api/v1/auth/refresh/` directly in
+`config/urls.py` (no migration). The Director user was created
+manually via `docker compose exec backend python manage.py shell`
++ `getpass()` — the password is NEVER stored in code, env, or
+git. To rotate the Director password on the VPS, see
+[`docs/RUNBOOK.md`](RUNBOOK.md#director-login-phase-13a) §"Rotate
+the password".
 
 ### Director payment-recovery workflow (Phase 10 family CLI commands)
 
