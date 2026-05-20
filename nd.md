@@ -158,6 +158,8 @@
 
 > Single point of truth for "where are we right now". Re-read this block at the start of every new session before touching anything.
 
+> **Vision lock (added Phase 14A):** Founder Operating Model is now §1.5 in nd.md. Solo-operator constraint applies to every future phase. Goal: ₹10,000 cr operable by 1 founder + AI agent army.
+
 - **Project:** Nirogidhara AI Command Center (multi-tenant SaaS scaffold over a single-tenant Ayurvedic D2C operations stack).
 - **Production URL:** <https://ai.nirogidhara.com>
 - **VPS path:** `/opt/nirogidhara-command` (Hostinger VPS; six namespaced containers; host port `18020 → 80`; host Ubuntu Nginx + Certbot terminate TLS).
@@ -366,6 +368,89 @@ Net Delivered Profit = Delivered Revenue
                        − Product Cost
 ```
 Reward/penalty is based on **delivered profitable orders**, not "orders punched".
+
+---
+
+## 1.5 Founder Operating Model (LOCKED — non-negotiable)
+
+> **Strategic vision lock.** This section defines the operating model the entire system is designed for. Every architectural decision, every phase plan, every feature priority must respect this constraint. Added in Phase 14A doc sync.
+
+### Mission
+
+**Nirogidhara AI Command Center enables Prarit Sidana to operate Nirogidhara Private Limited as a solo founder, with AI agents performing all functional roles, scaling toward ₹10,000 cr annual revenue.**
+
+### Solo-operator definition
+
+- **Only the Director (Prarit) interacts with the application.**
+- No internal employees are needed for sales, calling, CRM, WhatsApp, payments, courier coordination, RTO rescue, reorder, or customer success.
+- All functional roles are performed by AI agents (Sales Growth, Calling, Confirmation, RTO Prevention, Customer Success, Compliance, etc. — see §3 AI agent architecture).
+- External contractors (Doctor Review Board, CA, lawyer, 3PL warehouse, CMO manufacturing partners) may have limited scoped read-only access for their domain — they are NOT staff of Nirogidhara Private Limited via this system.
+- Every approval, suggestion, override, escalation, and strategic decision flows to the Director and only the Director.
+
+### People-dependent → System-dependent
+
+Today's business depends on agent skill, manual follow-up, spreadsheets, and individual judgment. After this project is complete:
+
+| Layer | Before (people-dependent) | After (system-dependent) |
+| --- | --- | --- |
+| Sales calls | Human agents | AI voice agents (Vapi or similar) |
+| Lead follow-up | Manual reminders | Automated cadence |
+| Order confirmation | Confirmation team | AI confirmation + Director exception queue |
+| Payment-to-order sync | Manual reconciliation | Phase 8 controlled mutation gates |
+| Courier coordination | Manual Delhivery panel | Automated integration with gates |
+| RTO rescue | Manual rescue calls | RTO Prevention Agent + automated workflows |
+| Customer success | Sporadic follow-ups | Automated reorder cadence (Day 0/3/7/15/25/30/45) |
+| Performance review | Manager subjective | Automated AI-agent leaderboards |
+| Compliance check | Spot-check | Claim Vault enforced server-side + CAIO continuous audit |
+| Business reporting | Manual Excel | Real-time dashboard + daily Director briefing |
+| Strategic decisions | Founder + meetings | Founder + CEO AI recommendations |
+
+### Required system properties
+
+Solo-operator viability mandates:
+
+1. **AI confidence thresholds gate auto-execution** — no human safety net layer exists; high-confidence AI actions auto-run under compliance gates; low-confidence escalates to Director.
+2. **Director Priority Filter** — the system must surface only the top 5-10 actionable items per day. The Director must not need to scan thousands of events.
+3. **One-click approval UX** — AI proposes with full analysis; Director confirms in 30 seconds or less.
+4. **Mobile-first interface** — Director must operate from a phone anywhere (PWA or native app priority).
+5. **Off-hours / vacation safe defaults** — when Director offline, system auto-pauses high-risk actions and continues only pre-approved lifecycle automation.
+6. **Daily founder briefing** — morning + evening summary, covering 16 core questions (today's ads spend, leads, calls, orders, payments, dispatch, delivery, RTO, best agent, best script, AI agent issues, blocked approvals, tomorrow's priorities).
+7. **External contractor portals** — Doctor / CA / lawyer / 3PL each access only their scope, read-only by default.
+
+### Caveats and constraints
+
+Some realities the solo-operator model must navigate (UNCERTAIN — to be verified with CA / lawyer):
+
+- **AYUSH / Drug & Cosmetics Act licensing**: A named pharmacist in charge may be legally required for Ayurveda finished goods sale. This is intended as an external compliance consultant or part-time contractor arrangement, not an operational employee.
+- **Manufacturing**: Pure third-party manufacturing (CMO / P2P) contracts keep manufacturing humans outside Nirogidhara Private Limited.
+- **Warehouse / dispatch**: 3PL (third-party logistics) arrangement keeps packing/dispatch humans outside Nirogidhara Private Limited employee roster.
+- **Customer dispute resolution**: Consumer protection law may require human accessibility for serious disputes. The Director is that human; cases requiring escalation route to the Director directly through the priority filter.
+- **Medical emergencies**: Adverse reactions auto-escalate to Doctor Review Board (contractor on-call) AND Director simultaneously; no employee buffer between AI and Director.
+- **Founder bus factor**: Single-person operation requires documented disaster recovery: trusted contact emergency access, vacation mode, "Director unreachable > 72hr" safe defaults. See §11 phase roadmap Tier 3.
+
+### Additional non-negotiables (extending §2)
+
+- Solo-operator model does NOT compromise safety, compliance, or audit gates. Lower friction does not equal lower rigor.
+- AI never makes legally or financially irreversible decisions without Director consent.
+- Business actions that would normally require multi-person sign-off in a traditional company instead require multi-layer AI consensus + Director's single approval.
+- **The Director's time is the bottleneck constraint.** Every feature is evaluated against: "does this save Director time or cost Director time?"
+
+### Roadmap tier implications
+
+The phase roadmap (§11) is reshaped by this constraint into four tiers:
+
+1. **Tier 1 (Director enablement)** — Priority engine, 16-question daily briefing, 1-click approval UX, mobile-first PWA.
+2. **Tier 2 (Operations unlock)** — Phase 8F-Hotfix-1 + execution, Phase 12A live AI calling, Phase 7E-Live-B WhatsApp lifecycle.
+3. **Tier 3 (Solo-operator hardening)** — Vacation mode, trusted contact emergency access, contractor portals, AI agent retraining loop.
+4. **Tier 4 (Strategic scaling)** — Multi-SKU expansion, inventory agent, business simulation, eventual SaaS productization to other Ayurveda brands.
+
+### Why this matters
+
+This is the answer to the question: **"What is this project ultimately for?"** Every other decision in the codebase flows downstream from this lock. The North Star metric the entire system optimizes is:
+
+**Net Delivered Profit per Director Hour**
+
+Features that save Director time or reduce Director cognitive load are prioritized. Features that add Director workload are descoped unless they unlock disproportionate downstream value.
 
 ---
 

@@ -300,6 +300,20 @@ nd.md                               ← full project handoff (read this if you n
 
 ## Conventions
 
+### Solo-operator design constraint (LOCKED — Phase 14A)
+
+The Nirogidhara AI Command Center is built for a solo-operator model. The Director (Prarit Sidana) is the sole human interacting with the application. All functional roles are performed by AI agents. No internal employee accounts/roles are created. Multi-user support exists for external contractors only (Doctor Review Board, CA, lawyer, 3PL), read-only by default within their domain scope.
+
+When proposing a feature, ask: **"Does this require a human team, or can it be done by AI + Director approval?"** If the former, redesign or descope.
+
+When proposing a UI, ask: **"Can the Director operate this from a mobile phone in 30 seconds?"** If no, the UX is wrong for this product.
+
+When proposing an automation, ask: **"What confidence threshold gates auto-execution? When does this escalate to Director? What happens at 2 AM when Director sleeping?"**
+
+The Director's time is the project's bottleneck constraint. The North Star metric is **Net Delivered Profit per Director Hour**.
+
+See nd.md §1.5 for the full Founder Operating Model specification.
+
 ### Python / Django
 
 - Pin `Django>=5.0,<5.2`, `Python>=3.10`.

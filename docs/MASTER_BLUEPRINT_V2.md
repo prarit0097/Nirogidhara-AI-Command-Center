@@ -44,6 +44,37 @@ tests + 82 frontend tests**, green on local SQLite and VPS Postgres. Phase
 
 **Phase 7D update (legacy wording):** Completed phase range is now Phase 1 → **Phase 7D — Razorpay Controlled Pilot one-shot internal TEST execution capability**. Phase 7D ships the prepare → approve → execute → rollback / archive / recover lifecycle on top of an approved Phase 7B gate, with `execute_razorpay_controlled_pilot_test_order` implemented as a CLI-only command (POST execute / approve / reject / archive endpoints intentionally absent). All three Phase 7D env flags default OFF (`PHASE7D_RAZORPAY_TEST_EXECUTION_ENABLED`, `PHASE7D_DIRECTOR_APPROVED_ONE_SHOT_EXECUTION`, `PHASE7D_ALLOW_RAZORPAY_TEST_ORDER`); the command has not been run. Phase 7D never sends WhatsApp, never queues an outbound, never calls Meta Cloud / Delhivery / Vapi, never creates a shipment / AWB, never creates a payment link, never captures, never refunds, never mutates real `Order` / `Payment` / `Shipment` / `DiscountOfferLog` / `Customer` / `Lead`, never sends a customer notification, and never edits any `.env*` file. 12 audit kinds (each ≤ 64 chars). Last verified baseline: **1581 backend tests + 66 frontend tests**, `makemigrations --check` clean, `manage.py check` clean, frontend lint 0 errors, frontend build OK. Phase 7E (WhatsApp send) / 7F (Delhivery shipment) / live customer flow remain **not approved**.
 
+## Strategic Vision: Solo-Operator AI Revenue OS (LOCKED — Phase 14A)
+
+The Nirogidhara AI Command Center exists to enable a single founder to operate a **₹10,000 cr revenue Ayurveda business** by deploying an army of AI agents in place of every functional team that a traditional company would require.
+
+This is not "automation tooling" — it is a **founder's digital operating system**.
+
+### North Star metric
+
+**Net Delivered Profit per Director Hour**
+
+Every feature, every phase, every architectural decision is evaluated against this metric. Features that save Director time or reduce Director cognitive load are prioritized. Features that add Director workload are descoped unless they unlock disproportionate downstream value.
+
+### Operating model constraints
+
+- Only the Director interacts with the application.
+- All functional roles handled by AI agents.
+- External contractors only (Doctor Review Board, CA, lawyer, 3PL) — limited scoped read-only access.
+- AI confidence thresholds gate auto-execution; Director sees only the top 5-10 actionable items per day.
+- Mobile-first interface; 1-click approvals; vacation / off-hours safe defaults.
+
+### Tiered roadmap (reshaped by solo-operator constraint)
+
+1. **Tier 1 — Director enablement**: priority engine, 16-question daily briefing, 1-click approval UX, mobile-first PWA.
+2. **Tier 2 — Operations unlock**: Phase 8F live execution, Phase 12A AI calling, Phase 7E-Live-B WhatsApp lifecycle.
+3. **Tier 3 — Solo-operator hardening**: vacation mode, trusted contact emergency access, contractor portals, AI agent retraining loop.
+4. **Tier 4 — Strategic scaling**: multi-SKU expansion, inventory agent, business simulation, eventual SaaS productization to other Ayurveda brands.
+
+Refer to `nd.md §1.5 Founder Operating Model` for the full canonical specification. This blueprint inherits and elaborates that lock.
+
+---
+
 ## 1. Vision & Purpose
 
 Nirogidhara Private Limited sells Ayurvedic medicines across eight wellness categories (Weight Management, Blood Purification, Men Wellness, Women Wellness, Immunity, Lungs Detox, Body Detox, Joint Care) at a standard price of **₹3000 per 30 capsules** with a **₹499 fixed advance** payment.

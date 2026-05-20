@@ -9,6 +9,16 @@
 
 How to bring the full stack up locally on Windows / macOS / Linux.
 
+## Operator model (LOCKED — Phase 14A)
+
+This project is operated by a single Director (Prarit Sidana). All documented procedures below assume the Director is the executing party for any human-required step.
+
+External contractors (Doctor Review Board, CA, lawyer, 3PL warehouse) may have limited scoped read-only access for their specific domain. They do NOT execute operational procedures from this runbook.
+
+When a procedure says "the operator", it means the Director. When a procedure mentions a team (e.g., "calling team", "confirmation team"), that team is an AI agent fleet under the Director's command — read the relevant AI agent section in `nd.md §3` for which agent owns that workflow.
+
+For the full Founder Operating Model specification (the why behind this model), see `nd.md §1.5`.
+
 ## Director Login (Phase 13A)
 
 Production login UI for the Director account.

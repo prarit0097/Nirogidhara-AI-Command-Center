@@ -1,10 +1,12 @@
 # Nirogidhara AI Command Center
 
-AI Business Operating System for Ayurveda sales, CRM, AI calling, payments,
-Delhivery delivery tracking, RTO control, AI agents, CEO AI, CAIO governance,
-reward/penalty engine, and the human-call learning loop.
+> **A solo-operator AI Revenue Operating System for Ayurveda D2C sales operations.** Designed to be operated by a single founder with an army of AI agents handling all functional work — sales, calling, CRM, WhatsApp, payments, courier, RTO rescue, reorder, compliance, governance. North Star: **Net Delivered Profit per Director Hour**. Goal: ₹10,000 cr scale operable by 1 founder + AI agent army.
 
-> Full vision: see [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) — Master Blueprint v2.0 (the v1.0 PDF is historical reference only).
+**Production**: <https://ai.nirogidhara.com>
+
+**Stack**: Django + DRF + PostgreSQL 16 + Redis 7 + Celery + React + Vite + Tailwind + shadcn/ui + Docker Compose on a Hostinger VPS.
+
+**Canonical specification**: see [`nd.md`](nd.md) (operational truth) and [`docs/MASTER_BLUEPRINT_V2.md`](docs/MASTER_BLUEPRINT_V2.md) (strategic framing). The Founder Operating Model lock lives in `nd.md §1.5`.
 
 ## Monorepo layout
 
