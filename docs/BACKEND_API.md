@@ -1398,3 +1398,198 @@ shipment — it only mutates `Payment.payment_url` and writes a
 `Phase10CPaymentLinkRefreshGate` row for evidence. The refreshed
 link is delivered to the customer only via the separate Phase
 7E-Live-B `payment_reminder` template send.
+
+---
+
+## Phase 11 Calls Observability APIs (Tier-3 — read-only)
+
+All Phase 11 endpoints are **read-only** (GET / HEAD / OPTIONS only;
+POST / PATCH / PUT / DELETE return 405). Auth: admin / director /
+superuser only. Phone numbers and Vapi call ids are masked to
+last-4 in every response.
+
+### Phase 11A — Transcript Ingestion Pipeline V1
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/calls/transcript-backlog/?window_days=N` | Backlog summary: total Calls in window, ingested count, missing-transcript count, ingest ratio, oldest + newest backlog rows, top-10 backlog call ids masked with `provider_call_id_last4`. |
+| GET | `/api/v1/calls/transcripts/<str:call_id>/` | Per-utterance transcript list for one Call (Phase 2D `CallTranscriptLine` shape: `order` / `who` / `text`). |
+
+Phase 11A NEVER triggers WhatsApp / makes a call / dispatches a
+shipment / mutates `Customer` / `Order` / `Payment` / `Lead` /
+`Shipment` / `DiscountOfferLog`. The daily ingest sweep
+(`apps.calls.tasks.ingest_transcript_backlog_daily` at 23:00 IST)
+refuses with `transcript.daily_ingest.blocked` audit when the
+runtime kill switch is off, sandbox mode is active, or
+`VAPI_API_KEY` is missing.
+
+### Phase 11B — Call Quality Scorer V1 (deterministic, no LLM)
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/calls/quality-scores/?limit=N` | Paginated list of `CallQualityScore` rows (cap 200). |
+| GET | `/api/v1/calls/quality-scores/<str:call_id>/` | Single score detail with full `raw_signals` JSON. |
+| GET | `/api/v1/calls/quality-scores/summary/?window_days=N` | Aggregate: `totalScored`, `avgComposite`, `lowComplianceCount`, `topFlags[]`, `avgByAgent[]` (per agent label: `callCount`, `avgComposite`, `avgCompliance`). Ready for the Phase 11C CAIO Audit Agent to consume. |
+
+Each `CallQualityScore` carries 5 deterministic dimension scores
+(`connection_score`, `product_knowledge_score`, `compliance_score`,
+`objection_handling_score`, `tonality_score`) + a weighted
+`composite_score` + a `flags` JSON list (`compliance_violation`,
+`no_greeting`, `weak_product_knowledge`, `no_objection_response`,
+`short_call`, `zero_agent_utterances`, `no_transcript`). The daily
+scoring sweep (`apps.calls.tasks.score_call_transcripts_daily` at
+23:30 IST) runs 30 minutes after Phase 11A so freshly-ingested
+transcripts get scored the same evening.
+
+### Phase 11C — CAIO Audit Agent V1 (governance, recommendations-only)
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/caio/snapshots/` | Paginated list of `CaioAuditSnapshot` rows (cap 200). |
+| GET | `/api/v1/caio/snapshots/latest/` | Most recent CAIO snapshot. 404 when none. |
+| GET | `/api/v1/caio/snapshots/<int:pk>/` | Single snapshot detail with full `recommendation_text` + `raw` JSON. |
+
+CAIO is a **pure governance layer** — Master Blueprint §26 #2
+("CAIO Agent never executes business actions. Monitor / audit /
+suggest only."). The agent reads compliance risk from Phase 11B
+flagged calls, transcript backlog from Phase 11A, call quality
+trend (7d vs prior 7d), and the latest Phase 9A-9F agent
+snapshots. Each daily run (`apps.caio.tasks.run_caio_audit_agent_daily`
+at 14:00 IST) writes one `CaioAuditSnapshot` + one `AgentRun` +
+2 audit rows.
+
+### Phase 11D — Learning Loop Gate V1 (Director-approved)
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/learning/proposals/?status=&type=&limit=N` | Paginated `LearningProposal` rows (cap 200). |
+| GET | `/api/v1/learning/proposals/pending/` | Shortcut for `status=pending`. |
+| GET | `/api/v1/learning/proposals/<int:pk>/` | Single proposal detail with full `evidence`, `proposed_change_text`, `implementation_note`. |
+| GET | `/api/v1/learning/proposals/summary/` | Camel-cased aggregate counts: `pending`, `approved`, `rejected`, `implemented`, `cancelled`, `highImpactPending`, `total`. |
+
+Phase 11D is a **paper-trail system** — no auto-execution of any
+kind. `implement_proposal` only records what the Director did
+manually outside the platform. Phase 11D never mutates
+`PromptVersion`, never touches Vapi prompt config, never triggers
+WhatsApp / makes a call / dispatches a shipment. Proposals are
+created on demand by the existing `caio-audit-daily` task; no
+new beat task added (beat count stays at 11 entries through
+Phase 11D).
+
+---
+
+## Phase 12 AI Calling APIs (Tier-4 — read-only)
+
+All Phase 12 endpoints are **read-only** (GET / HEAD / OPTIONS only;
+POST / PATCH / PUT / DELETE return 405). Auth: admin / director /
+superuser only. Phone numbers, Vapi assistant ids, and Vapi call
+ids are masked to last-4 in every response.
+
+### Phase 12A — AI Calling Campaign Gate V1 (Director-approved)
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/calls/campaigns/?limit=N` | Paginated `AiCallCampaignGate` rows (cap 200). |
+| GET | `/api/v1/calls/campaigns/latest/` | Most recent campaign gate. 404 when none. |
+| GET | `/api/v1/calls/campaigns/<int:pk>/` | Single campaign detail with camelCased fields including `aiAssistantIdLast4` (never the full Vapi assistant id). |
+
+Phase 12A is the **only** path that may dispatch real Vapi calls,
+and only when ALL guards pass: gate status `approved`,
+`--confirm-ai-calling-campaign` CLI flag, `AI_CALLING_ENABLED=true`
+runtime env (defaults locked off — `.env.production` is NEVER
+edited), Postgres-safe runtime kill switch enabled, now ∈
+[recorded UTC window start, end], `VAPI_MODE=live`. There is no
+rollback path — cannot un-make a Vapi call.
+
+### Phase 12B — Call Outcome Classifier V1 (deterministic, suggestions-only)
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/calls/outcomes/?review_status=&outcome=&campaign_gate_id=&limit=N` | Paginated `CallOutcomeRecord` rows (cap 200). |
+| GET | `/api/v1/calls/outcomes/<int:pk>/` | Single outcome detail with full `evidence` JSON. |
+| GET | `/api/v1/calls/outcomes/summary/` | Camel-cased aggregate: `total`, `pendingCount`, `approvedCount`, `appliedCount`, `skippedCount`, `byOutcome` map. |
+
+Phase 12B is **suggestions-only** — V1 has NO auto-apply path.
+`Lead.status` is mutated ONLY by `apply_outcome_updates` when
+called with `--operator-name`, `--confirm-outcome-apply` flag,
+and for records already in `review_status="approved"` with a
+non-blank `suggested_lead_status`. Sandbox mode skips the
+mutation but records the intent. The deterministic classifier
+(no LLM) cascades rejection → conversion → callback → unclear,
+with Hinglish-aware signal lists.
+
+### Phase 12C — Post-Call WhatsApp Follow-up Queue V1 (Director-triggered)
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/calls/followups/?status=&type=&limit=N` | Paginated `PostCallFollowUpQueue` rows (cap 200). |
+| GET | `/api/v1/calls/followups/<int:pk>/` | Single follow-up detail. |
+| GET | `/api/v1/calls/followups/summary/` | Camel-cased aggregate: `total`, `byStatus` map, `byFollowUpType` map. |
+
+Phase 12C **never sends WhatsApp automatically** — it only
+queues a draft-status `Phase7ELiveBRealCustomerSendGate` row;
+the Director still owns the approve + execute via the existing
+Phase 7E-Live-B CLI commands. Phone numbers are masked to last-4
+everywhere; full E.164 NEVER appears in API responses or audit
+payloads.
+
+### Phase 12D — Tier-4 AI Calling Performance Dashboard (frontend-only)
+
+Phase 12D is **frontend-only** — it reads the existing Phase 12A-C
+endpoints (`/api/v1/calls/{campaigns,outcomes,outcomes/summary,
+followups,followups/summary}/`) and renders the
+`/operations/calling-dashboard` Director review surface (Campaign
+History table, Call Outcomes summary tiles + tabs, WhatsApp
+Follow-up Queue summary + masked-phone table, CLI Reference card).
+**No "Run Campaign" / "Send WhatsApp" / "Approve" / "Apply" /
+"Trigger Call" / "Reassign Agent" / "Auto-dial" buttons anywhere.**
+State changes still happen exclusively via Phase 12A/B/C CLI.
+
+---
+
+## Phase 13 Director Auth APIs
+
+### Phase 13A — Director Login Flow (JWT-backed)
+
+| Method | Path | Auth | Behaviour |
+| --- | --- | --- | --- |
+| POST | `/api/v1/auth/login/` | public | SimpleJWT `TokenObtainPairView` alias. Frontend `api.login(email, password)` targets this path. On success returns `{access, refresh}`; access token saved to `localStorage["nirogidhara.jwt"]`. |
+| POST | `/api/v1/auth/refresh/` | public | SimpleJWT `TokenRefreshView`. Exchanges a refresh token for a fresh access token. |
+| POST | `/api/auth/token/` | public | **Legacy alias** — preserved for backward compatibility with the original `apps.accounts.urls` registration. New code must target `/api/v1/auth/login/`. |
+
+The Director user (`1995praritsidana@gmail.com`,
+`is_superuser=True`) was created manually on the VPS Postgres via
+`python manage.py shell` + `getpass()` — the password is NEVER
+stored in code, env, or git. `RequireAuth`
+(`frontend/src/components/RequireAuth.tsx`) wraps every
+`AppLayout`-rendered route; unauthenticated users redirect to
+`/login` with the attempted path captured in `location.state.from`.
+`safeFetch` gains a 401 interceptor that clears the JWT and
+dispatches a `nirogidhara:auth-cleared` window event.
+
+**`safeFetch` production fix (Phase 13A):** the mock-data fallback
+now only runs when `import.meta.env.DEV === true`; production
+builds throw real backend errors instead of silently masking them.
+
+Phase 13B added a SaaS Admin defensive optional-chaining pass on
+Phase 7 readiness card array accesses + a WebSocket scheme fix
+(`audit.events` connection now matches the page protocol). Phase
+13C wrapped the SaaS Admin route in an `ErrorBoundary` component
+and ran a broad defensive pass over 148 array-like accesses. No
+new endpoints in 13B / 13C — code-quality hardening only.
+
+### Phase 13D-1 — Integration Readiness DB Cleanup (DB-ops only)
+
+DB-operations only — no new API endpoints, no new models, no
+new migrations. Cleared orphaned readiness rows on the VPS via a
+one-time `python manage.py shell` block.
+
+---
+
+## Phase 14A Founder Operating Model (docs-only)
+
+Phase 14A is the **solo-operator design constraint** lock — a
+docs-only commit that adds a new "Founder Operating Model" section
+to `nd.md` (§1.5) anchoring every future automation decision to
+the ₹10,000 cr solo-operator North Star. No code, no migration,
+no endpoint, no env var — pure vision lock.

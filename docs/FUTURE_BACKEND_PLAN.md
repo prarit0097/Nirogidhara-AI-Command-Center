@@ -1576,12 +1576,95 @@ reminder → 7E-Live-B Director approve + execute**. None of Phase 10
 sends WhatsApp; only the final 7E-Live-B execute does, inside the
 same structured 15-minute UTC window the Director signed.
 
-## Current test baseline (post-Phase 12D)
+## ✅ Phase 11 — Calls Observability stack (SHIPPED 2026-05)
 
-**2466 backend tests + 82 frontend tests.** `makemigrations --check
+| Phase | Module | Status |
+| --- | --- | --- |
+| 11A | Transcript Ingestion Pipeline V1 (`apps.calls.transcript_ingestion` — Vapi REST pull; `transcript_ingested_at` / `transcript_line_count` denormalized fields; daily sweep at 23:00 IST; `/api/v1/calls/transcript-backlog/` + `/api/v1/calls/transcripts/<call_id>/`) | ✅ SHIPPED |
+| 11B | Call Quality Scorer V1 (deterministic, no LLM — 5 dimensions + composite + 7 flag codes; daily sweep at 23:30 IST; `/api/v1/calls/quality-scores/{,<call_id>/,summary/}`) | ✅ SHIPPED |
+| 11C | CAIO Audit Agent V1 (governance-only synthesis layer over Phase 9 + 11A/B; daily snapshot at 14:00 IST; `/api/v1/caio/snapshots/{,latest/,<int:pk>/}`) | ✅ SHIPPED |
+| 11D | Learning Loop Gate V1 (Director-approved paper-trail; `LearningProposal` 5-status lifecycle; CAIO integration helper `create_proposals_from_audit`; `/api/v1/learning/proposals/{,pending/,summary/,<int:pk>/}`) | ✅ SHIPPED |
+
+Phase 11 is the **read-only calls-observability chain** that closes
+the gap between Phase 9 business-level snapshots and the Tier-4
+calling stack. None of Phase 11 mutates business state. CAIO has
+NO execution power (Master Blueprint §26 #2). Phase 11D never
+auto-implements anything — `implement_proposal` records what the
+Director did manually outside the platform.
+
+## ✅ Phase 12 — Tier-4 AI Calling stack (SHIPPED 2026-05)
+
+| Phase | Module | Status |
+| --- | --- | --- |
+| 12A | AI Calling Campaign Gate V1 (Director-approved Vapi outbound; `AiCallCampaignGate` 6-state lifecycle; `apps.calls.ai_calling_gate` service + 5 CLI commands; 30-min UTC window cap; `AI_CALLING_ENABLED=false` env default; `/api/v1/calls/campaigns/{,latest/,<int:pk>/}`) | ✅ SHIPPED |
+| 12B | Call Outcome Classifier V1 (deterministic Hinglish-aware; rejection → conversion → callback → unclear cascade; suggestions-only — NO auto-apply path; daily sweep at 07:00 IST; `/api/v1/calls/outcomes/{,<int:pk>/,summary/}`) | ✅ SHIPPED |
+| 12C | Post-Call WhatsApp Follow-up Queue V1 (queue-only — Director-triggered Phase 7E-Live-B gate prep; daily sweep at 08:30 IST; `/api/v1/calls/followups/{,<int:pk>/,summary/}`) | ✅ SHIPPED |
+| 12D | Tier-4 AI Calling Performance Dashboard (frontend-only — `/operations/calling-dashboard` page; no backend changes) | ✅ SHIPPED |
+
+Phase 12A is the **only** path that may dispatch real Vapi calls,
+and only with `AI_CALLING_ENABLED=true` runtime env + Director
+sign-off in a 30-min UTC window + kill switch + `VAPI_MODE=live`.
+There is no rollback path for a Vapi call. Phase 12B never
+auto-applies a `Lead.status` flip — only `apply_outcome_updates`
+with `--confirm-outcome-apply` does, after Director approval.
+Phase 12C never sends WhatsApp — it only queues a draft-status
+Phase 7E-Live-B gate row. Phase 12D has no buttons that mutate
+state — state changes still happen exclusively via Phase 12A/B/C
+CLI.
+
+## ✅ Phase 13 — Director Auth + frontend hardening (SHIPPED 2026-05)
+
+| Phase | Module | Status |
+| --- | --- | --- |
+| 13A | Director Login Flow (JWT-backed; `/api/v1/auth/login/` SimpleJWT alias; `Login.tsx` + `RequireAuth.tsx` route guard + 401 interceptor + `safeFetch` production fix + logout button; Director user created manually on VPS Postgres) | ✅ SHIPPED |
+| 13B | SaaS Admin defensive optional-chaining pass on Phase 7 readiness card array accesses + WebSocket scheme fix (matches page protocol) | ✅ SHIPPED |
+| 13C | ErrorBoundary wrapper around SaaS Admin route + broad defensive pass over 148 array-like accesses | ✅ SHIPPED |
+| 13D-1 | Integration Readiness DB cleanup (DB-ops only — one-time `python manage.py shell` block to clear orphaned readiness rows on the VPS) | ✅ SHIPPED |
+
+Phase 13 is **code-quality hardening + Director auth**. No new
+business endpoints. The Director password is NEVER stored in code,
+env, or git — only in VPS Postgres via `python manage.py shell` +
+`getpass()`. Test infrastructure was updated to seed a JWT in
+`tests/conftest.py` global setup so existing render-app tests can
+get past `RequireAuth`.
+
+## ✅ Phase 14A — Founder Operating Model vision lock (SHIPPED 2026-05)
+
+| Phase | Module | Status |
+| --- | --- | --- |
+| 14A | Solo-operator design constraint lock (docs-only — adds `nd.md` §1.5 "Founder Operating Model" anchoring every future automation decision to the ₹10,000 cr solo-operator North Star) | ✅ SHIPPED |
+| 14B | Doc Sync to Reality (in progress — 6 atomic commits bringing all canonical project docs up to actual VPS commit reality through Phase 14A) | 🟡 IN PROGRESS |
+
+Phase 14A is a **pure vision lock** — no code, no migration, no
+endpoint, no env var. Every Tier 1 / Tier 3 / Tier 4 phase that
+follows must satisfy the solo-operator constraint: the Director
+remains the only human, and every approval flows to a single
+person.
+
+## Currently planned post-Phase 14A
+
+Tier 1 — Top of funnel:
+- Meta Lead Ads quality + Vapi calling cohort upgrade
+- Top of funnel scoring + risk model
+
+Tier 3 — Customer Success / Reorder:
+- Tier 3 customer success messaging gate (Phase 7E-Live-B compatible)
+- Reorder Day-N reminder cadence beyond Day-20
+
+Tier 4 — AI Calling further refinement:
+- Phase 12B confidence calibration with real-call ground truth
+- Phase 12C → Phase 7E-Live-B handshake automation (Director-only one-click)
+- Vapi assistant prompt registry + Phase 11D-driven prompt rollback
+
+No Tier 2 phase planned next — Tier 2 (Phase 9 + 11C) is feature-complete
+as recommendations-only governance.
+
+## Current test baseline (post-Phase 14A)
+
+**2734 backend tests + 85 frontend tests.** `makemigrations --check
 --dry-run` reports `No changes detected`; `python manage.py check`
-identifies no issues; frontend lint reports 0 errors / 8 pre-existing
-shadcn warnings; `npm test` runs 82/82; `npm run build` succeeds.
+identifies no issues; frontend lint reports 0 errors; `npm test`
+runs 85/85; `npm run build` succeeds.
 
 ## Out of scope forever (or until explicitly requested)
 
