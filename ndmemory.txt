@@ -1,0 +1,986 @@
+================================================================================
+ndmemory.txt — Nirogidhara AI Command Center · Master Handoff
+================================================================================
+
+Generated: 2026-05-20
+Branch: main
+HEAD at write time: 930b281 (Phase 14B Doc Sync v3 commit C5)
+Canonical sources kept in sync by this commit chain:
+  - nd.md                            (full handoff, ~621KB)
+  - CLAUDE.md                        (project instructions, auto-loaded)
+  - AGENTS.md                        (cross-tool conventions + hard stops)
+  - docs/MASTER_BLUEPRINT_V2.md      (strategic blueprint v2)
+  - docs/BACKEND_API.md              (endpoint reference)
+  - docs/FUTURE_BACKEND_PLAN.md      (phased roadmap + shipped markers)
+  - docs/RUNBOOK.md                  (local dev runbook + Director playbooks)
+  - docs/DEPLOYMENT_VPS.md           (production deploy + smoke + backup)
+  - README.md (root + docs)
+
+This file is intentionally a single readable summary. For depth, follow the
+references at the end of each section.
+
+================================================================================
+SECTION 0 — TL;DR (60-second read)
+================================================================================
+
+What this is:
+  Full-stack AI Business Operating System for Nirogidhara Private Limited
+  (Ayurvedic medicine D2C). React 18 + Vite + TS frontend talks to Django 5 +
+  DRF backend via /api/JSON. Production live at https://ai.nirogidhara.com on
+  a Hostinger VPS (six Docker containers in /opt/nirogidhara-command, host
+  port 18020 → 80).
+
+Who runs it:
+  ONE Director (Prarit Sidana, 1995praritsidana@gmail.com, is_superuser=True).
+  Phase 14A locked the solo-operator design constraint — every future
+  automation decision must respect that the Director is the only human in
+  the loop. External contractors (Doctor Review Board, CA, lawyer, 3PL
+  warehouse) get scoped read-only access for their domain only.
+
+Current shipped scope:
+  Phase 1 → Phase 14A complete. Phase 14B (this doc-sync chain) in progress.
+  Test baseline: 2734 backend tests + 85 frontend tests, all green. No
+  pending migrations, no lint errors.
+
+Strategic North Star:
+  ₹10,000 cr solo-operator company. Every Tier 1 / Tier 3 / Tier 4 phase
+  that follows must satisfy that constraint.
+
+What touches the real world:
+  - WhatsApp Meta Cloud API (live) — only Phase 7E-Live-B executed gates and
+    Phase 5A queue_template_message with consent + approved template + Claim
+    Vault all green. Phase 5C AI auto-reply is OFF.
+  - Razorpay (live keys, test mode in tests) — payment link create/fetch via
+    Phase 2B path; refresh via Phase 10C; one-shot real Order+Payment status
+    mutation only via Phase 8F (executed once 2026-05-14, rolled back same
+    day).
+  - Vapi (mock by default) — Phase 12A is the only path that may dispatch
+    real Vapi calls, and only with AI_CALLING_ENABLED=true runtime env +
+    Director sign-off + kill switch + VAPI_MODE=live.
+  - Delhivery (mock by default) — Phase 7G-Live not approved.
+
+================================================================================
+SECTION 1 — Director identity + login (Phase 13A)
+================================================================================
+
+Login URL:    https://ai.nirogidhara.com/login
+Login email:  1995praritsidana@gmail.com
+Password:     NEVER documented in code, env, or git. Set via:
+                docker compose -f docker-compose.prod.yml exec backend \
+                  python manage.py shell
+                from django.contrib.auth import get_user_model
+                from getpass import getpass
+                User = get_user_model()
+                u = User.objects.get(email="1995praritsidana@gmail.com")
+                u.set_password(getpass("New password: "))
+                u.save(update_fields=["password"])
+
+Auth endpoints (canonical Phase 13A v1 paths):
+  POST /api/v1/auth/login/    SimpleJWT TokenObtainPairView alias
+  POST /api/v1/auth/refresh/  SimpleJWT TokenRefreshView
+  POST /api/auth/token/       (legacy alias, kept for backward compat)
+
+Frontend route guard:
+  frontend/src/components/RequireAuth.tsx wraps every AppLayout-rendered
+  route. Unauthenticated users redirect to /login with location.state.from.
+  401 interceptor in safeFetch clears the JWT and fires
+  nirogidhara:auth-cleared window event.
+
+safeFetch production fix (Phase 13A): mock-data fallback only runs when
+import.meta.env.DEV === true. Production builds throw real backend errors.
+
+For full Director-auth ops (rotate, revoke, troubleshoot), see
+docs/RUNBOOK.md §"Director Login (Phase 13A)".
+
+================================================================================
+SECTION 2 — Hard stops (compliance — never bypass)
+================================================================================
+
+1. No free-style medical claims. AI may only emit content from
+   apps.compliance.Claim. Hard-coded medical strings are forbidden.
+
+2. CAIO Agent never executes business actions. Monitor / audit / suggest
+   only. Master Blueprint §26 #2.
+
+3. CEO AI is the execution approval layer. High-risk decisions go to
+   the Director.
+
+4. Every important state change writes an AuditEvent (Master Event Ledger).
+
+5. Reward/penalty is based on delivered profitable orders, not punching
+   count.
+
+6. Frontend never holds business logic.
+
+7. Razorpay / PayU / Delhivery / Vapi / Meta secrets stay server-side.
+   Frontend gets URLs and statuses only.
+
+8. WhatsApp: production target is Meta Cloud API. Baileys is dev/demo
+   only (off by default in non-DEBUG environments). Every send is consent
+   + approved-template + Claim-Vault gated server-side. Failed sends never
+   mutate Order / Payment / Shipment. CAIO never sends customer messages.
+
+9. WhatsApp AI Chat Sales Agent (Phase 5C): inbound-first; greeting locked
+   to fixed Hindi UTILITY template on first reply. Auto-reply mode does
+   NOT bypass matrix / Claim Vault / approval engine / sandbox / budget.
+   Currently OFF (WHATSAPP_AI_AUTO_REPLY_ENABLED=false on the VPS).
+
+10. Discount discipline (LOCKED): AI / Calling / Chat / Confirmation /
+    RTO / Customer-Success agents must NOT offer a discount upfront. Lead
+    with standard ₹3000/30-capsule price. Handle the underlying objection
+    first. Only after 2-3 customer pushes may the AI offer a discount
+    within the Phase 3E validate_discount bands.
+
+11. 50% total discount hard cap (LOCKED): across all stages combined,
+    total discount on a single order must NEVER exceed 50%. Examples:
+    20+20+10=50% allowed; 20+20+20=60% blocked.
+
+12. Phase 7E-Live-B real customer WhatsApp send: CLI-only, one-shot per
+    gate, requires Director sign-off in a structured 15-min UTC window,
+    runtime env prefix only (PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=true).
+    NEVER use --no-verify or skip the kill-switch.
+
+13. Phase 7G-Live real customer Delhivery dispatch: NOT approved. Phase 7G
+    test/mock execution exists but the live customer variant requires a
+    separate Director directive that has not been issued.
+
+14. Phase 8F real customer Payment → Order mutation: executed ONCE on
+    2026-05-14 (gate id=1, Order NRG-20435, Payment PAY-30125, ₹0
+    business impact — every locked-False boolean stayed False, rollback
+    completed same day). System state back to Partial/Pending. Further
+    Phase 8F executes require a separate Director directive + all three
+    Phase 8F env flags flipped + a fresh 15-min UTC window.
+
+================================================================================
+SECTION 3 — Architecture contract
+================================================================================
+
+  React UI  ──/api/JSON──►  Django + DRF  ──ORM──►  PostgreSQL (prod) / SQLite (dev)
+     │                          │
+     │                          │ post_save signals + service-layer writes
+     │                          ▼
+     │                   audit.AuditEvent  ← Master Event Ledger
+     │                          ▲
+     │                          │
+     │                   Provider webhooks (HMAC-verified, idempotent)
+     │
+     └── mock fallback ── frontend/src/services/mockData.ts (dev only since Phase 13A)
+
+Rules:
+  - Frontend → backend flows through frontend/src/services/api.ts.
+  - Backend → frontend uses camelCase JSON keys (Django serializers map
+    snake_case columns via source=).
+  - Pages consume api only. Never import mockData.ts from a page.
+  - No {success, data} envelope — endpoints return raw arrays/objects
+    matching frontend/src/types/domain.ts.
+  - Workflow logic lives in apps/<app>/services.py (services), not views.
+    Views are parse → call service → respond.
+  - Gateway integrations live in apps/<app>/integrations/ with a
+    mock/test/live mode dispatch.
+
+================================================================================
+SECTION 4 — File map (top of "where things live")
+================================================================================
+
+Frontend:
+  frontend/src/services/api.ts          - all backend calls
+  frontend/src/types/domain.ts          - shared TS types
+  frontend/src/components/RequireAuth.tsx - JWT route guard
+  frontend/src/components/ErrorBoundary.tsx - Phase 13C safety wrapper
+  frontend/src/pages/Login.tsx          - Phase 13A login UI
+  frontend/src/pages/CallingDashboard.tsx - Phase 12D Tier-4 dashboard
+  frontend/src/pages/SaasAdmin.tsx      - Phase 6E+ saas admin
+  frontend/src/pages/WhatsAppMonitoring.tsx - Phase 5F-Gate dashboard
+
+Backend service modules (highlights — full list in CLAUDE.md §5):
+  apps/payments/integrations/razorpay_client.py
+  apps/shipments/integrations/delhivery_client.py
+  apps/calls/integrations/vapi_client.py
+  apps/whatsapp/integrations/whatsapp/meta_cloud_client.py
+  apps/calls/transcript_ingestion.py    - Phase 11A
+  apps/calls/quality_scorer.py          - Phase 11B
+  apps/caio/service.py                  - Phase 11C
+  apps/learning/service.py              - Phase 11D
+  apps/calls/ai_calling_gate.py         - Phase 12A
+  apps/calls/outcome_classifier.py      - Phase 12B
+  apps/calls/post_call_followup.py      - Phase 12C
+  apps/diagnostics/                     - Phase 10A (service-only app)
+  apps/payments/phase8f_real_customer_controlled_mutation.py
+  apps/whatsapp/phase7e_live_b_real_customer_send.py
+  apps/shipments/phase7g_live_real_customer_dispatch.py
+
+Production deploy:
+  docker-compose.prod.yml               - six-container stack
+  backend/Dockerfile + deploy/backend/entrypoint.sh
+  frontend/Dockerfile + deploy/nginx/nirogidhara.conf
+  .env.production.example               - locked mock-mode defaults
+  docs/DEPLOYMENT_VPS.md                - runbook
+
+================================================================================
+SECTION 5 — Phase ladder summary (Phase 1 → Phase 14A)
+================================================================================
+
+Tier 0 / foundation:
+  Phase 1                  CRM + customer base + manual ops scaffold
+  Phase 2A-2E              Workflow APIs + Razorpay + Delhivery + Vapi +
+                           Meta Lead Ads webhooks
+  Phase 3A-3E              AgentRun + per-agent runtimes + Celery beat +
+                           sandbox / prompt versions / budgets +
+                           business config (catalog + discount + reward)
+  Phase 4A-4E              Real-time AuditEvent WS + reward/penalty +
+                           approval matrix + execution layer
+  Phase 5A-5F-Gate         WhatsApp Live Sender + Inbox + AI Chat (OFF) +
+                           Lifecycle automation + Rescue discount +
+                           Day-20 reorder + Monitoring dashboard
+
+Phase 6 SaaS foundation:
+  Phase 6A-6E              Multi-tenant scaffold (Organization, Branch,
+                           OrganizationMembership, Settings) + org-scoped
+                           filtering + write-path assignment + SaaS admin
+  Phase 6F-6N              Runtime routing preview + dry-run + live audit
+                           gate + simulation + provider test plan +
+                           Razorpay test execution (executed once 2026-04
+                           pex_8f309650e9644cfaae4418f9 → rolled back) +
+                           webhook readiness + MCP gateway (dormant)
+  Phase 6O-6T              Razorpay sandbox status mapping / mutation /
+                           workflow safety gate / dispatch readiness /
+                           pilot plan / final audit lock — all CLI-only
+
+Phase 7 production gating:
+  Phase 7B                 Razorpay controlled pilot execution gate
+  Phase 7D                 One-shot internal Razorpay TEST execution
+                           (executed once 2026-05-07 order_SmThqpK6sc6Dhs,
+                           rolled back; Phase 7D-Hotfix-1 added structured
+                           UTC window guard)
+  Phase 7E                 WhatsApp internal notification readiness gate
+  Phase 7E-Live-A          Internal allowed-list WhatsApp one-shot send
+                           (executed real internal send WAM-100003)
+  Phase 7E-Live-B          Real customer WhatsApp one-shot send gate
+                           (executed first live send for Phase 10C/10B
+                           payment recovery workflow)
+  Phase 7F                 Delhivery courier readiness gate
+  Phase 7G                 One-shot Delhivery TEST/MOCK courier execution
+                           (executed once DLH35391376, rolled back)
+  Phase 7G-Live            Real customer Delhivery dispatch gate (NOT
+                           approved — separate Director directive needed)
+  Phase 7H                 Courier execution evidence lock
+  Phase 7I                 Final Phase 7 audit lock
+
+Phase 8 Payment → Order mutation chain:
+  Phase 8A                 Sandbox gate (dry-run only)
+  Phase 8B                 Review gate (dry-run + review only)
+  Phase 8C                 Controlled mutation (internal sandbox target;
+                           executed end-to-end on phase8c-controlled-order-001
+                           + phase8c-controlled-payment-001 fixture)
+  Phase 8C-Hotfix-1        Safe sandbox fixture seed command
+  Phase 8D                 Controlled mutation evidence lock
+  Phase 8D-Hotfix-1        Resolve Phase 8C evidence via rollback record
+  Phase 8E                 Real customer pilot review gate
+  Phase 8E-Hotfix-1        Accept Partial+Pending candidate; pool inspector
+  Phase 8F                 Controlled real customer Payment → Order mutation
+                           gate. EXECUTED ONCE 2026-05-14 (gate id=1,
+                           Order NRG-20435, Payment PAY-30125) and rolled
+                           back same day. System state back to
+                           Partial/Pending.
+  Phase 8F-Hotfix-1/2/3    Three independent hotfixes (recovery from
+                           blocked, Postgres-safe test fixtures, attempt
+                           recovery from blocked to approved)
+  Test Hygiene Hotfix-1    Pin integration modes in conftest.py for
+                           VPS-safe full-suite runs
+
+Phase 9 Tier-2 AI agents (recommendations-only, deterministic, daily):
+  Phase 9A   Customer Success / Reorder    08:00 IST
+  Phase 9B   RTO Prevention                09:00 IST
+  Phase 9C   CFO                            10:00 IST
+  Phase 9D   Data Analyst                   11:00 IST
+  Phase 9E   Calling Team Leader            12:00 IST
+  Phase 9F   CEO Orchestration              13:00 IST
+
+Phase 10 Diagnostics + payment recovery (CLI-only chain):
+  Phase 10A    Pending Payments Drilldown (read-only diagnostics)
+  Phase 10A-Hotfix-1   Phone fallback chain Payment → Order → Customer
+  Phase 10B    Targeted Payment Reminder Preparer (Phase 7E-Live-B wrapper)
+  Phase 10B-Hotfix-1   Auto-create crm.Customer for Order-only phone
+  Phase 10B-Hotfix-2   Fix template_params to match nrg_payment_reminder
+  Phase 10C    Razorpay Payment Link Refresh Gate (heavyweight CLI)
+  Phase 10C-Hotfix-1   Persist Payment.gateway_reference_id at execute
+
+Phase 11 Calls observability stack:
+  Phase 11A    Transcript Ingestion Pipeline V1 (Vapi REST pull, daily 23:00 IST)
+  Phase 11B    Call Quality Scorer V1 (5 dimensions, deterministic, daily 23:30 IST)
+  Phase 11C    CAIO Audit Agent V1 (governance synthesis, daily 14:00 IST)
+  Phase 11D    Learning Loop Gate V1 (Director-approved paper-trail)
+
+Phase 12 Tier-4 AI calling:
+  Phase 12A    AI Calling Campaign Gate V1 (Director-approved Vapi)
+  Phase 12B    Call Outcome Classifier V1 (deterministic, suggestions-only,
+               daily 07:00 IST)
+  Phase 12C    Post-Call WhatsApp Follow-up Queue V1 (queue → Phase 7E-Live-B,
+               daily 08:30 IST)
+  Phase 12D    Tier-4 AI Calling Performance Dashboard (frontend-only)
+
+Phase 13 Auth + frontend hardening:
+  Phase 13A    Director Login Flow (JWT-backed)
+  Phase 13B    SaasAdmin defensive optional chaining + WebSocket scheme fix
+  Phase 13C    ErrorBoundary wrapper + broad defensive pass over 148 accesses
+  Phase 13D-1  Integration Readiness DB cleanup (DB-ops only)
+
+Phase 14 Vision lock:
+  Phase 14A    Founder Operating Model (solo-operator design constraint
+               lock; docs-only)
+  Phase 14B    Doc Sync to Reality (6-commit chain — this file is C6)
+
+================================================================================
+SECTION 6 — Live execution history (real-world side effects)
+================================================================================
+
+ONLY the events below have produced real-world side effects in production.
+Anything not in this list is either OFF, mock, sandbox, or test-mode.
+
+2026-04   Phase 6K-B    Razorpay test order pex_8f309650e9644cfaae4418f9
+                        → order_Sks3KPf0vntKhf, ₹1.00, no payment link,
+                        rolled back
+
+2026-05-07  Phase 7D    Razorpay TEST controlled pilot
+                        order_SmThqpK6sc6Dhs at 12:42:46Z (134s before
+                        the Director window start 12:45:00Z — caught by
+                        Phase 7D-Hotfix-1 retrospectively; no business
+                        impact, rolled back)
+
+2026-05-?   Phase 7E-Live-A   Internal allowed-list WhatsApp send
+                        (WAM-100003) — `nrg_greeting_intro` UTILITY
+                        template, delivered + read on test phone
+
+2026-05-?   Phase 7G    Delhivery TEST AWB DLH35391376 created, status
+                        Pickup Scheduled, rolled back record-only
+
+2026-05-14  Phase 8F    REAL CUSTOMER Payment → Order mutation
+                        Order NRG-20435 → payment_status Paid → rolled
+                        back to Partial
+                        Payment PAY-30125 → status Paid → rolled back to
+                        Pending
+                        Window: BEGIN_UTC=2026-05-14T09:32:29Z to
+                        END_UTC=2026-05-14T09:45:29Z
+                        Result: ok=True, every locked-False boolean
+                        stayed False, no customer notification, no
+                        WhatsApp send, no shipment, no Razorpay/Meta/
+                        Delhivery/Vapi call. Rollback Reading 1 ok=True
+                        same day. Current state: Partial / Pending.
+
+2026-05-?   Phase 7E-Live-B   First real-customer WhatsApp send executed
+                        via Phase 10C → Phase 10B → Phase 7E-Live-B
+                        payment-recovery workflow. Phase 10C-Hotfix-1
+                        followed to fix gateway_reference_id persistence.
+
+2026-05-?   Phase 5F-Gate Real Inbound Deterministic Fallback Fix
+                        First real-inbound auto-reply test on the VPS
+                        (allowed test number suffix 9990) succeeded
+                        end-to-end. Director rolled back to
+                        WHATSAPP_AI_AUTO_REPLY_ENABLED=false (current
+                        safe OFF state).
+
+Future Phase 8F live executes, Phase 7E-Live-B sends, Phase 7G-Live
+dispatches, and Phase 12A real Vapi calls require fresh Director
+directives in fresh 15-30 min UTC windows.
+
+================================================================================
+SECTION 7 — Env / runtime mode posture (current .env.production)
+================================================================================
+
+Live-mode flags:
+  RAZORPAY_MODE=live                          (live keys rzp_live_*)
+  WHATSAPP_PROVIDER=meta_cloud
+  WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true   (allow-list gate still on
+                                               for every send)
+
+Locked-OFF flags (runtime env prefix only — `.env.production` never edited):
+  WHATSAPP_AI_AUTO_REPLY_ENABLED=false
+  WHATSAPP_CALL_HANDOFF_ENABLED=false
+  WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED=false
+  WHATSAPP_RESCUE_DISCOUNT_ENABLED=false
+  WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED=false
+  WHATSAPP_REORDER_DAY20_ENABLED=false
+  AI_CALLING_ENABLED=false                    (Phase 12A)
+  PHASE7E_LIVE_B_REAL_CUSTOMER_SEND_ENABLED=false
+  PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_ENABLED=false
+  PHASE8F_REAL_CUSTOMER_CONTROLLED_MUTATION_GATE_ENABLED=false
+  PHASE8F_DIRECTOR_APPROVED_ONE_SHOT_REAL_MUTATION=false
+  PHASE8F_ALLOW_REAL_CUSTOMER_ORDER_PAYMENT_MUTATION=false
+  PHASE10C_PAYMENT_LINK_REFRESH_ENABLED=false
+  DELHIVERY_MODE=mock                          (or test)
+  VAPI_MODE=mock
+  MCP_ENABLED=false
+  RUNTIME_KILL_SWITCH=enabled (default)        (enabled=False row wins
+                                                ordered by -pk)
+
+Director reconciliation note: `.env.production` is NEVER edited without
+explicit Director sign-off.
+
+================================================================================
+SECTION 8 — Verification commands
+================================================================================
+
+Mandatory before every commit:
+
+  cd backend && python manage.py makemigrations --check --dry-run
+  cd backend && python -m pytest -q && python manage.py check
+  cd frontend && npm run lint && npm test && npm run build
+
+Test baseline (post-Phase 14A):
+  Backend:  2734 tests, all green
+  Frontend: 85 tests, all green
+  Lint:     0 errors (shadcn pre-existing warnings only)
+  Build:    clean
+
+VPS post-deploy smoke tests:
+  - `docker compose -f docker-compose.prod.yml exec backend \
+       python manage.py makemigrations --check --dry-run`
+  - curl https://ai.nirogidhara.com/api/healthz/
+  - curl /api/v1/ceo-orchestration/snapshots/latest/ (admin token required)
+  - curl /api/v1/diagnostics/pending-payments/?limit=10 (admin token required)
+
+================================================================================
+SECTION 9 — Working agreement (docs sync rule)
+================================================================================
+
+Every meaningful change MUST be followed by:
+  1. Update nd.md (relevant section).
+  2. Update AGENTS.md if any convention or hard stop changed.
+  3. Update CLAUDE.md §5 "where things live" if a file path or service
+     location changed.
+  4. Run the full verification suite (above).
+  5. Commit with a Conventional Commit message (feat/fix/refactor/docs/
+     test/chore/perf/ci).
+  6. Push to origin/main at https://github.com/prarit0097/Nirogidhara-AI-Command-Center.
+
+The repo on GitHub must mirror the local state at the end of every working
+session. No force-push. No rebase of already-pushed commits.
+
+================================================================================
+SECTION 10 — Common commands (local dev)
+================================================================================
+
+Backend:
+  cd backend
+  python -m venv .venv && .\.venv\Scripts\Activate.ps1   # Windows
+  pip install -r requirements.txt
+  python manage.py migrate
+  python manage.py seed_demo_data --reset
+  python manage.py runserver 0.0.0.0:8000
+  python -m pytest -q
+
+Frontend:
+  cd frontend
+  npm install
+  npm run dev                                            # http://localhost:8080
+  npm test
+  npm run lint
+  npm run build
+
+After any change:
+  git add <files>
+  git commit -m "<type>: <message>"
+  git push origin main
+
+================================================================================
+SECTION 11 — Production deploy summary
+================================================================================
+
+Host:       Hostinger VPS (shared with Postzyo + OpenClaw)
+Folder:     /opt/nirogidhara-command
+Containers: nirogidhara-{db,redis,backend,worker,beat,nginx} (six total)
+Host port:  18020 → 80 (Nginx host terminates TLS via Certbot)
+Domain:     https://ai.nirogidhara.com
+
+Boot:
+  cd /opt/nirogidhara-command
+  docker compose -f docker-compose.prod.yml up -d --build
+
+Migration drift gate (run after every git pull):
+  docker compose -f docker-compose.prod.yml exec backend \
+      python manage.py makemigrations --check --dry-run
+  docker compose -f docker-compose.prod.yml exec backend \
+      python manage.py migrate
+
+Logs:
+  docker compose -f docker-compose.prod.yml logs -f backend
+
+Backup (recommended before going live):
+  docker compose -f docker-compose.prod.yml exec db pg_dump -U <user> <db> > backup.sql
+
+Never:
+  - Change container / volume / network names or the 18020 host port.
+  - Commit .env.production (gitignored).
+  - Edit .env.production without explicit Director sign-off.
+  - Skip the migration drift gate.
+
+Full runbook: docs/DEPLOYMENT_VPS.md
+
+================================================================================
+SECTION 12 — Phase 10 (diagnostics + payment recovery) family
+================================================================================
+
+Composes: 10A diagnose → 10C refresh stale link → 10B prepare reminder →
+7E-Live-B Director approve + execute.
+
+Phase 10A — Pending Payments Drilldown (read-only)
+  python manage.py inspect_pending_payments [--limit N] [--include-partial] [--json]
+  GET /api/v1/diagnostics/pending-payments/?include_partial=true|false&limit=N&state=Delhi
+  Frontend: /operations/pending-payments
+
+Phase 10B — Targeted Payment Reminder Preparer (CLI-only)
+  python manage.py prepare_payment_reminder_send <payment_id> [--operator-name "Prarit Sidana"] [--force] [--json]
+  Output: a Phase 7E-Live-B draft gate row. Director still owns approve + execute.
+
+Phase 10C — Razorpay Payment Link Refresh Gate (heavyweight CLI-only)
+  python manage.py prepare_phase10c_payment_link_refresh_gate <payment_id> --mode test|live --operator-name "Prarit Sidana"
+  python manage.py approve_phase10c_payment_link_refresh_gate --gate-id N --operator-name "..." --intent "..." --director-signoff "BEGIN_UTC=...Z END_UTC=...Z"
+  python manage.py execute_phase10c_payment_link_refresh_gate --gate-id N --operator-name "..." [--confirm-phase10c-payment-link-refresh-live]
+  python manage.py rollback_phase10c_payment_link_refresh_gate --gate-id N --operator-name "..."
+
+Phase 7E-Live-B Director approve + execute (LIVE WhatsApp send):
+  python manage.py inspect_phase7e_live_b_real_customer_gate
+  python manage.py approve_phase7e_live_b_real_customer_gate --gate-id N --director-signoff "...BEGIN_UTC=...Z END_UTC=...Z..." --operator-name "..." --confirm-phase7e-live-b-real-customer-send
+  python manage.py execute_phase7e_live_b_real_customer_send --gate-id N --director-signoff "<same>" --operator-name "..." --confirm-phase7e-live-b-real-customer-send
+
+None of Phase 10 sends WhatsApp directly; only the final 7E-Live-B execute
+does, inside the same 15-min UTC window the Director signed.
+
+================================================================================
+SECTION 13 — Phase 11 (calls observability) family
+================================================================================
+
+Phase 11A — Transcript Ingestion Pipeline V1
+  Daily 23:00 IST via apps.calls.tasks.ingest_transcript_backlog_daily.
+  Pulls Vapi REST transcripts for Calls older than the 24h grace window.
+  Reads-only API:
+    GET /api/v1/calls/transcript-backlog/?window_days=N
+    GET /api/v1/calls/transcripts/<call_id>/
+
+Phase 11B — Call Quality Scorer V1 (deterministic, no LLM)
+  Daily 23:30 IST. 5 dimensions: connection_score, product_knowledge_score,
+  compliance_score, objection_handling_score, tonality_score. Composite =
+  0.20*conn + 0.25*prod + 0.25*comp + 0.15*obj + 0.15*tone.
+  Flag codes: compliance_violation, no_greeting, weak_product_knowledge,
+  no_objection_response, short_call, zero_agent_utterances, no_transcript.
+  Reads-only API:
+    GET /api/v1/calls/quality-scores/?limit=N
+    GET /api/v1/calls/quality-scores/<call_id>/
+    GET /api/v1/calls/quality-scores/summary/?window_days=N
+
+Phase 11C — CAIO Audit Agent V1 (governance-only synthesis)
+  Daily 14:00 IST. Reads Phase 9 + 11A + 11B + CEO orchestration.
+  Severity: green / amber / red. NO execution power.
+  Reads-only API:
+    GET /api/v1/caio/snapshots/?limit=N
+    GET /api/v1/caio/snapshots/latest/
+    GET /api/v1/caio/snapshots/<int:pk>/
+
+Phase 11D — Learning Loop Gate V1 (Director-approved paper-trail)
+  Reads-only API:
+    GET /api/v1/learning/proposals/?status=&type=&limit=N
+    GET /api/v1/learning/proposals/pending/
+    GET /api/v1/learning/proposals/summary/
+    GET /api/v1/learning/proposals/<int:pk>/
+
+  CLI:
+    python manage.py list_learning_proposals
+    python manage.py review_learning_proposal <id> --decision approved|rejected --operator-name "..." [--note "..."]
+    python manage.py implement_learning_proposal <id> --operator-name "..." --implementation-note "REQUIRED — what was actually done"
+
+Phase 11D never auto-implements anything. implement_proposal only records
+what the Director did manually outside the platform.
+
+================================================================================
+SECTION 14 — Phase 12 (Tier-4 AI calling) family
+================================================================================
+
+Phase 12A — AI Calling Campaign Gate V1 (Director-approved Vapi outbound)
+  Reads-only API:
+    GET /api/v1/calls/campaigns/?limit=N
+    GET /api/v1/calls/campaigns/latest/
+    GET /api/v1/calls/campaigns/<int:pk>/
+  CLI (the ONLY path that may dispatch real Vapi calls):
+    python manage.py prepare_ai_calling_campaign --operator-name "..." [--stage STAGE] [--max-leads N] [--assistant-id ID]
+    python manage.py inspect_ai_calling_campaign <gate_id>
+    python manage.py approve_ai_calling_campaign <gate_id> --operator-name "..." --intent "..." --director-signoff "BEGIN_UTC=...Z END_UTC=...Z"
+    python manage.py execute_ai_calling_campaign <gate_id> --operator-name "..." --confirm-ai-calling-campaign
+    python manage.py cancel_ai_calling_campaign <gate_id> --operator-name "..." [--reason "..."]
+  Requires AI_CALLING_ENABLED=true runtime env + kill switch + VAPI_MODE=live.
+  No rollback path — cannot un-make a Vapi call.
+
+Phase 12B — Call Outcome Classifier V1 (deterministic, suggestions-only)
+  Daily 07:00 IST. Outcomes: connected_converted, connected_callback,
+  connected_not_interested, connected_unclear, not_connected, no_transcript.
+  Cascade: rejection → conversion → callback → unclear.
+  Reads-only API:
+    GET /api/v1/calls/outcomes/?review_status=&outcome=&campaign_gate_id=&limit=N
+    GET /api/v1/calls/outcomes/<int:pk>/
+    GET /api/v1/calls/outcomes/summary/
+  CLI:
+    python manage.py classify_call_outcomes [--call-id ID] [--campaign-id N] [--hours N] [--dry-run]
+    python manage.py review_call_outcomes [--status pending] [--limit N]
+    python manage.py approve_call_outcome <id> --operator-name "..."
+    python manage.py apply_call_outcome_updates [--outcome-record-id N ...] --operator-name "..." --confirm-outcome-apply
+  Lead.status is mutated ONLY by apply_call_outcome_updates with the explicit
+  confirm flag, on already-approved records, with non-blank suggested status.
+
+Phase 12C — Post-Call WhatsApp Follow-up Queue V1 (Director-triggered)
+  Daily 08:30 IST. Queues a draft-status Phase 7E-Live-B gate row when
+  Phase 12B classifies converted or callback outcomes.
+  Reads-only API:
+    GET /api/v1/calls/followups/?status=&type=&limit=N
+    GET /api/v1/calls/followups/<int:pk>/
+    GET /api/v1/calls/followups/summary/
+  CLI:
+    python manage.py list_post_call_followups [--status] [--type] [--hours N] [--limit N]
+    python manage.py prepare_post_call_followup_gate <follow_up_id> --operator-name "..."
+    python manage.py mark_followup_dispatched <follow_up_id> --operator-name "..." [--note "..."]
+    python manage.py skip_post_call_followup <follow_up_id> --operator-name "..." [--reason "..."]
+  Phase 12C NEVER sends WhatsApp automatically — Director still owns the
+  approve + execute via Phase 7E-Live-B CLI.
+
+Phase 12D — Tier-4 AI Calling Performance Dashboard (frontend-only)
+  /operations/calling-dashboard — Director review surface.
+  No "Run Campaign" / "Send WhatsApp" / "Approve" / "Apply" buttons.
+
+================================================================================
+SECTION 15 — Phase 13 (auth + frontend hardening) family
+================================================================================
+
+Phase 13A — Director Login Flow (JWT-backed)
+  New: /login page, RequireAuth route guard, 401 interceptor, logout button,
+  safeFetch production fix, /api/v1/auth/login/ + /api/v1/auth/refresh/ alias.
+  Director user created manually on VPS Postgres (password NEVER in code,
+  env, or git).
+
+Phase 13B — SaasAdmin defensive optional chaining + WebSocket scheme fix
+  Phase 7 readiness card array accesses guarded with optional chaining.
+  audit.events WebSocket connection now matches the page protocol.
+
+Phase 13C — ErrorBoundary wrapper + broad defensive pass
+  SaaS Admin route wrapped in ErrorBoundary class component.
+  148 array-like accesses across the codebase guarded with optional
+  chaining + defaulting.
+
+Phase 13D-1 — Integration Readiness DB Cleanup (DB-ops only)
+  One-time python manage.py shell block to clear orphaned readiness rows
+  on the VPS. No code changes, no migrations.
+
+================================================================================
+SECTION 16 — Phase 14A (founder operating model)
+================================================================================
+
+Phase 14A is a pure vision lock. No code, no migration, no endpoint, no env
+var. Adds a new "Founder Operating Model" section to nd.md (§1.5) anchoring
+every future automation decision to the ₹10,000 cr solo-operator North Star.
+
+The constraint:
+  - ONE human in the loop (the Director).
+  - All approvals route to the Director.
+  - All sensitive actions are CLI-only with explicit confirm + sign-off.
+  - All operational dashboards are read-only; mutation happens via gated
+    CLI commands.
+  - External contractors get scoped read-only access for their domain
+    only, not operational execution capability.
+
+The vision:
+  Run a ₹10,000 cr Ayurvedic D2C business with one person at the helm,
+  every other role performed by an AI agent fleet under the Director's
+  command.
+
+================================================================================
+SECTION 17 — Outstanding next-priority order (post Phase 14A)
+================================================================================
+
+Tier 1 (top of funnel):
+  - Meta Lead Ads quality + Vapi calling cohort upgrade
+  - Top-of-funnel scoring + risk model
+
+Tier 3 (customer success / reorder):
+  - Tier 3 customer success messaging gate (Phase 7E-Live-B compatible)
+  - Reorder Day-N reminder cadence beyond Day-20
+
+Tier 4 (AI calling further refinement):
+  - Phase 12B confidence calibration with real-call ground truth
+  - Phase 12C → Phase 7E-Live-B handshake automation (Director-only one-click)
+  - Vapi assistant prompt registry + Phase 11D-driven prompt rollback
+
+No Tier 2 phase planned next — Tier 2 (Phase 9 + 11C) is feature-complete
+as recommendations-only governance.
+
+================================================================================
+SECTION 18 — Out of scope / locked-OFF (until explicitly requested)
+================================================================================
+
+- Implementing the full reward formula in JS / pushing it to the frontend.
+- Mobile push notifications.
+- E2E Playwright suite (the prototype phase doesn't need it).
+- WhatsApp inbound auto-reply (Phase 5C) — gated by WHATSAPP_AI_AUTO_REPLY_ENABLED=false.
+- Chat-to-call handoff — gated by WHATSAPP_CALL_HANDOFF_ENABLED=false.
+- Order booking from WhatsApp chat — guarded by limited test mode.
+- Discount automation / rescue-discount flow — gated by env flags off.
+- Day-20 reorder cadence — gated by env flag off.
+- Campaign / broadcast WhatsApp sends (Phase 5F) — LOCKED.
+- Freeform outbound WhatsApp text — LOCKED (only approved templates).
+- CAIO-originated customer messages — LOCKED (CAIO is monitor / audit only).
+- MCP Gateway tools / provider tools — gated by MCP_ENABLED=false.
+- Per-org runtime provider routing — Phase 6F preview only.
+- Phase 7E-Live-B broad auto-send — NOT approved (only one-shot per gate).
+- Phase 7G-Live real customer Delhivery dispatch — NOT approved.
+- Phase 8F broad-customer auto-mutation — NOT approved (only one-shot per gate).
+- Phase 12A auto-dispatch — NOT approved (Director sign-off per campaign).
+
+================================================================================
+SECTION 19 — References
+================================================================================
+
+Primary documents (in repo):
+  nd.md                            Full handoff (~621KB). Read TL;DR §0 first.
+  CLAUDE.md                        Project instructions, auto-loaded by Claude.
+  AGENTS.md                        Cross-tool conventions + hard stops.
+  docs/MASTER_BLUEPRINT_V2.md      Strategic blueprint v2 (supersedes v1 PDF).
+  docs/BACKEND_API.md              Endpoint reference, all phases.
+  docs/FUTURE_BACKEND_PLAN.md      Phased roadmap with shipped markers.
+  docs/RUNBOOK.md                  Local dev runbook + Director playbooks.
+  docs/DEPLOYMENT_VPS.md           Production deploy + smoke + backup.
+  docs/WHATSAPP_INTEGRATION_PLAN.md Phase 5A integration plan A-R + S-GG.
+  README.md                        Root readme (high-level).
+  docs/README.md                   Docs index.
+
+External:
+  https://github.com/prarit0097/Nirogidhara-AI-Command-Center
+  https://ai.nirogidhara.com    (production — Director login required)
+
+When in doubt:
+  1. Read nd.md (TL;DR §0 + the relevant section).
+  2. Cross-check the per-phase summary in docs/FUTURE_BACKEND_PLAN.md.
+  3. Run the health check: pytest -q + npm test + npm run lint + npm run build.
+  4. Ask the Director before doing anything that touches: ad budgets, real
+     medical claims, payment flows in live mode, customer messaging,
+     kill-switch states, or production data.
+
+================================================================================
+SECTION 20 — Test baselines per phase (most recent first)
+================================================================================
+
+Phase 14A baseline:         2734 backend + 85 frontend, all green
+Phase 13A baseline:         2734 backend + 85 frontend, all green
+Phase 12D baseline:         2730 backend + 82 frontend, all green
+Phase 12C baseline:         2730 backend + 82 frontend, all green
+Phase 12B baseline:         2684 backend + 82 frontend, all green
+Phase 12A baseline:         2644 backend + 82 frontend, all green
+Phase 11D baseline:         2605 backend + 82 frontend, all green
+Phase 11C baseline:         2570 backend + 82 frontend, all green
+Phase 11B baseline:         2536 backend + 82 frontend, all green
+Phase 11A baseline:         2496 backend + 82 frontend, all green
+Phase 10C baseline:         2458 backend + 82 frontend, all green
+Phase 10B baseline:         2462 backend + 82 frontend, all green
+Phase 10A baseline:         2382 backend + 82 frontend, all green
+Phase 9F baseline:          2365 backend + 82 frontend, all green
+Phase 9E baseline:          2332 backend + 82 frontend, all green
+Phase 9D baseline:          2308 backend + 82 frontend, all green
+Phase 9C baseline:          2290 backend + 82 frontend, all green
+Phase 9B baseline:          2272 backend + 82 frontend, all green
+Phase 9A baseline:          2245 backend + 82 frontend, all green
+Phase 8F (post-Hotfix-3):   2200 backend + 82 frontend, all green
+Phase 7E-Live-A (post-Hotfix-3): 1954 backend + 74 frontend, all green
+Phase 7D baseline:          1581 backend + 66 frontend, all green
+Phase 7B baseline:          1540 backend + 64 frontend, all green
+Phase 6T baseline:          1495 backend + 62 frontend, all green
+Phase 6S baseline:          1474 backend + 60 frontend, all green
+Phase 6E baseline:          ~1015 backend + 32 frontend, all green
+
+================================================================================
+SECTION 21 — Audit-event catalog (high-level coverage)
+================================================================================
+
+The Master Event Ledger (audit.AuditEvent) carries every important state
+change. Each phase introduces its own kind names (≤ 64 chars). High-level
+groupings:
+
+  saas.*                  Phase 6A-6E SaaS scaffolding
+  whatsapp.*              Phase 5A-5F WhatsApp send + AI + monitoring
+  razorpay.*              Phase 2B + 6K-B + 6L + 6M + 6O-6T
+  delhivery.*             Phase 2C + 7F + 7G
+  vapi.*                  Phase 2D + 12A
+  meta.*                  Phase 2E
+  reward.*                Phase 4B
+  approval.*              Phase 4C + 4D + 4E
+  customer_success.*      Phase 9A
+  rto_prevention.*        Phase 9B
+  cfo.*                   Phase 9C
+  data_analyst.*          Phase 9D
+  calling_team_leader.*   Phase 9E
+  ceo_orchestration.*     Phase 9F
+  transcript.*            Phase 11A
+  call_quality.*          Phase 11B
+  caio.*                  Phase 11C
+  learning.*              Phase 11D
+  ai_calling.*            Phase 12A
+  call_outcome.*          Phase 12B
+  call_followup.*         Phase 12C
+  phase7e.*               Phase 7E gates
+  phase7e_live_b.*        Phase 7E-Live-B real customer WhatsApp
+  phase7f.*               Phase 7F courier readiness
+  phase7g.*               Phase 7G + 7G-Live courier execution
+  phase8a.* … phase8f.*   Phase 8 Payment → Order mutation chain
+  phase10b.*              Phase 10B payment reminder
+  phase10c.*              Phase 10C payment link refresh
+  phase13a.*              Phase 13A Director auth (login_success, etc.)
+
+Every audit payload is run through a forbidden-keys filter so tokens,
+phones (full E.164), addresses, raw secrets, Director sign-off text, and
+raw provider payloads NEVER reach the ledger.
+
+================================================================================
+SECTION 22 — Approval matrix highlights
+================================================================================
+
+Approval requirements are defined in apps/ai_governance/approval_matrix.py.
+Selected rows (full list in source):
+
+  whatsapp.payment_reminder            auto_with_consent
+  whatsapp.confirmation_reminder       auto_with_consent
+  whatsapp.delivery_reminder           auto_with_consent
+  whatsapp.rto_rescue                  auto_with_consent
+  whatsapp.usage_explanation           approval_required (compliance)
+  whatsapp.reorder_reminder            auto_with_consent
+  whatsapp.support_complaint_ack       auto_with_consent
+  whatsapp.greeting                    auto_with_consent
+  whatsapp.broadcast_or_campaign       approval_required (LOCKED — Phase 5F)
+  whatsapp.support_handover_to_human   human_escalation
+  discount.up_to_10                    auto
+  discount.11_to_20                    approval_required
+  discount.rescue.ceo_review           approval_required (over-cap)
+  discount.above_safe_auto_band        approval_required
+  ai.sandbox.disable                   approval_required (Director)
+
+CAIO is never an approver. CEO AI is the AI-side approver for high-risk
+decisions; Director is the ultimate human approver.
+
+================================================================================
+SECTION 23 — Celery beat schedule (current, IST)
+================================================================================
+
+  07:00  call-outcome-classification-daily          (Phase 12B)
+  08:00  customer-success-agent-daily               (Phase 9A)
+  08:30  post-call-followup-daily                   (Phase 12C)
+  09:00  rto-prevention-agent-daily                 (Phase 9B)
+  09:00  ai-daily-briefing-morning                  (Phase 3C legacy)
+  10:00  cfo-agent-daily                            (Phase 9C)
+  11:00  data-analyst-agent-daily                   (Phase 9D)
+  12:00  calling-team-leader-agent-daily            (Phase 9E)
+  13:00  ceo-orchestration-agent-daily              (Phase 9F)
+  14:00  caio-audit-daily                           (Phase 11C)
+  18:00  ai-daily-briefing-evening                  (Phase 3C legacy)
+  23:00  transcript-ingestion-daily                 (Phase 11A)
+  23:30  call-quality-scoring-daily                 (Phase 11B)
+
+13 daily entries total. Each can be env-shifted via *_HOUR / *_MINUTE
+overrides. All beat tasks respect the runtime kill switch.
+
+================================================================================
+SECTION 24 — Operational guard rails (do not bypass)
+================================================================================
+
+Before any provider-touching CLI:
+  1. Confirm the runtime kill switch is enabled.
+  2. Confirm the relevant env flag is set via runtime prefix (NEVER edit
+     .env.production).
+  3. Confirm the Director sign-off body literally contains the required
+     id references (gate id, attempt id, target order id, target payment
+     id, etc.) AND BEGIN_UTC= / END_UTC= structured markers.
+  4. Confirm `now` is inside the signed UTC window (15-min cap for most
+     execute commands; 30-min cap for Phase 12A campaigns; 24h cap for
+     Phase 7E approval-only state transitions).
+  5. Confirm the operator name is non-empty.
+  6. Confirm the right --confirm-... CLI flag is present.
+
+Refusal patterns (each command writes a blocked audit row instead of
+mutating state):
+  - Missing structured UTC window
+  - Window > permitted length
+  - Window stale > 24h
+  - END_UTC <= BEGIN_UTC
+  - now < window start OR now > window end
+  - Kill switch off
+  - Env flag off
+  - --confirm-... missing
+  - Operator name blank
+  - Idempotency lock — prior execute on same gate
+
+Rollback is a first-class concern:
+  - Phase 7E-Live-B sends are NOT rollback-able (cannot un-send WhatsApp).
+  - Phase 7G test/mock AWBs are rollback-record-only (Delhivery cancel may
+    refuse for in-transit shipments).
+  - Phase 7D / Phase 8C / Phase 8F mutations have first-class rollback
+    commands that restore the pre-execute snapshot.
+  - Phase 12A Vapi calls are NOT rollback-able (cannot un-make a call).
+
+================================================================================
+SECTION 25 — Director quick-reference (one-page cheat sheet)
+================================================================================
+
+Daily review surfaces:
+  /                                  Dashboard
+  /saas-admin                        SaaS admin (Phase 6E+)
+  /whatsapp-inbox                    Inbox + manual template send (Phase 5B)
+  /whatsapp-monitoring               Phase 5F-Gate monitoring
+  /whatsapp-templates                Read-only template list
+  /operations/pending-payments       Phase 10A drilldown
+  /operations/calling-dashboard      Phase 12D Tier-4 dashboard
+  /ai-governance                     Phase 3D sandbox / budget guards
+  /ai-scheduler                      Phase 3C scheduler status
+
+Daily CLI checks (post-2300 IST after the beat sweeps complete):
+  python manage.py inspect_recent_whatsapp_auto_reply_activity --hours 24 --json
+  python manage.py inspect_transcript_backlog --window-days 7 --json
+  python manage.py inspect_quality_scoring_backlog --window-days 7 --json
+  python manage.py list_post_call_followups --status pending --json
+  python manage.py review_call_outcomes --status pending --limit 50 --json
+  python manage.py list_learning_proposals --status pending --json
+
+Weekly checks:
+  python manage.py check_claim_vault_coverage --json
+  python manage.py inspect_whatsapp_customer_pilot --json
+
+================================================================================
+SECTION 26 — Acceptance criteria for future agent / new operator pickup
+================================================================================
+
+A new agent or operator can claim "I understand this project" when they
+can answer ALL of the following without asking the Director:
+
+  [ ] What is the single most important hard stop in production?
+      → Phase 7E-Live-B / 7G-Live / 8F / 12A all require explicit Director
+        sign-off in a structured UTC window. Cannot un-send WhatsApp or
+        un-make a Vapi call.
+
+  [ ] Where does the WhatsApp consent + Claim Vault check live?
+      → apps.whatsapp.services.queue_template_message — runs the full
+        safety stack before persisting a queued row.
+
+  [ ] How is the Director password stored?
+      → It is NOT stored. Set via Django shell + getpass(), never written
+        to code / env / git.
+
+  [ ] What does Phase 14A mean?
+      → Solo-operator design constraint lock. Every Tier 1 / 3 / 4 phase
+        that follows must respect that the Director is the only human.
+
+  [ ] What is the verification gate before commit?
+      → makemigrations --check --dry-run, pytest -q, manage.py check,
+        npm run lint, npm test, npm run build. All green or no commit.
+
+  [ ] Where is the current test baseline recorded?
+      → CLAUDE.md §0 (auto-loaded), nd.md TL;DR, docs/FUTURE_BACKEND_PLAN.md
+        "Current test baseline" section.
+
+  [ ] What is the next-priority order?
+      → Tier 1 top-of-funnel, Tier 3 customer success messaging,
+        Tier 4 calling refinement. No Tier 2 planned.
+
+================================================================================
+END OF ndmemory.txt
+================================================================================
