@@ -154,7 +154,7 @@
 
 ---
 
-## Current Working Memory — Phase 12D Baseline
+## Current Working Memory — Phase 14A Baseline
 
 > Single point of truth for "where are we right now". Re-read this block at the start of every new session before touching anything.
 
@@ -163,7 +163,10 @@
 - **Project:** Nirogidhara AI Command Center (multi-tenant SaaS scaffold over a single-tenant Ayurvedic D2C operations stack).
 - **Production URL:** <https://ai.nirogidhara.com>
 - **VPS path:** `/opt/nirogidhara-command` (Hostinger VPS; six namespaced containers; host port `18020 → 80`; host Ubuntu Nginx + Certbot terminate TLS).
-- **Latest completed change:** **Phase 13A — Director Login Flow (commits `001eaf0` → `f04fda0` on `origin/main`).** Ships a real JWT-backed login UI for the Director. New `/login` route + `Login.tsx` (email + password form). New `api.login(email, password)` POSTs to a fresh `/api/v1/auth/login/` alias backed by SimpleJWT `TokenObtainPairView` (the legacy `/api/auth/token/` endpoint is preserved unchanged for backward compatibility). On success, the access token is saved to `localStorage["nirogidhara.jwt"]` and the user is routed to the originally-attempted path or `/saas-admin`. New `RequireAuth` wrapper guards every `AppLayout`-rendered route; unauthenticated access redirects to `/login` with the attempted path captured in `location.state.from`. `safeFetch` gains a 401 interceptor: on HTTP 401 it clears the JWT and dispatches a `nirogidhara:auth-cleared` window event that `RequireAuth` listens for. **`safeFetch` production fix:** the mock-data fallback now only triggers when `import.meta.env.DEV === true`; in production builds real backend errors throw, finally surfacing instead of being silently masked. New Logout icon button in the Topbar's "Prarit Sidana / Director" identity block clears the JWT and trips the same `auth-cleared` event. Director user `1995praritsidana@gmail.com` (`is_superuser=True`) was created manually via `python manage.py shell` + `getpass()` on the VPS Postgres before this phase; password is NEVER stored in code, env, or git. 4 new backend tests (`test_phase13a_director_login.py`: valid creds → 200 + access token, wrong password → 401, unknown email → 401, response body does not leak the password string) + 3 new frontend tests (`login.test.tsx`: inputs render, success saves JWT and navigates, failure shows error and does not navigate). No backend mutation surface added; no migration; no `.env.production` edit. Verification baseline after this phase: **2734 backend tests + 85 frontend tests** (4 + 3 new in 13A), `manage.py check` clean, `makemigrations --check --dry-run` clean, npm lint 0 errors, npm build green.
+- **HEAD on origin/main:** `a7cee89` (Phase 14A Founder Operating Model vision lock; pushed 2026-05-20). Most recent operational commit before that was `d72bfe1` (Phase 13C SaasAdmin broad defensive pass).
+- **Latest completed change:** **Phase 14A — Founder Operating Model vision lock (commit `a7cee89`).** Docs-only single commit; 6 canonical docs updated with solo-operator design constraint, ₹10,000 cr North Star, Net Delivered Profit per Director Hour metric. nd.md §1.5 is the canonical specification; CLAUDE.md / AGENTS.md / README.md / docs/MASTER_BLUEPRINT_V2.md / docs/RUNBOOK.md all inherit + cross-reference §1.5.
+- **Recent shipped commits chain (Phase 13A-D-1 + 14A, since Phase 12D doc sync v2 closed at `c5bd041`):** `001eaf0` → `f1d6cb5` → `6935a60` → `72bd699` → `f04fda0` → `5626df5` → `a6eb0a0` (Phase 13A Director Login Flow) → `98926ad` (Phase 13B SaasAdmin defensive optional chaining on Phase 7 readiness) → `7c5d0ac` (Phase 13B WebSocket scheme to match page protocol) → `cf48ddd` (Phase 13C ErrorBoundary wrapper) → `d72bfe1` (Phase 13C broad defensive pass — 148 array-like access defenses) → `a7cee89` (Phase 14A Founder Operating Model vision lock). Phase 13D-1 (Integration Readiness DB cleanup — Delhivery + PayU `invalid`, Vapi `warning`, WhatsApp Meta + Razorpay + OpenAI `valid`) was a DB-ops-only change with no commit.
+- **Previous completed change:** **Phase 13A — Director Login Flow (commits `001eaf0` → `f04fda0` on `origin/main`).** Ships a real JWT-backed login UI for the Director. New `/login` route + `Login.tsx` (email + password form). New `api.login(email, password)` POSTs to a fresh `/api/v1/auth/login/` alias backed by SimpleJWT `TokenObtainPairView` (the legacy `/api/auth/token/` endpoint is preserved unchanged for backward compatibility). On success, the access token is saved to `localStorage["nirogidhara.jwt"]` and the user is routed to the originally-attempted path or `/saas-admin`. New `RequireAuth` wrapper guards every `AppLayout`-rendered route; unauthenticated access redirects to `/login` with the attempted path captured in `location.state.from`. `safeFetch` gains a 401 interceptor: on HTTP 401 it clears the JWT and dispatches a `nirogidhara:auth-cleared` window event that `RequireAuth` listens for. **`safeFetch` production fix:** the mock-data fallback now only triggers when `import.meta.env.DEV === true`; in production builds real backend errors throw, finally surfacing instead of being silently masked. New Logout icon button in the Topbar's "Prarit Sidana / Director" identity block clears the JWT and trips the same `auth-cleared` event. Director user `1995praritsidana@gmail.com` (`is_superuser=True`) was created manually via `python manage.py shell` + `getpass()` on the VPS Postgres before this phase; password is NEVER stored in code, env, or git. 4 new backend tests (`test_phase13a_director_login.py`: valid creds → 200 + access token, wrong password → 401, unknown email → 401, response body does not leak the password string) + 3 new frontend tests (`login.test.tsx`: inputs render, success saves JWT and navigates, failure shows error and does not navigate). No backend mutation surface added; no migration; no `.env.production` edit. Verification baseline after this phase: **2734 backend tests + 85 frontend tests** (4 + 3 new in 13A), `manage.py check` clean, `makemigrations --check --dry-run` clean, npm lint 0 errors, npm build green.
 - **Previous completed change:** **Phase 12D — Tier-4 AI Calling Performance Dashboard (frontend-only, read-only; commit `dbe8a7b`).** Closes the Tier-4 calling loop with a Director review surface for Phase 12A campaigns + Phase 12B outcomes + Phase 12C follow-ups. No backend changes — frontend consumes existing `/api/v1/calls/{campaigns,outcomes,outcomes/summary,followups,followups/summary}/` endpoints already shipped in Phase 12A/B/C. New TS types in `frontend/src/types/domain.ts` mirror backend serializer output (camelCase + nested `byOutcome` / `byStatus` maps). New api methods `getCallingCampaigns / getCallOutcomes / getCallOutcomesSummary / getPostCallFollowUps / getPostCallFollowUpSummary` with deterministic mock fallback. New "Tier-4 AI Calling — Campaign Performance" card on `/saas-admin` after the Phase 9E Calling Team Leader card; new `/operations/calling-dashboard` page (`frontend/src/pages/CallingDashboard.tsx`, 4 sections: Campaign History / Call Outcomes / WhatsApp Follow-up Queue / CLI Reference). **Read-only end-to-end** — no "Run Campaign" / "Send WhatsApp" / "Approve" / "Apply" / "Trigger Call" / "Reassign Agent" / "Auto-dial" buttons exist anywhere. All state changes still happen exclusively via Phase 12A/B/C CLI commands. Verification baseline unchanged at **2730 backend tests + 82 frontend tests** (no new backend tests added in 12D; npm lint + test + build green).
 - **Phase 7E-Live-B safety posture:** no broadcast, campaign, bulk send, AI freeform, frontend execute/approve/cancel button, business mutation, Order/Payment mutation, courier call, or rollback. WhatsApp cannot be unsent, so executed gates cannot be cancelled. Every action writes an audit event; execute keeps `payment_mutation_made`, `order_mutation_made`, and `courier_called` false.
 - **Previous completed live mechanism proof:** **Phase 8F Live Execute + Rollback Reading 1 (2026-05-14; mechanism proof, no lasting change).** Execute ran on the VPS for attempt id=1 / gate id=1 / source Phase 8E gate id=1 / Order `NRG-20435` / Payment `PAY-30125` with operator `Prarit Sidana` and Director signoff window `BEGIN_UTC=2026-05-14T09:32:29Z` to `END_UTC=2026-05-14T09:45:29Z`. Result: `ok=True`, `status=executed`; `Order.payment_status -> Paid`, `Payment.status -> Paid`; all locked-False flags stayed False and there was no provider call, WhatsApp send, customer notification, shipment/AWB, or `Order.state` mutation.
@@ -220,6 +223,29 @@
   - `MCP_ENABLED=false`, `MCP_READ_ONLY_MODE=true`, `MCP_WRITE_TOOLS_ENABLED=false`, `MCP_PROVIDER_TOOLS_ENABLED=false`
   - `RuntimeKillSwitch` global → **enabled** (live gate refuses provider-side execution)
   - Campaigns / broadcast / lifecycle automation / RTO rescue / reorder cadence → **LOCKED**
+
+### Phase 14A status — solo-operator vision lock + live execution history
+
+- **Founder Operating Model (LOCKED — see §1.5):** Solo-operator design constraint. Director-only interaction. All functional work via AI agents. External contractors only (Doctor / CA / lawyer / 3PL). North Star: Net Delivered Profit per Director Hour. Goal: ₹10,000 cr operable by 1 founder.
+- **Director login:** Phase 13A live in production. JWT-based, `RequireAuth` route guard, Logout button. Login URL `/login`, Director email `1995praritsidana@gmail.com` (password set + rotated via Django shell + getpass(), never in code/env/git).
+- **SaaS Admin dashboard:** Phase 13B + 13C defensive hardening complete. ErrorBoundary safety net active around `/saas-admin` route. 148 defensive accesses applied across `frontend/src/pages/SaasAdmin.tsx`. WebSocket Mixed-Content fix on HTTPS. Integration Readiness reflects real backend data (Phase 13D-1 DB cleanup — Delhivery + PayU marked `invalid`, Vapi marked `warning`, WhatsApp Meta + Razorpay + OpenAI marked `valid` — reflecting actual env state).
+- **Live execution history (real customer impact recorded):**
+  - **Phase 7E-Live-B internal one-shot real customer WhatsApp send:** executed; kill-switch precondition hotfix landed (commit `0d9c975`). `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` restricts sends to the explicitly allowlisted test numbers — broader live send still gated.
+  - **Phase 8F real customer Payment → Order mutation:** executed once and rolled back on 2026-05-14 (commit `057b140`). Target candidate Order `NRG-20435` / Payment `PAY-30125`. Hotfix-1 (`2ffb3ca`) recovered blocked approval gate; Hotfix-3 (`2aca2fc`) added attempt-level recovery. Future Phase 8F runs require fresh Director directive + new UTC window + operator name + RuntimeKillSwitch + new approve cycle.
+  - **Phase 12A AI calling campaign gate:** built and director-approval-ready (commit `22535d6`). Vapi outbound integration. Vapi still in `VAPI_MODE=mock` — live AI calling execution status to be confirmed with operator before next planning round.
+  - **Phase 11D learning loop:** built and director-review-ready (commit `e01a52e`). Whether any specific learning has been approved through human review to-date — to be confirmed.
+- **Current env / runtime mode snapshot (per `.env.production` audit):**
+  - `RAZORPAY_MODE=live` — Razorpay payment gateway in production mode.
+  - `WHATSAPP_PROVIDER=meta_cloud`, `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true` — Meta Cloud API live to allowlisted numbers only.
+  - All six WhatsApp lifecycle / auto-reply automations remain locked OFF (`WHATSAPP_AI_AUTO_REPLY_ENABLED`, `WHATSAPP_LIFECYCLE_AUTOMATION_ENABLED`, `WHATSAPP_REORDER_DAY20_ENABLED`, `WHATSAPP_RESCUE_DISCOUNT_ENABLED`, `WHATSAPP_RTO_RESCUE_DISCOUNT_ENABLED`, `WHATSAPP_CALL_HANDOFF_ENABLED`).
+  - `META_MODE=mock`, `DELHIVERY_MODE=mock`, `VAPI_MODE=mock` — three integrations in mock mode in env; live execution status per-integration recorded above.
+  - All Phase 7D / 7E-Live-A / 7E-Live-B / 7G / 7G-Live / 8A / 8B / 8C / 8E / 8F env flags currently locked OFF — any re-execution requires explicit Director re-enable per the documented one-shot pattern.
+- **Outstanding (next-priority order, per Phase 14A tiered roadmap in §1.5):**
+  - **Tier 1 — Director enablement (genuinely not yet built):** Director Priority Engine; CEO AI 16-question daily briefing format wire-up; one-click approval UX; mobile-first PWA / native app.
+  - **Tier 2 — Operations unlock (largely built, execution gated by Director directive):** Phase 8F future re-execute (separate one-shot Director directive required); Phase 12A live Vapi outbound first run; WhatsApp lifecycle automation flag flips (six flags, one at a time, 24+ hour soak).
+  - **Tier 3 — Solo-operator hardening (not yet built):** Vacation / off-hours safe-defaults mode; trusted contact emergency access; external contractor read-only portals (Doctor / CA / lawyer / 3PL); AI agent retraining loop UI.
+  - **Tier 4 — Strategic scaling (not yet built):** PayU adapter; multi-SKU expansion logic; inventory / procurement agent; business simulation agent; Doctor Review Board UI; SaaS multi-tenant productization to other Ayurveda brands.
+
 - **Real artefacts the platform has produced (immutable records — each was rolled back / record-only):**
   - **Phase 6K-B (Razorpay TEST order, 2026-04):** `execution_id=pex_8f309650e9644cfaae4418f9` → `provider_object_id=order_Sks3KPf0vntKhf`, amount = `100 paise INR` (₹1.00), Razorpay TEST key. No payment link, no capture, no customer notification, no business mutation. `rollback_status=completed`. `PHASE6K_RAZORPAY_TEST_EXECUTION_ENABLED` flipped back to `false` immediately after the run.
   - **Phase 7D (Razorpay TEST order, 2026-05-07):** Phase 7D attempt id=1, gate id=1, `executed_at=2026-05-07T12:42:46Z`, provider order id `order_SmThqpK6sc6Dhs`, status `rolled_back`, `rollback_status=completed`, `provider_call_attempted=True`. The execute fell ~134 seconds *before* the Director-approved UTC window of `12:45:00Z → 13:00:00Z` — this drove the Phase 7D-Hotfix-1 structured UTC window guard. No business or customer impact (every locked-False boolean stayed False, the attempt was rolled back).
@@ -723,7 +749,7 @@ Final Reward Score =
 
 ---
 
-## 8. What's done so far — Phase 1 → Phase 12D — every checkpoint we shipped
+## 8. What's done so far — Phase 1 → Phase 14A — every checkpoint we shipped
 
 > This section is a chronological reference for the earliest phases. The latest checkpoints (Phase 5 → Phase 12D) are summarised in the §0 TL;DR + the §11 phase roadmap. Read those first for the current state.
 
@@ -1196,6 +1222,198 @@ Final Reward Score =
 | --- | --- |
 | `python -m pytest -q` | **77 passed** (44 + 13 razorpay + 7 ai config + 13 delhivery) — pre-Phase-2D snapshot |
 | `python manage.py check` | 0 issues |
+
+---
+
+### Phase 7E-Live-B + Hotfix-1 — Real customer WhatsApp one-shot send (executed)
+
+**Commits:** `10867c0` (gate framework), `0d9c975` (Hotfix-1 kill-switch precondition on execute).
+
+- Single internal one-shot real customer WhatsApp send executed under `WHATSAPP_LIVE_META_LIMITED_TEST_MODE=true`.
+- Hotfix-1 added kill-switch precondition check inside execute command — refuses dispatch when `RuntimeKillSwitch` global is disabled.
+- Broader live customer WhatsApp send still gated; allowlist-only mode preserved.
+
+### Phase 7G-Live — Real customer Delhivery one-shot dispatch gate (built; execution status TBC with operator)
+
+**Commit:** `54f2c53` (gate framework).
+
+- Gate-only model + service shipped. Defaults LOCKED OFF (`PHASE7G_LIVE_REAL_CUSTOMER_DISPATCH_ENABLED=false`).
+- Execution status against a live customer order: to be confirmed with operator before next planning round.
+
+### Phase 8F-Hotfix-1 — Recover blocked approval gate + migration index sync
+
+**Commit:** `2ffb3ca` (in `5ff4b6a` doc range).
+
+- Migration `payments.0025_phase8f_hotfix_rename_indexes` (pure `RenameIndex` ×8; no schema rewrite; no `RunPython`).
+- Narrowly-scoped approve-recovery path on `apps.payments.phase8f_real_customer_controlled_mutation.approve_phase8f_real_customer_controlled_mutation` enabling `blocked → approved_for_one_shot_real_customer_mutation` recovery for the missing-env-flag case only.
+- Did NOT execute Phase 8F. Locked-False contract preserved on the new attempt.
+
+### Phase 8F-Hotfix-2 — Postgres-safe Phase 8F execute tests
+
+**Commit:** `111680c`.
+
+- Made Phase 8F execute test fixtures use dynamic Phase 8E gate id instead of hardcoded id=1.
+- Necessary for VPS Postgres full-suite runs where gate ids are not predictable.
+
+### Phase 8F-Hotfix-3 — Attempt-level recovery command for blocked attempt
+
+**Commit:** `2aca2fc`.
+
+- New CLI `recover_phase8f_attempt_to_approved` to recover a Phase 8F attempt that was blocked by a failed pre-execute signoff check.
+- Used during the Phase 8F Reading 1 pre-execute journey to restore `attempt.status` between correctly refused placeholder-signoff runs.
+- Hard-gated by env flag + kill switch + non-empty operator + explicit confirmation + structured Director signoff (no UTC window because this is not an execute command).
+
+### ✅ Phase 8F Live Execute + Rollback Reading 1 (2026-05-14) — REAL CUSTOMER MUTATION EXECUTED + ROLLED BACK
+
+**Commit:** `057b140` (doc-only completion record).
+
+- First and only live Phase 8F real-customer Payment → Order mutation execution.
+- Target: Order `NRG-20435` (stage `Confirmed`, masked phone last-4 `1203`) + Payment `PAY-30125` (`order_id=NRG-20435`).
+- Result: `ok=True`, `status=executed`; `Order.payment_status` Partial → Paid; `Payment.status` Pending → Paid.
+- All locked-False flags stayed False (no provider call, no WhatsApp, no customer notification, no shipment/AWB, no `Order.state` mutation).
+- Rollback Reading 1 returned `ok=True`, `status=rollback_recorded`, `rollbackId=1`. psql confirmed Order back to `payment_status="Partial"` and Payment back to `status="Pending"`.
+- Three `PHASE8F_*` env flags were passed via runtime env prefix only; `.env.production` was NOT edited.
+- Future Phase 8F runs require fresh Director directive + new UTC window + operator name + RuntimeKillSwitch + new approve cycle.
+
+### ✅ Phase 10A + Hotfix-1 — Pending payments drilldown + phone fallback
+
+**Commits:** `5b33c47` (Phase 10A), `95f9b63` (Hotfix-1 phone fallback).
+
+- New `apps.diagnostics` Django app + read-only pending-payments drilldown service.
+- Hotfix-1 added phone fallback chain (Payment.customer_phone → Order.phone → Customer.phone) for the pending-payments drilldown CLI.
+- Read-only by default; no business mutation.
+
+### ✅ Phase 10B + Hotfix-1 + Hotfix-2 — Targeted payment reminder preparer
+
+**Commits:** `5f1587c` (Phase 10B), `cde213f` (Hotfix-1 auto-create CRM customer for order-only phone fallback), `47ac3ac` (Hotfix-2 `nrg_payment_reminder` template params customer_name + context).
+
+- Stage-aware preparer that creates a Phase 7E-Live-B-ready draft gate for a pending payment.
+- Hotfix-1: auto-create `crm.Customer` when only Order has the phone (order-only phone fallback).
+- Hotfix-2: corrected `nrg_payment_reminder` template params to `customer_name` + `context` after Meta template registry update.
+
+### ✅ Phase 10C — Razorpay payment link refresh gate
+
+**Commits:** `553b1a9` (gate framework, test default, live gated), `5a0fee2` (persist refreshed Razorpay link reference).
+
+- New gate to refresh a stale Razorpay payment link for a pending Payment without creating a new Order.
+- Migration `0026_phase10c_payment_link_refresh_gate`.
+- Test default; live mode gated by env flag.
+
+### ✅ Phase 11A — Transcript ingestion pipeline V1
+
+**Commit:** `828d2b5`.
+
+- Vapi daily Celery pull for call transcripts.
+- New management command + Celery beat schedule entry.
+- Recommendations-only; no business mutation. Transcripts persisted to `apps.calls.models.CallTranscript`.
+
+### ✅ Phase 11B — Call quality scorer V1
+
+**Commit:** `8a5d314`.
+
+- Deterministic five-dimension scoring of ingested call transcripts.
+- New management command + service module. Scoring is pure-Python deterministic, not LLM-only.
+
+### ✅ Phase 11C — CAIO audit agent V1
+
+**Commit:** `9655472`.
+
+- Governance recommendations-only daily audit agent.
+- New `apps.caio` Django app. CAIO emits audit findings; never executes business actions (hard rule).
+
+### ✅ Phase 11D — Learning loop gate V1 (director-approved + human-reviewed)
+
+**Commit:** `e01a52e`.
+
+- Learning proposals model + review workflow.
+- New `apps.learning` Django app. Auto-promotion of any learning proposal is forbidden — director approval + human review pathway required for any prompt / playbook / claim vault update to take effect.
+
+### ✅ Tier 3 frontend dashboard — CAIO audit card + learning proposals page
+
+**Commit:** `4105e1f`.
+
+- Frontend `/saas-admin` gains a CAIO audit card (Phase 11C) + a Learning Proposals page (Phase 11D review workflow).
+- Read-only review surface; approve / reject flows shipped.
+
+### ✅ Phase 12A — AI calling campaign gate V1 (director-approved Vapi outbound)
+
+**Commit:** `22535d6`.
+
+- Director-approved AI calling campaign gate model + service.
+- Vapi outbound integration. Campaign cannot be approved without a named candidate set + Claim Vault grounding + RuntimeKillSwitch precondition.
+- Live Vapi outbound execution status to be confirmed with operator before next planning round.
+
+### ✅ Phase 12B — Call outcome classifier V1 (director-reviewed suggestions only)
+
+**Commit:** `22ff52c`.
+
+- Emits lead status SUGGESTIONS only. Director reviews. No auto-promotion of suggested status changes.
+
+### ✅ Phase 12C — Post-call WhatsApp followup queue V1 (director-triggered)
+
+**Commit:** `3fa8e6c`.
+
+- Director-triggered queue. No automatic outbound from queue without director-level enable flag.
+
+### ✅ Phase 12D — Calling performance dashboard (frontend, Tier 4 complete)
+
+**Commit:** `dbe8a7b`.
+
+- Frontend `/operations/calling-dashboard` page with 4 sections (Campaign History / Call Outcomes / WhatsApp Follow-up Queue / CLI Reference).
+- Read-only end-to-end; all state changes via Phase 12A/B/C CLI commands.
+
+### ✅ Doc Sync v2 (C1-C7) — Reference docs synced to Phase 12D baseline
+
+**Commits:** `a385d95` (C1 nd.md) → `efd7c54` (C2 docs/README.md + AGENTS.md) → `de617b0` (C3 README.md root) → `20b123a` (C5 master blueprint) → `dfcd214` (C6 backend api + future plan) → `c5bd041` (C7 runbook + frontend audit + deployment vps + whatsapp plan).
+
+### ✅ Phase 13A — Director Login Flow
+
+**Commits:** `001eaf0` (backend register JWT login endpoint alias) → `f1d6cb5` (frontend login page + api.login()) → `6935a60` (route guard + 401 interceptor + safeFetch production fix) → `72bd699` (logout action) → `f04fda0` (tests) → `5626df5` (docs) → `a6eb0a0` (test setup seed JWT).
+
+- Real JWT-backed login UI for Director. New `/login` route + `Login.tsx`.
+- New `api.login(email, password)` POSTs to `/api/v1/auth/login/` (SimpleJWT `TokenObtainPairView`). Legacy `/api/auth/token/` preserved.
+- `RequireAuth` wrapper guards every `AppLayout`-rendered route. 401 interceptor clears JWT + dispatches `nirogidhara:auth-cleared`.
+- `safeFetch` production fix: mock-data fallback only when `import.meta.env.DEV === true`.
+- Logout button in Topbar. 4 backend tests + 3 frontend tests.
+- Director user `1995praritsidana@gmail.com` (`is_superuser=True`) created via Django shell + `getpass()`. Password never in code/env/git.
+
+### ✅ Phase 13B — SaasAdmin defensive optional chaining + WebSocket scheme fix
+
+**Commits:** `98926ad` (defensive optional chaining on Phase 7 readiness), `7c5d0ac` (WebSocket scheme to match page protocol).
+
+- 11 optional chaining edits across SaasAdmin Phase 7 readiness nested chains (`envFlags?.lifecycleEnabled`, `envFlags?.directorOneShotApproved`, `envFlags?.allowRazorpayTestOrder`, `razorpayKeyAdvisory?.razorpayKeyMode`, `razorpayKeyAdvisory?.razorpayKeyIdMasked`, `envFlags?.phase7eGateEnabled`).
+- WebSocket scheme derivation now coerces `ws://` to `wss://` whenever page protocol is `https:`.
+
+### ✅ Phase 13C — ErrorBoundary wrapper + broad defensive pass (148 edits)
+
+**Commits:** `cf48ddd` (ErrorBoundary wrapper around `/saas-admin` route), `d72bfe1` (broad defensive pass on array-like accesses).
+
+- New `frontend/src/components/ErrorBoundary.tsx` with structured fallback UI + "Try again" reset button. 3 new ErrorBoundary tests.
+- 148 single-line array-like access defenses applied via reusable `scripts/phase13c_defensive_pass.py` (89 array method calls + 61 `.length` accesses wrapped with `(x ?? [])`).
+
+### Phase 13D-1 — Integration Readiness DB cleanup (DB-ops only; no commit)
+
+- `OrganizationIntegrationSetting` rows reset to reflect actual env reality:
+  - Delhivery: `invalid` (env credentials missing/adapter not implemented).
+  - PayU: `invalid` (adapter code missing).
+  - Vapi: `warning` (API key present but `PHONE_NUMBER_ID` + `WEBHOOK_SECRET` empty, mode=mock).
+  - WhatsApp Meta / Razorpay / OpenAI: `valid`.
+
+### ✅ Phase 14A — Founder Operating Model vision lock (docs-only, single commit)
+
+**Commit:** `a7cee89`.
+
+- Six canonical docs updated with solo-operator design constraint, ₹10,000 cr North Star, Net Delivered Profit per Director Hour metric.
+- New nd.md §1.5 "Founder Operating Model (LOCKED)" canonical specification.
+- CLAUDE.md §0 / AGENTS.md / README.md / docs/MASTER_BLUEPRINT_V2.md / docs/RUNBOOK.md all inherit + cross-reference §1.5.
+- No code, env, migration, or test files modified.
+
+### Phase 14B — Doc sync to reality (in progress)
+
+**Commits:** this commit (C1 nd.md) → C2 CLAUDE.md + AGENTS.md → C3 docs/MASTER_BLUEPRINT_V2.md → C4 docs/BACKEND_API.md + docs/FUTURE_BACKEND_PLAN.md → C5 docs/RUNBOOK.md + docs/DEPLOYMENT_VPS.md → C6 ndmemory.txt full rewrite.
+
+- Brings every canonical doc up to actual VPS commit reality through Phase 14A. The doc was last fully synced at Phase 12D baseline (Doc Sync v2); everything shipped since (Phase 13A-D-1, 14A, plus the previously-undocumented Phase 8F live execute + rollback, Phase 10A-C, 11A-D, 12A-D backlog) is now reflected.
+- Pure documentation. No code, env, migration, or test files modified.
 
 ---
 
