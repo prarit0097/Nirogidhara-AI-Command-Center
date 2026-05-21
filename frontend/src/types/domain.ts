@@ -2254,6 +2254,39 @@ export interface SaasRuntimeLiveGateKillSwitchPostPayload {
   confirmationPhrase: string;
 }
 
+/**
+ * Phase 14E — Sandbox Mode (apps/ai_governance/models.SandboxState
+ * singleton) UI state + action shapes. The legacy Phase 3D fields
+ * (isEnabled, updatedBy, note) stay present; Phase 14E layers
+ * unambiguous fields on top so the Settings page can render without
+ * inverting semantics.
+ */
+export interface AiSandboxModeStatus {
+  // Phase 3D legacy fields (preserved).
+  isEnabled: boolean;
+  note: string;
+  updatedBy: string;
+  // Phase 14E additions.
+  sandboxEnabled?: boolean;
+  statusLabel?: "enabled" | "disabled";
+  reason?: string;
+  updatedAt?: string | null;
+  confirmationPhrases?: {
+    enableSandboxMode: string;
+    disableSandboxMode: string;
+  };
+}
+
+export type AiSandboxModeAction =
+  | "enable_sandbox_mode"
+  | "disable_sandbox_mode";
+
+export interface AiSandboxModePostPayload {
+  action: AiSandboxModeAction;
+  reason: string;
+  confirmationPhrase: string;
+}
+
 export interface SaasRuntimeLiveGatePreview {
   operationType: string;
   providerType: string;

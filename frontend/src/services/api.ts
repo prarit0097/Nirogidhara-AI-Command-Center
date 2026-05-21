@@ -1342,6 +1342,53 @@ export const api = {
         };
       },
     ),
+  // Phase 14E — Sandbox Mode UI wiring. Reuses the Phase 3D endpoint
+  // (apps/ai_governance/views.py::SandboxStatusView) — Phase 14E
+  // extends it with a typed-phrase + reason-gated POST. GET responses
+  // are enriched additively (legacy isEnabled / updatedBy preserved).
+  getAiSandboxModeStatus: () =>
+    safeFetch<import("@/types/domain").AiSandboxModeStatus>(
+      "/ai/sandbox/status/",
+      () => ({
+        isEnabled: false,
+        note: "",
+        updatedBy: "",
+        sandboxEnabled: false,
+        statusLabel: "disabled",
+        reason: "",
+        updatedAt: null,
+        confirmationPhrases: {
+          enableSandboxMode: "ENABLE SANDBOX MODE",
+          disableSandboxMode: "DISABLE SANDBOX MODE",
+        },
+      }),
+    ),
+  postAiSandboxModeAction: (
+    payload: import("@/types/domain").AiSandboxModePostPayload,
+  ) =>
+    safeMutate<import("@/types/domain").AiSandboxModeStatus>(
+      "/ai/sandbox/status/",
+      "POST",
+      payload,
+      // Deterministic optimistic — only used in dev (Phase 13A safeFetch
+      // production fix means prod throws on backend error).
+      () => {
+        const nextEnabled = payload.action === "enable_sandbox_mode";
+        return {
+          isEnabled: nextEnabled,
+          note: payload.reason,
+          updatedBy: "",
+          sandboxEnabled: nextEnabled,
+          statusLabel: nextEnabled ? "enabled" : "disabled",
+          reason: payload.reason,
+          updatedAt: new Date().toISOString(),
+          confirmationPhrases: {
+            enableSandboxMode: "ENABLE SANDBOX MODE",
+            disableSandboxMode: "DISABLE SANDBOX MODE",
+          },
+        };
+      },
+    ),
   previewSaasRuntimeLiveGate: (payload: {
     operationType: string;
     liveRequested?: boolean;

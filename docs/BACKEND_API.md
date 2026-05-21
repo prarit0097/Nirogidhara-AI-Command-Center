@@ -83,7 +83,7 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 | GET | `/api/ai/agent-runs/{id}/` | `AgentRun` (admin/director only) |
 | GET | `/api/ai/agent-runtime/status/` | `{phase, dryRunOnly, agents, lastRuns}` (Phase 3B — admin/director only) |
 | GET | `/api/ai/scheduler/status/` | `{celeryConfigured, celeryEagerMode, redisConfigured, brokerUrl (redacted), timezone, morningSchedule, eveningSchedule, lastDailyBriefingRun, lastCaioSweepRun, aiProvider, primaryModel, fallbacks, lastCostUsd, lastFallbackUsed}` (Phase 3C — admin/director only) |
-| GET | `/api/ai/sandbox/status/` | Sandbox singleton: `{isEnabled, note, updatedBy, updatedAt}` (Phase 3D — admin/director only) |
+| GET | `/api/ai/sandbox/status/` | Sandbox singleton: `{isEnabled, note, updatedBy, updatedAt}` (Phase 3D — admin/director only). Phase 14E adds `sandboxEnabled`, `statusLabel`, `reason`, `confirmationPhrases`. POST verb added Phase 14E for UI-driven typed-phrase toggle. |
 | GET | `/api/ai/prompt-versions/` (`?agent=`) | List prompt versions (Phase 3D — admin/director only) |
 | GET | `/api/ai/prompt-versions/{id}/` | Single prompt version |
 | GET | `/api/ai/budgets/` | Per-agent budgets with current daily/monthly spend decoration |
@@ -602,8 +602,9 @@ All endpoints are admin/director only.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/ai/sandbox/status/` | Read the global sandbox toggle. |
+| GET | `/api/ai/sandbox/status/` | Read the global sandbox toggle. Phase 14E enriches the response additively with `sandboxEnabled`, `statusLabel: "enabled" \| "disabled"`, `reason`, `updatedAt`, and `confirmationPhrases.{enableSandboxMode, disableSandboxMode}`. Legacy `isEnabled` / `updatedBy` / `note` fields preserved for Phase 3D / 4D consumers. |
 | PATCH | `/api/ai/sandbox/status/` | Body: `{ isEnabled, note? }`. Flips the singleton; writes `ai.sandbox.{enabled,disabled}`. While ON, successful AgentRuns NEVER refresh `CeoBriefing` or any other business-state row. |
+| POST | `/api/ai/sandbox/status/` | **Phase 14E** — UI-driven sandbox toggle. Body: `{action: "enable_sandbox_mode" \| "disable_sandbox_mode", reason: string (>= 10 chars), confirmationPhrase: string}`. The `confirmationPhrase` must equal `"ENABLE SANDBOX MODE"` (for enable) or `"DISABLE SANDBOX MODE"` (for disable); mismatch → HTTP 400. Disable still routes through the Phase 4C approval matrix as `ai.sandbox.disable` (`director_override`) — a non-director admin gets refused by the matrix even though `_AdminAndUpAlways` lets them in. Writes a `sandbox.mode.ui_changed` audit row with `phase="14E"` + actor + previous/new state + reason, alongside the legacy `ai.sandbox.{enabled,disabled}` rows. NEVER calls Razorpay / Meta Cloud / Delhivery / Vapi / WhatsApp / OpenAI / NVIDIA; NEVER mutates any business row; NEVER touches `RuntimeKillSwitch` state. |
 | POST | `/api/ai/prompt-versions/` | Body: `{ agent, version, title?, systemPolicy?, rolePrompt?, instructionPayload?, metadata? }`. Creates a `draft` PromptVersion. The Approved Claim Vault block is always appended to every dispatched prompt — a PromptVersion CANNOT skip it. |
 | POST | `/api/ai/prompt-versions/{id}/activate/` | Make this version the active one for its agent. The previous active version is auto-archived. |
 | POST | `/api/ai/prompt-versions/{id}/rollback/` | Body: `{ reason }`. Re-activate this version and mark the prior active as `rolled_back` with the reason recorded. |

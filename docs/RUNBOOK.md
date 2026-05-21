@@ -209,6 +209,81 @@ the audit ledger cleanly distinguishes UI vs CLI provenance.
 
 ---
 
+## Sandbox Mode (Phase 14E)
+
+The Settings page **"Sandbox Mode"** card drives the canonical
+`apps.ai_governance.SandboxState` singleton via the Phase 3D endpoint
+extended in Phase 14E:
+
+```
+POST /api/ai/sandbox/status/
+```
+
+### State semantics (preserved from Phase 3D / 4D / 4E)
+
+| `SandboxState.is_enabled` | UI label | Effective behaviour |
+|---|---|---|
+| `true` | **"Sandbox ON"** | Every successful `AgentRun` is stamped `sandbox_mode=True`; the CEO success path skips `CeoBriefing` refresh; no visible business-state mutation from AI paths. CAIO remains read-only regardless. Claim Vault enforcement still applies — sandbox is an additional layer, not a replacement. |
+| `false` | **"Sandbox OFF"** | AI agents run normally with live business-state behaviour. Phase 4E `discount.up_to_10` / `discount.11_to_20` / other approved handlers can mutate `Order.discount_pct` etc. through the existing service paths. |
+
+### Director playbook — enable Sandbox Mode from the UI
+
+1. Navigate to `/settings`.
+2. The "Sandbox Mode" card shows the current state ("Sandbox ON" or "Sandbox OFF"), the last `reason`, and the operator who last changed it.
+3. Click **"Enable sandbox"** (enabled only while sandbox is off).
+4. Type a **reason** (≥ 10 characters — the audit trail captures it).
+5. Type the exact confirmation phrase **`ENABLE SANDBOX MODE`** (case sensitive, full string match).
+6. Click **"Enable Sandbox Mode"**. Backend writes a `sandbox.mode.ui_changed` audit row + the legacy `ai.sandbox.enabled` row, flips `SandboxState.is_enabled` to `true`. The card refreshes to "Sandbox ON".
+
+### Director playbook — disable Sandbox Mode
+
+1. From `/settings`, the "Sandbox Mode" card shows "Sandbox ON".
+2. Click **"Disable sandbox"** (enabled only while sandbox is on; styled as destructive to convey the "back to live AI" risk).
+3. Type a reason (≥ 10 chars) + the exact phrase **`DISABLE SANDBOX MODE`**.
+4. Click submit. Backend:
+   - Routes the disable through the **Phase 4C approval matrix** as `ai.sandbox.disable` (`director_override` mode). **Non-director admins are refused at this step** even though `_AdminAndUpAlways` let them past the endpoint permission gate.
+   - Director request flows through; the matrix records the override; `set_sandbox_enabled(enabled=False, note=reason)` is called.
+   - Audit ledger gets `sandbox.mode.ui_changed` + `ai.sandbox.disabled`.
+
+### CLI / legacy PATCH (still supported)
+
+The Phase 3D `PATCH /api/ai/sandbox/status/` path stays functional and unchanged:
+
+```bash
+# Enable sandbox via legacy PATCH (admin or director can call this).
+docker compose -f docker-compose.prod.yml exec backend python manage.py shell -c "
+from apps.ai_governance.sandbox import set_sandbox_enabled;
+set_sandbox_enabled(enabled=True, note='Operator enabled sandbox via shell')
+"
+
+# Disable sandbox — same shell helper, but the approval matrix gate is
+# bypassed by the direct shell call (intentional — shell is operator-trusted).
+docker compose -f docker-compose.prod.yml exec backend python manage.py shell -c "
+from apps.ai_governance.sandbox import set_sandbox_enabled;
+set_sandbox_enabled(enabled=False, note='Operator disabled sandbox via shell')
+"
+```
+
+Both shell flows write the legacy `ai.sandbox.enabled` / `ai.sandbox.disabled` audit rows. The Phase 14E `sandbox.mode.ui_changed` row fires ONLY for UI-driven flips through the new POST, so the audit ledger cleanly distinguishes UI vs PATCH vs shell provenance.
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Sandbox card shows "Loading…" indefinitely | Backend GET failed. Check `/api/ai/sandbox/status/` returns 200 + JSON. 403 means user role is not admin/director/superuser. |
+| `confirmation_phrase` 400 error | Phrase must match EXACTLY (case sensitive). `"ENABLE SANDBOX MODE"` or `"DISABLE SANDBOX MODE"` — no abbreviations. |
+| Reason 400 error | Reason must be at least 10 characters. Whitespace-only does not count. |
+| Disable returns 403 with `approvalRequestId` in detail | The Phase 4C matrix refused — operator is admin-but-not-director. Director must run the action, or the operator must request approval via the matrix queue first. |
+| AI agents still showing "real" business behaviour after Enable | Confirm `SandboxState.objects.get(pk=1).is_enabled == True` in shell. Sandbox is checked by each agent runtime — re-deploy may be required if agents started before the flip. |
+
+### Endpoint reference
+
+- `GET /api/ai/sandbox/status/` → admin/director only. Returns canonical state + Phase 14E fields (`sandboxEnabled`, `statusLabel`, `reason`, `updatedAt`, `confirmationPhrases`). Phase 3D `isEnabled` / `updatedBy` / `note` preserved.
+- `POST /api/ai/sandbox/status/` → admin/director only. Body: `{action, reason (>= 10 chars), confirmationPhrase}`. Disable routes through Phase 4C `ai.sandbox.disable` matrix gate (director-only). Audit kinds: `sandbox.mode.ui_changed` (Phase 14E) + the legacy `ai.sandbox.enabled` / `ai.sandbox.disabled` rows.
+- `PATCH /api/ai/sandbox/status/` → Phase 3D legacy path, preserved.
+
+---
+
 ## Prerequisites
 
 - **Node** 18+ (frontend) — verify with `node --version`

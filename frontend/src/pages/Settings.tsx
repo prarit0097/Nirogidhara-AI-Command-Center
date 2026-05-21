@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { api } from "@/services/api";
 import type {
+  AiSandboxModeAction,
+  AiSandboxModeStatus,
   SaasRuntimeLiveGateKillSwitch,
   SaasRuntimeLiveGateKillSwitchAction,
   WhatsAppProviderStatus,
@@ -22,10 +23,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import KillSwitchModal from "@/components/KillSwitchModal";
+import SandboxModeModal from "@/components/SandboxModeModal";
 
 export default function Settings() {
   const [data, setData] = useState<any>(null);
-  const [sandbox, setSandbox] = useState(true);
   const [whatsappStatus, setWhatsappStatus] = useState<
     WhatsAppProviderStatus | null
   >(null);
@@ -35,6 +36,11 @@ export default function Settings() {
   const [killModal, setKillModal] = useState<
     SaasRuntimeLiveGateKillSwitchAction | null
   >(null);
+  // Phase 14E — real backend-wired Sandbox Mode state.
+  const [sandboxState, setSandboxState] =
+    useState<AiSandboxModeStatus | null>(null);
+  const [sandboxModal, setSandboxModal] =
+    useState<AiSandboxModeAction | null>(null);
 
   const refreshKillSwitch = async () => {
     try {
@@ -48,10 +54,22 @@ export default function Settings() {
     }
   };
 
+  const refreshSandbox = async () => {
+    try {
+      const next = await api.getAiSandboxModeStatus();
+      setSandboxState(next);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to load sandbox state";
+      toast.error(`Sandbox Mode: ${message}`);
+    }
+  };
+
   useEffect(() => {
     api.getSettingsMock().then(setData);
     api.getWhatsAppProviderStatus().then(setWhatsappStatus);
     refreshKillSwitch();
+    refreshSandbox();
   }, []);
   if (!data) return <div className="h-96 grid place-items-center text-muted-foreground">Loading…</div>;
 
@@ -117,9 +135,64 @@ export default function Settings() {
             </Button>
           </div>
         </div>
-        <ControlCard icon={Beaker} tone="info" title="Sandbox Mode" desc="Run new prompts/playbooks in shadow mode first.">
-          <Switch checked={sandbox} onCheckedChange={setSandbox} />
-        </ControlCard>
+        {/* Phase 14E — Sandbox Mode card is wired to the real
+            SandboxState singleton through
+            POST /api/ai/sandbox/status/. Enable and Disable both
+            require a typed confirmation phrase + reason captured into
+            the AuditEvent payload. Disable additionally routes
+            through the Phase 4C approval matrix
+            (`ai.sandbox.disable` / director_override) — preserved. */}
+        <div className="surface-card p-5 border-l-4 border-l-info">
+          <div className="flex items-center justify-between mb-2">
+            <Beaker
+              className={`h-5 w-5 ${sandboxState?.isEnabled ? "text-warning" : "text-info"}`}
+            />
+            <StatusPill tone={sandboxState?.isEnabled ? "warning" : "info"}>
+              {sandboxState
+                ? sandboxState.isEnabled
+                  ? "Sandbox ON"
+                  : "Sandbox OFF"
+                : "Loading…"}
+            </StatusPill>
+          </div>
+          <div className="font-display text-lg font-semibold">Sandbox Mode</div>
+          <div className="text-xs text-muted-foreground">
+            {sandboxState
+              ? sandboxState.isEnabled
+                ? "AgentRuns are stamped sandbox_mode=true; CEO success path skips CeoBriefing refresh — no visible business-state mutation from AI."
+                : "AI agents run normally with live business-state behavior. Enable sandbox to shadow-test new prompts/playbooks first."
+              : "Loading current state from backend…"}
+          </div>
+          {sandboxState?.reason && (
+            <div className="mt-3 rounded-lg bg-muted/40 p-2 text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground">Last reason:</span>{" "}
+              {sandboxState.reason}
+              {sandboxState.updatedBy && (
+                <span> · by {sandboxState.updatedBy}</span>
+              )}
+            </div>
+          )}
+          <div className="mt-3 flex gap-2">
+            <Button
+              data-testid="settings-sandbox-enable"
+              variant="default"
+              size="sm"
+              disabled={Boolean(sandboxState?.isEnabled) || !sandboxState}
+              onClick={() => setSandboxModal("enable_sandbox_mode")}
+            >
+              Enable sandbox
+            </Button>
+            <Button
+              data-testid="settings-sandbox-disable"
+              variant="destructive"
+              size="sm"
+              disabled={!sandboxState?.isEnabled || !sandboxState}
+              onClick={() => setSandboxModal("disable_sandbox_mode")}
+            >
+              Disable sandbox
+            </Button>
+          </div>
+        </div>
         <ControlCard icon={RotateCcw} tone="warning" title="Rollback System" desc="Revert to last known-good prompts and pricing rules.">
           <Button variant="outline" size="sm" onClick={() => toast.success("Rolled back to v3.2")}>Rollback</Button>
         </ControlCard>
@@ -138,6 +211,22 @@ export default function Settings() {
               : killSwitchState?.confirmationPhrases?.resumeAiOperations
           }
           onSuccess={(next) => setKillSwitchState(next)}
+        />
+      )}
+      {/* Phase 14E — Sandbox Mode modal. Same UX contract as
+          KillSwitchModal: typed phrase + reason; backend re-validates;
+          on success the sandbox card refreshes with the fresh state. */}
+      {sandboxModal && (
+        <SandboxModeModal
+          open={sandboxModal !== null}
+          onOpenChange={(next) => !next && setSandboxModal(null)}
+          action={sandboxModal}
+          expectedPhrase={
+            sandboxModal === "enable_sandbox_mode"
+              ? sandboxState?.confirmationPhrases?.enableSandboxMode
+              : sandboxState?.confirmationPhrases?.disableSandboxMode
+          }
+          onSuccess={(next) => setSandboxState(next)}
         />
       )}
 

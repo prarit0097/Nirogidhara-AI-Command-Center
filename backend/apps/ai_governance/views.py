@@ -523,18 +523,55 @@ class ApprovalMatrixView(APIView):
 
 
 class SandboxStatusView(APIView):
-    """Phase 3D — read or flip the global sandbox toggle.
+    """Phase 3D / 4C / 4E — read or flip the global sandbox toggle.
 
-    GET returns the singleton state. PATCH flips ``isEnabled`` and writes
-    an ``ai.sandbox.{enabled,disabled}`` audit event. Both paths are
-    admin/director only.
+    GET returns the singleton state plus Phase 14E unambiguous fields
+    (``statusLabel``, ``confirmationPhrases``) layered on top of the
+    Phase 3D serializer shape.
+
+    PATCH (Phase 3D legacy) flips ``isEnabled`` directly and routes
+    disable through the Phase 4C approval matrix. Preserved unchanged
+    for backward compatibility.
+
+    POST (Phase 14E) takes a typed-phrase + reason payload from the
+    Settings UI. Same Phase 4C matrix gate applies on disable; the new
+    audit row ``sandbox.mode.ui_changed`` is written on top of the
+    legacy ``ai.sandbox.{enabled,disabled}`` row that
+    ``set_sandbox_enabled`` already emits.
+
+    All three verbs are admin/director only via ``_AdminAndUpAlways``.
     """
 
     permission_classes = [_AdminAndUpAlways]
 
+    # Phase 14E — unambiguous typed-phrase confirmations per action.
+    _CONFIRMATION_PHRASE_ENABLE = "ENABLE SANDBOX MODE"
+    _CONFIRMATION_PHRASE_DISABLE = "DISABLE SANDBOX MODE"
+    _MIN_REASON_LENGTH = 10
+
+    def _serialize(self, state: SandboxState) -> dict:
+        """Phase 14E — canonical response shape.
+
+        Returns every Phase 3D field for backward compatibility plus
+        the new Phase 14E fields the Settings UI consumes.
+        """
+        base = SandboxStateSerializer(state).data
+        # Phase 14E additions — must not collide with existing keys.
+        base["sandboxEnabled"] = bool(state.is_enabled)
+        base["statusLabel"] = "enabled" if state.is_enabled else "disabled"
+        base["reason"] = state.note or ""
+        base["updatedAt"] = (
+            state.updated_at.isoformat() if state.updated_at else None
+        )
+        base["confirmationPhrases"] = {
+            "enableSandboxMode": self._CONFIRMATION_PHRASE_ENABLE,
+            "disableSandboxMode": self._CONFIRMATION_PHRASE_DISABLE,
+        }
+        return base
+
     def get(self, _request):
         state = sandbox.get_state()
-        return Response(SandboxStateSerializer(state).data)
+        return Response(self._serialize(state))
 
     def patch(self, request):
         payload = SandboxPatchSerializer(data=request.data)
@@ -567,7 +604,136 @@ class SandboxStatusView(APIView):
             note=payload.validated_data.get("note", ""),
             by_user=request.user,
         )
-        return Response(SandboxStateSerializer(state).data)
+        return Response(self._serialize(state))
+
+    def post(self, request):
+        """Phase 14E — UI-driven sandbox toggle.
+
+        Refuses unless: (a) action is ``enable_sandbox_mode`` or
+        ``disable_sandbox_mode``; (b) non-empty ``reason`` (>=10 chars);
+        (c) typed confirmation phrase matches the action exactly.
+        Preserves the Phase 4C approval matrix gate on disable
+        (a non-director admin still gets refused by the matrix even
+        though the endpoint permission lets them in).
+
+        Writes a ``sandbox.mode.ui_changed`` audit row carrying actor +
+        previous/new state + reason. The legacy
+        ``ai.sandbox.{enabled,disabled}`` row that
+        ``set_sandbox_enabled`` writes is preserved.
+        """
+        action = (request.data.get("action") or "").strip()
+        reason = (request.data.get("reason") or "").strip()
+        confirmation = (request.data.get("confirmationPhrase") or "").strip()
+
+        if action == "enable_sandbox_mode":
+            new_enabled = True
+            expected_phrase = self._CONFIRMATION_PHRASE_ENABLE
+            audit_action_label = "enabled"
+        elif action == "disable_sandbox_mode":
+            new_enabled = False
+            expected_phrase = self._CONFIRMATION_PHRASE_DISABLE
+            audit_action_label = "disabled"
+        else:
+            return Response(
+                {
+                    "detail": (
+                        "action must be 'enable_sandbox_mode' or "
+                        "'disable_sandbox_mode'."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(reason) < self._MIN_REASON_LENGTH:
+            return Response(
+                {
+                    "detail": (
+                        f"A non-empty reason of at least "
+                        f"{self._MIN_REASON_LENGTH} characters is required "
+                        f"so the audit trail captures why sandbox mode "
+                        f"changed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if confirmation != expected_phrase:
+            return Response(
+                {
+                    "detail": (
+                        "Confirmation phrase did not match. Type "
+                        f"'{expected_phrase}' exactly to proceed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        before_state = sandbox.get_state()
+        previous_enabled = bool(before_state.is_enabled)
+
+        # Phase 4C preservation — disable still routes through the
+        # approval matrix as `ai.sandbox.disable` (director_override).
+        # A non-director admin reaching this endpoint will still be
+        # refused by the matrix even though _AdminAndUpAlways let them
+        # past the permission gate.
+        if not new_enabled:
+            evaluation = approval_engine.enforce_or_queue(
+                action="ai.sandbox.disable",
+                payload={
+                    "director_override": True,
+                    "override_reason": reason,
+                },
+                actor_role=getattr(request.user, "role", "") or "",
+                by_user=request.user,
+            )
+            if not evaluation.allowed:
+                from rest_framework.exceptions import PermissionDenied as _PD
+
+                raise _PD(detail={
+                    "detail": evaluation.reason,
+                    "approvalRequestId": evaluation.approval_request_id,
+                    "mode": evaluation.mode,
+                })
+
+        # Re-use the existing service helper — keeps the legacy
+        # ``ai.sandbox.{enabled,disabled}`` audit row firing exactly as
+        # Phase 3D/4D consumers expect.
+        state = sandbox.set_sandbox_enabled(
+            enabled=new_enabled,
+            note=reason,
+            by_user=request.user,
+        )
+
+        actor_label = getattr(request.user, "username", "") or getattr(
+            request.user, "email", ""
+        )
+        # Phase 14E — dedicated UI audit kind so operators can separate
+        # UI-driven flips from PATCH-driven or matrix-driven flips at
+        # audit-review time.
+        write_event(
+            kind="sandbox.mode.ui_changed",
+            text=(
+                f"Sandbox Mode {audit_action_label} via UI by "
+                f"{actor_label or 'admin'}"
+            ),
+            tone=(
+                AuditEvent.Tone.WARNING
+                if new_enabled
+                else AuditEvent.Tone.INFO
+            ),
+            user=request.user,
+            payload={
+                "phase": "14E",
+                "source": "ui",
+                "action": action,
+                "actor": actor_label,
+                "previous_enabled": previous_enabled,
+                "new_enabled": bool(state.is_enabled),
+                "reason": reason[:280],
+            },
+        )
+
+        return Response(self._serialize(state))
 
 
 # ----- Phase 4C — Approval Matrix Middleware endpoints -----
