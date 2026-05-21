@@ -120,6 +120,95 @@ sections.
 
 ---
 
+## AI Kill Switch (Phase 14D)
+
+The Topbar red **"AI Kill Switch"** button and the Settings page
+**"AI Kill Switch"** card both drive the canonical
+`apps.saas.RuntimeKillSwitch` global row via the Phase 6H endpoint
+extended in Phase 14D:
+
+```
+POST /api/v1/saas/runtime-live-gate/kill-switch/
+```
+
+### State semantics (preserved from Phase 6H)
+
+| `RuntimeKillSwitch.enabled` (global row) | UI label | Effective behaviour |
+|---|---|---|
+| `true` (Phase 6H default seed) | **"AI Paused"** | `is_runtime_kill_switch_active()` returns `True`. Daily Celery sweeps for Phase 9A-F, 11A-D, 12B/C all refuse with `*.daily_run.blocked` audit rows. |
+| `false` | **"AI Running"** | Daily Celery sweeps run normally. Phase 7+/12A execute gates may proceed (subject to all other guards). |
+
+The Phase 7+/12A execute gates' inverse refusal — they refuse when
+`enabled=False` because their `_kill_switch_state` reader treats a
+disarmed kill switch as "safety net missing" — is unchanged. Both
+readings continue to compose safely; flipping the switch has
+asymmetric effects across the stack by design.
+
+### Director playbook — activate emergency stop from the UI
+
+1. Click the red **"AI Kill Switch"** button in the Topbar (visible only
+   when AI is running). The button is intentionally hidden when AI is
+   already paused — Resume happens only from `/settings`.
+2. The confirmation modal opens. Type a **reason** (≥ 10 characters; the
+   audit trail captures it).
+3. Type the exact confirmation phrase **`ACTIVATE KILL SWITCH`** (case
+   sensitive, full string match).
+4. Click **"Engage Kill Switch"**. Backend writes a
+   `runtime.kill_switch.ui_changed` audit row + the legacy
+   `runtime.kill_switch.enabled` row, flips `RuntimeKillSwitch.enabled`
+   to `true`. The Topbar swaps to the "AI Paused" indicator.
+
+### Director playbook — resume AI operations
+
+1. Navigate to `/settings`.
+2. The "AI Kill Switch" card shows the current state, the last reason,
+   and the operator who last changed it.
+3. Click **"Resume AI operations"** (enabled only while AI is paused).
+4. Type a reason (≥ 10 chars) + the exact phrase
+   **`RESUME AI OPERATIONS`**.
+5. Click submit. Backend flips the row to `enabled=false` and writes
+   the matching audit rows.
+
+### CLI equivalents (still supported)
+
+The Phase 6H CLI helpers remain functional and unchanged:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend \
+    python manage.py enable_runtime_kill_switch \
+    --scope global \
+    --reason "Director activated kill switch via CLI" \
+    --json
+
+docker compose -f docker-compose.prod.yml exec backend \
+    python manage.py disable_runtime_kill_switch \
+    --scope global \
+    --reason "Director resumed AI operations via CLI" \
+    --json
+```
+
+Both CLI flows write the legacy `runtime.kill_switch.enabled` /
+`runtime.kill_switch.disabled` audit rows. The Phase 14D
+`runtime.kill_switch.ui_changed` row fires ONLY for UI-driven flips, so
+the audit ledger cleanly distinguishes UI vs CLI provenance.
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Topbar shows neither "AI Kill Switch" button nor "AI Paused" indicator | Backend GET failed. Check `/api/v1/saas/runtime-live-gate/kill-switch/` returns 200 + JSON. 403 means user role is not admin/director/superuser (tightened in Phase 14D). |
+| `confirmation_phrase` 400 error | Phrase must match EXACTLY (case sensitive). `"ACTIVATE KILL SWITCH"` or `"RESUME AI OPERATIONS"` — no shortened forms. |
+| Reason 400 error | Reason must be at least 10 characters. Whitespace-only does not count. |
+| Action 400 error | Only `activate_emergency_stop` and `resume_ai_operations` are accepted. |
+| Daily Celery sweeps still showing `blocked` after Resume | Confirm `RuntimeKillSwitch.enabled=false` for the `scope=global, organization=None, provider_type="", operation_type=""` row. The kill switch is keyed on the 4-tuple. |
+
+### Endpoint reference
+
+- `GET /api/v1/saas/runtime-live-gate/kill-switch/` → admin/director/superuser only. Returns canonical state + Phase 14D fields (`runtimeKillSwitchEnabled`, `aiExecutionBlocked`, `statusLabel`, `updatedAt`, `updatedBy`, `confirmationPhrases`).
+- `POST /api/v1/saas/runtime-live-gate/kill-switch/` → admin/director/superuser only. Body: `{action, reason (>= 10 chars), confirmationPhrase}`. Audit kinds: `runtime.kill_switch.ui_changed` (Phase 14D) + the legacy `runtime.kill_switch.enabled` / `runtime.kill_switch.disabled` rows.
+
+---
+
 ## Prerequisites
 
 - **Node** 18+ (frontend) — verify with `node --version`

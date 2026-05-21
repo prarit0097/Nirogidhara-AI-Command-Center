@@ -33,8 +33,12 @@ from .live_gate import (
     evaluate_live_execution_gate,
     get_or_create_default_runtime_kill_switch,
     reject_live_execution_request,
+    set_runtime_kill_switch,
     summarize_live_gate_readiness,
 )
+from .models import RuntimeKillSwitch
+from apps.audit.models import AuditEvent
+from apps.audit.signals import write_event
 from .live_gate_policy import list_live_gate_policies
 from .live_gate_simulation import (
     approve_single_internal_live_gate_simulation,
@@ -661,34 +665,185 @@ class RuntimeLiveGatePoliciesView(APIView):
 
 
 class RuntimeLiveGateKillSwitchView(APIView):
-    permission_classes = [IsAuthenticated]
+    """``GET / POST /api/v1/saas/runtime-live-gate/kill-switch/``.
+
+    Phase 6H ships GET-only status. Phase 14D extends with a typed-phrase
+    + reason-gated POST so the Topbar / Settings UI can drive the
+    canonical ``RuntimeKillSwitch.enabled`` field without operators
+    needing SSH access to flip the CLI commands.
+
+    Permission tightened to admin / director / superuser only (Phase 14D)
+    — the prior ``IsAuthenticated`` allowed any logged-in user to read
+    the kill switch state, which the Director ruled out as too broad.
+    """
+
+    # Phase 14D — tightened from IsAuthenticated to AdminSaasPermission.
+    permission_classes = [AdminSaasPermission]
+
+    # Phase 14D — unambiguous typed-phrase confirmation per action.
+    _CONFIRMATION_PHRASE_ACTIVATE = "ACTIVATE KILL SWITCH"
+    _CONFIRMATION_PHRASE_RESUME = "RESUME AI OPERATIONS"
+
+    def _serialize(self, switch) -> dict[str, Any]:
+        """Return the canonical Phase 14D kill-switch shape.
+
+        The ``enabled`` field follows the model docstring exactly —
+        ``True`` means the switch IS blocking live external side
+        effects (i.e. AI paused). The Phase 14D additions
+        (``aiExecutionBlocked``, ``statusLabel``) restate the same
+        truth in user-facing language so frontend consumers do not
+        invert the semantic.
+        """
+        ai_paused = bool(switch.enabled)
+        updated_by_username = ""
+        if getattr(switch, "changed_by_id", None):
+            try:
+                updated_by_username = getattr(
+                    switch.changed_by, "username", ""
+                ) or getattr(switch.changed_by, "email", "")
+            except Exception:  # pragma: no cover - defensive only
+                updated_by_username = ""
+        return {
+            "scope": switch.scope,
+            "enabled": switch.enabled,
+            "runtimeKillSwitchEnabled": switch.enabled,
+            "aiExecutionBlocked": ai_paused,
+            "statusLabel": "paused" if ai_paused else "running",
+            "reason": switch.reason,
+            "updatedAt": (
+                switch.updated_at.isoformat() if switch.updated_at else None
+            ),
+            "updatedBy": updated_by_username,
+            "dryRun": True,
+            "liveExecutionAllowed": False,
+            "externalCallWillBeMade": False,
+            "killSwitchActive": switch.enabled,
+            "approvalStatus": "",
+            "gateDecision": (
+                "blocked_by_kill_switch"
+                if ai_paused
+                else "kill_switch_disabled"
+            ),
+            "blockers": ["global_runtime_kill_switch_enabled"]
+            if ai_paused
+            else [],
+            "warnings": [
+                "Phase 6H does not execute external calls even when disabled."
+            ],
+            "nextAction": "keep_live_execution_blocked",
+            "confirmationPhrases": {
+                "activateEmergencyStop": self._CONFIRMATION_PHRASE_ACTIVATE,
+                "resumeAiOperations": self._CONFIRMATION_PHRASE_RESUME,
+            },
+        }
 
     def get(self, _request):
         switch = get_or_create_default_runtime_kill_switch()
-        return Response(
-            {
-                "scope": switch.scope,
-                "enabled": switch.enabled,
-                "reason": switch.reason,
-                "dryRun": True,
-                "liveExecutionAllowed": False,
-                "externalCallWillBeMade": False,
-                "killSwitchActive": switch.enabled,
-                "approvalStatus": "",
-                "gateDecision": (
-                    "blocked_by_kill_switch"
-                    if switch.enabled
-                    else "kill_switch_disabled"
-                ),
-                "blockers": ["global_runtime_kill_switch_enabled"]
-                if switch.enabled
-                else [],
-                "warnings": [
-                    "Phase 6H does not execute external calls even when disabled."
-                ],
-                "nextAction": "keep_live_execution_blocked",
-            }
+        return Response(self._serialize(switch))
+
+    def post(self, request):
+        """Phase 14D — UI-driven kill switch toggle.
+
+        Refuses unless: (a) action is ``activate_emergency_stop`` or
+        ``resume_ai_operations``; (b) non-empty ``reason`` (>=10 chars);
+        (c) typed confirmation phrase matches the action exactly.
+        Writes a ``runtime.kill_switch.ui_changed`` audit row carrying
+        the actor + previous/new state + reason. Body never contains
+        secrets / phones / tokens. Preserves existing CLI commands and
+        the legacy ``runtime.kill_switch.enabled`` / ``.disabled`` audit
+        rows emitted by ``set_runtime_kill_switch``.
+        """
+        action = (request.data.get("action") or "").strip()
+        reason = (request.data.get("reason") or "").strip()
+        confirmation = (request.data.get("confirmationPhrase") or "").strip()
+
+        if action == "activate_emergency_stop":
+            new_enabled = True
+            expected_phrase = self._CONFIRMATION_PHRASE_ACTIVATE
+            audit_action_label = "activated"
+        elif action == "resume_ai_operations":
+            new_enabled = False
+            expected_phrase = self._CONFIRMATION_PHRASE_RESUME
+            audit_action_label = "resumed"
+        else:
+            return Response(
+                {
+                    "detail": (
+                        "action must be 'activate_emergency_stop' or "
+                        "'resume_ai_operations'."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(reason) < 10:
+            return Response(
+                {
+                    "detail": (
+                        "A non-empty reason of at least 10 characters is "
+                        "required so the audit trail captures why the "
+                        "kill switch state changed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if confirmation != expected_phrase:
+            return Response(
+                {
+                    "detail": (
+                        "Confirmation phrase did not match. Type "
+                        f"'{expected_phrase}' exactly to proceed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        before_switch = get_or_create_default_runtime_kill_switch()
+        previous_enabled = bool(before_switch.enabled)
+        previous_ai_paused = previous_enabled
+
+        # Re-use the existing service helper so the legacy audit row
+        # (`runtime.kill_switch.enabled` / `.disabled`) still fires.
+        switch = set_runtime_kill_switch(
+            enabled=new_enabled,
+            scope=RuntimeKillSwitch.Scope.GLOBAL,
+            reason=reason,
+            user=request.user,
         )
+
+        actor_label = getattr(request.user, "username", "") or getattr(
+            request.user, "email", ""
+        )
+        # Phase 14D — dedicated UI audit kind so operators can separate
+        # UI-driven flips from CLI-driven flips at audit-review time.
+        write_event(
+            kind="runtime.kill_switch.ui_changed",
+            text=(
+                f"AI Kill Switch {audit_action_label} via UI by "
+                f"{actor_label or 'admin'}"
+            ),
+            tone=(
+                AuditEvent.Tone.WARNING
+                if new_enabled
+                else AuditEvent.Tone.SUCCESS
+            ),
+            user=request.user,
+            payload={
+                "phase": "14D",
+                "source": "ui",
+                "action": action,
+                "actor": actor_label,
+                "previous_enabled": previous_enabled,
+                "new_enabled": bool(switch.enabled),
+                "previous_ai_execution_blocked": previous_ai_paused,
+                "new_ai_execution_blocked": bool(switch.enabled),
+                "reason": reason[:280],
+                "scope": switch.scope,
+            },
+        )
+
+        return Response(self._serialize(switch))
 
 
 class RuntimeLiveGatePreviewView(APIView):

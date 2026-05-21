@@ -2231,6 +2231,27 @@ export interface SaasRuntimeLiveGateKillSwitch {
   blockers: string[];
   warnings: string[];
   nextAction: string;
+  /** Phase 14D — unambiguous user-facing fields. */
+  runtimeKillSwitchEnabled?: boolean;
+  aiExecutionBlocked?: boolean;
+  statusLabel?: "running" | "paused";
+  updatedAt?: string | null;
+  updatedBy?: string;
+  confirmationPhrases?: {
+    activateEmergencyStop: string;
+    resumeAiOperations: string;
+  };
+}
+
+/** Phase 14D — kill-switch POST body shape. */
+export type SaasRuntimeLiveGateKillSwitchAction =
+  | "activate_emergency_stop"
+  | "resume_ai_operations";
+
+export interface SaasRuntimeLiveGateKillSwitchPostPayload {
+  action: SaasRuntimeLiveGateKillSwitchAction;
+  reason: string;
+  confirmationPhrase: string;
 }
 
 export interface SaasRuntimeLiveGatePreview {

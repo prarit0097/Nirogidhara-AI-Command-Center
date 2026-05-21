@@ -5,7 +5,11 @@ import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/services/api";
-import type { WhatsAppProviderStatus } from "@/types/domain";
+import type {
+  SaasRuntimeLiveGateKillSwitch,
+  SaasRuntimeLiveGateKillSwitchAction,
+  WhatsAppProviderStatus,
+} from "@/types/domain";
 import {
   Boxes,
   KeyRound,
@@ -17,20 +21,50 @@ import {
   Beaker,
 } from "lucide-react";
 import { toast } from "sonner";
+import KillSwitchModal from "@/components/KillSwitchModal";
 
 export default function Settings() {
   const [data, setData] = useState<any>(null);
-  const [killSwitch, setKillSwitch] = useState(false);
   const [sandbox, setSandbox] = useState(true);
   const [whatsappStatus, setWhatsappStatus] = useState<
     WhatsAppProviderStatus | null
   >(null);
+  // Phase 14D — real backend-wired AI Kill Switch state.
+  const [killSwitchState, setKillSwitchState] =
+    useState<SaasRuntimeLiveGateKillSwitch | null>(null);
+  const [killModal, setKillModal] = useState<
+    SaasRuntimeLiveGateKillSwitchAction | null
+  >(null);
+
+  const refreshKillSwitch = async () => {
+    try {
+      const next = await api.getSaasRuntimeLiveGateKillSwitch();
+      setKillSwitchState(next);
+    } catch (err) {
+      // Surface failure as a toast but do not crash the page.
+      const message =
+        err instanceof Error ? err.message : "Failed to load kill switch state";
+      toast.error(`AI Kill Switch: ${message}`);
+    }
+  };
 
   useEffect(() => {
     api.getSettingsMock().then(setData);
     api.getWhatsAppProviderStatus().then(setWhatsappStatus);
+    refreshKillSwitch();
   }, []);
   if (!data) return <div className="h-96 grid place-items-center text-muted-foreground">Loading…</div>;
+
+  const aiPaused = Boolean(
+    killSwitchState?.aiExecutionBlocked ?? killSwitchState?.enabled ?? false,
+  );
+  const statusLabel = aiPaused ? "AI Paused" : "AI Running";
+  const statusTone = aiPaused ? "warning" : "success";
+  const statusDescription = killSwitchState
+    ? aiPaused
+      ? "Daily agent sweeps and Phase 7+/12A execute gates are blocked. Use Resume only after the incident is resolved."
+      : "Daily agent sweeps are allowed. Activate emergency stop to pause all automated AI agents."
+    : "Loading current state from backend…";
 
   return (
     <>
@@ -39,9 +73,50 @@ export default function Settings() {
       />
 
       <div className="grid lg:grid-cols-3 gap-4 mb-6">
-        <ControlCard icon={Power} tone="danger" title="AI Kill Switch" desc="Immediately pause all AI agents.">
-          <Switch checked={killSwitch} onCheckedChange={(v) => { setKillSwitch(v); toast[v ? "error" : "success"](v ? "Kill Switch engaged" : "AI agents resumed"); }} />
-        </ControlCard>
+        {/* Phase 14D — AI Kill Switch card is wired to the real
+            RuntimeKillSwitch row through
+            POST /api/v1/saas/runtime-live-gate/kill-switch/. Activate
+            and Resume both require a typed confirmation phrase + reason
+            captured into the AuditEvent payload. */}
+        <div className="surface-card p-5 border-l-4 border-l-destructive">
+          <div className="flex items-center justify-between mb-2">
+            <Power
+              className={`h-5 w-5 ${aiPaused ? "text-warning" : "text-destructive"}`}
+            />
+            <StatusPill tone={statusTone}>{statusLabel}</StatusPill>
+          </div>
+          <div className="font-display text-lg font-semibold">AI Kill Switch</div>
+          <div className="text-xs text-muted-foreground">{statusDescription}</div>
+          {killSwitchState?.reason && (
+            <div className="mt-3 rounded-lg bg-muted/40 p-2 text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground">Last reason:</span>{" "}
+              {killSwitchState.reason}
+              {killSwitchState.updatedBy && (
+                <span> · by {killSwitchState.updatedBy}</span>
+              )}
+            </div>
+          )}
+          <div className="mt-3 flex gap-2">
+            <Button
+              data-testid="settings-kill-switch-activate"
+              variant="destructive"
+              size="sm"
+              disabled={aiPaused || !killSwitchState}
+              onClick={() => setKillModal("activate_emergency_stop")}
+            >
+              Activate emergency stop
+            </Button>
+            <Button
+              data-testid="settings-kill-switch-resume"
+              variant="outline"
+              size="sm"
+              disabled={!aiPaused || !killSwitchState}
+              onClick={() => setKillModal("resume_ai_operations")}
+            >
+              Resume AI operations
+            </Button>
+          </div>
+        </div>
         <ControlCard icon={Beaker} tone="info" title="Sandbox Mode" desc="Run new prompts/playbooks in shadow mode first.">
           <Switch checked={sandbox} onCheckedChange={setSandbox} />
         </ControlCard>
@@ -49,6 +124,22 @@ export default function Settings() {
           <Button variant="outline" size="sm" onClick={() => toast.success("Rolled back to v3.2")}>Rollback</Button>
         </ControlCard>
       </div>
+      {/* Phase 14D — single shared KillSwitchModal handles both
+          activate and resume from the Settings card. The Topbar uses
+          its own instance for emergency-stop only. */}
+      {killModal && (
+        <KillSwitchModal
+          open={killModal !== null}
+          onOpenChange={(next) => !next && setKillModal(null)}
+          action={killModal}
+          expectedPhrase={
+            killModal === "activate_emergency_stop"
+              ? killSwitchState?.confirmationPhrases?.activateEmergencyStop
+              : killSwitchState?.confirmationPhrases?.resumeAiOperations
+          }
+          onSuccess={(next) => setKillSwitchState(next)}
+        />
+      )}
 
       <div className="surface-card overflow-hidden mb-6">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">

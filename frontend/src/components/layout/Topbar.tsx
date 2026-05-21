@@ -1,15 +1,42 @@
 import { Bell, Command, LogOut, Menu, Power, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { OrgBadge } from "./OrgBadge";
+import { api } from "@/services/api";
+import type { SaasRuntimeLiveGateKillSwitch } from "@/types/domain";
+import KillSwitchModal from "@/components/KillSwitchModal";
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
+  // Phase 14D — Topbar AI Kill Switch is wired to the real backend
+  // RuntimeKillSwitch state. The Topbar button is emergency-stop ONLY:
+  // it opens the activate_emergency_stop modal. Resume happens on
+  // /settings (intentionally a heavier surface so resume isn't a
+  // one-click anywhere on the chrome).
   const [killOpen, setKillOpen] = useState(false);
+  const [state, setState] = useState<SaasRuntimeLiveGateKillSwitch | null>(
+    null,
+  );
+
+  const refresh = async () => {
+    try {
+      const next = await api.getSaasRuntimeLiveGateKillSwitch();
+      setState(next);
+    } catch (err) {
+      // Phase 14D — surface load failure quietly; the Topbar should
+      // not white-screen if the backend is briefly unreachable.
+      // Settings page shows the canonical state on retry.
+      console.error("[Topbar] kill-switch load failed:", err);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const aiPaused = Boolean(
+    state?.aiExecutionBlocked ?? state?.enabled ?? false,
+  );
 
   return (
     <header className="sticky top-0 z-30 h-[68px] bg-background/75 backdrop-blur-xl border-b border-border/60 supports-[backdrop-filter]:bg-background/60">
@@ -64,37 +91,43 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-background animate-pulse" />
         </button>
 
-        {/* Kill switch */}
-        <Dialog open={killOpen} onOpenChange={setKillOpen}>
-          <DialogTrigger asChild>
-            <Button variant="destructive" size="sm" className="gap-1.5 h-9 rounded-lg shadow-soft hover:shadow-elevated transition-shadow">
-              <Power className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline font-medium">AI Kill Switch</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="font-display text-2xl">Activate AI Kill Switch?</DialogTitle>
-              <DialogDescription>
-                This will <strong>immediately pause all AI agents</strong> across calling, ads,
-                pricing, RTO rescue and creative generation. Human operators will continue. Use only
-                during a critical incident or compliance issue.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-              All in-flight AI calls will be safely handed off to human callers.
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setKillOpen(false)}>Cancel</Button>
-              <Button
-                variant="destructive"
-                onClick={() => { setKillOpen(false); toast.error("AI Kill Switch ENGAGED — all AI agents paused (mock)."); }}
-              >
-                Engage Kill Switch
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Phase 14D — AI Kill Switch (live, backend-wired).
+            Button is emergency-stop only. While AI is already paused
+            the button stays visible but shows the paused state — to
+            resume, the operator goes to /settings (intentional friction
+            so resume is never a one-click anywhere in the chrome). */}
+        {aiPaused ? (
+          <span
+            data-testid="topbar-kill-switch-paused"
+            title="AI is paused. Resume from Settings."
+            className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-warning/40 bg-warning/10 text-warning text-[12px] font-semibold"
+          >
+            <Power className="h-3.5 w-3.5" />
+            AI Paused
+          </span>
+        ) : (
+          <Button
+            data-testid="topbar-kill-switch-button"
+            variant="destructive"
+            size="sm"
+            className="gap-1.5 h-9 rounded-lg shadow-soft hover:shadow-elevated transition-shadow"
+            onClick={() => setKillOpen(true)}
+            disabled={!state}
+            aria-label="Open AI Kill Switch confirmation"
+          >
+            <Power className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline font-medium">AI Kill Switch</span>
+          </Button>
+        )}
+        <KillSwitchModal
+          open={killOpen}
+          onOpenChange={setKillOpen}
+          action="activate_emergency_stop"
+          expectedPhrase={
+            state?.confirmationPhrases?.activateEmergencyStop
+          }
+          onSuccess={(next) => setState(next)}
+        />
 
         {/* User */}
         <div className="flex items-center gap-2.5 pl-3 border-l border-border ml-1">

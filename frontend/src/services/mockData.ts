@@ -1909,10 +1909,21 @@ export const SAAS_RUNTIME_LIVE_GATE_POLICIES: Record<string, unknown> = {
   externalCallWillBeMade: false,
 };
 
+// Phase 14D — fixture aligned with the canonical backend shape returned
+// by RuntimeLiveGateKillSwitchView (apps/saas/views.py). enabled=true
+// means the kill switch IS active (AI paused), matching the production
+// default seeded by Phase 6H. Phase 14D additions:
+// runtimeKillSwitchEnabled, aiExecutionBlocked, statusLabel,
+// updatedAt, updatedBy, confirmationPhrases.
 export const SAAS_RUNTIME_LIVE_GATE_KILL_SWITCH: Record<string, unknown> = {
   scope: "global",
   enabled: true,
+  runtimeKillSwitchEnabled: true,
+  aiExecutionBlocked: true,
+  statusLabel: "paused",
   reason: "Phase 6H default global live execution block.",
+  updatedAt: null,
+  updatedBy: "",
   dryRun: true,
   liveExecutionAllowed: false,
   externalCallWillBeMade: false,
@@ -1922,6 +1933,10 @@ export const SAAS_RUNTIME_LIVE_GATE_KILL_SWITCH: Record<string, unknown> = {
   blockers: ["global_runtime_kill_switch_enabled"],
   warnings: ["Phase 6H does not execute external calls even when disabled."],
   nextAction: "keep_live_execution_blocked",
+  confirmationPhrases: {
+    activateEmergencyStop: "ACTIVATE KILL SWITCH",
+    resumeAiOperations: "RESUME AI OPERATIONS",
+  },
 };
 
 const _LIVE_GATE_REQUEST = {

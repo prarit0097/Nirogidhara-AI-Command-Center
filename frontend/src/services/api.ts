@@ -1314,6 +1314,34 @@ export const api = {
       () =>
         M.SAAS_RUNTIME_LIVE_GATE_KILL_SWITCH as SaasRuntimeLiveGateKillSwitch,
     ),
+  // Phase 14D — typed-phrase + reason-gated UI toggle for the
+  // RuntimeKillSwitch global row. Refer to the docstring on
+  // RuntimeLiveGateKillSwitchView in apps/saas/views.py for the full
+  // validation contract.
+  postSaasRuntimeLiveGateKillSwitch: (
+    payload: import("@/types/domain").SaasRuntimeLiveGateKillSwitchPostPayload,
+  ) =>
+    safeMutate<SaasRuntimeLiveGateKillSwitch>(
+      "/v1/saas/runtime-live-gate/kill-switch/",
+      "POST",
+      payload,
+      // Deterministic optimistic — only used in dev (Phase 13A safeFetch
+      // production fix means prod throws on backend error rather than
+      // silently returning the mock).
+      () => {
+        const previous = M.SAAS_RUNTIME_LIVE_GATE_KILL_SWITCH as SaasRuntimeLiveGateKillSwitch;
+        const nextEnabled = payload.action === "activate_emergency_stop";
+        return {
+          ...previous,
+          enabled: nextEnabled,
+          runtimeKillSwitchEnabled: nextEnabled,
+          aiExecutionBlocked: nextEnabled,
+          statusLabel: nextEnabled ? "paused" : "running",
+          killSwitchActive: nextEnabled,
+          reason: payload.reason,
+        };
+      },
+    ),
   previewSaasRuntimeLiveGate: (payload: {
     operationType: string;
     liveRequested?: boolean;
