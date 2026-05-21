@@ -211,6 +211,39 @@ def test_settings(client: APIClient) -> None:
     assert "killSwitch" in s
 
 
+def test_settings_approval_matrix_returns_action_and_approval_fields(
+    client: APIClient,
+) -> None:
+    """Phase 14C contract test.
+
+    Locks the ``{action, approval}`` shape so ``frontend/src/pages/Settings.tsx``
+    render code can rely on it. If a future serializer renames ``approval``
+    back to ``policy`` (or anything else) the suite fails before the bug
+    ships and white-screens the /settings page again.
+
+    Backstory: prior to Phase 14C, the frontend read ``a.policy`` and the
+    backend returned ``a.approval`` — undefined.includes(...) crashed the
+    React tree on every production load of /settings.
+    """
+    res = client.get("/api/settings/")
+    assert res.status_code == 200
+    payload = res.json()
+    assert "approvalMatrix" in payload
+    rows = payload["approvalMatrix"]
+    assert isinstance(rows, list)
+    assert len(rows) > 0, "approvalMatrix must not be empty"
+    for row in rows:
+        assert "action" in row, f"row missing 'action' key: {row}"
+        assert "approval" in row, f"row missing 'approval' key: {row}"
+        assert isinstance(row["action"], str)
+        assert isinstance(row["approval"], str)
+        # Phase 14C — stale field name 'policy' is intentionally absent.
+        assert "policy" not in row, (
+            f"row has stale 'policy' key (renamed to 'approval' "
+            f"in Phase 14C): {row}"
+        )
+
+
 def test_jwt_endpoints_exist(client: APIClient) -> None:
     # Just confirm the routes are registered; real auth flow lives in Phase 2.
     res = client.post("/api/auth/token/", {})

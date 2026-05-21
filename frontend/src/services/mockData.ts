@@ -623,17 +623,22 @@ export const STATE_RTO = [
 ];
 
 /* ---------------- Settings ---------------- */
+// Phase 14C — fixture rows now use the canonical {action, approval}
+// shape that backend SettingsView (apps/accounts/views.py:19-51) returns.
+// The legacy {action, policy, approver} shape diverged from prod and
+// caused the /settings page to white-screen once Phase 13A's safeFetch
+// production fix removed the silent mock fallback. Keeping dev + prod
+// in lockstep prevents the next field drift from going unnoticed.
 export const APPROVAL_MATRIX = [
-  { action: "Lead call", policy: "Auto", approver: "—" },
-  { action: "Payment link send", policy: "Auto", approver: "—" },
-  { action: "Discount up to 10%", policy: "Auto within rule", approver: "—" },
-  { action: "Discount 11–20%", policy: "Auto within rule", approver: "Calling TL" },
-  { action: "Discount 21–30%", policy: "Approval required", approver: "CEO AI" },
-  { action: "New medical claim", policy: "Approval required", approver: "Doctor + Compliance" },
-  { action: "New ad creative", policy: "Approval required", approver: "CEO AI / Prarit" },
-  { action: "Ad budget increase", policy: "Approval required", approver: "Prarit" },
-  { action: "Refund", policy: "Approval required", approver: "Human / Prarit" },
-  { action: "Emergency medical case", policy: "Hard handoff", approver: "Doctor / Human" },
+  { action: "Lead call", approval: "Auto" },
+  { action: "Payment link send", approval: "Auto" },
+  { action: "10% discount", approval: "Auto within rules" },
+  { action: "30% discount", approval: "CEO AI approval or rule-based limit" },
+  { action: "New medical claim", approval: "Doctor + Compliance approval" },
+  { action: "New ad creative", approval: "CEO/Prarit initially" },
+  { action: "Ad budget increase", approval: "Prarit approval" },
+  { action: "Refund", approval: "Human/Prarit approval" },
+  { action: "Emergency case", approval: "Human/doctor handoff" },
 ];
 
 export const INTEGRATIONS = [

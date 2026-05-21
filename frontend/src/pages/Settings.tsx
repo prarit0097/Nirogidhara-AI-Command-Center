@@ -60,16 +60,34 @@ export default function Settings() {
             <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left font-medium px-6 py-3">Action</th>
-                <th className="text-left font-medium py-3">Policy</th>
-                <th className="text-left font-medium px-6 py-3">Approver</th>
+                <th className="text-left font-medium py-3">Approval</th>
               </tr>
             </thead>
             <tbody>
-              {data.approvalMatrix.map((a: any) => (
+              {/* Phase 14C — read backend's {action, approval} shape (not the
+                  legacy mock {action, policy, approver}). Defensive
+                  short-circuit on empty/missing approval so a future field
+                  rename never crashes the entire React tree again. */}
+              {data.approvalMatrix.map((a: { action: string; approval?: string }) => (
                 <tr key={a.action} className="border-t border-border/60 hover:bg-muted/20">
                   <td className="px-6 py-3 font-medium">{a.action}</td>
-                  <td className="py-3"><StatusPill tone={a.policy === "Auto" ? "success" : a.policy.includes("Hard") ? "danger" : a.policy.includes("Approval") ? "warning" : "info"}>{a.policy}</StatusPill></td>
-                  <td className="px-6 py-3">{a.approver}</td>
+                  <td className="py-3">
+                    <StatusPill
+                      tone={
+                        !a.approval
+                          ? "info"
+                          : a.approval === "Auto"
+                            ? "success"
+                            : /hard|handoff|emergency|director|critical/i.test(a.approval)
+                              ? "danger"
+                              : /approval|review|manager/i.test(a.approval)
+                                ? "warning"
+                                : "info"
+                      }
+                    >
+                      {a.approval || "—"}
+                    </StatusPill>
+                  </td>
                 </tr>
               ))}
             </tbody>
