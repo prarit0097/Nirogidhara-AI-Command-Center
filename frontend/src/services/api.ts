@@ -2061,6 +2061,27 @@ export const api = {
         M.CEO_ORCHESTRATION_LATEST as CeoOrchestrationLatestResponse,
     ),
 
+  // Phase 15B — slim allow-list endpoint for the Sidebar briefing
+  // badge. NEVER returns briefingText / crossCuttingAlerts /
+  // top3Priorities / agentStatusSummary — those stay on the heavier
+  // /snapshots/latest/ endpoint above (consumed only by the CEO page).
+  getDirectorBriefingSidebarStatus: () =>
+    safeFetch<
+      import("@/types/domain").DirectorBriefingSidebarStatus
+    >("/v1/ceo-orchestration/snapshots/sidebar-status/", () => ({
+      // Deterministic dev fallback — surfaces as "missing" if the
+      // backend isn't reachable, so the Sidebar never claims a
+      // briefing is "ready" while the fetch failed.
+      status: "missing",
+      label: "No briefing yet",
+      latestSnapshotId: null,
+      latestSnapshotAt: null,
+      ageMinutes: null,
+      healthScore: null,
+      tier: null,
+      targetRoute: "/ceo-ai",
+    })),
+
   getCeoOrchestrationSnapshots: (
     params: { page?: number; pageSize?: number } = {},
   ) => {

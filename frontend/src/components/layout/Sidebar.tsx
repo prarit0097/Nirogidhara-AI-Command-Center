@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/services/api";
 import type {
   AiSandboxModeStatus,
+  DirectorBriefingSidebarStatus,
   SaasRuntimeLiveGateKillSwitch,
 } from "@/types/domain";
 import { computeSafetyStatus } from "@/utils/safetyStatus";
@@ -62,6 +63,16 @@ export function Sidebar({ open, onClose, collapsed, onCollapsedChange }: Sidebar
   const [killSwitchError, setKillSwitchError] = useState(false);
   const [sandboxError, setSandboxError] = useState(false);
 
+  // Phase 15B — Director Daily Briefing badge state. Pulled from the
+  // slim Phase 15B sidebar-status endpoint (NEVER from the heavier
+  // /snapshots/latest/ endpoint, which exposes briefingText body).
+  const [briefing, setBriefing] = useState<
+    DirectorBriefingSidebarStatus | null
+  >(null);
+  const [briefingError, setBriefingError] = useState<
+    "auth" | "permission" | "generic" | null
+  >(null);
+
   useEffect(() => {
     let cancelled = false;
     api
@@ -72,10 +83,26 @@ export function Sidebar({ open, onClose, collapsed, onCollapsedChange }: Sidebar
       .getAiSandboxModeStatus()
       .then((next) => !cancelled && setSandbox(next))
       .catch(() => !cancelled && setSandboxError(true));
+    api
+      .getDirectorBriefingSidebarStatus()
+      .then((next) => !cancelled && setBriefing(next))
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : "";
+        if (message.includes("401")) setBriefingError("auth");
+        else if (message.includes("403")) setBriefingError("permission");
+        else setBriefingError("generic");
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Phase 15B — pick the small visual treatment for the briefing
+  // badge based on the backend-returned status. Loading + error
+  // states deliberately do NOT render "Briefing ready" so the
+  // operator is never misled.
+  const briefingBadge = computeBriefingBadge({ briefing, briefingError });
 
   const safety = computeSafetyStatus({
     killSwitch,
@@ -170,7 +197,29 @@ export function Sidebar({ open, onClose, collapsed, onCollapsedChange }: Sidebar
                           )}
                           strokeWidth={active ? 2.2 : 1.8}
                         />
-                        {!collapsed && <span className="truncate relative">{item.label}</span>}
+                        {!collapsed && (
+                          <span className="truncate relative flex-1">
+                            {item.label}
+                          </span>
+                        )}
+                        {/* Phase 15B — Director Briefing badge next to
+                            the CEO AI Briefing nav item. Read-only;
+                            clicking the nav item navigates to /ceo-ai
+                            via NavLink, the badge is a passive label
+                            (no separate onClick). */}
+                        {!collapsed && item.to === "/ceo-ai" && (
+                          <span
+                            data-testid="sidebar-briefing-badge"
+                            data-briefing-status={briefingBadge.dataStatus}
+                            title={briefingBadge.title}
+                            className={cn(
+                              "ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                              briefingBadge.className,
+                            )}
+                          >
+                            {briefingBadge.shortLabel}
+                          </span>
+                        )}
                       </NavLink>
                     </li>
                   );
@@ -214,4 +263,91 @@ export function Sidebar({ open, onClose, collapsed, onCollapsedChange }: Sidebar
       </aside>
     </>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 15B — Director Briefing badge visual mapping.
+// ---------------------------------------------------------------------------
+
+interface BriefingBadgeVisual {
+  shortLabel: string;
+  title: string;
+  className: string;
+  dataStatus: string;
+}
+
+function computeBriefingBadge(args: {
+  briefing: DirectorBriefingSidebarStatus | null;
+  briefingError: "auth" | "permission" | "generic" | null;
+}): BriefingBadgeVisual {
+  const { briefing, briefingError } = args;
+
+  // 1. Error states first — never claim "ready" when fetch failed.
+  if (briefingError === "auth") {
+    return {
+      shortLabel: "auth",
+      title: "Session expired",
+      className: "bg-sidebar-foreground/10 text-sidebar-foreground/55",
+      dataStatus: "auth-error",
+    };
+  }
+  if (briefingError === "permission") {
+    return {
+      shortLabel: "—",
+      title: "Briefing unavailable",
+      className: "bg-sidebar-foreground/10 text-sidebar-foreground/55",
+      dataStatus: "permission-error",
+    };
+  }
+  if (briefingError === "generic") {
+    return {
+      shortLabel: "—",
+      title: "Briefing unavailable",
+      className: "bg-sidebar-foreground/10 text-sidebar-foreground/55",
+      dataStatus: "error",
+    };
+  }
+
+  // 2. Loading — backend GET still in flight.
+  if (briefing === null) {
+    return {
+      shortLabel: "…",
+      title: "Checking briefing…",
+      className: "bg-sidebar-foreground/10 text-sidebar-foreground/55",
+      dataStatus: "loading",
+    };
+  }
+
+  // 3. Backend-reported status.
+  switch (briefing.status) {
+    case "ready":
+      return {
+        shortLabel: "ready",
+        title: `Briefing ready · health ${briefing.healthScore ?? "?"}/100`,
+        className: "bg-success/15 text-success",
+        dataStatus: "ready",
+      };
+    case "stale":
+      return {
+        shortLabel: "stale",
+        title: `Briefing stale (${briefing.ageMinutes ?? "?"} min old)`,
+        className: "bg-warning/20 text-warning",
+        dataStatus: "stale",
+      };
+    case "critical":
+      return {
+        shortLabel: "crit",
+        title: `Briefing flags critical · health ${briefing.healthScore ?? "?"}/100`,
+        className: "bg-destructive/20 text-destructive",
+        dataStatus: "critical",
+      };
+    case "missing":
+    default:
+      return {
+        shortLabel: "—",
+        title: "No briefing yet",
+        className: "bg-sidebar-foreground/10 text-sidebar-foreground/55",
+        dataStatus: "missing",
+      };
+  }
 }

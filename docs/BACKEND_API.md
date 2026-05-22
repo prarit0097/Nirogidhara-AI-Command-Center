@@ -1335,6 +1335,7 @@ beat schedule (08:00 → 13:00 IST) writes.
 | --- | --- | --- |
 | GET | `/api/v1/ceo-orchestration/snapshots/` | Paginated `CeoOrchestrationSnapshot` rows. |
 | GET | `/api/v1/ceo-orchestration/snapshots/latest/` | Latest composite snapshot — business health score, tier, top-3 priorities, cross-cutting alerts, agent status summary, deterministic briefing text. |
+| GET | `/api/v1/ceo-orchestration/snapshots/sidebar-status/` | **Phase 15B** — slim allow-list response for the Sidebar Director Briefing badge. Admin/director/owner/superuser only. Response: `{status: "ready" \| "stale" \| "critical" \| "missing", label, latestSnapshotId, latestSnapshotAt (ISO), ageMinutes, healthScore (0-100), tier (HealthTier choice), targetRoute: "/ceo-ai"}`. NEVER returns `briefingText`, `crossCuttingAlerts`, `top3Priorities`, `agentStatusSummary`, `alerts`, or any other field outside the 8-key allow-list. POST/PUT/PATCH/DELETE return 405. NEVER triggers a new orchestration run, NEVER enqueues a Celery task, NEVER mutates any row, NEVER writes an AuditEvent. Status precedence: `tier == "critical"` → critical (regardless of age); else `age >= 36h` → stale; else → ready. No snapshot → missing. |
 | GET | `/api/v1/ceo-orchestration/snapshots/<int:pk>/` | Single composite snapshot detail. |
 
 Phase 9F does NOT touch the legacy `ai_governance.CeoBriefing`

@@ -24,6 +24,19 @@ vi.mock("@/services/api", () => ({
   api: {
     getSaasRuntimeLiveGateKillSwitch: vi.fn(),
     getAiSandboxModeStatus: vi.fn(),
+    // Phase 15B — Sidebar now also fetches the briefing badge state.
+    // Provide a default-missing response so the safety-indicator
+    // tests don't fail on undefined.then().
+    getDirectorBriefingSidebarStatus: vi.fn().mockResolvedValue({
+      status: "missing",
+      label: "No briefing yet",
+      latestSnapshotId: null,
+      latestSnapshotAt: null,
+      ageMinutes: null,
+      healthScore: null,
+      tier: null,
+      targetRoute: "/ceo-ai",
+    }),
   },
 }));
 

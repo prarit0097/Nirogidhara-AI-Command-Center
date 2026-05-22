@@ -2354,6 +2354,30 @@ export interface PromptVersionRollbackHistoryFilters {
   offset?: number;
 }
 
+/**
+ * Phase 15B — Sidebar Director Briefing badge.
+ * Slim allow-list shape returned by
+ * GET /api/v1/ceo-orchestration/snapshots/sidebar-status/. Never
+ * contains briefingText, crossCuttingAlerts, top3Priorities,
+ * agentStatusSummary, or any raw provider payload.
+ */
+export type DirectorBriefingStatus =
+  | "ready"
+  | "stale"
+  | "critical"
+  | "missing";
+
+export interface DirectorBriefingSidebarStatus {
+  status: DirectorBriefingStatus;
+  label: string;
+  latestSnapshotId: number | null;
+  latestSnapshotAt: string | null;
+  ageMinutes: number | null;
+  healthScore: number | null;
+  tier: string | null;
+  targetRoute: string;
+}
+
 export interface SaasRuntimeLiveGatePreview {
   operationType: string;
   providerType: string;

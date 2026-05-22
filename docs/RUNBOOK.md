@@ -407,6 +407,38 @@ back what and when.
 
 - `GET /api/ai/prompt-versions/rollback-history/` → admin/director only. Optional query params: `?agent=<label>`, `?kind=<one of the two allow-listed kinds>`, `?limit=` (default 50, max 200), `?offset=`. Allow-listed kinds: `prompt_version.rollback.ui_changed` (Phase 14F UI) + `ai.prompt_version.rolled_back` (Phase 3D service). Response keys: `items` (sanitised allow-list slice — see [`docs/BACKEND_API.md`](BACKEND_API.md) for the full row shape), `count`, `limit`, `offset`, `kindsIncluded`. POST / PUT / PATCH / DELETE return 405.
 
+---
+
+## Director Briefing Sidebar Badge (Phase 15B)
+
+The Sidebar now shows a small status pill next to the **"CEO AI Briefing"** nav item that reflects the latest Phase 9F `CeoOrchestrationSnapshot`. The badge is **read-only** — it surfaces what the daily 13:00 IST Celery sweep wrote into the DB; it never generates a briefing or triggers a new orchestration run.
+
+### How to interpret the badge
+
+| Badge label | Tone | Meaning |
+|---|---|---|
+| `…` (Checking briefing…) | grey | Backend GET still in flight. Brief — should settle within a second. |
+| `ready` | green | Latest snapshot exists, is < 36h old, and tier is not critical. Business as usual. |
+| `stale` | amber | Latest snapshot is >= 36h old. The daily 13:00 IST sweep missed at least one cycle. Likely cause: Celery beat is down, the `RuntimeKillSwitch` is blocking daily tasks, or an upstream Phase 9A-9E snapshot failed. Investigate; the AI is fine, but the briefing surface is degraded. |
+| `crit` (Briefing flags critical) | red | The latest snapshot's `health_tier = "critical"` per Phase 9F's deterministic scoring (e.g. compliance violation + multiple Phase 9 data gaps + revenue alerts). Click the nav item to open `/ceo-ai` and read the full briefing immediately. |
+| `—` (No briefing yet) | grey | No `CeoOrchestrationSnapshot` row exists. On a fresh install, this is expected until the first daily sweep at 13:00 IST. On a long-running deployment it's a red flag — Celery beat may have never run. |
+| `—` (Briefing unavailable) | grey | Backend returned non-401/403 error. Check `docker compose -f docker-compose.prod.yml logs --since 60s backend` for the `/api/v1/ceo-orchestration/snapshots/sidebar-status/` traceback. |
+| `auth` (Session expired) | grey | JWT expired. Sign out + back in via `/login`. |
+
+Hover any badge state for a tooltip with the age + health score (if available).
+
+### What the badge does NOT do
+
+- **It does not generate a new briefing.** Briefings are written by `apps.agents.ceo_orchestration.tasks.run_ceo_orchestration_agent_daily` on the Celery beat schedule. Click the nav item to read the briefing; do not look for a "generate now" button — there isn't one.
+- **It does not call an LLM provider.** The badge consumes a single SELECT against the existing snapshot table.
+- **It does not write an AuditEvent.** Pure read endpoint.
+- **It does not change AI safety state.** Independent of kill-switch and sandbox state.
+- **It does not expose the full briefing body.** `briefingText`, `crossCuttingAlerts`, `top3Priorities`, `agentStatusSummary` are NOT in the badge endpoint's response — they remain only at `GET /api/v1/ceo-orchestration/snapshots/latest/` which the `/ceo-ai` page consumes.
+
+### Endpoint reference
+
+- `GET /api/v1/ceo-orchestration/snapshots/sidebar-status/` → admin/director/owner/superuser only. Returns 8 keys (`status`, `label`, `latestSnapshotId`, `latestSnapshotAt`, `ageMinutes`, `healthScore`, `tier`, `targetRoute`). POST/PUT/PATCH/DELETE return 405.
+
 ### Troubleshooting
 
 | Symptom | Cause / fix |

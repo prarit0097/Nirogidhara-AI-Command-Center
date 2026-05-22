@@ -1,8 +1,19 @@
-"""Phase 9F — CEO AI Orchestration V1 read-only API."""
+"""Phase 9F — CEO AI Orchestration V1 read-only API.
+
+Phase 15B adds a slimmer ``sidebar-status/`` endpoint that returns
+only the minimum allow-listed metadata the Sidebar badge needs —
+``status``, ``label``, ``healthScore``, ``tier``, ``ageMinutes``,
+``targetRoute``. The full ``briefingText`` / ``crossCuttingAlerts``
+/ ``agentStatusSummary`` payload the Phase 9F ``snapshots/latest/``
+endpoint returns is intentionally NOT in the sidebar response so a
+client fetching the badge cannot incidentally read the Director's
+full internal briefing body.
+"""
 from __future__ import annotations
 
 from typing import Any
 
+from django.utils import timezone
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -118,3 +129,91 @@ class CeoOrchestrationSnapshotDetailView(APIView):
         if snapshot is None:
             return Response({"detail": "not_found"}, status=404)
         return Response(_serialize_snapshot(snapshot))
+
+
+class CeoOrchestrationSidebarStatusView(APIView):
+    """Phase 15B — minimal sidebar-badge payload.
+
+    Returns the Director-facing CEO briefing status in a small,
+    allow-listed shape:
+      - ``status`` ∈ {"ready", "stale", "critical", "missing"}
+      - ``label`` — short human-readable string for the badge
+      - ``latestSnapshotId``
+      - ``latestSnapshotAt`` (ISO-8601)
+      - ``ageMinutes``
+      - ``healthScore`` (0-100)
+      - ``tier`` (Phase 9F HealthTier choice)
+      - ``targetRoute`` (always ``/ceo-ai`` — the existing CEO page)
+
+    Hard guarantees:
+      - GET-only. POST/PUT/PATCH/DELETE return 405.
+      - Admin/director/superuser/owner only.
+      - NEVER returns ``briefingText``, ``crossCuttingAlerts``,
+        ``top3Priorities``, ``agentStatusSummary``, raw provider
+        payloads, prompt body, secrets, tokens, phones, or PII.
+      - NEVER triggers a new orchestration run, never enqueues a
+        Celery task, never invokes any provider client. It is a pure
+        SELECT + small computed-status response.
+    """
+
+    permission_classes = [_AdminPermission]
+
+    # Stale threshold — Phase 9F's beat task runs daily at 13:00 IST,
+    # so any snapshot older than ~36h means we've missed >1 full run.
+    # Conservative threshold; surface as "stale" so the Director
+    # knows to inspect why the daily sweep didn't write a fresh row.
+    _STALE_AFTER_MINUTES = 36 * 60
+
+    def get(self, request):
+        snapshot = (
+            CeoOrchestrationSnapshot.objects.order_by("-snapshot_at").first()
+        )
+
+        if snapshot is None:
+            return Response(
+                {
+                    "status": "missing",
+                    "label": "No briefing yet",
+                    "latestSnapshotId": None,
+                    "latestSnapshotAt": None,
+                    "ageMinutes": None,
+                    "healthScore": None,
+                    "tier": None,
+                    "targetRoute": "/ceo-ai",
+                }
+            )
+
+        # Compute age in minutes from ``snapshot_at`` (the canonical
+        # "when did the orchestration synthesise this" timestamp).
+        now = timezone.now()
+        age_seconds = max(0, int((now - snapshot.snapshot_at).total_seconds()))
+        age_minutes = age_seconds // 60
+
+        tier = snapshot.health_tier or "fair"
+
+        # Phase 15B status precedence:
+        #   1. critical tier always wins regardless of age.
+        #   2. stale if older than the threshold.
+        #   3. ready otherwise.
+        if tier == CeoOrchestrationSnapshot.HealthTier.CRITICAL:
+            status_label = "critical"
+            label = "Briefing flags critical"
+        elif age_minutes >= self._STALE_AFTER_MINUTES:
+            status_label = "stale"
+            label = "Briefing stale"
+        else:
+            status_label = "ready"
+            label = "Briefing ready"
+
+        return Response(
+            {
+                "status": status_label,
+                "label": label,
+                "latestSnapshotId": snapshot.pk,
+                "latestSnapshotAt": snapshot.snapshot_at.isoformat(),
+                "ageMinutes": age_minutes,
+                "healthScore": snapshot.business_health_score,
+                "tier": tier,
+                "targetRoute": "/ceo-ai",
+            }
+        )
