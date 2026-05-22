@@ -172,25 +172,38 @@ export default function Settings() {
               )}
             </div>
           )}
+          {/* Phase 14E-Hotfix-1 — render ONLY the valid state-transition
+              action. While Sandbox is OFF, only Enable is shown; while
+              Sandbox is ON, only Disable is shown. Loading state shows a
+              neutral placeholder so the operator cannot blindly submit
+              an action before backend state has loaded. */}
           <div className="mt-3 flex gap-2">
-            <Button
-              data-testid="settings-sandbox-enable"
-              variant="default"
-              size="sm"
-              disabled={Boolean(sandboxState?.isEnabled) || !sandboxState}
-              onClick={() => setSandboxModal("enable_sandbox_mode")}
-            >
-              Enable sandbox
-            </Button>
-            <Button
-              data-testid="settings-sandbox-disable"
-              variant="destructive"
-              size="sm"
-              disabled={!sandboxState?.isEnabled || !sandboxState}
-              onClick={() => setSandboxModal("disable_sandbox_mode")}
-            >
-              Disable sandbox
-            </Button>
+            {sandboxState === null ? (
+              <span
+                data-testid="settings-sandbox-loading"
+                className="text-[11px] text-muted-foreground"
+              >
+                Loading state…
+              </span>
+            ) : sandboxState.isEnabled ? (
+              <Button
+                data-testid="settings-sandbox-disable"
+                variant="destructive"
+                size="sm"
+                onClick={() => setSandboxModal("disable_sandbox_mode")}
+              >
+                Disable sandbox
+              </Button>
+            ) : (
+              <Button
+                data-testid="settings-sandbox-enable"
+                variant="default"
+                size="sm"
+                onClick={() => setSandboxModal("enable_sandbox_mode")}
+              >
+                Enable sandbox
+              </Button>
+            )}
           </div>
         </div>
         <ControlCard icon={RotateCcw} tone="warning" title="Rollback System" desc="Revert to last known-good prompts and pricing rules.">

@@ -119,7 +119,7 @@ beforeEach(() => {
 // ---- Settings sandbox card --------------------------------------------
 
 describe("Phase 14E — Settings Sandbox Mode card", () => {
-  it("renders 'Sandbox OFF' status with Enable enabled and Disable disabled", async () => {
+  it("renders 'Sandbox OFF' status with ONLY the Enable button (Phase 14E-Hotfix-1)", async () => {
     (
       api.getAiSandboxModeStatus as unknown as ReturnType<typeof vi.fn>
     ).mockResolvedValue(sandboxOff);
@@ -130,19 +130,17 @@ describe("Phase 14E — Settings Sandbox Mode card", () => {
       </MemoryRouter>,
     );
 
+    // Enable IS rendered.
     const enableBtn = (await screen.findByTestId(
       "settings-sandbox-enable",
     )) as HTMLButtonElement;
-    const disableBtn = screen.getByTestId(
-      "settings-sandbox-disable",
-    ) as HTMLButtonElement;
-
     expect(enableBtn.disabled).toBe(false);
-    expect(disableBtn.disabled).toBe(true);
+    // Disable is NOT rendered while Sandbox is OFF.
+    expect(screen.queryByTestId("settings-sandbox-disable")).toBeNull();
     expect(screen.getByText(/Sandbox OFF/i)).toBeInTheDocument();
   });
 
-  it("renders 'Sandbox ON' status with Disable enabled and Enable disabled", async () => {
+  it("renders 'Sandbox ON' status with ONLY the Disable button (Phase 14E-Hotfix-1)", async () => {
     (
       api.getAiSandboxModeStatus as unknown as ReturnType<typeof vi.fn>
     ).mockResolvedValue(sandboxOn);
@@ -153,15 +151,13 @@ describe("Phase 14E — Settings Sandbox Mode card", () => {
       </MemoryRouter>,
     );
 
-    const enableBtn = (await screen.findByTestId(
-      "settings-sandbox-enable",
-    )) as HTMLButtonElement;
-    const disableBtn = screen.getByTestId(
+    // Disable IS rendered.
+    const disableBtn = (await screen.findByTestId(
       "settings-sandbox-disable",
-    ) as HTMLButtonElement;
-
-    expect(enableBtn.disabled).toBe(true);
+    )) as HTMLButtonElement;
     expect(disableBtn.disabled).toBe(false);
+    // Enable is NOT rendered while Sandbox is ON.
+    expect(screen.queryByTestId("settings-sandbox-enable")).toBeNull();
     expect(screen.getByText(/Sandbox ON/i)).toBeInTheDocument();
     // Last reason should surface so the operator sees who flipped it.
     expect(

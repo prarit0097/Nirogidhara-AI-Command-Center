@@ -5,7 +5,14 @@ import {
   GraduationCap, FileBadge2, BarChart3, Settings2, Leaf, ChevronLeft,
   AlarmClock, ShieldCheck, MessageSquare, Inbox, Building2,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { api } from "@/services/api";
+import type {
+  AiSandboxModeStatus,
+  SaasRuntimeLiveGateKillSwitch,
+} from "@/types/domain";
+import { computeSafetyStatus } from "@/utils/safetyStatus";
 
 const NAV = [
   { to: "/", label: "Command Center", icon: LayoutDashboard, group: "Overview" },
@@ -43,6 +50,39 @@ interface SidebarProps {
 export function Sidebar({ open, onClose, collapsed, onCollapsedChange }: SidebarProps) {
   const location = useLocation();
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
+
+  // Phase 14E-Hotfix-1 — bottom safety indicator follows real backend
+  // state. Priority is encoded in computeSafetyStatus(): kill-switch
+  // paused beats sandbox-on beats normal. Loading + error states
+  // explicitly avoid claiming "All systems normal".
+  const [killSwitch, setKillSwitch] = useState<SaasRuntimeLiveGateKillSwitch | null>(
+    null,
+  );
+  const [sandbox, setSandbox] = useState<AiSandboxModeStatus | null>(null);
+  const [killSwitchError, setKillSwitchError] = useState(false);
+  const [sandboxError, setSandboxError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getSaasRuntimeLiveGateKillSwitch()
+      .then((next) => !cancelled && setKillSwitch(next))
+      .catch(() => !cancelled && setKillSwitchError(true));
+    api
+      .getAiSandboxModeStatus()
+      .then((next) => !cancelled && setSandbox(next))
+      .catch(() => !cancelled && setSandboxError(true));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const safety = computeSafetyStatus({
+    killSwitch,
+    sandbox,
+    killSwitchError,
+    sandboxError,
+  });
 
   return (
     <>
@@ -140,12 +180,24 @@ export function Sidebar({ open, onClose, collapsed, onCollapsedChange }: Sidebar
           ))}
         </nav>
 
-        {/* Footer — system + collapse */}
+        {/* Footer — real safety status + collapse.
+            Phase 14E-Hotfix-1 — label + dot are computed from the
+            real Phase 14D kill-switch + Phase 14E sandbox state. */}
         <div className="relative border-t border-sidebar-border/60 p-3">
           {!collapsed && (
-            <div className="mb-2 px-2 flex items-center gap-2 text-[11px] text-sidebar-foreground/55">
-              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-              <span>All systems normal</span>
+            <div
+              data-testid="sidebar-safety-indicator"
+              data-safety-tone={safety.tone}
+              className="mb-2 px-2 flex items-center gap-2 text-[11px] text-sidebar-foreground/55"
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  safety.dotClass,
+                  safety.pulse && "animate-pulse",
+                )}
+              />
+              <span data-testid="sidebar-safety-label">{safety.label}</span>
               <span className="ml-auto font-mono text-[10px] text-sidebar-foreground/40">v2.4</span>
             </div>
           )}
