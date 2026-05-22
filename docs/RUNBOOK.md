@@ -451,6 +451,69 @@ Hover any badge state for a tooltip with the age + health score (if available).
 
 ---
 
+## Audit Timeline (Phase 15C)
+
+The Director can review every state change across the system from a single standalone page at `/operations/audit-timeline`. It is read-only by design — no buttons exist on this page that mutate any business row.
+
+### When to use it
+
+- Investigating a specific incident: filter by kind (e.g. `payment.received`) or text (e.g. order id `NRG-1001`).
+- Daily safety review: filter by category `safety` to see kill-switch flips, sandbox toggles, compliance flags, and safety downgrades from the last 24h.
+- Rollback audit: filter by category `rollback` to see who rolled back which prompt and why (richer narrative than the Phase 15A modal).
+- Verifying that a Celery sweep ran: filter by kind (e.g. `transcript.daily_ingest.completed`) and tone `success`.
+
+### Filter cheatsheet
+
+| Filter | Behaviour |
+|---|---|
+| `kind` | Exact match against `AuditEvent.kind`. Use the dropdown in `nd.md` §8 / the audit signals file for the full list. |
+| `tone` | One of `success` / `info` / `warning` / `danger`. Invalid → 400. |
+| `category` | Prefix-derived in pure Python: `safety` / `rollback` / `ai_governance` / `whatsapp` / `payments` / `orders` / `delivery` / `auth_system` / `other`. Invalid → 400. |
+| `q` (text) | Case-insensitive substring match against the `text` column **only**. Payload bodies are never searched (they are sanitised at serialise time). |
+| `date_from` / `date_to` | ISO 8601 datetime. URL-encode `+00:00` as `%2B00:00`. |
+| `limit` | Default 50, hard-capped at 200. Zero / garbage falls back to 50. |
+| `offset` | Pagination. |
+
+### What the page sanitises
+
+The backend never returns the raw `AuditEvent.payload`. The page renders only the allow-listed slice (phase / source / actor / agent / IDs / stage / status / counts / tier / labels / boolean flags / SHA-256 hashes). The following are stripped at the source even if a future writer accidentally embeds them:
+
+- Tokens / access tokens / refresh tokens / verify tokens / app secrets / API keys / Razorpay / Meta WhatsApp / Vapi / OpenAI / Anthropic credentials
+- Full phone numbers (only last-4 suffixes are kept on the allow-list)
+- Full emails, addresses, card numbers, VPAs, UPIs
+- Raw provider responses / raw payloads / raw signatures / gateway reference IDs / payment URLs
+- Prompt system policies / role prompts / instruction payloads / messages arrays / transcripts / reply text
+- Full customer names / director sign-off bodies / metadata blobs / evidence JSON / briefing bodies
+
+String values are truncated defensively at 200 chars.
+
+### What the page does NOT do
+
+- It does not write a new `AuditEvent` — pure SELECT.
+- It does not call any provider (Razorpay / Meta Cloud / Delhivery / Vapi / any LLM).
+- It does not enqueue any Celery task.
+- It does not mutate `Order` / `Payment` / `Customer` / `Lead` / `Shipment` / `WhatsAppMessage` / `Call` / `DiscountOfferLog` / `PromptVersion`.
+- It does not create an `ApprovalRequest`.
+- It does not change `RuntimeKillSwitch` / `SandboxState` state.
+- It does not edit any `.env*` file.
+- It exposes no "Send / Approve / Execute / Submit / Resume AI / Toggle Sandbox / Apply Rollback / Generate Briefing / Confirm / Go Live / Kill" controls.
+
+### Endpoint reference
+
+- `GET /api/audit/timeline/` → admin / director / owner / superuser only. Query params: `kind` / `tone` / `category` / `q` / `date_from` / `date_to` / `limit` / `offset`. Response: `{items: [{id, occurredAt, kind, tone, icon, text, category, payload}], count, limit, offset, categoriesAvailable, categoryFiltered}`. POST / PUT / PATCH / DELETE return 405.
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| "Loading audit events…" never resolves | Backend GET stuck. Check `docker compose -f docker-compose.prod.yml logs --since 60s backend` for `/api/audit/timeline/` traceback. |
+| "Session expired or unauthenticated." | JWT expired; sign out + back in via `/login`. |
+| "HTTP 403" / page renders the error banner with `permission` text | Current user role is not admin/director/superuser. Check `User.role` in shell. |
+| "No audit events match the current filters." but you know events exist | Check the filter combination: `category=safety` + `kind=payment.received` (mismatch) is the most common cause. Clear filters and try one filter at a time. |
+| Date filter ignored | Confirm the value is URL-encoded properly. Browsers handle this; tests / curl users must encode `+00:00` as `%2B00:00`. |
+
+---
+
 ## Prerequisites
 
 - **Node** 18+ (frontend) — verify with `node --version`

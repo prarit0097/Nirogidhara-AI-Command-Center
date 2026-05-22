@@ -19,6 +19,7 @@ api_patterns = [
     path("auth/", include("apps.accounts.urls")),
     path("settings/", include("apps.accounts.settings_urls")),
     path("dashboard/", include("apps.dashboards.urls")),
+    path("audit/", include("apps.audit.urls")),
     path("analytics/", include("apps.analytics.urls")),
     path("", include("apps.crm.urls")),
     path("", include("apps.orders.urls")),

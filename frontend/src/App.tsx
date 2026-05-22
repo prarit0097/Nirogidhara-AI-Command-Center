@@ -31,6 +31,7 @@ import SaasAdminPage from "./pages/SaasAdmin";
 import PendingPaymentsPage from "./pages/PendingPayments";
 import LearningProposalsPage from "./pages/LearningProposals";
 import CallingDashboardPage from "./pages/CallingDashboard";
+import AuditTimelinePage from "./pages/AuditTimeline";
 import Login from "@/pages/Login";
 import RequireAuth from "@/components/RequireAuth";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -91,6 +92,10 @@ const App = () => (
             <Route
               path="/operations/calling-dashboard"
               element={<CallingDashboardPage />}
+            />
+            <Route
+              path="/operations/audit-timeline"
+              element={<AuditTimelinePage />}
             />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

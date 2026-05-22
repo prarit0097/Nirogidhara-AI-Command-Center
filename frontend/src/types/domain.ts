@@ -2378,6 +2378,57 @@ export interface DirectorBriefingSidebarStatus {
   targetRoute: string;
 }
 
+/**
+ * Phase 15C — Audit Timeline read-only surface.
+ * Returned by GET /api/audit/timeline/ with sanitised payload.
+ * The backend strips secrets, tokens, raw bodies, full phones,
+ * full emails, addresses, full prompt bodies, and provider
+ * payloads — only the allow-list payload keys reach the frontend.
+ */
+export type AuditTimelineTone = "success" | "info" | "warning" | "danger";
+
+export type AuditTimelineCategory =
+  | "safety"
+  | "rollback"
+  | "ai_governance"
+  | "whatsapp"
+  | "payments"
+  | "orders"
+  | "delivery"
+  | "auth_system"
+  | "other";
+
+export interface AuditTimelineItem {
+  id: number;
+  occurredAt: string;
+  kind: string;
+  tone: AuditTimelineTone;
+  icon: string;
+  text: string;
+  category: AuditTimelineCategory;
+  payload: Record<string, unknown>;
+}
+
+export interface AuditTimelineResponse {
+  items: AuditTimelineItem[];
+  count: number;
+  limit: number;
+  offset: number;
+  categoriesAvailable: AuditTimelineCategory[];
+  categoryFiltered: AuditTimelineCategory | null;
+}
+
+export interface AuditTimelineFilters {
+  kind?: string;
+  tone?: AuditTimelineTone | "";
+  category?: AuditTimelineCategory | "";
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface SaasRuntimeLiveGatePreview {
   operationType: string;
   providerType: string;

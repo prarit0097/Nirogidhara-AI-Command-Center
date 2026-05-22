@@ -373,6 +373,49 @@ export const api = {
   getLiveActivityFeed: () =>
     safeFetch<ActivityEvent[]>("/dashboard/activity/", () => M.ACTIVITY_FEED as ActivityEvent[]),
 
+  // Phase 15C — read-only Audit Timeline. Sanitised, paginated,
+  // filterable. NEVER mutates state; NEVER returns secrets / tokens
+  // / raw bodies / full phones / full emails / addresses / prompt
+  // bodies / provider payloads. Backend hard-caps limit at 200.
+  getAuditTimeline: (
+    filters: import("@/types/domain").AuditTimelineFilters = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (filters.kind) q.set("kind", filters.kind);
+    if (filters.tone) q.set("tone", filters.tone);
+    if (filters.category) q.set("category", filters.category);
+    if (filters.q) q.set("q", filters.q);
+    if (filters.dateFrom) q.set("date_from", filters.dateFrom);
+    if (filters.dateTo) q.set("date_to", filters.dateTo);
+    if (filters.limit != null) q.set("limit", String(filters.limit));
+    if (filters.offset != null) q.set("offset", String(filters.offset));
+    const qs = q.toString();
+    const url = qs ? `/audit/timeline/?${qs}` : "/audit/timeline/";
+    return safeFetch<import("@/types/domain").AuditTimelineResponse>(
+      url,
+      () => ({
+        items: [],
+        count: 0,
+        limit: filters.limit ?? 50,
+        offset: filters.offset ?? 0,
+        categoriesAvailable: [
+          "safety",
+          "rollback",
+          "ai_governance",
+          "whatsapp",
+          "payments",
+          "orders",
+          "delivery",
+          "auth_system",
+          "other",
+        ],
+        categoryFiltered: (filters.category as
+          | import("@/types/domain").AuditTimelineCategory
+          | undefined) ?? null,
+      }),
+    );
+  },
+
   // Analytics
   getFunnel: () => safeFetch<KPITrend[]>("/analytics/funnel/", () => M.FUNNEL as KPITrend[]),
   getRevenueTrend: () => safeFetch<KPITrend[]>("/analytics/revenue-trend/", () => M.REVENUE_TREND as KPITrend[]),
