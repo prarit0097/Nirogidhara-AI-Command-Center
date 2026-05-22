@@ -2312,6 +2312,48 @@ export interface PromptVersionRollbackFromUiResult {
   message: string;
 }
 
+/**
+ * Phase 15A — read-only rollback history surface
+ * (GET /api/ai/prompt-versions/rollback-history/). Returns sanitised
+ * metadata only — NEVER includes `systemPolicy` / `rolePrompt` /
+ * `instructionPayload` / tokens / phone numbers / customer data.
+ */
+export interface PromptVersionRollbackHistoryItem {
+  id: number | string;
+  createdAt: string;
+  kind:
+    | "prompt_version.rollback.ui_changed"
+    | "ai.prompt_version.rolled_back";
+  tone: "success" | "info" | "warning" | "danger";
+  actor: string;
+  agent: string;
+  previousVersionId: string | null;
+  previousVersionLabel: string | null;
+  targetVersionId: string | null;
+  targetVersionLabel: string | null;
+  reason: string;
+  matrixAction: string;
+  matrixStatus: string;
+  status: "rolled_back" | "unknown";
+  source: "settings_ui" | "service" | "unknown";
+  summary: string;
+}
+
+export interface PromptVersionRollbackHistoryResponse {
+  items: PromptVersionRollbackHistoryItem[];
+  count: number;
+  limit: number;
+  offset: number;
+  kindsIncluded: string[];
+}
+
+export interface PromptVersionRollbackHistoryFilters {
+  agent?: string;
+  kind?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface SaasRuntimeLiveGatePreview {
   operationType: string;
   providerType: string;

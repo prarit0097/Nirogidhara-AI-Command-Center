@@ -23,6 +23,7 @@ from .views import (
     ComplianceAnalyzeView,
     PromptVersionActivateView,
     PromptVersionRollbackFromUiView,
+    PromptVersionRollbackHistoryView,
     PromptVersionRollbackView,
     PromptVersionViewSet,
     RtoAnalyzeView,
@@ -110,6 +111,15 @@ urlpatterns = [
         "prompt-versions/rollback-from-ui/",
         PromptVersionRollbackFromUiView.as_view(),
         name="prompt-version-rollback-from-ui",
+    ),
+    # Phase 15A — read-only rollback history surface. Admin/director
+    # only. Returns Phase 14F UI rows + Phase 3D service rows in a
+    # sanitised allow-list shape. Never mutates state; never returns
+    # raw audit payloads / prompt bodies.
+    path(
+        "prompt-versions/rollback-history/",
+        PromptVersionRollbackHistoryView.as_view(),
+        name="prompt-version-rollback-history",
     ),
     # Phase 3E — approval matrix policy snapshot.
     path(

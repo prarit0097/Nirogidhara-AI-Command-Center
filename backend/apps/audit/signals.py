@@ -71,6 +71,8 @@ ICON_BY_KIND: dict[str, str] = {
     "ai.prompt_version.created": "file-plus",
     "ai.prompt_version.activated": "play",
     "ai.prompt_version.rolled_back": "rotate-ccw",
+    # Phase 14F — Settings UI rollback (coexists with the Phase 3D row).
+    "prompt_version.rollback.ui_changed": "rotate-ccw",
     "ai.sandbox.enabled": "shield-half",
     "ai.sandbox.disabled": "shield-off",
     "ai.budget.warning": "gauge",

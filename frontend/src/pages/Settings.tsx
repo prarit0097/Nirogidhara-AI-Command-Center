@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import KillSwitchModal from "@/components/KillSwitchModal";
 import SandboxModeModal from "@/components/SandboxModeModal";
 import RollbackSystemModal from "@/components/RollbackSystemModal";
+import RollbackHistoryModal from "@/components/RollbackHistoryModal";
 
 export default function Settings() {
   const [data, setData] = useState<any>(null);
@@ -49,6 +50,8 @@ export default function Settings() {
   >(null);
   const [promptVersionsError, setPromptVersionsError] = useState(false);
   const [rollbackOpen, setRollbackOpen] = useState(false);
+  // Phase 15A — Rollback History modal open state.
+  const [rollbackHistoryOpen, setRollbackHistoryOpen] = useState(false);
 
   const refreshKillSwitch = async () => {
     try {
@@ -267,7 +270,7 @@ export default function Settings() {
             Does not resume AI, toggle sandbox, send messages, or call
             customers.
           </div>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button
               data-testid="settings-rollback-open"
               variant="outline"
@@ -280,6 +283,18 @@ export default function Settings() {
               onClick={() => setRollbackOpen(true)}
             >
               Choose rollback target…
+            </Button>
+            {/* Phase 15A — read-only history surface. Always available
+                regardless of whether candidates exist (an operator may
+                want to review past rollbacks even when nothing is
+                currently eligible). */}
+            <Button
+              data-testid="settings-rollback-history-open"
+              variant="ghost"
+              size="sm"
+              onClick={() => setRollbackHistoryOpen(true)}
+            >
+              View rollback history
             </Button>
           </div>
         </div>
@@ -331,6 +346,15 @@ export default function Settings() {
             // the new active version are reflected in the next open.
             refreshPromptVersions();
           }}
+        />
+      )}
+      {/* Phase 15A — read-only Rollback History modal. Lazy-mounted
+          so the list endpoint is only hit when the operator opens
+          the surface. */}
+      {rollbackHistoryOpen && (
+        <RollbackHistoryModal
+          open={rollbackHistoryOpen}
+          onOpenChange={(next) => setRollbackHistoryOpen(next)}
         />
       )}
 

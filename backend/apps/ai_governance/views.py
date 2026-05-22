@@ -436,6 +436,199 @@ class PromptVersionRollbackView(APIView):
         return PromptVersionViewSet._rollback_view(request, pk)
 
 
+class PromptVersionRollbackHistoryView(APIView):
+    """Phase 15A — read-only rollback history surface.
+
+    Returns the latest rollback-related audit events (Phase 14F UI rows
+    + Phase 3D service rows) in a sanitised shape. The endpoint NEVER
+    mutates state, NEVER calls a provider, NEVER invokes
+    rollback_prompt_version, and NEVER returns the underlying raw
+    audit payload — only the safe-metadata allow-list below.
+
+    Allow-listed audit kinds:
+      - ``prompt_version.rollback.ui_changed`` (Phase 14F, UI source)
+      - ``ai.prompt_version.rolled_back`` (Phase 3D service, also the
+        backing row of every Phase 14F UI flip)
+    Other audit kinds are intentionally excluded so unrelated audit
+    payloads never leak into this surface.
+
+    Sensitive data NEVER returned (defence in depth — the audit
+    payloads themselves are already sanitised by the Phase 14F view
+    + the Phase 3D service, but we re-filter here):
+      - ``system_policy`` / ``role_prompt`` full bodies
+      - ``instruction_payload`` raw JSON
+      - Any token, secret, phone, email, address, raw payload key.
+    """
+
+    permission_classes = [_AdminAndUpAlways]
+
+    _ALLOWED_KINDS: tuple[str, ...] = (
+        "prompt_version.rollback.ui_changed",
+        "ai.prompt_version.rolled_back",
+    )
+
+    # Hard cap so a malformed ``limit`` cannot drain the audit table.
+    _MAX_LIMIT = 200
+    _DEFAULT_LIMIT = 50
+
+    @staticmethod
+    def _safe_payload_slice(payload: dict | None) -> dict:
+        """Extract only the safe-metadata keys we want to surface.
+
+        Both Phase 14F UI rows + Phase 3D service rows use stable
+        snake_case keys; this slice deliberately ignores everything
+        else so a future writer that accidentally stuffs a sensitive
+        field into the payload cannot leak it via this endpoint.
+        """
+        if not isinstance(payload, dict):
+            return {}
+        allowed = {
+            "phase",
+            "source",
+            "action",
+            "actor",
+            "agent",
+            "previous_active_version_id",
+            "previous_version_id",
+            "previous_version",
+            "previous_version_label",
+            "target_version_id",
+            "target_version",
+            "target_version_label",
+            "reason",
+            "by",
+            "matrix_action",
+            "matrix_status",
+        }
+        return {k: payload[k] for k in allowed if k in payload}
+
+    @classmethod
+    def _serialize_event(cls, event: AuditEvent) -> dict:
+        """Compose the Phase 15A canonical history shape from an
+        AuditEvent row."""
+        payload = cls._safe_payload_slice(event.payload)
+
+        # Phase 14F UI rows use ``previous_active_version_id``; Phase 3D
+        # service rows use ``previous_version_id``. Normalise both into
+        # the same camelCase field so the frontend renders uniformly.
+        previous_version_id = payload.get(
+            "previous_active_version_id"
+        ) or payload.get("previous_version_id")
+        previous_version_label = payload.get(
+            "previous_version_label"
+        ) or payload.get("previous_version")
+        target_version_id = payload.get("target_version_id")
+        target_version_label = payload.get(
+            "target_version_label"
+        ) or payload.get("target_version")
+        agent = payload.get("agent") or ""
+
+        # actor / source disambiguation by audit kind.
+        if event.kind == "prompt_version.rollback.ui_changed":
+            source = payload.get("source") or "settings_ui"
+            status_label = "rolled_back"
+            actor = payload.get("actor") or payload.get("by") or ""
+        elif event.kind == "ai.prompt_version.rolled_back":
+            source = payload.get("source") or "service"
+            status_label = "rolled_back"
+            actor = payload.get("by") or payload.get("actor") or ""
+        else:  # pragma: no cover — _ALLOWED_KINDS guarantees one of the above
+            source = "unknown"
+            status_label = "unknown"
+            actor = ""
+
+        # Human-readable summary string the UI can render without
+        # re-deriving from agent + version labels.
+        if previous_version_label and target_version_label:
+            summary = (
+                f"{agent or 'agent'} rolled back from "
+                f"{previous_version_label} to {target_version_label}"
+            )
+        elif target_version_label:
+            summary = (
+                f"{agent or 'agent'} rolled back to {target_version_label}"
+            )
+        else:
+            summary = f"{agent or 'agent'} prompt rolled back"
+
+        return {
+            "id": event.id,
+            "createdAt": event.occurred_at.isoformat(),
+            "kind": event.kind,
+            "tone": event.tone,
+            "actor": actor,
+            "agent": agent,
+            "previousVersionId": previous_version_id,
+            "previousVersionLabel": previous_version_label,
+            "targetVersionId": target_version_id,
+            "targetVersionLabel": target_version_label,
+            "reason": payload.get("reason") or "",
+            "matrixAction": payload.get("matrix_action") or "",
+            "matrixStatus": payload.get("matrix_status") or "",
+            "status": status_label,
+            "source": source,
+            "summary": summary,
+        }
+
+    def get(self, request):
+        qs = AuditEvent.objects.filter(kind__in=self._ALLOWED_KINDS)
+
+        # Filter — agent.
+        agent = (request.query_params.get("agent") or "").strip()
+        if agent:
+            # AuditEvent.payload is JSONField — filter via the
+            # canonical ``agent`` payload key.
+            qs = qs.filter(payload__agent=agent)
+
+        # Filter — kind (allow narrowing to just one source).
+        kind_filter = (request.query_params.get("kind") or "").strip()
+        if kind_filter:
+            if kind_filter not in self._ALLOWED_KINDS:
+                return Response(
+                    {
+                        "detail": (
+                            "kind must be one of "
+                            + ", ".join(repr(k) for k in self._ALLOWED_KINDS)
+                            + "."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            qs = qs.filter(kind=kind_filter)
+
+        # Pagination — simple limit/offset; no DB-wide drain possible
+        # because limit is capped at 200.
+        try:
+            limit = min(
+                int(request.query_params.get("limit") or self._DEFAULT_LIMIT),
+                self._MAX_LIMIT,
+            )
+        except (TypeError, ValueError):
+            limit = self._DEFAULT_LIMIT
+        try:
+            offset = max(int(request.query_params.get("offset") or 0), 0)
+        except (TypeError, ValueError):
+            offset = 0
+
+        total = qs.count()
+        # Phase 15A — secondary ordering by ``-id`` so rows created
+        # in the same millisecond (common on SQLite in tests + on
+        # bursts of activity in prod) sort deterministically with
+        # the newest-inserted row first.
+        page = qs.order_by("-occurred_at", "-id")[offset : offset + limit]
+        items = [self._serialize_event(event) for event in page]
+
+        return Response(
+            {
+                "items": items,
+                "count": total,
+                "limit": limit,
+                "offset": offset,
+                "kindsIncluded": list(self._ALLOWED_KINDS),
+            }
+        )
+
+
 class PromptVersionRollbackFromUiView(APIView):
     """Phase 14F — Settings-UI rollback wrapper around the Phase 3D
     ``rollback_prompt_version`` service.

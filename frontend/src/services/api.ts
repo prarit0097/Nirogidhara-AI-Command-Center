@@ -755,6 +755,38 @@ export const api = {
       () => ({ ...optimisticPromptVersion({ agent: "ceo", version: "draft" }), id, rollbackReason: reason, status: "active" }),
     ),
 
+  // Phase 15A — read-only Rollback History endpoint. Returns
+  // sanitised Phase 14F UI + Phase 3D service audit rows only — never
+  // raw audit payload, never prompt body, never secrets.
+  // See apps/ai_governance/views.py::PromptVersionRollbackHistoryView.
+  getPromptVersionRollbackHistory: (
+    filters: import("@/types/domain").PromptVersionRollbackHistoryFilters = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.agent) params.set("agent", filters.agent);
+    if (filters.kind) params.set("kind", filters.kind);
+    if (filters.limit !== undefined) params.set("limit", String(filters.limit));
+    if (filters.offset !== undefined)
+      params.set("offset", String(filters.offset));
+    const query = params.toString();
+    const path = query
+      ? `/ai/prompt-versions/rollback-history/?${query}`
+      : "/ai/prompt-versions/rollback-history/";
+    return safeFetch<
+      import("@/types/domain").PromptVersionRollbackHistoryResponse
+    >(path, () => ({
+      // Deterministic dev-only optimistic fallback.
+      items: [],
+      count: 0,
+      limit: filters.limit ?? 50,
+      offset: filters.offset ?? 0,
+      kindsIncluded: [
+        "prompt_version.rollback.ui_changed",
+        "ai.prompt_version.rolled_back",
+      ],
+    }));
+  },
+
   // Phase 14F — Settings Rollback System card endpoint. Wraps the
   // Phase 3D rollback service with typed-phrase + reason validation
   // and writes a dedicated prompt_version.rollback.ui_changed audit

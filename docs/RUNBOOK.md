@@ -367,6 +367,58 @@ Same flow — open the modal, pick the original agent + the just-rolled-back ver
 
 ---
 
+## Rollback History (Phase 15A)
+
+The Settings page **"Rollback System"** card includes a secondary
+**"View rollback history"** ghost button that opens a read-only
+modal listing every prompt-version rollback event. The modal is
+strictly read-only — it has no rollback execution path, no typed-
+phrase prompt, no business mutation. Use it to audit who rolled
+back what and when.
+
+### How to review rollback history
+
+1. Open `/settings`.
+2. In the Rollback System card, click **"View rollback history"** (the ghost-variant secondary button next to "Choose rollback target…"). The button is always enabled — history is useful even when no current rollback candidates exist.
+3. The modal opens and fetches `GET /api/ai/prompt-versions/rollback-history/?limit=50`. While loading: "Loading rollback history…". On success either the empty state ("No rollback history yet.") or a table with up to 50 most-recent rollbacks renders.
+4. Each row shows:
+   - **Time** — ISO-formatted timestamp (rendered as the operator's locale).
+   - **Agent** — `ceo`, `cfo`, etc.
+   - **Change** — `<previous_version_label> → <target_version_label>`.
+   - **Reason** — the operator-entered reason (truncated to ≤ 280 chars by the backend).
+   - **Actor** — the username/email of whoever executed the rollback.
+   - **Source** — `UI` (Phase 14F Settings flow) or `Service` (Phase 3D direct service call / legacy `POST /api/ai/prompt-versions/<id>/rollback/` from the Governance page).
+5. Use the **Agent** dropdown at the top to filter to a specific agent's rollback history. Click **"Refresh"** to re-fetch the current filter without closing the modal.
+
+### When to use it
+
+- Verify who rolled back a prompt and when.
+- Check why a prompt version changed (the operator-entered reason is shown verbatim).
+- Audit a compliance concern — confirm that a flagged prompt was actually rolled back, by whom, with what justification.
+- Diagnose unexpected AI behaviour: cross-reference recent AgentRun output with whether the prompt version changed in the last few hours.
+
+### What NOT to do
+
+- **Do not use the history modal as a rollback-execution approval surface.** It is read-only by design. The history button cannot submit a rollback. To actually roll back, use the Phase 14F "Choose rollback target…" button.
+- **Do not paste rollback reasons containing customer PHI/PII.** The reason field is captured into the audit ledger and surfaced to every admin/director who opens the history modal. Keep reasons descriptive but PII-free.
+- **Do not expose this modal outside the admin/director context.** The endpoint is `_AdminAndUpAlways` server-side; the modal is rendered inside the Settings page which is already admin-gated. If a future Doctor Review Board view needs rollback visibility, build a separate endpoint with a tighter allow-list.
+
+### Endpoint reference
+
+- `GET /api/ai/prompt-versions/rollback-history/` → admin/director only. Optional query params: `?agent=<label>`, `?kind=<one of the two allow-listed kinds>`, `?limit=` (default 50, max 200), `?offset=`. Allow-listed kinds: `prompt_version.rollback.ui_changed` (Phase 14F UI) + `ai.prompt_version.rolled_back` (Phase 3D service). Response keys: `items` (sanitised allow-list slice — see [`docs/BACKEND_API.md`](BACKEND_API.md) for the full row shape), `count`, `limit`, `offset`, `kindsIncluded`. POST / PUT / PATCH / DELETE return 405.
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| "Loading rollback history…" never resolves | Backend GET stuck. Check `docker compose -f docker-compose.prod.yml logs --since 60s backend` for `/api/ai/prompt-versions/rollback-history/` traceback. |
+| "Session expired or unauthenticated." | JWT expired; sign out + back in via `/login`. |
+| "You do not have permission to view rollback history." | Current user role is not admin/director/superuser. Check `User.role` in shell. |
+| "Rollback history unavailable." (generic) | Backend returned non-401/403 error. Inspect backend logs for the request id; check whether the audit table is reachable. |
+| "No rollback history yet." but you know a rollback happened | Confirm via shell: `AuditEvent.objects.filter(kind__in=["prompt_version.rollback.ui_changed","ai.prompt_version.rolled_back"]).count()`. If non-zero, the agent filter might be too narrow — clear it via "All agents" and refresh. |
+
+---
+
 ## Prerequisites
 
 - **Node** 18+ (frontend) — verify with `node --version`
