@@ -451,6 +451,54 @@ Hover any badge state for a tooltip with the age + health score (if available).
 
 ---
 
+## Topbar Safety Compact Pill (Phase 15D)
+
+A small compact pill on the Topbar (right of the Org badge, before the Live indicator) summarises the three safety signals the Director needs at a glance — kill-switch state, sandbox state, and Director Briefing freshness — in a single line.
+
+### How to read it
+
+| Pill text | Tone | Meaning |
+|---|---|---|
+| `Safety: Checking…` | grey | One or more fetches still in flight. Will settle within ~1s. |
+| `Safety: AI Paused · Sandbox OFF · Briefing READY/STALE/CRIT/—` | amber | Kill switch is active; AI execution is blocked. **Current production state.** |
+| `Safety: AI Running · Sandbox OFF · Briefing READY` | green | All safety signals nominal. |
+| `Safety: AI Running · Sandbox ON · Briefing READY` | blue | AI is running in shadow / dry-run mode (Phase 14E sandbox). |
+| `Safety: AI Running · Sandbox OFF · Briefing CRIT` | red | Director Briefing flagged critical issues (Phase 9F deterministic scoring). Click into `/ceo-ai` immediately. |
+| `Safety: AI Running · Sandbox OFF · Briefing STALE` | amber | Briefing is >= 36h old. Celery beat may be down. |
+| `Safety: AI ? · Sandbox OFF · Briefing READY` (or similar `?`) | amber | At least one fetch errored. The pill refuses to claim green when state is partially unknown. |
+| `Safety: State unavailable` | grey | All three fetches failed. Check `docker compose -f docker-compose.prod.yml logs --since 60s backend`. |
+
+Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
+
+### What the pill does NOT do
+
+- It is a `<span role="status">` — there is no click handler, no button, no anchor.
+- It does not pause or resume the kill switch (Topbar `AI Paused` / `AI Kill Switch` button remains the only Topbar control for that).
+- It does not toggle sandbox.
+- It does not generate a CEO briefing.
+- It does not execute rollback.
+- It does not write a new AuditEvent.
+- It does not call any provider (Razorpay / Meta Cloud / Delhivery / Vapi / LLMs).
+
+### Endpoint reference
+
+The pill reuses three existing read-only endpoints — no new endpoint was added in Phase 15D:
+
+- `GET /api/v1/saas/runtime-live-gate/kill-switch/` (Phase 14D)
+- `GET /api/ai/sandbox/status/` (Phase 14E)
+- `GET /api/v1/ceo-orchestration/snapshots/sidebar-status/` (Phase 15B)
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Pill stays on "Checking…" forever | One of the three GETs is hung. Check backend logs for `/api/v1/saas/runtime-live-gate/kill-switch/`, `/api/ai/sandbox/status/`, `/api/v1/ceo-orchestration/snapshots/sidebar-status/`. |
+| Pill shows `AI ?` or `Sandbox ?` or `Briefing ?` | The respective endpoint returned a non-200 / non-401 / non-403 response. The pill stays amber until the fetch recovers; refresh the page after backend restart. |
+| Pill claims `AI Running · Sandbox ON` but Sidebar / Settings disagree | Race between the three GETs — refresh once. If it persists, the underlying `SandboxState` / `RuntimeKillSwitch` rows are out of sync; inspect via `python manage.py shell`. |
+| Mobile width hides the pill | Intentional — the pill is `md:inline-flex` so the chrome stays uncluttered on phones. Sidebar bottom indicator + Settings page still surface the full posture. |
+
+---
+
 ## Audit Timeline (Phase 15C)
 
 The Director can review every state change across the system from a single standalone page at `/operations/audit-timeline`. It is read-only by design — no buttons exist on this page that mutate any business row.

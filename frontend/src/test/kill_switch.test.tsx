@@ -33,6 +33,27 @@ vi.mock("@/services/api", () => ({
     postSaasRuntimeLiveGateKillSwitch: vi.fn(),
     getSettingsMock: vi.fn(),
     getWhatsAppProviderStatus: vi.fn(),
+    // Phase 15D — Topbar safety pill also fetches sandbox + briefing
+    // statuses on mount. Provide deterministic stubs so the pill
+    // never throws on undefined.then(); the kill-switch button under
+    // test is unaffected by these.
+    getAiSandboxModeStatus: vi.fn().mockResolvedValue({
+      isEnabled: false,
+      note: "",
+      updatedBy: "",
+      sandboxEnabled: false,
+      statusLabel: "disabled",
+    }),
+    getDirectorBriefingSidebarStatus: vi.fn().mockResolvedValue({
+      status: "missing",
+      label: "No briefing yet",
+      latestSnapshotId: null,
+      latestSnapshotAt: null,
+      ageMinutes: null,
+      healthScore: null,
+      tier: null,
+      targetRoute: "/ceo-ai",
+    }),
     // OrgBadge (rendered inside Topbar) hits this on mount; satisfy it
     // with a deterministic shape so the Topbar render does not throw.
     getSaasCurrentOrganization: vi.fn().mockResolvedValue({

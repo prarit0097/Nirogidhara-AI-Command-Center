@@ -1,11 +1,17 @@
-import { Bell, Command, LogOut, Menu, Power, Search, Sparkles } from "lucide-react";
+import { Bell, Command, LogOut, Menu, Power, Search, Sparkles, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { OrgBadge } from "./OrgBadge";
 import { api } from "@/services/api";
-import type { SaasRuntimeLiveGateKillSwitch } from "@/types/domain";
+import type {
+  AiSandboxModeStatus,
+  DirectorBriefingSidebarStatus,
+  SaasRuntimeLiveGateKillSwitch,
+} from "@/types/domain";
 import KillSwitchModal from "@/components/KillSwitchModal";
+import { computeTopbarSafetySummary } from "@/utils/topbarSafetySummary";
+import { cn } from "@/lib/utils";
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   // Phase 14D — Topbar AI Kill Switch is wired to the real backend
@@ -18,15 +24,27 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     null,
   );
 
+  // Phase 15D — Topbar safety pill data. Reuses Phase 14E sandbox
+  // + Phase 15B briefing endpoints; never mutates state.
+  const [sandbox, setSandbox] = useState<AiSandboxModeStatus | null>(null);
+  const [briefing, setBriefing] = useState<
+    DirectorBriefingSidebarStatus | null
+  >(null);
+  const [killSwitchError, setKillSwitchError] = useState(false);
+  const [sandboxError, setSandboxError] = useState(false);
+  const [briefingError, setBriefingError] = useState(false);
+
   const refresh = async () => {
     try {
       const next = await api.getSaasRuntimeLiveGateKillSwitch();
       setState(next);
+      setKillSwitchError(false);
     } catch (err) {
       // Phase 14D — surface load failure quietly; the Topbar should
       // not white-screen if the backend is briefly unreachable.
       // Settings page shows the canonical state on retry.
       console.error("[Topbar] kill-switch load failed:", err);
+      setKillSwitchError(true);
     }
   };
 
@@ -34,9 +52,44 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     refresh();
   }, []);
 
+  // Phase 15D — fire-and-forget reads for the safety pill. Errors
+  // are recorded so the pill renders "unavailable" rather than
+  // silently claiming a green posture.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getAiSandboxModeStatus()
+      .then((next) => !cancelled && setSandbox(next))
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.error("[Topbar] sandbox load failed:", err);
+        setSandboxError(true);
+      });
+    api
+      .getDirectorBriefingSidebarStatus()
+      .then((next) => !cancelled && setBriefing(next))
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.error("[Topbar] briefing load failed:", err);
+        setBriefingError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const aiPaused = Boolean(
     state?.aiExecutionBlocked ?? state?.enabled ?? false,
   );
+
+  const safetyPill = computeTopbarSafetySummary({
+    killSwitch: state,
+    sandbox,
+    briefing,
+    killSwitchError,
+    sandboxError,
+    briefingError,
+  });
 
   return (
     <header className="sticky top-0 z-30 h-[68px] bg-background/75 backdrop-blur-xl border-b border-border/60 supports-[backdrop-filter]:bg-background/60">
@@ -67,6 +120,30 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
 
         {/* Org badge (Phase 6A — read-only) */}
         <OrgBadge />
+
+        {/* Phase 15D — Topbar Safety Compact Pill.
+            Read-only summary of kill-switch + sandbox + briefing
+            state. No click handler; never executes any action.
+            Visible on md+ widths so the chrome stays uncluttered
+            on mobile (full posture still surfaces on the Sidebar
+            footer + Settings page). */}
+        <span
+          data-testid="topbar-safety-pill"
+          data-safety-tone={safetyPill.tone}
+          data-safety-status={safetyPill.dataStatus}
+          role="status"
+          aria-label={safetyPill.tooltip}
+          title={safetyPill.tooltip}
+          className={cn(
+            "hidden md:inline-flex items-center gap-1.5 h-9 px-3 rounded-full border text-[11.5px] font-semibold whitespace-nowrap cursor-default select-none",
+            safetyPill.className,
+          )}
+        >
+          <ShieldCheck className="h-3.5 w-3.5" />
+          <span data-testid="topbar-safety-pill-label">
+            {safetyPill.label}
+          </span>
+        </span>
 
         {/* Live */}
         <div className="hidden sm:flex items-center gap-2 px-3 h-9 rounded-full bg-success/8 border border-success/20 text-success">
