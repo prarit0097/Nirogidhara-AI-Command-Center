@@ -22,6 +22,7 @@ from .views import (
     CfoAnalyzeView,
     ComplianceAnalyzeView,
     PromptVersionActivateView,
+    PromptVersionRollbackFromUiView,
     PromptVersionRollbackView,
     PromptVersionViewSet,
     RtoAnalyzeView,
@@ -101,6 +102,14 @@ urlpatterns = [
         "prompt-versions/<str:pk>/rollback/",
         PromptVersionRollbackView.as_view(),
         name="prompt-version-rollback",
+    ),
+    # Phase 14F — Settings UI rollback wrapper. Body-shaped POST that
+    # adds typed-phrase + reason gating + matrix audit-trail recording
+    # on top of the Phase 3D legacy rollback view.
+    path(
+        "prompt-versions/rollback-from-ui/",
+        PromptVersionRollbackFromUiView.as_view(),
+        name="prompt-version-rollback-from-ui",
     ),
     # Phase 3E — approval matrix policy snapshot.
     path(

@@ -755,6 +755,42 @@ export const api = {
       () => ({ ...optimisticPromptVersion({ agent: "ceo", version: "draft" }), id, rollbackReason: reason, status: "active" }),
     ),
 
+  // Phase 14F — Settings Rollback System card endpoint. Wraps the
+  // Phase 3D rollback service with typed-phrase + reason validation
+  // and writes a dedicated prompt_version.rollback.ui_changed audit
+  // row. See apps/ai_governance/views.py::PromptVersionRollbackFromUiView.
+  postPromptVersionRollbackFromUi: (
+    payload: import("@/types/domain").PromptVersionRollbackFromUiPayload,
+  ) =>
+    safeMutate<
+      import("@/types/domain").PromptVersionRollbackFromUiResult
+    >(
+      "/ai/prompt-versions/rollback-from-ui/",
+      "POST",
+      payload,
+      // Deterministic optimistic — only used in dev (Phase 13A safeFetch
+      // production fix means prod throws on backend error).
+      () => ({
+        ok: true,
+        status: "rolled_back",
+        agent: payload.agent,
+        previousActiveVersionId: null,
+        targetVersionId: payload.targetVersionId,
+        auditKind: "prompt_version.rollback.ui_changed",
+        promptVersion: {
+          ...optimisticPromptVersion({
+            agent: payload.agent as PromptVersion["agent"],
+            version: "rollback-target",
+          }),
+          id: payload.targetVersionId,
+          isActive: true,
+          status: "active",
+          rollbackReason: "",
+        },
+        message: `Rolled ${payload.agent} back to ${payload.targetVersionId}.`,
+      }),
+    ),
+
   listAgentBudgets: () =>
     safeFetch<AgentBudget[]>("/ai/budgets/", () => []),
 

@@ -49,13 +49,28 @@ export interface SafetyConfirmationModalProps {
   minReasonLength?: number;
   /**
    * Prefix for every data-testid the modal renders. Phase 14D consumers
-   * pass "kill-switch"; Phase 14E sandbox consumer passes "sandbox-mode".
+   * pass "kill-switch"; Phase 14E sandbox consumer passes "sandbox-mode";
+   * Phase 14F rollback consumer passes "rollback-system".
    */
   testIdPrefix: string;
   /** Stable identifier appended to the modal-root testid (per-action). */
   actionKey: string;
   /** Caller-owned async POST. Receives the typed reason. */
   onConfirm: (reason: string) => Promise<void>;
+  /**
+   * Phase 14F — optional ReactNode rendered between the description
+   * and the reason/phrase block. The rollback modal uses this slot
+   * to mount its agent + target-version selectors. The parent owns
+   * the selector state and the validation predicate.
+   */
+  extraInputs?: ReactNode;
+  /**
+   * Phase 14F — additional precondition the parent enforces (e.g.
+   * "an agent and target version must both be selected"). When
+   * provided and false, submit stays disabled even if reason +
+   * phrase are valid.
+   */
+  extraValid?: boolean;
 }
 
 export function SafetyConfirmationModal({
@@ -71,6 +86,8 @@ export function SafetyConfirmationModal({
   testIdPrefix,
   actionKey,
   onConfirm,
+  extraInputs,
+  extraValid = true,
 }: SafetyConfirmationModalProps) {
   const [reason, setReason] = useState("");
   const [typed, setTyped] = useState("");
@@ -90,7 +107,7 @@ export function SafetyConfirmationModal({
 
   const reasonValid = reason.trim().length >= minReasonLength;
   const phraseValid = typed === confirmationPhrase;
-  const canSubmit = reasonValid && phraseValid && !busy;
+  const canSubmit = reasonValid && phraseValid && extraValid && !busy;
 
   const onSubmit = async () => {
     if (!canSubmit) return;
@@ -119,6 +136,11 @@ export function SafetyConfirmationModal({
         </DialogHeader>
 
         <div className="space-y-3">
+          {/* Phase 14F — optional selectors (e.g. rollback agent +
+              target version) injected by the caller. Rendered above
+              the reason + phrase block so the operator picks the
+              target first. */}
+          {extraInputs}
           <label className="block">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Reason (audit-logged)

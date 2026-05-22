@@ -2287,6 +2287,31 @@ export interface AiSandboxModePostPayload {
   confirmationPhrase: string;
 }
 
+/**
+ * Phase 14F — Prompt Version rollback from the Settings Rollback
+ * System card. Targets the dedicated UI endpoint
+ * POST /api/ai/prompt-versions/rollback-from-ui/. The legacy Phase 3D
+ * POST /api/ai/prompt-versions/<id>/rollback/ remains in use by the
+ * Governance page and is NOT changed.
+ */
+export interface PromptVersionRollbackFromUiPayload {
+  agent: string;
+  targetVersionId: string;
+  reason: string;
+  confirmationPhrase: string;
+}
+
+export interface PromptVersionRollbackFromUiResult {
+  ok: boolean;
+  status: "rolled_back";
+  agent: string;
+  previousActiveVersionId: string | null;
+  targetVersionId: string;
+  auditKind: "prompt_version.rollback.ui_changed";
+  promptVersion: PromptVersion;
+  message: string;
+}
+
 export interface SaasRuntimeLiveGatePreview {
   operationType: string;
   providerType: string;

@@ -436,6 +436,185 @@ class PromptVersionRollbackView(APIView):
         return PromptVersionViewSet._rollback_view(request, pk)
 
 
+class PromptVersionRollbackFromUiView(APIView):
+    """Phase 14F — Settings-UI rollback wrapper around the Phase 3D
+    ``rollback_prompt_version`` service.
+
+    Adds a typed-phrase + reason gate matching the Phase 14D / 14E
+    safety-modal pattern, records a Phase 4C ``mark_auto_approved``
+    row for the matrix audit trail (the underlying matrix policy is
+    ``approval_required`` + approver ``admin``; this endpoint already
+    requires admin/director via ``_AdminAndUpAlways``, so the role
+    gate is effectively the matrix gate — the auto-approved row is
+    the audit-only record), and writes a dedicated
+    ``prompt_version.rollback.ui_changed`` audit row on top of the
+    legacy ``ai.prompt_version.rolled_back`` row that the service
+    already emits.
+
+    The legacy ``POST /api/ai/prompt-versions/<pk>/rollback/``
+    endpoint (Phase 3D) is intentionally preserved for backwards
+    compatibility with existing tests + the Governance page.
+    """
+
+    permission_classes = [_AdminAndUpAlways]
+
+    _CONFIRMATION_PHRASE = "ROLLBACK PROMPT VERSION"
+    _MIN_REASON_LENGTH = 10
+
+    def post(self, request):
+        agent = (request.data.get("agent") or "").strip()
+        target_version_id = (
+            request.data.get("targetVersionId")
+            or request.data.get("target_version_id")
+            or ""
+        )
+        target_version_id = str(target_version_id).strip()
+        reason = (request.data.get("reason") or "").strip()
+        confirmation = (request.data.get("confirmationPhrase") or "").strip()
+
+        if not target_version_id:
+            return Response(
+                {"detail": "targetVersionId is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(reason) < self._MIN_REASON_LENGTH:
+            return Response(
+                {
+                    "detail": (
+                        f"A non-empty reason of at least "
+                        f"{self._MIN_REASON_LENGTH} characters is required "
+                        f"so the audit trail captures why the rollback "
+                        f"happened."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if confirmation != self._CONFIRMATION_PHRASE:
+            return Response(
+                {
+                    "detail": (
+                        "Confirmation phrase did not match. Type "
+                        f"'{self._CONFIRMATION_PHRASE}' exactly to proceed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Resolve target + cross-check agent (if supplied) BEFORE
+        # mutating anything so a bad payload never leaves the DB in a
+        # half-rolled-back state.
+        try:
+            target = PromptVersion.objects.get(pk=target_version_id)
+        except PromptVersion.DoesNotExist as exc:
+            raise NotFound(
+                f"PromptVersion {target_version_id} not found"
+            ) from exc
+
+        if agent and target.agent != agent:
+            return Response(
+                {
+                    "detail": (
+                        f"targetVersionId {target_version_id} belongs to "
+                        f"agent '{target.agent}', not '{agent}'."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # No-op refusal: rolling back to the currently active version.
+        if target.is_active:
+            return Response(
+                {
+                    "detail": (
+                        f"PromptVersion {target_version_id} is already the "
+                        f"active version for agent '{target.agent}' — "
+                        f"rollback would be a no-op."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        previous = prompt_versions.get_active_prompt_version(target.agent)
+        previous_id = previous.id if previous else None
+
+        # Phase 4C audit-trail record — matrix policy for
+        # ai.prompt_version.activate covers rollback per the description
+        # "Activate or rollback an AI prompt version." We mark
+        # auto-approved (same pattern as activate) so the operator
+        # queue shows the rollback action.
+        approval_engine.mark_auto_approved(
+            action="ai.prompt_version.activate",
+            payload={
+                "phase": "14F",
+                "subAction": "rollback",
+                "targetVersionId": target_version_id,
+                "agent": target.agent,
+                "previousActiveVersionId": previous_id,
+            },
+            actor_role=getattr(request.user, "role", "") or "",
+            target={
+                "app": "ai_governance",
+                "model": "PromptVersion",
+                "id": target_version_id,
+            },
+            by_user=request.user,
+        )
+
+        # Delegate to the existing Phase 3D service — same behaviour the
+        # legacy /api/ai/prompt-versions/<pk>/rollback/ endpoint uses.
+        result_pv = prompt_versions.rollback_prompt_version(
+            target_version_id=target_version_id,
+            reason=reason,
+            by_user=request.user,
+        )
+
+        actor_label = (
+            getattr(request.user, "username", "")
+            or getattr(request.user, "email", "")
+            or ""
+        )
+        # Phase 14F UI audit kind. Coexists with the legacy
+        # ai.prompt_version.rolled_back row written by the service.
+        write_event(
+            kind="prompt_version.rollback.ui_changed",
+            text=(
+                f"Prompt rollback via Settings UI by {actor_label or 'admin'} "
+                f"· agent={result_pv.agent} → v{result_pv.version}"
+            ),
+            tone=AuditEvent.Tone.WARNING,
+            user=request.user,
+            payload={
+                "phase": "14F",
+                "source": "settings_ui",
+                "action": "prompt_version.rollback",
+                "actor": actor_label,
+                "agent": result_pv.agent,
+                "previous_active_version_id": previous_id,
+                "target_version_id": result_pv.id,
+                "target_version_label": result_pv.version,
+                "matrix_action": "ai.prompt_version.activate",
+                "matrix_status": "auto_approved",
+                "reason": reason[:280],
+            },
+        )
+
+        return Response(
+            {
+                "ok": True,
+                "status": "rolled_back",
+                "agent": result_pv.agent,
+                "previousActiveVersionId": previous_id,
+                "targetVersionId": result_pv.id,
+                "auditKind": "prompt_version.rollback.ui_changed",
+                "promptVersion": PromptVersionSerializer(result_pv).data,
+                "message": (
+                    f"Rolled {result_pv.agent} back to version "
+                    f"{result_pv.version}."
+                ),
+            }
+        )
+
+
 class AgentBudgetViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,

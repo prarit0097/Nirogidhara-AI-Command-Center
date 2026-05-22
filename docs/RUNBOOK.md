@@ -284,6 +284,89 @@ Both shell flows write the legacy `ai.sandbox.enabled` / `ai.sandbox.disabled` a
 
 ---
 
+## Prompt Version Rollback (Phase 14F)
+
+The Settings page **"Rollback System"** card lets the Director roll an AI
+agent back to a previous prompt/playbook version via the Phase 3D
+`PromptVersion` service, wrapped in a typed-phrase + reason gate:
+
+```
+POST /api/ai/prompt-versions/rollback-from-ui/
+```
+
+### When to use it
+
+- A newly-activated prompt version produced regressing or unsafe AI output
+  in the last few hours.
+- A compliance review flagged a `system_policy` change that needs to be
+  reverted before the next agent run.
+- A Claim Vault claim was retracted and the corresponding prompt version
+  needs to be archived in favour of an older known-good one.
+
+### When NOT to use it
+
+- **Live business incident still in flight** — engage the **AI Kill
+  Switch** (Phase 14D) first, then roll back once the immediate stop is
+  in place. Rollback does not pause anything by itself.
+- **Medical / compliance incident requiring review** — coordinate with
+  the doctor review board and CAIO governance audit before rolling back;
+  the audit trail must reflect the review, not just the operator's reason.
+- **The version you want to roll back to has not yet been validated in
+  sandbox** — activate it through the Governance page first; rollback
+  expects a known-good prior version to exist.
+
+### State semantics
+
+| `PromptVersion.is_active` | Status | What it means |
+|---|---|---|
+| `true` (one row per agent) | `active` | Current production prompt for that agent. The Phase 14F UI excludes this row from the rollback candidate list. |
+| `false` + `status="archived"` | `archived` | Previously active, replaced by a newer activation. Most common rollback target. |
+| `false` + `status="rolled_back"` | `rolled_back` | Previously active, replaced by an explicit rollback (with `rollback_reason` recorded). Can be rolled back to again — the partial unique constraint on `is_active=True` permits it. |
+| `false` + `status="draft" / "sandbox"` | draft / sandbox | Created but never activated. Eligible as a rollback target if surfaced. |
+
+After a successful rollback:
+- `previous_active.is_active=False, status=ROLLED_BACK, rolled_back_at=now, rollback_reason=<the operator's reason>`.
+- `target.is_active=True, status=ACTIVE, activated_at=now`.
+- The next `AgentRun` for that agent dispatches the new active prompt.
+- **No provider call, no env edit, no Celery task restart needed.**
+
+### Director playbook — roll back from the UI
+
+1. Navigate to `/settings`.
+2. The "Rollback System" card status pill shows one of: `"Loading rollback state…"`, `"Rollback ready"`, `"No rollback candidates"`, or `"Rollback state unavailable"`. Click **"Choose rollback target…"** (enabled only when the pill says `"Rollback ready"`).
+3. The modal opens. Pick:
+   - **AI agent** dropdown — only agents with at least one non-active version are listed.
+   - **Target version** dropdown — filtered by selected agent; shows `version` label, `title`, `status`, `createdBy`. Full `system_policy` / `role_prompt` body is intentionally NOT rendered here; reach for the Governance page if you need to read the prompt body before deciding.
+4. Type a **reason** (≥ 10 characters; the audit trail captures it).
+5. Type the exact confirmation phrase **`ROLLBACK PROMPT VERSION`** (case sensitive, full string match).
+6. Click **"Roll back prompt version"**. Backend writes:
+   - A Phase 4C `ApprovalRequest` row with `action="ai.prompt_version.activate"` and `status="auto_approved"`.
+   - The Phase 3D `ai.prompt_version.rolled_back` audit row (from the underlying service).
+   - The Phase 14F `prompt_version.rollback.ui_changed` audit row (UI-source marker, `phase="14F"`).
+7. The modal closes; the Settings card refreshes the candidate list.
+
+### Undo a rollback
+
+Same flow — open the modal, pick the original agent + the just-rolled-back version (it now appears as a candidate because it's no longer active), type a reason like `"Undo previous rollback — original version was correct"`, and the same phrase.
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| "No rollback candidates" but you know an archived version exists | Confirm via shell: `PromptVersion.objects.filter(agent="<x>").values("id","version","is_active","status")`. If the archived version exists, check that the GET endpoint isn't blocked (admin/director only). |
+| `confirmationPhrase` 400 error | Phrase must match `"ROLLBACK PROMPT VERSION"` EXACTLY (case sensitive). No abbreviations. |
+| `targetVersionId belongs to agent 'X', not 'Y'` 400 | The modal already filters by agent; this error only fires if the UI is bypassed or the agent selector was changed after submit. |
+| `PromptVersion <id> is already the active version` 400 | The target you selected is currently active — pick a different non-active row. |
+| Rollback succeeded but next AgentRun still uses old prompt | Check whether the relevant agent runtime caches the prompt at process start. Most agents read `PromptVersion` fresh on each dispatch — if not, the backend container may need a restart (separate from Phase 14F flow). |
+
+### Endpoint reference
+
+- `GET /api/ai/prompt-versions/` (optional `?agent=`) → admin/director only. Returns full `PromptVersion` rows. The Phase 14F Settings modal renders only safe metadata (`version`, `title`, `status`, `createdBy`).
+- `POST /api/ai/prompt-versions/rollback-from-ui/` → admin/director only. Body: `{agent, targetVersionId, reason (>= 10 chars), confirmationPhrase}`. Confirmation phrase: `"ROLLBACK PROMPT VERSION"`. Audit kinds: `prompt_version.rollback.ui_changed` (Phase 14F) + the legacy `ai.prompt_version.rolled_back` row (Phase 3D service).
+- `POST /api/ai/prompt-versions/<id>/rollback/` → Phase 3D legacy path, preserved. The Governance page continues to use this endpoint with the lighter `{reason}` payload.
+
+---
+
 ## Prerequisites
 
 - **Node** 18+ (frontend) — verify with `node --version`

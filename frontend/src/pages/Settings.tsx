@@ -7,6 +7,7 @@ import { api } from "@/services/api";
 import type {
   AiSandboxModeAction,
   AiSandboxModeStatus,
+  PromptVersion,
   SaasRuntimeLiveGateKillSwitch,
   SaasRuntimeLiveGateKillSwitchAction,
   WhatsAppProviderStatus,
@@ -24,6 +25,7 @@ import {
 import { toast } from "sonner";
 import KillSwitchModal from "@/components/KillSwitchModal";
 import SandboxModeModal from "@/components/SandboxModeModal";
+import RollbackSystemModal from "@/components/RollbackSystemModal";
 
 export default function Settings() {
   const [data, setData] = useState<any>(null);
@@ -41,6 +43,12 @@ export default function Settings() {
     useState<AiSandboxModeStatus | null>(null);
   const [sandboxModal, setSandboxModal] =
     useState<AiSandboxModeAction | null>(null);
+  // Phase 14F — real backend-wired Rollback System state.
+  const [promptVersions, setPromptVersions] = useState<
+    PromptVersion[] | null
+  >(null);
+  const [promptVersionsError, setPromptVersionsError] = useState(false);
+  const [rollbackOpen, setRollbackOpen] = useState(false);
 
   const refreshKillSwitch = async () => {
     try {
@@ -65,11 +73,27 @@ export default function Settings() {
     }
   };
 
+  const refreshPromptVersions = async () => {
+    try {
+      const next = await api.listPromptVersions();
+      setPromptVersions(next);
+      setPromptVersionsError(false);
+    } catch (err) {
+      setPromptVersionsError(true);
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to load prompt versions";
+      toast.error(`Rollback System: ${message}`);
+    }
+  };
+
   useEffect(() => {
     api.getSettingsMock().then(setData);
     api.getWhatsAppProviderStatus().then(setWhatsappStatus);
     refreshKillSwitch();
     refreshSandbox();
+    refreshPromptVersions();
   }, []);
   if (!data) return <div className="h-96 grid place-items-center text-muted-foreground">Loading…</div>;
 
@@ -206,9 +230,59 @@ export default function Settings() {
             )}
           </div>
         </div>
-        <ControlCard icon={RotateCcw} tone="warning" title="Rollback System" desc="Revert to last known-good prompts and pricing rules.">
-          <Button variant="outline" size="sm" onClick={() => toast.success("Rolled back to v3.2")}>Rollback</Button>
-        </ControlCard>
+        {/* Phase 14F — Rollback System card wired to the real
+            PromptVersion rollback path
+            (POST /api/ai/prompt-versions/rollback-from-ui/).
+            Modal requires agent + target-version selectors + reason
+            + typed phrase "ROLLBACK PROMPT VERSION". The legacy mock
+            toast Rollback button is removed. */}
+        <div className="surface-card p-5 border-l-4 border-l-warning">
+          <div className="flex items-center justify-between mb-2">
+            <RotateCcw className="h-5 w-5 text-warning" />
+            <StatusPill
+              tone={
+                promptVersionsError
+                  ? "warning"
+                  : promptVersions === null
+                    ? "info"
+                    : (promptVersions ?? []).some((v) => !v.isActive)
+                      ? "info"
+                      : "neutral"
+              }
+            >
+              {promptVersionsError
+                ? "Rollback state unavailable"
+                : promptVersions === null
+                  ? "Loading rollback state…"
+                  : (promptVersions ?? []).some((v) => !v.isActive)
+                    ? "Rollback ready"
+                    : "No rollback candidates"}
+            </StatusPill>
+          </div>
+          <div className="font-display text-lg font-semibold">Rollback System</div>
+          <div className="text-xs text-muted-foreground">
+            Revert an AI agent to a previous prompt/playbook version. Requires
+            agent + target version selection, a 10+ char reason, and the typed
+            phrase <code className="font-mono">ROLLBACK PROMPT VERSION</code>.
+            Does not resume AI, toggle sandbox, send messages, or call
+            customers.
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button
+              data-testid="settings-rollback-open"
+              variant="outline"
+              size="sm"
+              disabled={
+                promptVersions === null ||
+                promptVersionsError ||
+                !(promptVersions ?? []).some((v) => !v.isActive)
+              }
+              onClick={() => setRollbackOpen(true)}
+            >
+              Choose rollback target…
+            </Button>
+          </div>
+        </div>
       </div>
       {/* Phase 14D — single shared KillSwitchModal handles both
           activate and resume from the Settings card. The Topbar uses
@@ -240,6 +314,23 @@ export default function Settings() {
               : sandboxState?.confirmationPhrases?.disableSandboxMode
           }
           onSuccess={(next) => setSandboxState(next)}
+        />
+      )}
+      {/* Phase 14F — Rollback System modal. Wraps the shared
+          SafetyConfirmationModal with agent + target-version
+          selectors above the reason/phrase block. Mounts only when
+          opened so the agent + target lists are recomputed off the
+          freshest promptVersions snapshot. */}
+      {rollbackOpen && promptVersions !== null && (
+        <RollbackSystemModal
+          open={rollbackOpen}
+          onOpenChange={(next) => setRollbackOpen(next)}
+          versions={promptVersions}
+          onSuccess={() => {
+            // Refresh the list so the no-longer-eligible target +
+            // the new active version are reflected in the next open.
+            refreshPromptVersions();
+          }}
         />
       )}
 
