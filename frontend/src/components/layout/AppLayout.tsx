@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { cn } from "@/lib/utils";
 
 export function AppLayout() {
   const [open, setOpen] = useState(false);
@@ -20,9 +21,22 @@ export function AppLayout() {
         collapsed={collapsed}
         onCollapsedChange={setCollapsed}
       />
-      <div className={collapsed ? "lg:pl-[72px] transition-[padding] duration-300" : "lg:pl-[260px] transition-[padding] duration-300"}>
+      <div
+        data-testid="app-layout-content"
+        className={cn(
+          "transition-[padding] duration-300",
+          // Phase 15E - clip horizontal overflow at the layout
+          // container so a wide chrome element or a wide page table
+          // never produces a body-level horizontal scrollbar.
+          // overflow-x-clip beats overflow-x-hidden because it does
+          // not establish a new scroll context and does not break
+          // sticky positioning of the Topbar / Sidebar.
+          "overflow-x-clip",
+          collapsed ? "lg:pl-[72px]" : "lg:pl-[260px]",
+        )}
+      >
         <Topbar onMenu={() => setOpen(true)} />
-        <main className="p-4 sm:p-6 lg:p-10 max-w-[1600px] mx-auto animate-fade-in">
+        <main className="p-4 sm:p-6 lg:p-10 max-w-[1600px] mx-auto animate-fade-in min-w-0">
           {/* Phase 14C — global route-level ErrorBoundary around <Outlet/>.
               Any uncaught render error in any child route now surfaces with
               the Topbar + Sidebar chrome intact instead of unmounting the

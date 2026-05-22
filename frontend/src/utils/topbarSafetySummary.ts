@@ -33,8 +33,15 @@ export type TopbarSafetyTone =
   | "neutral";
 
 export interface TopbarSafetySummary {
-  /** Compact pill label. Always begins with "Safety:". */
+  /** Full pill label. Always begins with "Safety:". Rendered at xl+. */
   label: string;
+  /**
+   * Compact pill label for medium widths (md/lg). Drops the
+   * "Safety:" prefix and abbreviates Sandbox -> SBOX and the
+   * Briefing token -> bare status. Always non-empty so the medium
+   * breakpoint never goes blank.
+   */
+  compactLabel: string;
   /** Semantic tone - the pill maps this to a colour class. */
   tone: TopbarSafetyTone;
   /** Tailwind background class for the pill body. */
@@ -189,6 +196,7 @@ export function computeTopbarSafetySummary(
   if (anyLoading) {
     return {
       label: "Safety: Checking…",
+      compactLabel: "Checking…",
       tone: "neutral",
       className: TONE_CLASS.neutral,
       tooltip: "Loading safety state…",
@@ -200,6 +208,7 @@ export function computeTopbarSafetySummary(
   if (allFetchesFailed) {
     return {
       label: "Safety: State unavailable",
+      compactLabel: "State unavailable",
       tone: "neutral",
       className: TONE_CLASS.neutral,
       tooltip:
@@ -239,6 +248,12 @@ export function computeTopbarSafetySummary(
   }
 
   const label = `Safety: ${ks.compact} · ${sb.compact} · ${br.compact}`;
+  // Compact label drops the "Safety:" prefix + shortens Sandbox to
+  // SBOX and the Briefing prefix word so the pill fits between
+  // ~768px and ~1280px without forcing the Topbar to overflow.
+  const sbCompact = sb.compact.replace(/^Sandbox /, "SBOX ");
+  const brCompact = br.compact.replace(/^Briefing /, "");
+  const compactLabel = `${ks.compact} · ${sbCompact} · ${brCompact}`;
   const tooltip = `${ks.long}. ${sb.long}. ${br.long}. Read-only summary.`;
 
   let dataStatus: TopbarSafetySummary["dataStatus"];
@@ -254,6 +269,7 @@ export function computeTopbarSafetySummary(
 
   return {
     label,
+    compactLabel,
     tone,
     className: TONE_CLASS[tone],
     tooltip,

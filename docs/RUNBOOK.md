@@ -470,6 +470,10 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Responsive behaviour (Phase 15E)
+
+At desktop widths ≥ 1280px the pill shows the full label, e.g. `Safety: AI Paused · Sandbox OFF · Briefing STALE`. Between 768px and 1279px it shows a compact form, e.g. `AI Paused · SBOX OFF · STALE` — same tone colour, same icon, same `title` / `aria-label` carrying the full posture. Below 768px the pill is hidden; the Sidebar bottom indicator and the Settings cards still show the full safety posture. If the visible label looks abbreviated, hover the pill — the long-form tooltip always carries the complete kill-switch / sandbox / briefing summary, and the pill still triggers no action.
+
 ### What the pill does NOT do
 
 - It is a `<span role="status">` — there is no click handler, no button, no anchor.

@@ -129,6 +129,7 @@ describe("Phase 15D — computeTopbarSafetySummary", () => {
       briefing: null,
     });
     expect(res.label).toBe("Safety: Checking…");
+    expect(res.compactLabel).toBe("Checking…");
     expect(res.tone).toBe("neutral");
     expect(res.dataStatus).toBe("loading");
   });
@@ -142,6 +143,9 @@ describe("Phase 15D — computeTopbarSafetySummary", () => {
     expect(res.label).toBe(
       "Safety: AI Paused · Sandbox OFF · Briefing STALE",
     );
+    // Phase 15E - compact label drops the "Safety:" prefix, shortens
+    // Sandbox -> SBOX, and drops the Briefing prefix word.
+    expect(res.compactLabel).toBe("AI Paused · SBOX OFF · STALE");
     expect(res.tone).toBe("warning");
     expect(res.dataStatus).toBe("ai_paused");
   });
@@ -242,6 +246,39 @@ describe("Phase 15D — computeTopbarSafetySummary", () => {
     // Missing briefing on a clean DB shouldn't escalate to warning
     // (it's the safe initial state) — success tone is appropriate.
     expect(res.tone).toBe("success");
+  });
+
+  it("Phase 15E - compactLabel for all 3-source states drops 'Safety:' prefix and abbreviates Sandbox/Briefing", () => {
+    const running = computeTopbarSafetySummary({
+      killSwitch: killRunning,
+      sandbox: sandboxOn,
+      briefing: briefingReady,
+    });
+    expect(running.compactLabel).toBe("AI Running · SBOX ON · READY");
+
+    const allClear = computeTopbarSafetySummary({
+      killSwitch: killRunning,
+      sandbox: sandboxOff,
+      briefing: briefingReady,
+    });
+    expect(allClear.compactLabel).toBe("AI Running · SBOX OFF · READY");
+
+    const critical = computeTopbarSafetySummary({
+      killSwitch: killRunning,
+      sandbox: sandboxOff,
+      briefing: briefingCritical,
+    });
+    expect(critical.compactLabel).toBe("AI Running · SBOX OFF · CRIT");
+
+    const unavailable = computeTopbarSafetySummary({
+      killSwitch: null,
+      sandbox: null,
+      briefing: null,
+      killSwitchError: true,
+      sandboxError: true,
+      briefingError: true,
+    });
+    expect(unavailable.compactLabel).toBe("State unavailable");
   });
 
   it("__testing__.TONE_CLASS includes all five tones", () => {
@@ -417,6 +454,49 @@ describe("Phase 15D — Topbar safety pill render", () => {
     expect(pill.closest("button")).toBeNull();
     // No onclick attribute / no role="button".
     expect(pill.getAttribute("role")).toBe("status");
+  });
+
+  it("Phase 15E - pill has shrink-0 so it cannot be squeezed out of the Topbar", async () => {
+    (
+      api.getSaasRuntimeLiveGateKillSwitch as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(killRunning);
+    (
+      api.getAiSandboxModeStatus as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(sandboxOff);
+    (
+      api.getDirectorBriefingSidebarStatus as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(briefingReady);
+
+    renderTopbar();
+
+    const pill = await screen.findByTestId("topbar-safety-pill");
+    expect(pill.className).toContain("shrink-0");
+    // Visible on md+ widths only (hidden md:inline-flex).
+    expect(pill.className).toContain("hidden");
+    expect(pill.className).toContain("md:inline-flex");
+  });
+
+  it("Phase 15E - both full and compact labels render, responsive classes pick which is visible", async () => {
+    (
+      api.getSaasRuntimeLiveGateKillSwitch as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(killPaused);
+    (
+      api.getAiSandboxModeStatus as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(sandboxOff);
+    (
+      api.getDirectorBriefingSidebarStatus as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(briefingStale);
+
+    renderTopbar();
+
+    const full = await screen.findByTestId("topbar-safety-pill-label");
+    const compact = screen.getByTestId("topbar-safety-pill-compact-label");
+    // Full label visible at xl+, compact label visible below xl.
+    expect(full.className).toContain("hidden");
+    expect(full.className).toContain("xl:inline");
+    expect(compact.className).toContain("xl:hidden");
+    expect(full.textContent).toContain("Sandbox OFF");
+    expect(compact.textContent).toContain("SBOX OFF");
   });
 
   it("aria-label / title surface the long-form tooltip for screen readers", async () => {

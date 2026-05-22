@@ -93,7 +93,13 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
 
   return (
     <header className="sticky top-0 z-30 h-[68px] bg-background/75 backdrop-blur-xl border-b border-border/60 supports-[backdrop-filter]:bg-background/60">
-      <div className="h-full px-4 lg:px-8 flex items-center gap-3">
+      {/* Phase 15E - min-w-0 lets flex children shrink correctly so
+          the Topbar never overflows horizontally on common desktop
+          widths. Without min-w-0 the chrome's intrinsic width (long
+          Safety Pill label + multiple whitespace-nowrap chips + the
+          search input) can exceed viewport and cause a body-level
+          horizontal scrollbar. */}
+      <div className="h-full px-4 lg:px-8 flex items-center gap-3 min-w-0">
         <button
           onClick={onMenu}
           className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-muted text-foreground"
@@ -102,8 +108,10 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           <Menu className="h-5 w-5" />
         </button>
 
-        {/* Search */}
-        <div className="hidden md:flex flex-1 max-w-xl">
+        {/* Search — Phase 15E: min-w-0 + shrink so the input
+            collapses when chrome to its right is busy, preventing
+            a horizontal page scrollbar at narrower desktop widths. */}
+        <div className="hidden md:flex flex-1 max-w-xl min-w-0 shrink">
           <div className="relative w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors" />
             <input
@@ -121,12 +129,18 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         {/* Org badge (Phase 6A — read-only) */}
         <OrgBadge />
 
-        {/* Phase 15D — Topbar Safety Compact Pill.
+        {/* Phase 15D / 15E — Topbar Safety Compact Pill.
             Read-only summary of kill-switch + sandbox + briefing
             state. No click handler; never executes any action.
             Visible on md+ widths so the chrome stays uncluttered
             on mobile (full posture still surfaces on the Sidebar
-            footer + Settings page). */}
+            footer + Settings page).
+            Phase 15E: responsive label - full text at xl+, compact
+            text at md/lg so the Topbar fits at common desktop
+            widths (1280-1366px) without forcing a page-level
+            horizontal scrollbar. aria-label / title always carry
+            the long-form tooltip regardless of which label is
+            visually rendered. */}
         <span
           data-testid="topbar-safety-pill"
           data-safety-tone={safetyPill.tone}
@@ -135,13 +149,22 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           aria-label={safetyPill.tooltip}
           title={safetyPill.tooltip}
           className={cn(
-            "hidden md:inline-flex items-center gap-1.5 h-9 px-3 rounded-full border text-[11.5px] font-semibold whitespace-nowrap cursor-default select-none",
+            "hidden md:inline-flex items-center gap-1.5 h-9 px-3 rounded-full border text-[11.5px] font-semibold whitespace-nowrap cursor-default select-none shrink-0",
             safetyPill.className,
           )}
         >
-          <ShieldCheck className="h-3.5 w-3.5" />
-          <span data-testid="topbar-safety-pill-label">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+          <span
+            data-testid="topbar-safety-pill-label"
+            className="hidden xl:inline"
+          >
             {safetyPill.label}
+          </span>
+          <span
+            data-testid="topbar-safety-pill-compact-label"
+            className="xl:hidden"
+          >
+            {safetyPill.compactLabel}
           </span>
         </span>
 
