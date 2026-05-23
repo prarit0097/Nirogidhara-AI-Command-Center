@@ -24,6 +24,7 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { Topbar } from "@/components/layout/Topbar";
 import Settings from "@/pages/Settings";
+import { SafetyStateProvider } from "@/context/SafetyStateContext";
 
 // ---- api mock ----------------------------------------------------------
 
@@ -130,7 +131,9 @@ describe("Phase 14D — Topbar AI Kill Switch", () => {
 
     render(
       <MemoryRouter>
-        <Topbar onMenu={() => {}} />
+        <SafetyStateProvider>
+          <Topbar onMenu={() => {}} />
+        </SafetyStateProvider>
       </MemoryRouter>,
     );
 
@@ -146,7 +149,9 @@ describe("Phase 14D — Topbar AI Kill Switch", () => {
 
     render(
       <MemoryRouter>
-        <Topbar onMenu={() => {}} />
+        <SafetyStateProvider>
+          <Topbar onMenu={() => {}} />
+        </SafetyStateProvider>
       </MemoryRouter>,
     );
 
@@ -165,7 +170,9 @@ describe("Phase 14D — Topbar AI Kill Switch", () => {
 
     render(
       <MemoryRouter>
-        <Topbar onMenu={() => {}} />
+        <SafetyStateProvider>
+          <Topbar onMenu={() => {}} />
+        </SafetyStateProvider>
       </MemoryRouter>,
     );
 
@@ -186,7 +193,9 @@ describe("Phase 14D — Topbar AI Kill Switch", () => {
 
     const { container } = render(
       <MemoryRouter>
-        <Topbar onMenu={() => {}} />
+        <SafetyStateProvider>
+          <Topbar onMenu={() => {}} />
+        </SafetyStateProvider>
       </MemoryRouter>,
     );
     await screen.findByTestId("topbar-kill-switch-button");
@@ -205,7 +214,9 @@ describe("Phase 14D — KillSwitchModal validation", () => {
 
     render(
       <MemoryRouter>
-        <Topbar onMenu={() => {}} />
+        <SafetyStateProvider>
+          <Topbar onMenu={() => {}} />
+        </SafetyStateProvider>
       </MemoryRouter>,
     );
     fireEvent.click(await screen.findByTestId("topbar-kill-switch-button"));
@@ -259,7 +270,9 @@ describe("Phase 14D — KillSwitchModal validation", () => {
 
     render(
       <MemoryRouter>
-        <Topbar onMenu={() => {}} />
+        <SafetyStateProvider>
+          <Topbar onMenu={() => {}} />
+        </SafetyStateProvider>
       </MemoryRouter>,
     );
     fireEvent.click(await screen.findByTestId("topbar-kill-switch-button"));

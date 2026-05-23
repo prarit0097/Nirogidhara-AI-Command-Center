@@ -17,6 +17,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { computeSafetyStatus } from "@/utils/safetyStatus";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { SafetyStateProvider } from "@/context/SafetyStateContext";
 
 // ---- api mock ----------------------------------------------------------
 
@@ -150,15 +151,21 @@ describe("Phase 14E-Hotfix-1 — computeSafetyStatus priority", () => {
 
 // ---- Sidebar render ----------------------------------------------------
 
+// Phase 15F — Sidebar now consumes shared safety state from
+// SafetyStateProvider. Tests wrap with the provider so the
+// provider's fetches drive the same mocks Phase 14E-Hotfix-1
+// tests already configured.
 const renderSidebar = () =>
   render(
     <MemoryRouter>
-      <Sidebar
-        open
-        onClose={() => {}}
-        collapsed={false}
-        onCollapsedChange={() => {}}
-      />
+      <SafetyStateProvider>
+        <Sidebar
+          open
+          onClose={() => {}}
+          collapsed={false}
+          onCollapsedChange={() => {}}
+        />
+      </SafetyStateProvider>
     </MemoryRouter>,
   );
 

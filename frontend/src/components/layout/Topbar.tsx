@@ -1,17 +1,11 @@
 import { Bell, Command, LogOut, Menu, Power, Search, Sparkles, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { OrgBadge } from "./OrgBadge";
-import { api } from "@/services/api";
-import type {
-  AiSandboxModeStatus,
-  DirectorBriefingSidebarStatus,
-  SaasRuntimeLiveGateKillSwitch,
-} from "@/types/domain";
 import KillSwitchModal from "@/components/KillSwitchModal";
-import { computeTopbarSafetySummary } from "@/utils/topbarSafetySummary";
 import { cn } from "@/lib/utils";
+import { useSafetyState } from "@/context/SafetyStateContext";
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   // Phase 14D — Topbar AI Kill Switch is wired to the real backend
@@ -20,76 +14,20 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   // /settings (intentionally a heavier surface so resume isn't a
   // one-click anywhere on the chrome).
   const [killOpen, setKillOpen] = useState(false);
-  const [state, setState] = useState<SaasRuntimeLiveGateKillSwitch | null>(
-    null,
-  );
 
-  // Phase 15D — Topbar safety pill data. Reuses Phase 14E sandbox
-  // + Phase 15B briefing endpoints; never mutates state.
-  const [sandbox, setSandbox] = useState<AiSandboxModeStatus | null>(null);
-  const [briefing, setBriefing] = useState<
-    DirectorBriefingSidebarStatus | null
-  >(null);
-  const [killSwitchError, setKillSwitchError] = useState(false);
-  const [sandboxError, setSandboxError] = useState(false);
-  const [briefingError, setBriefingError] = useState(false);
-
-  const refresh = async () => {
-    try {
-      const next = await api.getSaasRuntimeLiveGateKillSwitch();
-      setState(next);
-      setKillSwitchError(false);
-    } catch (err) {
-      // Phase 14D — surface load failure quietly; the Topbar should
-      // not white-screen if the backend is briefly unreachable.
-      // Settings page shows the canonical state on retry.
-      console.error("[Topbar] kill-switch load failed:", err);
-      setKillSwitchError(true);
-    }
-  };
-
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  // Phase 15D — fire-and-forget reads for the safety pill. Errors
-  // are recorded so the pill renders "unavailable" rather than
-  // silently claiming a green posture.
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getAiSandboxModeStatus()
-      .then((next) => !cancelled && setSandbox(next))
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        console.error("[Topbar] sandbox load failed:", err);
-        setSandboxError(true);
-      });
-    api
-      .getDirectorBriefingSidebarStatus()
-      .then((next) => !cancelled && setBriefing(next))
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        console.error("[Topbar] briefing load failed:", err);
-        setBriefingError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Phase 15F — shared safety state. The Topbar no longer issues
+  // its own kill-switch / sandbox / briefing GETs; the provider
+  // owns the fetches once per AppLayout mount and Topbar consumes
+  // the same snapshot the Sidebar reads.
+  const {
+    killSwitch: state,
+    topbar: safetyPill,
+    setKillSwitch,
+  } = useSafetyState();
 
   const aiPaused = Boolean(
     state?.aiExecutionBlocked ?? state?.enabled ?? false,
   );
-
-  const safetyPill = computeTopbarSafetySummary({
-    killSwitch: state,
-    sandbox,
-    briefing,
-    killSwitchError,
-    sandboxError,
-    briefingError,
-  });
 
   return (
     <header className="sticky top-0 z-30 h-[68px] bg-background/75 backdrop-blur-xl border-b border-border/60 supports-[backdrop-filter]:bg-background/60">
@@ -226,7 +164,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           expectedPhrase={
             state?.confirmationPhrases?.activateEmergencyStop
           }
-          onSuccess={(next) => setState(next)}
+          onSuccess={(next) => setKillSwitch(next)}
         />
 
         {/* User */}

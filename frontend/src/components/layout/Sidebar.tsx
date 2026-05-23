@@ -5,15 +5,9 @@ import {
   GraduationCap, FileBadge2, BarChart3, Settings2, Leaf, ChevronLeft,
   AlarmClock, ShieldCheck, MessageSquare, Inbox, Building2, ScrollText,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { api } from "@/services/api";
-import type {
-  AiSandboxModeStatus,
-  DirectorBriefingSidebarStatus,
-  SaasRuntimeLiveGateKillSwitch,
-} from "@/types/domain";
-import { computeSafetyStatus } from "@/utils/safetyStatus";
+import type { DirectorBriefingSidebarStatus } from "@/types/domain";
+import { useSafetyState } from "@/context/SafetyStateContext";
 
 const NAV = [
   { to: "/", label: "Command Center", icon: LayoutDashboard, group: "Overview" },
@@ -53,64 +47,16 @@ export function Sidebar({ open, onClose, collapsed, onCollapsedChange }: Sidebar
   const location = useLocation();
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
 
-  // Phase 14E-Hotfix-1 — bottom safety indicator follows real backend
-  // state. Priority is encoded in computeSafetyStatus(): kill-switch
-  // paused beats sandbox-on beats normal. Loading + error states
-  // explicitly avoid claiming "All systems normal".
-  const [killSwitch, setKillSwitch] = useState<SaasRuntimeLiveGateKillSwitch | null>(
-    null,
-  );
-  const [sandbox, setSandbox] = useState<AiSandboxModeStatus | null>(null);
-  const [killSwitchError, setKillSwitchError] = useState(false);
-  const [sandboxError, setSandboxError] = useState(false);
-
-  // Phase 15B — Director Daily Briefing badge state. Pulled from the
-  // slim Phase 15B sidebar-status endpoint (NEVER from the heavier
-  // /snapshots/latest/ endpoint, which exposes briefingText body).
-  const [briefing, setBriefing] = useState<
-    DirectorBriefingSidebarStatus | null
-  >(null);
-  const [briefingError, setBriefingError] = useState<
-    "auth" | "permission" | "generic" | null
-  >(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getSaasRuntimeLiveGateKillSwitch()
-      .then((next) => !cancelled && setKillSwitch(next))
-      .catch(() => !cancelled && setKillSwitchError(true));
-    api
-      .getAiSandboxModeStatus()
-      .then((next) => !cancelled && setSandbox(next))
-      .catch(() => !cancelled && setSandboxError(true));
-    api
-      .getDirectorBriefingSidebarStatus()
-      .then((next) => !cancelled && setBriefing(next))
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : "";
-        if (message.includes("401")) setBriefingError("auth");
-        else if (message.includes("403")) setBriefingError("permission");
-        else setBriefingError("generic");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Phase 15B — pick the small visual treatment for the briefing
-  // badge based on the backend-returned status. Loading + error
-  // states deliberately do NOT render "Briefing ready" so the
-  // operator is never misled.
+  // Phase 15F — shared safety state. The Sidebar no longer issues
+  // its own kill-switch / sandbox / briefing GETs; the provider
+  // owns the fetches once per AppLayout mount and Sidebar consumes
+  // the same snapshot the Topbar reads. The Phase 14E-Hotfix-1
+  // priority cascade (kill-switch paused > sandbox > normal) and
+  // the Phase 15B briefing badge logic are unchanged because both
+  // helpers are reused verbatim through the provider's memoised
+  // outputs.
+  const { briefing, briefingError, sidebar: safety } = useSafetyState();
   const briefingBadge = computeBriefingBadge({ briefing, briefingError });
-
-  const safety = computeSafetyStatus({
-    killSwitch,
-    sandbox,
-    killSwitchError,
-    sandboxError,
-  });
 
   return (
     <>

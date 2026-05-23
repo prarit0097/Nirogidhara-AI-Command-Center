@@ -29,6 +29,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { SafetyStateProvider } from "@/context/SafetyStateContext";
 
 // ---- api mock ----------------------------------------------------------
 
@@ -70,15 +71,20 @@ const sandboxOff = {
   statusLabel: "disabled" as const,
 };
 
+// Phase 15F — Sidebar now consumes shared safety state from
+// SafetyStateProvider. Tests wrap with the provider so the
+// provider drives the same mocks Phase 15B configured.
 const renderSidebar = () =>
   render(
     <MemoryRouter>
-      <Sidebar
-        open
-        onClose={() => {}}
-        collapsed={false}
-        onCollapsedChange={() => {}}
-      />
+      <SafetyStateProvider>
+        <Sidebar
+          open
+          onClose={() => {}}
+          collapsed={false}
+          onCollapsedChange={() => {}}
+        />
+      </SafetyStateProvider>
     </MemoryRouter>,
   );
 

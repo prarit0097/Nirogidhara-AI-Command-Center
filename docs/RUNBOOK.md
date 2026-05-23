@@ -470,6 +470,14 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Shared safety state (Phase 15F)
+
+Topbar, Sidebar bottom indicator, and the CEO AI Briefing nav badge now read from one shared `SafetyStateProvider` mounted at the AppLayout level. Practical implications for operators:
+
+- On a fresh page load the network tab should show **one GET per safety endpoint** (kill-switch / sandbox / sidebar-status), not two. If you see duplicates after a deploy, hard-refresh first — old service-worker caches can serve the pre-15F bundle.
+- If any one of the three safety endpoints returns an error, the Topbar pill shows partial-unknown (`Sandbox ?` etc) or `State unavailable` and the Sidebar shows `Safety state unavailable`. None of those states ever claim "All systems normal" or "Safety: AI Running … Briefing READY" while a fetch failed — that is the deliberate Phase 15F contract.
+- After hitting the AI Kill Switch confirmation modal in the Topbar, the chrome updates immediately without issuing another GET. The next manual page refresh re-fetches all three endpoints once.
+
 ### Responsive behaviour (Phase 15E)
 
 At desktop widths ≥ 1280px the pill shows the full label, e.g. `Safety: AI Paused · Sandbox OFF · Briefing STALE`. Between 768px and 1279px it shows a compact form, e.g. `AI Paused · SBOX OFF · STALE` — same tone colour, same icon, same `title` / `aria-label` carrying the full posture. Below 768px the pill is hidden; the Sidebar bottom indicator and the Settings cards still show the full safety posture. If the visible label looks abbreviated, hover the pill — the long-form tooltip always carries the complete kill-switch / sandbox / briefing summary, and the pill still triggers no action.

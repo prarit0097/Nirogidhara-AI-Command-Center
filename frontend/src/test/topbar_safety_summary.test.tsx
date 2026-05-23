@@ -22,6 +22,7 @@ import {
   computeTopbarSafetySummary,
 } from "@/utils/topbarSafetySummary";
 import { Topbar } from "@/components/layout/Topbar";
+import { SafetyStateProvider } from "@/context/SafetyStateContext";
 
 // ---- api mock ----------------------------------------------------------
 
@@ -294,10 +295,16 @@ describe("Phase 15D — computeTopbarSafetySummary", () => {
 
 // ---- Topbar render -----------------------------------------------------
 
+// Phase 15F — Topbar now consumes shared safety state from
+// SafetyStateProvider. Tests wrap with the provider so the
+// provider's fetches drive the same mocks Phase 15D tests
+// already configured.
 const renderTopbar = () =>
   render(
     <MemoryRouter>
-      <Topbar onMenu={() => {}} />
+      <SafetyStateProvider>
+        <Topbar onMenu={() => {}} />
+      </SafetyStateProvider>
     </MemoryRouter>,
   );
 
