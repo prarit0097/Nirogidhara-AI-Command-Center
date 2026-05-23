@@ -30,7 +30,9 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "@/services/api";
+import { connectAuditEvents } from "@/services/realtime";
 import type {
+  ActivityEvent,
   AiSandboxModeStatus,
   DirectorBriefingSidebarStatus,
   SaasRuntimeLiveGateKillSwitch,
@@ -40,6 +42,49 @@ import {
   computeTopbarSafetySummary,
   type TopbarSafetySummary,
 } from "@/utils/topbarSafetySummary";
+
+/**
+ * Phase 15G - audit-event kind prefixes that should trigger a
+ * safety-state refresh. The provider subscribes to the existing
+ * Phase 4A `/ws/audit/events/` WebSocket and only refreshes when an
+ * allow-listed event lands. Anything else is ignored so the live
+ * activity feed continues to flow at its own pace without driving
+ * any extra GETs.
+ *
+ * Allow-list rationale:
+ *   - `runtime.kill_switch.` (Phase 6H): backs the Phase 14D Topbar
+ *     AI Paused / AI Kill Switch UI + Phase 15D Topbar Safety Pill.
+ *   - `ai.sandbox.` (Phase 3D): backs the Phase 14E Sandbox Mode UI
+ *     + Phase 15D Topbar Safety Pill.
+ *   - `ceo_orchestration.snapshot.` (Phase 9F): backs the Phase 15B
+ *     Sidebar Director Briefing badge + Phase 15D Topbar Safety
+ *     Pill briefing token.
+ */
+export const SAFETY_REFRESH_EVENT_PREFIXES: readonly string[] = [
+  "runtime.kill_switch.",
+  "ai.sandbox.",
+  "ceo_orchestration.snapshot.",
+];
+
+/**
+ * Pure helper - returns true if `event.kind` is on the allow-list.
+ * Exported so the provider test can assert the allow-list contract
+ * without re-deriving the prefixes.
+ */
+export function shouldRefreshOnEvent(event: ActivityEvent | null | undefined): boolean {
+  const kind = event?.kind;
+  if (typeof kind !== "string" || kind.length === 0) return false;
+  return SAFETY_REFRESH_EVENT_PREFIXES.some((prefix) =>
+    kind.startsWith(prefix),
+  );
+}
+
+/**
+ * Phase 15G - debounce window for coalescing safety-refresh
+ * requests. A burst of allow-listed events lands as a single
+ * fetchAll() call rather than three back-to-back round-trips.
+ */
+export const SAFETY_REFRESH_DEBOUNCE_MS = 750;
 
 /**
  * Granular error tags surface which fetch(es) failed so the Topbar
@@ -171,6 +216,68 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Fire-and-forget; never await at the effect level.
     void fetchAll();
+  }, [fetchAll]);
+
+  // Phase 15G - subscribe once to the existing Phase 4A audit-event
+  // WebSocket fan-out and re-run fetchAll() when an allow-listed
+  // kill-switch / sandbox / briefing event lands. Refresh requests
+  // are coalesced through a single debounced timer so a burst of
+  // events lands as one round-trip instead of three back-to-back
+  // refreshes.
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const triggerDebouncedRefresh = () => {
+      if (!mounted.current) return;
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        if (!mounted.current) return;
+        void fetchAll();
+      }, SAFETY_REFRESH_DEBOUNCE_MS);
+    };
+
+    let controller: { close: () => void } | null = null;
+    try {
+      controller = connectAuditEvents({
+        onEvent: (event) => {
+          if (shouldRefreshOnEvent(event)) {
+            triggerDebouncedRefresh();
+          }
+        },
+        // Initial snapshot is not used to drive refresh - the
+        // initial Promise.allSettled fetch is the canonical
+        // source for the first paint. Snapshot events are still
+        // delivered to the WebSocket for other consumers; we just
+        // ignore them here.
+        onError: (err) => {
+          // Stream errors are non-fatal: initial GETs still drive
+          // the chrome. Log once so the operator can see why
+          // auto-refresh isn't firing if they tail the console.
+          console.warn("[SafetyStateProvider] audit-event stream error:", err);
+        },
+      });
+    } catch (err) {
+      // connectAuditEvents already swallows construction failures
+      // and reconnects internally, but guard one more time so the
+      // provider never crashes the chrome.
+      console.warn(
+        "[SafetyStateProvider] connectAuditEvents threw synchronously:",
+        err,
+      );
+    }
+
+    return () => {
+      if (debounceTimer !== null) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      try {
+        controller?.close();
+      } catch {
+        /* swallow - close should never throw */
+      }
+    };
   }, [fetchAll]);
 
   const sidebar = useMemo<SafetyStatusResult>(

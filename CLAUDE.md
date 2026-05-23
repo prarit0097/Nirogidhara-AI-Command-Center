@@ -5,6 +5,27 @@
 
 ---
 
+## Current operational baseline (post Phase 15G — read this first)
+
+**`nd.md` is the canonical source of truth for current state. If anything below disagrees with `nd.md`, `nd.md` wins.**
+
+The "Phase 14A baseline status update" and similar entries below were correct at the time they were written but are now **historical narrative**. Since they were authored the repo has shipped Phase 14B / 14C / 14D / 14E / 14E-Hotfix-1 / 14F / 15A / 15B / 15C / 15D / 15E / 15F / **15G**.
+
+**Current operational baseline (as of Phase 15G):**
+
+- Frontend chrome ships a shared `SafetyStateProvider` + `useSafetyState()` (Phase 15F) that auto-refreshes via the Phase 4A `/ws/audit/events/` WebSocket on allow-listed events (Phase 15G — `runtime.kill_switch.*` / `ai.sandbox.*` / `ceo_orchestration.snapshot.*`, debounced at 750ms).
+- Live Director UI surfaces: Topbar Safety Compact Pill (Phase 15D + 15E responsive polish), Sidebar Director Briefing badge (Phase 15B), Audit Timeline at `/operations/audit-timeline` (Phase 15C), Rollback History modal (Phase 15A), Rollback System UI (Phase 14F), Sandbox Mode UI (Phase 14E + Hotfix-1), AI Kill Switch UI (Phase 14D), Director login flow (Phase 13A), Founder Operating Model lock (Phase 14A; see `nd.md` §1.5).
+- Production posture (do NOT touch from coding agents without explicit Director directive):
+  - `RuntimeKillSwitch` → paused (AI execution blocked)
+  - `SandboxState` → OFF
+  - CEO AI Briefing → typically STALE in current production state
+  - Phase 7E-Live-B (real customer WhatsApp send) → NOT approved
+  - Phase 7G-Live (real customer Delhivery dispatch) → NOT approved
+  - Phase 8F (real customer payment → order mutation) → not staged; Reading 1 rolled back on 2026-05-14
+- Verification counts in `nd.md` head-of-file Phase 15G entry are current truth. The "Verification baseline … 2734 backend tests + 85 frontend tests" string below is the Phase 13A baseline and is no longer current.
+
+---
+
 ## 0. Project context (60-second read)
 
 **Founder Operating Model (LOCKED — Phase 14A):** This project is designed for solo-operator use. Only the Director (Prarit Sidana) interacts with the app. All functional roles (sales, calling, CRM, WhatsApp, payments, courier, RTO, reorder, customer success) are performed by AI agents. External contractors only for Doctor Review Board, CA, lawyer, 3PL — limited scoped read-only access. Goal: ₹10,000 cr operable by 1 founder + AI agent army. Every feature evaluated against "does this save Director time?" Every architectural decision must respect this constraint. **See nd.md §1.5 for full specification.**

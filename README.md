@@ -17,7 +17,13 @@ nirogidhara-command/
   docs/       # RUNBOOK, BACKEND_API, FRONTEND_AUDIT, FUTURE_BACKEND_PLAN
 ```
 
-## Current SaaS foundation status
+## Current operational baseline (post Phase 15G)
+
+**`nd.md` is the canonical source of truth for current state. The "Current SaaS foundation status" section below is preserved as historical narrative through the Phase 12D Tier-4 calling baseline; for current state read `nd.md` head-of-file first.**
+
+Since the Phase 12D baseline below was written, the repo has shipped Phase 13A / 14A / 14B / 14C / 14D / 14E / 14E-Hotfix-1 / 14F / 15A / 15B / 15C / 15D / 15E / 15F / **15G**. Phase 15G ties the shared safety chrome state (Phase 15F `SafetyStateProvider`) to the existing Phase 4A `/ws/audit/events/` WebSocket: a kill-switch / sandbox / CEO snapshot audit event now auto-refreshes the Topbar pill + Sidebar bottom indicator + CEO briefing badge across every open tab without a page reload. Production posture remains: `RuntimeKillSwitch` paused, `SandboxState` OFF, Phase 7E-Live-B / 7G-Live / Phase 8F all NOT approved.
+
+## Current SaaS foundation status (historical — Phase 12D baseline)
 
 - **Current baseline:** Phase 12D (Tier-4 AI Calling Performance Dashboard, frontend-only) is shipped at origin/main commit `dbe8a7b`. Phase 8F Live Execute Reading 1 ran on the VPS on 2026-05-14 and was rolled back the same hour (mechanism proof; no lasting business-row change). Order `NRG-20435` is back to Partial; Payment `PAY-30125` is back to Pending.
 - **Verification baseline:** **2730 backend tests + 82 frontend tests** are green on local SQLite and the VPS Postgres full-suite run. Test Hygiene Hotfix-1 still pins integration modes to mock for tests; production code, models, migrations, services, views, env flags, `.env*` files, and frontend remain untouched by that hotfix.

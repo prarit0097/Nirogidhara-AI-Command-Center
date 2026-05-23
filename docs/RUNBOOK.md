@@ -470,6 +470,16 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Safety State Auto-Refresh on Audit Events (Phase 15G)
+
+The `SafetyStateProvider` now subscribes to the existing Phase 4A `/ws/audit/events/` WebSocket and auto-refreshes the three safety GETs (`kill-switch`, `sandbox/status`, `sidebar-status`) when an allow-listed audit event lands. Practical implications for operators:
+
+- Hitting the AI Kill Switch confirmation in one browser tab updates the Topbar pill, Sidebar bottom indicator, and CEO Briefing badge in every other open tab automatically — typically within ~750ms (the debounce window). No page refresh needed.
+- The auto-refresh only fires for kinds matching one of three prefixes: `runtime.kill_switch.` / `ai.sandbox.` / `ceo_orchestration.snapshot.`. Every other audit kind is ignored by the safety listener, so the live activity feed keeps flowing for other consumers (Audit Timeline page, Governance page) without driving extra safety GETs.
+- Bursts of allow-listed events inside the 750ms window coalesce into a single refresh — not one refresh per event.
+- If the WebSocket connection drops, the helper reconnects with exponential backoff (Phase 4A behavior). The Topbar / Sidebar continue to display the last-known state until reconnect, and the next manual page navigation still triggers a fresh `fetchAll()`.
+- A `[SafetyStateProvider] audit-event stream error:` warning in the browser console is non-fatal — the chrome keeps working on initial GETs even if the WebSocket never comes up.
+
 ### Shared safety state (Phase 15F)
 
 Topbar, Sidebar bottom indicator, and the CEO AI Briefing nav badge now read from one shared `SafetyStateProvider` mounted at the AppLayout level. Practical implications for operators:
