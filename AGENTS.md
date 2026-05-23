@@ -6,11 +6,11 @@
 
 ---
 
-## Current operational baseline (post Phase 15H — read this first)
+## Current operational baseline (post Phase 15I — read this first)
 
 **`nd.md` is the canonical source of truth for current state. If anything in this file disagrees with `nd.md`, `nd.md` wins.**
 
-The "Current baseline (Phase 12D …)" section further down in this file describes the Phase 12D *Tier-4 calling* baseline and the historical narrative is preserved for context — but the repo has since shipped **Phase 13A / 14A / 14B / 14C / 14D / 14E / 14E-Hotfix-1 / 14F / 15A / 15B / 15C / 15D / 15E / 15F / 15G / 15H**. Treat every "current baseline" / "verification baseline" claim further down this file as **historical**; for the actually-current state read the top entries of `nd.md` first.
+The "Current baseline (Phase 12D …)" section further down in this file describes the Phase 12D *Tier-4 calling* baseline and the historical narrative is preserved for context — but the repo has since shipped **Phase 13A / 14A / 14B / 14C / 14D / 14E / 14E-Hotfix-1 / 14F / 15A / 15B / 15C / 15D / 15E / 15F / 15G / 15H / 15I**. Treat every "current baseline" / "verification baseline" claim further down this file as **historical**; for the actually-current state read the top entries of `nd.md` first.
 
 **Current operational baseline (as of Phase 15G):**
 

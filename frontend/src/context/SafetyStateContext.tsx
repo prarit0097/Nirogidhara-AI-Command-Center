@@ -125,6 +125,23 @@ export type SafetySyncStatus =
   | "offline"
   | "unavailable";
 
+/**
+ * Phase 15I - lightweight per-endpoint health for the Settings
+ * diagnostics panel. Derived purely from the snapshot + error
+ * flags already on `SafetyStateValue` so no new fetches are
+ * issued. Three states:
+ *
+ *   - "loading" - the initial GET is still in flight (no snapshot,
+ *     no error yet).
+ *   - "ok"      - the latest GET returned successfully and the
+ *     snapshot is on hand.
+ *   - "error"   - the latest GET threw or returned a non-200.
+ *
+ * Mapping is intentionally narrow: the panel never surfaces raw
+ * response bodies, status codes, or stack traces.
+ */
+export type SafetyEndpointStatus = "loading" | "ok" | "error";
+
 export interface SafetyStateValue {
   // ---- raw snapshots ----------------------------------------------------
   killSwitch: SaasRuntimeLiveGateKillSwitch | null;
@@ -146,6 +163,13 @@ export interface SafetyStateValue {
   lastSafetyEventAt: string | null;
   /** ISO timestamp of the most recent debounced `refresh()` triggered by an event. */
   lastSafetyRefreshAt: string | null;
+  // ---- Phase 15I per-endpoint health (read-only, derived) ---------------
+  /** Health of the Phase 14D /runtime-live-gate/kill-switch/ GET. */
+  killSwitchStatus: SafetyEndpointStatus;
+  /** Health of the Phase 14E /ai/sandbox/status/ GET. */
+  sandboxStatus: SafetyEndpointStatus;
+  /** Health of the Phase 15B /ceo-orchestration/snapshots/sidebar-status/ GET. */
+  briefingStatus: SafetyEndpointStatus;
   // ---- callbacks --------------------------------------------------------
   /** Re-fetches all three endpoints once. Returns when all settle. */
   refresh: () => Promise<void>;
@@ -171,6 +195,24 @@ function classifyBriefingError(err: unknown): SafetyBriefingErrorKind {
   if (message.includes("401")) return "auth";
   if (message.includes("403")) return "permission";
   return "generic";
+}
+
+/**
+ * Phase 15I - pure helper. Maps {snapshot, error-flag} into one
+ * of the three diagnostics buckets. Exported so the panel and the
+ * tests share one source of truth.
+ *
+ *   - errored                              -> "error"
+ *   - snapshot present (truthy)            -> "ok"
+ *   - neither (still loading)              -> "loading"
+ */
+export function deriveEndpointStatus(
+  hasSnapshot: boolean,
+  errored: boolean,
+): SafetyEndpointStatus {
+  if (errored) return "error";
+  if (hasSnapshot) return "ok";
+  return "loading";
 }
 
 export function SafetyStateProvider({ children }: { children: ReactNode }) {
@@ -386,6 +428,21 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
     [killSwitch, sandbox, briefing, killSwitchError, sandboxError, briefingError],
   );
 
+  // Phase 15I - per-endpoint diagnostics. Memoised so the panel
+  // only re-renders when an individual endpoint actually flips.
+  const killSwitchStatus = useMemo<SafetyEndpointStatus>(
+    () => deriveEndpointStatus(killSwitch !== null, killSwitchError),
+    [killSwitch, killSwitchError],
+  );
+  const sandboxStatus = useMemo<SafetyEndpointStatus>(
+    () => deriveEndpointStatus(sandbox !== null, sandboxError),
+    [sandbox, sandboxError],
+  );
+  const briefingStatus = useMemo<SafetyEndpointStatus>(
+    () => deriveEndpointStatus(briefing !== null, briefingError !== null),
+    [briefing, briefingError],
+  );
+
   const setKillSwitch = useCallback(
     (next: SaasRuntimeLiveGateKillSwitch) => {
       if (!mounted.current) return;
@@ -409,6 +466,9 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       safetySyncStatus,
       lastSafetyEventAt,
       lastSafetyRefreshAt,
+      killSwitchStatus,
+      sandboxStatus,
+      briefingStatus,
       refresh: fetchAll,
       setKillSwitch,
     }),
@@ -425,6 +485,9 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       safetySyncStatus,
       lastSafetyEventAt,
       lastSafetyRefreshAt,
+      killSwitchStatus,
+      sandboxStatus,
+      briefingStatus,
       fetchAll,
       setKillSwitch,
     ],
@@ -473,6 +536,12 @@ export function useSafetyState(): SafetyStateValue {
     safetySyncStatus: "unavailable",
     lastSafetyEventAt: null,
     lastSafetyRefreshAt: null,
+    // Phase 15I - same "no provider" semantics: every endpoint
+    // is treated as still loading so the panel never falsely
+    // claims OK outside a real fetch lifecycle.
+    killSwitchStatus: "loading",
+    sandboxStatus: "loading",
+    briefingStatus: "loading",
     refresh: async () => undefined,
     setKillSwitch: () => undefined,
   };

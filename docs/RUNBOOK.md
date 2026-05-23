@@ -470,6 +470,24 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Safety Diagnostics panel (Phase 15I)
+
+The Settings & Control page now ships a read-only **Safety Diagnostics** mini panel (between the three safety control cards and the AI Action Approval Matrix). It mirrors the Phase 15H Topbar Safety Sync indicator and adds per-endpoint health + last-event / last-refresh timestamps so an operator can verify the full chrome plumbing without reading code.
+
+| Row | Possible values | Meaning |
+|---|---|---|
+| Safety sync | `Live` / `Connecting` / `Reconnecting` / `Offline` / `Unavailable` | Same audit-event WebSocket lifecycle the Topbar Sync indicator surfaces (Phase 15H). |
+| Last safety refresh | locale timestamp or `Never` | When `safety.refresh()` last successfully ran a debounced fetch. Updates on initial mount AND every allow-listed Phase 15G audit event. |
+| Last audit event | locale timestamp or `No event seen yet` | When the most recent allow-listed kill-switch / sandbox / CEO snapshot audit event was received over the WebSocket. |
+| Kill switch endpoint | `OK` / `Loading` / `Error` | Latest result of `GET /api/v1/saas/runtime-live-gate/kill-switch/`. |
+| Sandbox endpoint | `OK` / `Loading` / `Error` | Latest result of `GET /api/ai/sandbox/status/`. |
+| Briefing status endpoint | `OK` / `Loading` / `Error` | Latest result of `GET /api/v1/ceo-orchestration/snapshots/sidebar-status/`. |
+
+Operator notes:
+- The panel never claims "All OK" if any one of the three endpoints failed — it shows that specific row as `Error` while the others remain `OK`.
+- The panel is **read-only**. There is no Refresh / Reset / Resume button anywhere on it. To trigger a fresh fetch, hard-refresh the page (`Ctrl + Shift + R`).
+- Sensitive data is never rendered — rows surface only the enum status + the locale-formatted ISO timestamp. No tokens, secrets, phones, PII, prompt bodies, or provider payloads can leak through this panel.
+
 ### Safety Sync indicator (Phase 15H)
 
 A small read-only pill next to the Topbar Safety Pill shows whether the passive Phase 15G audit-event stream is healthy. It is a `<span role="status">` — there is no click handler, no button, no anchor; hovering shows the long-form tooltip ending `Read-only indicator.`

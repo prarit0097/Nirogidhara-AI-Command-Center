@@ -27,6 +27,7 @@ import KillSwitchModal from "@/components/KillSwitchModal";
 import SandboxModeModal from "@/components/SandboxModeModal";
 import RollbackSystemModal from "@/components/RollbackSystemModal";
 import RollbackHistoryModal from "@/components/RollbackHistoryModal";
+import { SafetyDiagnosticsPanel } from "@/components/settings/SafetyDiagnosticsPanel";
 
 export default function Settings() {
   const [data, setData] = useState<any>(null);
@@ -357,6 +358,13 @@ export default function Settings() {
           onOpenChange={(next) => setRollbackHistoryOpen(next)}
         />
       )}
+
+      {/* Phase 15I — Safety Diagnostics mini panel. Read-only;
+          consumes the shared SafetyStateProvider (Phase 15F) so no
+          new fetches are issued. Sits between the three safety
+          control cards above and the AI Action Approval Matrix
+          below. */}
+      <SafetyDiagnosticsPanel />
 
       <div className="surface-card overflow-hidden mb-6">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
