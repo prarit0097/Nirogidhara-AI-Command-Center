@@ -1,4 +1,4 @@
-import { Bell, Command, LogOut, Menu, Power, Search, Sparkles, ShieldCheck } from "lucide-react";
+import { Bell, Command, LogOut, Menu, Power, Search, Sparkles, ShieldCheck, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -6,6 +6,7 @@ import { OrgBadge } from "./OrgBadge";
 import KillSwitchModal from "@/components/KillSwitchModal";
 import { cn } from "@/lib/utils";
 import { useSafetyState } from "@/context/SafetyStateContext";
+import { computeSafetySyncIndicator } from "@/utils/safetySyncIndicator";
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   // Phase 14D — Topbar AI Kill Switch is wired to the real backend
@@ -23,11 +24,15 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     killSwitch: state,
     topbar: safetyPill,
     setKillSwitch,
+    safetySyncStatus,
   } = useSafetyState();
 
   const aiPaused = Boolean(
     state?.aiExecutionBlocked ?? state?.enabled ?? false,
   );
+
+  // Phase 15H — Safety Sync health indicator (read-only).
+  const syncIndicator = computeSafetySyncIndicator(safetySyncStatus);
 
   return (
     <header className="sticky top-0 z-30 h-[68px] bg-background/75 backdrop-blur-xl border-b border-border/60 supports-[backdrop-filter]:bg-background/60">
@@ -103,6 +108,41 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
             className="xl:hidden"
           >
             {safetyPill.compactLabel}
+          </span>
+        </span>
+
+        {/* Phase 15H — Safety Sync health indicator (read-only).
+            Surfaces the audit-event WebSocket lifecycle from the
+            Phase 15F SafetyStateProvider so the Director can see at
+            a glance whether passive safety auto-refresh is live.
+            Renders as <span role="status"> — no click handler, no
+            anchor, no action. Visible at md+ so mobile chrome stays
+            uncluttered; aria-label always carries the long-form
+            tooltip regardless of which label width is showing. */}
+        <span
+          data-testid="topbar-safety-sync-indicator"
+          data-safety-sync-status={syncIndicator.dataStatus}
+          data-safety-sync-tone={syncIndicator.tone}
+          role="status"
+          aria-label={syncIndicator.tooltip}
+          title={syncIndicator.tooltip}
+          className={cn(
+            "hidden md:inline-flex items-center gap-1.5 h-9 px-3 rounded-full border text-[11.5px] font-semibold whitespace-nowrap cursor-default select-none shrink-0",
+            syncIndicator.className,
+          )}
+        >
+          <Radio className="h-3.5 w-3.5 shrink-0" />
+          <span
+            data-testid="topbar-safety-sync-label"
+            className="hidden xl:inline"
+          >
+            {syncIndicator.label}
+          </span>
+          <span
+            data-testid="topbar-safety-sync-compact-label"
+            className="xl:hidden"
+          >
+            {syncIndicator.compactLabel}
           </span>
         </span>
 

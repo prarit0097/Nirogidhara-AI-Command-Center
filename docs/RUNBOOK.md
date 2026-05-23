@@ -470,6 +470,23 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Safety Sync indicator (Phase 15H)
+
+A small read-only pill next to the Topbar Safety Pill shows whether the passive Phase 15G audit-event stream is healthy. It is a `<span role="status">` — there is no click handler, no button, no anchor; hovering shows the long-form tooltip ending `Read-only indicator.`
+
+| Label (xl+) | Compact (md/lg) | Tone | Meaning |
+|---|---|---|---|
+| `Sync: Live` | `Live` | green | Audit event stream connected; safety auto-refresh is reacting to allow-listed events. |
+| `Sync: Connecting` | `Connect` | blue | Opening the stream; chrome uses last fetched safety state until the socket opens. |
+| `Sync: Reconnecting` | `Reconnect` | amber | Stream temporarily disconnected; Phase 4A helper is retrying with exponential backoff (1s → 30s capped). Chrome continues using last known status. |
+| `Sync: Offline` | `Offline` | amber | Subscription torn down (provider unmount or caller-initiated close). Manual page refresh re-establishes the stream. |
+| `Sync: Unavailable` | `Unavail` | grey | Audit event stream cannot start at all (e.g. WebSocket missing from runtime). Chrome continues using GET-fetched safety status; no safety state is changed. |
+
+Operator notes:
+- If the Safety Sync indicator stays on `Reconnecting` or `Offline` for more than a minute, check `docker compose -f docker-compose.prod.yml logs --since 60s backend nginx` for `/ws/audit/events/` errors.
+- The indicator is **passive** — it only reports the existing stream's lifecycle. It does not retry harder than the Phase 4A helper already does, and it never falls back to polling.
+- A single `[SafetyStateProvider] audit-event stream error:` warning in the browser console is non-fatal. The Topbar Safety Pill + Sidebar bottom indicator + CEO badge still reflect the last fetched status, and a manual page refresh re-runs the three GETs.
+
 ### Safety State Auto-Refresh on Audit Events (Phase 15G)
 
 The `SafetyStateProvider` now subscribes to the existing Phase 4A `/ws/audit/events/` WebSocket and auto-refreshes the three safety GETs (`kill-switch`, `sandbox/status`, `sidebar-status`) when an allow-listed audit event lands. Practical implications for operators:

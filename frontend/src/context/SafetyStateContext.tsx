@@ -35,6 +35,7 @@ import type {
   ActivityEvent,
   AiSandboxModeStatus,
   DirectorBriefingSidebarStatus,
+  RealtimeStatus,
   SaasRuntimeLiveGateKillSwitch,
 } from "@/types/domain";
 import { computeSafetyStatus, type SafetyStatusResult } from "@/utils/safetyStatus";
@@ -97,6 +98,33 @@ export type SafetyBriefingErrorKind =
   | "permission"
   | "generic";
 
+/**
+ * Phase 15H - lifecycle of the safety-sync audit-event WebSocket.
+ *
+ *   - "connecting"   - initial state before the socket has opened.
+ *   - "live"         - socket is open; auto-refresh is reacting to
+ *                      allow-listed events as they land.
+ *   - "reconnecting" - socket closed; Phase 4A helper is attempting
+ *                      exponential-backoff reconnect.
+ *   - "offline"      - subscription was torn down (provider unmount
+ *                      or caller-initiated close).
+ *   - "unavailable"  - we never opened a socket (helper threw on
+ *                      construction or `WebSocket` is missing from
+ *                      the runtime).
+ *
+ * The first four states are forwarded verbatim from the existing
+ * Phase 4A `RealtimeStatus` type; "unavailable" is a Phase 15H
+ * extension for the construction-failure path so the Topbar
+ * indicator can render a distinct neutral state instead of
+ * misleading "reconnecting".
+ */
+export type SafetySyncStatus =
+  | "connecting"
+  | "live"
+  | "reconnecting"
+  | "offline"
+  | "unavailable";
+
 export interface SafetyStateValue {
   // ---- raw snapshots ----------------------------------------------------
   killSwitch: SaasRuntimeLiveGateKillSwitch | null;
@@ -111,6 +139,13 @@ export interface SafetyStateValue {
   // ---- computed views (memoised; safe for direct render) ----------------
   sidebar: SafetyStatusResult;
   topbar: TopbarSafetySummary;
+  // ---- Phase 15H sync health (read-only) --------------------------------
+  /** Current lifecycle of the audit-event WebSocket. */
+  safetySyncStatus: SafetySyncStatus;
+  /** ISO timestamp of the most recent allow-listed safety event. */
+  lastSafetyEventAt: string | null;
+  /** ISO timestamp of the most recent debounced `refresh()` triggered by an event. */
+  lastSafetyRefreshAt: string | null;
   // ---- callbacks --------------------------------------------------------
   /** Re-fetches all three endpoints once. Returns when all settle. */
   refresh: () => Promise<void>;
@@ -153,6 +188,22 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
     useState<SafetyBriefingErrorKind | null>(null);
 
   const [loading, setLoading] = useState(true);
+
+  // Phase 15H - WebSocket health surface. Initial state is
+  // "connecting" because the Phase 4A helper opens the socket
+  // synchronously on construction; the provider's effect flips
+  // this to "live" / "reconnecting" / "offline" as the helper
+  // fires `onStatusChange`. "unavailable" only ever fires when
+  // the construction itself throws.
+  const [safetySyncStatus, setSafetySyncStatus] = useState<SafetySyncStatus>(
+    "connecting",
+  );
+  const [lastSafetyEventAt, setLastSafetyEventAt] = useState<string | null>(
+    null,
+  );
+  const [lastSafetyRefreshAt, setLastSafetyRefreshAt] = useState<
+    string | null
+  >(null);
 
   // Guard against state updates after unmount (StrictMode dev render
   // pairs + Phase 13A 401 interceptor that auto-clears storage).
@@ -233,6 +284,10 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
         if (!mounted.current) return;
+        // Phase 15H - stamp the refresh timestamp BEFORE awaiting
+        // so the indicator reflects the latest event-triggered
+        // refresh attempt even if the network round-trip is slow.
+        setLastSafetyRefreshAt(new Date().toISOString());
         void fetchAll();
       }, SAFETY_REFRESH_DEBOUNCE_MS);
     };
@@ -242,8 +297,23 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       controller = connectAuditEvents({
         onEvent: (event) => {
           if (shouldRefreshOnEvent(event)) {
+            // Phase 15H - record the inbound timestamp regardless of
+            // whether debounce coalesces this event into an existing
+            // window. Operators can see "did anything land?" via the
+            // Topbar indicator's hover title.
+            if (mounted.current) {
+              setLastSafetyEventAt(new Date().toISOString());
+            }
             triggerDebouncedRefresh();
           }
+        },
+        // Phase 15H - mirror the Phase 4A lifecycle into local state
+        // so the Topbar Safety Sync indicator can render the right
+        // colour + label without re-implementing the helper's
+        // reconnect machinery.
+        onStatusChange: (status: RealtimeStatus) => {
+          if (!mounted.current) return;
+          setSafetySyncStatus(status);
         },
         // Initial snapshot is not used to drive refresh - the
         // initial Promise.allSettled fetch is the canonical
@@ -265,6 +335,11 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
         "[SafetyStateProvider] connectAuditEvents threw synchronously:",
         err,
       );
+      // Phase 15H - construction-failure path. The socket never
+      // opened, so reconnect isn't being attempted; flag the
+      // indicator as "unavailable" so the operator sees a distinct
+      // neutral state instead of misleading "connecting" forever.
+      if (mounted.current) setSafetySyncStatus("unavailable");
     }
 
     return () => {
@@ -277,6 +352,11 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       } catch {
         /* swallow - close should never throw */
       }
+      // Phase 15H - the helper's onStatusChange also sets "offline"
+      // when close() is called, but the effect-cleanup setter is a
+      // belt-and-braces guarantee against React 18 StrictMode dev
+      // double-mount leaking a stale "live" status.
+      if (mounted.current) setSafetySyncStatus("offline");
     };
   }, [fetchAll]);
 
@@ -326,6 +406,9 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       loading,
       sidebar,
       topbar,
+      safetySyncStatus,
+      lastSafetyEventAt,
+      lastSafetyRefreshAt,
       refresh: fetchAll,
       setKillSwitch,
     }),
@@ -339,6 +422,9 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       loading,
       sidebar,
       topbar,
+      safetySyncStatus,
+      lastSafetyEventAt,
+      lastSafetyRefreshAt,
       fetchAll,
       setKillSwitch,
     ],
@@ -380,6 +466,13 @@ export function useSafetyState(): SafetyStateValue {
       sandbox: null,
       briefing: null,
     }),
+    // Phase 15H inert defaults — used when the hook is consumed
+    // outside the provider. "unavailable" is the safest default:
+    // it tells the indicator there is no live socket without
+    // misleading the operator into thinking we're connecting.
+    safetySyncStatus: "unavailable",
+    lastSafetyEventAt: null,
+    lastSafetyRefreshAt: null,
     refresh: async () => undefined,
     setKillSwitch: () => undefined,
   };
