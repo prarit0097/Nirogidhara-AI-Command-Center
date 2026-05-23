@@ -13,13 +13,16 @@
  *   - No raw payloads, tokens, secrets, full phones, or PII -
  *     panel renders only enum statuses + ISO->locale timestamps.
  */
+import { useState } from "react";
 import { Activity, ShieldCheck } from "lucide-react";
 import { StatusPill } from "@/components/StatusPill";
+import { Button } from "@/components/ui/button";
 import {
   useSafetyState,
   type SafetyEndpointStatus,
   type SafetySyncStatus,
 } from "@/context/SafetyStateContext";
+import { SafetyDiagnosticsDetailModal } from "@/components/settings/SafetyDiagnosticsDetailModal";
 
 function formatTimestamp(iso: string | null, emptyLabel: string): string {
   if (!iso) return emptyLabel;
@@ -112,6 +115,11 @@ export function SafetyDiagnosticsPanel() {
     briefingStatus,
   } = useSafetyState();
 
+  // Phase 15J — local-only modal state for the read-only details
+  // drawer. The button is the only mutation of any UI state in this
+  // component; nothing crosses the backend boundary.
+  const [detailOpen, setDetailOpen] = useState<boolean>(false);
+
   const sync = syncVisual(safetySyncStatus);
   const ks = endpointVisual(killSwitchStatus);
   const sb = endpointVisual(sandboxStatus);
@@ -134,10 +142,24 @@ export function SafetyDiagnosticsPanel() {
             </p>
           </div>
         </div>
-        <Activity
-          className="h-4 w-4 text-muted-foreground"
-          aria-hidden
-        />
+        <div className="flex items-center gap-3">
+          {/* Phase 15J — read-only "View details" trigger. Opens a
+              local modal; never calls the backend. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="safety-diagnostics-view-details"
+            onClick={() => setDetailOpen(true)}
+            aria-label="View Safety Diagnostics details"
+          >
+            View details
+          </Button>
+          <Activity
+            className="h-4 w-4 text-muted-foreground"
+            aria-hidden
+          />
+        </div>
       </div>
       <div className="px-6 py-3">
         <DiagnosticsRow
@@ -179,6 +201,13 @@ export function SafetyDiagnosticsPanel() {
           asPill
         />
       </div>
+
+      {/* Phase 15J - Safety Diagnostics Detail Drawer. Read-only,
+          local-only state, never calls backend. */}
+      <SafetyDiagnosticsDetailModal
+        open={detailOpen}
+        onOpenChange={(next) => setDetailOpen(next)}
+      />
     </section>
   );
 }

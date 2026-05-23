@@ -289,10 +289,17 @@ describe("Phase 15I - SafetyDiagnosticsPanel render", () => {
     ).toContain("Offline");
   });
 
-  it("panel contains NO buttons, NO anchors, NO click handlers", () => {
+  it("panel contains NO action buttons (only the Phase 15J 'View details' read-only trigger), NO anchors, NO mutation labels", () => {
     renderPanel();
     const panel = screen.getByTestId("safety-diagnostics-panel");
-    expect(panel.querySelector("button")).toBeNull();
+    // Phase 15J introduced a read-only "View details" button. Every
+    // OTHER button is still forbidden, so we filter the testid for
+    // the allow-listed trigger and assert nothing else is present.
+    const buttons = Array.from(panel.querySelectorAll("button")).filter(
+      (b) =>
+        b.getAttribute("data-testid") !== "safety-diagnostics-view-details",
+    );
+    expect(buttons.length).toBe(0);
     expect(panel.querySelector("a")).toBeNull();
     // Spot-check forbidden action labels in case a future regression
     // sneaks them in.

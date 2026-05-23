@@ -470,6 +470,21 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Safety Diagnostics detail drawer (Phase 15J)
+
+The Phase 15I Safety Diagnostics panel now has a small **"View details"** button in its header. Clicking it opens a read-only modal titled **"Safety Diagnostics Details"** that surfaces deeper diagnostics without exposing secrets, PII, prompt bodies, or backend internals.
+
+What the drawer shows (read-only):
+- **Safety sync** — Status (Live / Connecting / Reconnecting / Offline / Unavailable), Last audit event, Last safety refresh, Refresh source (`Initial load` / `Audit event` / `Unknown`), Reconnect attempts (`Not tracked` — the Phase 4A helper handles backoff internally).
+- **Endpoint health** — Kill switch / Sandbox / Briefing endpoint each as `OK` / `Loading` / `Error`.
+- **Safe error summary** — when healthy: `No safety errors detected.` When any endpoint fails: short sanitised labels like `Kill switch endpoint failed`, `Safety sync stream unavailable`. **Never** shows raw stack traces, HTTP status codes, or response bodies.
+- **Read-only guarantee paragraph** — rendered verbatim so the operator can see the contract at a glance: *"This drawer is read-only. It does not resume AI, toggle sandbox, rollback prompts, send messages, call customers, create audit events, or change business data."*
+
+Operator notes:
+- Safe fallback labels (`Never`, `No event seen yet`, `Not tracked`, `Unknown`) are normal on a fresh page load before any allow-listed event has fired.
+- The drawer's only interactive control is the `Close` button. Opening and closing the drawer is purely local UI state — no GETs, no POSTs, no AuditEvent writes.
+- If the Safe error summary lists anything, treat it as a hint to inspect the matching endpoint manually; do not assume "All OK" until the summary returns to `No safety errors detected.`
+
 ### Safety Diagnostics panel (Phase 15I)
 
 The Settings & Control page now ships a read-only **Safety Diagnostics** mini panel (between the three safety control cards and the AI Action Approval Matrix). It mirrors the Phase 15H Topbar Safety Sync indicator and adds per-endpoint health + last-event / last-refresh timestamps so an operator can verify the full chrome plumbing without reading code.
