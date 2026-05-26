@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "@/services/api";
+import { SessionExpiredBanner } from "@/components/auth/SessionExpiredBanner";
 
 interface LocationState {
   from?: { pathname?: string };
@@ -44,6 +45,9 @@ export default function Login() {
           <h1 className="text-2xl font-semibold tracking-tight">Nirogidhara</h1>
           <p className="text-sm text-muted-foreground">Director Login</p>
         </header>
+        {/* Phase 15K — Session Expired banner. Renders only when
+            RequireAuth redirected the user here with a from-state. */}
+        <SessionExpiredBanner />
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium">

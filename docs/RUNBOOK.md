@@ -470,6 +470,25 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Session expiry UX (Phase 15K)
+
+When the backend returns HTTP 401 (JWT missing, expired, or invalid), the chrome now shows **one** clean message instead of the previous per-widget technical toast spam.
+
+What the Director sees:
+1. A single sonner toast titled **"Session expired"** with body *"Please sign in again to continue. Safety data may be stale until you sign in."* This toast is deduped at the api layer — multiple simultaneous 401 responses from the kill-switch / sandbox / briefing endpoints fire the toast only once per page load.
+2. The existing Phase 13A `RequireAuth` redirect immediately routes the user to `/login`.
+3. On `/login`, a passive `SessionExpiredBanner` renders above the email/password form: **"Session expired — Please sign in again to continue. Safety data may be stale until you sign in."** The banner only appears when `RequireAuth` redirected the user with a `from` state (so first-time direct visits to `/login` stay clean).
+
+What the Director does NOT see anymore:
+- Per-widget technical toasts like `"Sandbox Mode: HTTP 401 — session expired or unauthenticated"`, `"AI Kill Switch: HTTP 401..."`, or `"Rollback System: HTTP 401..."`.
+- Multiple console.error lines from `SafetyStateProvider` for the same expiry event.
+- The raw `"HTTP 401"` / `"unauthenticated"` / `Bearer` / `Authorization` strings anywhere in the toast or banner copy.
+
+Operator notes:
+- The Safety Diagnostics panel (Phase 15I) and Detail Drawer (Phase 15J) correctly show `Error` pills for the three endpoint rows after a 401 — they never falsely claim `OK` until the next successful fetch after re-login.
+- The session-expiry UI is **passive**. Closing the toast / navigating to `/login` never executes any safety or business action.
+- If the Director sees the global toast more than once in a single browser session without a full page reload, that's a regression — file it; the dedupe guard should only release on a hard refresh.
+
 ### Safety Diagnostics detail drawer (Phase 15J)
 
 The Phase 15I Safety Diagnostics panel now has a small **"View details"** button in its header. Clicking it opens a read-only modal titled **"Safety Diagnostics Details"** that surfaces deeper diagnostics without exposing secrets, PII, prompt bodies, or backend internals.

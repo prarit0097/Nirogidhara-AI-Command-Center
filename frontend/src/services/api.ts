@@ -250,6 +250,86 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * Phase 15K - Session Expiry UX Polish.
+ *
+ * Typed error thrown on HTTP 401 so call sites can distinguish
+ * auth expiry from other failures and suppress per-widget
+ * "Sandbox Mode: HTTP 401..." style toasts. The user-facing
+ * session-expired message is owned by the global dedup helper
+ * below, not by individual call sites.
+ */
+export class AuthExpiredError extends Error {
+  public readonly isAuthError = true as const;
+  public readonly httpStatus = 401 as const;
+
+  constructor(message?: string) {
+    super(message ?? "Session expired or unauthenticated");
+    this.name = "AuthExpiredError";
+    // Prevent the error message itself from being treated as
+    // user-facing copy; call sites are expected to consult
+    // `isAuthError(err)` and skip their per-widget toast.
+    Object.setPrototypeOf(this, AuthExpiredError.prototype);
+  }
+}
+
+/**
+ * Phase 15K - predicate so call sites can detect auth expiry
+ * without reaching for `instanceof AuthExpiredError` everywhere.
+ * Tolerates non-Error values; returns false for anything that
+ * isn't clearly an auth-expired signal.
+ */
+export function isAuthError(err: unknown): boolean {
+  if (err instanceof AuthExpiredError) return true;
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { isAuthError?: unknown }).isAuthError === true
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Phase 15K - dedupe the global "Session expired" toast so a
+ * burst of 401s from multiple safety endpoints surfaces as ONE
+ * clean message instead of three technical ones. The guard is
+ * module-level, so the dedup window is "until next full page
+ * reload". `RequireAuth` redirects to `/login` immediately after
+ * the toast, so in practice the user only ever sees this once
+ * per expiry event.
+ */
+let _sessionExpiredToastShown = false;
+
+function notifySessionExpiredOnce(): void {
+  if (_sessionExpiredToastShown) return;
+  _sessionExpiredToastShown = true;
+  // Lazy-load sonner so a non-browser test runner (or pre-mount
+  // call) doesn't error on the toast helper.
+  if (typeof window === "undefined") return;
+  void import("sonner")
+    .then((mod) => {
+      try {
+        mod.toast.error("Session expired", {
+          description:
+            "Please sign in again to continue. Safety data may be stale until you sign in.",
+          duration: 8000,
+        });
+      } catch {
+        /* swallow */
+      }
+    })
+    .catch(() => {
+      /* swallow */
+    });
+}
+
+/** Test-only reset for the dedup guard. */
+export function __resetSessionExpiredToastForTest(): void {
+  _sessionExpiredToastShown = false;
+}
+
 async function safeFetch<T>(path: string, fallback: () => T | Promise<T>): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, {
@@ -260,17 +340,30 @@ async function safeFetch<T>(path: string, fallback: () => T | Promise<T>): Promi
       // invalid, or expired. Clear it from localStorage and dispatch a
       // global event so RequireAuth re-evaluates and routes the user
       // back to /login.
+      // Phase 15K — also fire ONE global "Session expired" sonner
+      // toast (deduplicated at module level) and throw a typed
+      // AuthExpiredError so per-widget call sites can suppress
+      // their own "Sandbox Mode: HTTP 401..." style toasts.
       if (res.status === 401) {
         if (typeof window !== "undefined") {
           window.localStorage.removeItem("nirogidhara.jwt");
           window.dispatchEvent(new Event("nirogidhara:auth-cleared"));
         }
-        throw new Error(`HTTP 401 — session expired or unauthenticated`);
+        notifySessionExpiredOnce();
+        throw new AuthExpiredError();
       }
       throw new Error(`HTTP ${res.status} for ${path}`);
     }
     return (await res.json()) as T;
   } catch (error) {
+    // Phase 15K - never substitute mock data for an auth-expired
+    // call. The chrome must surface a clean session-expired UX
+    // rather than a convincing mock that hides the missing
+    // session. The typed AuthExpiredError preserves so call
+    // sites can suppress their own toasts via isAuthError().
+    if (isAuthError(error)) {
+      throw error;
+    }
     // Phase 13A — production-mode fix. In production we no longer fall
     // back to mock data on fetch failure — real backend errors must
     // surface to the user rather than be silently hidden behind a
@@ -316,6 +409,19 @@ async function safeMutate<T>(
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!res.ok) {
+      // Phase 15K - same 401 contract as safeFetch. Clear the
+      // JWT, dispatch auth-cleared, fire ONE global session-
+      // expired toast, and throw a typed AuthExpiredError so the
+      // call site never falls back to an optimistic mock that
+      // would mask the missing session.
+      if (res.status === 401) {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem("nirogidhara.jwt");
+          window.dispatchEvent(new Event("nirogidhara:auth-cleared"));
+        }
+        notifySessionExpiredOnce();
+        throw new AuthExpiredError();
+      }
       throw new Error(`HTTP ${res.status} for ${method} ${path}`);
     }
     if (res.status === 204) {
@@ -323,6 +429,12 @@ async function safeMutate<T>(
     }
     return (await res.json()) as T;
   } catch (error) {
+    // Phase 15K - never substitute optimistic mock for an auth-
+    // expired mutation. Surface the typed error to the caller so
+    // the chrome's session-expired UX wins.
+    if (isAuthError(error)) {
+      throw error;
+    }
     const key = `${method} ${path}`;
     if (!warnedPaths.has(key)) {
       warnedPaths.add(key);

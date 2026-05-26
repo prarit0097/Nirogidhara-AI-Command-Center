@@ -4,6 +4,24 @@ import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
+
+/**
+ * Phase 15K - inline auth-error predicate. We deliberately do NOT
+ * import `isAuthError` from `@/services/api` because existing test
+ * files mock `@/services/api` with a factory that only exports
+ * `api` — importing a sibling export breaks those mocks. The
+ * predicate mirrors `services/api.ts::isAuthError` exactly.
+ */
+function isAuthError(err: unknown): boolean {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { isAuthError?: unknown }).isAuthError === true
+  ) {
+    return true;
+  }
+  return false;
+}
 import type {
   AiSandboxModeAction,
   AiSandboxModeStatus,
@@ -59,7 +77,12 @@ export default function Settings() {
       const next = await api.getSaasRuntimeLiveGateKillSwitch();
       setKillSwitchState(next);
     } catch (err) {
-      // Surface failure as a toast but do not crash the page.
+      // Phase 15K — on a 401, the global Session expired toast
+      // already fired from safeFetch (deduped) and RequireAuth is
+      // about to route to /login. Suppress the per-widget
+      // "AI Kill Switch: HTTP 401..." spam so the operator sees
+      // exactly one clean message.
+      if (isAuthError(err)) return;
       const message =
         err instanceof Error ? err.message : "Failed to load kill switch state";
       toast.error(`AI Kill Switch: ${message}`);
@@ -71,6 +94,7 @@ export default function Settings() {
       const next = await api.getAiSandboxModeStatus();
       setSandboxState(next);
     } catch (err) {
+      if (isAuthError(err)) return;
       const message =
         err instanceof Error ? err.message : "Failed to load sandbox state";
       toast.error(`Sandbox Mode: ${message}`);
@@ -84,6 +108,7 @@ export default function Settings() {
       setPromptVersionsError(false);
     } catch (err) {
       setPromptVersionsError(true);
+      if (isAuthError(err)) return;
       const message =
         err instanceof Error
           ? err.message

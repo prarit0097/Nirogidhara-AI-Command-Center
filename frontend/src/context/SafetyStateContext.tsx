@@ -30,6 +30,26 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "@/services/api";
+
+/**
+ * Phase 15K - inline auth-error predicate. We deliberately do NOT
+ * import `isAuthError` from `@/services/api` because existing test
+ * files mock `@/services/api` with a factory that only exports
+ * `api` — importing a sibling export breaks those mocks. The
+ * predicate mirrors `services/api.ts::isAuthError` exactly: it
+ * matches the typed `AuthExpiredError` (via the `isAuthError`
+ * marker field) and the duck-typed shape.
+ */
+function isAuthError(err: unknown): boolean {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { isAuthError?: unknown }).isAuthError === true
+  ) {
+    return true;
+  }
+  return false;
+}
 import { connectAuditEvents } from "@/services/realtime";
 import type {
   ActivityEvent,
@@ -272,12 +292,17 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       setKillSwitchState(ksRes.value);
       setKillSwitchError(false);
     } else {
-      // Logging matches the pre-15F Topbar behavior so existing
-      // operator runbook expectations stay aligned.
-      console.error(
-        "[SafetyStateProvider] kill-switch load failed:",
-        ksRes.reason,
-      );
+      // Phase 15K — suppress per-endpoint console.error spam on
+      // auth-expired failures; the global Session expired toast
+      // (deduped at the api layer) is the single source of truth.
+      if (!isAuthError(ksRes.reason)) {
+        // Logging matches the pre-15F Topbar behavior so existing
+        // operator runbook expectations stay aligned.
+        console.error(
+          "[SafetyStateProvider] kill-switch load failed:",
+          ksRes.reason,
+        );
+      }
       setKillSwitchError(true);
     }
 
@@ -285,10 +310,12 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       setSandbox(sbRes.value);
       setSandboxError(false);
     } else {
-      console.error(
-        "[SafetyStateProvider] sandbox load failed:",
-        sbRes.reason,
-      );
+      if (!isAuthError(sbRes.reason)) {
+        console.error(
+          "[SafetyStateProvider] sandbox load failed:",
+          sbRes.reason,
+        );
+      }
       setSandboxError(true);
     }
 
@@ -296,10 +323,12 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       setBriefing(brRes.value);
       setBriefingError(null);
     } else {
-      console.error(
-        "[SafetyStateProvider] briefing load failed:",
-        brRes.reason,
-      );
+      if (!isAuthError(brRes.reason)) {
+        console.error(
+          "[SafetyStateProvider] briefing load failed:",
+          brRes.reason,
+        );
+      }
       setBriefingError(classifyBriefingError(brRes.reason));
     }
 

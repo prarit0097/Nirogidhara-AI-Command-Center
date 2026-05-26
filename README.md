@@ -17,11 +17,11 @@ nirogidhara-command/
   docs/       # RUNBOOK, BACKEND_API, FRONTEND_AUDIT, FUTURE_BACKEND_PLAN
 ```
 
-## Current operational baseline (post Phase 15J)
+## Current operational baseline (post Phase 15K)
 
 **`nd.md` is the canonical source of truth for current state. The "Current SaaS foundation status" section below is preserved as historical narrative through the Phase 12D Tier-4 calling baseline; for current state read `nd.md` head-of-file first.**
 
-Since the Phase 12D baseline below was written, the repo has shipped Phase 13A / 14A / 14B / 14C / 14D / 14E / 14E-Hotfix-1 / 14F / 15A / 15B / 15C / 15D / 15E / 15F / 15G / 15H / 15I / **15J**. Phase 15G ties the shared safety chrome state (Phase 15F `SafetyStateProvider`) to the existing Phase 4A `/ws/audit/events/` WebSocket so kill-switch / sandbox / CEO snapshot audit events auto-refresh the Topbar pill + Sidebar bottom indicator + CEO briefing badge across every open tab without a page reload. Phase 15H adds a small read-only Safety Sync indicator in the Topbar that surfaces the WebSocket lifecycle. Phase 15I adds a read-only Safety Diagnostics mini panel on the Settings & Control page. Phase 15J adds the matching "View details" drawer that opens a sanitised Safety Diagnostics Details modal with sync / endpoint / refresh-source / safe-error-summary sections + a read-only guarantee paragraph. Production posture remains: `RuntimeKillSwitch` paused, `SandboxState` OFF, Phase 7E-Live-B / 7G-Live / Phase 8F all NOT approved.
+Since the Phase 12D baseline below was written, the repo has shipped Phase 13A / 14A / 14B / 14C / 14D / 14E / 14E-Hotfix-1 / 14F / 15A / 15B / 15C / 15D / 15E / 15F / 15G / 15H / 15I / 15J / **15K**. Phase 15K replaces per-widget HTTP 401 toast spam with one deduped global "Session expired" toast plus a passive banner on `/login`. Phase 15G ties the shared safety chrome state (Phase 15F `SafetyStateProvider`) to the existing Phase 4A `/ws/audit/events/` WebSocket so kill-switch / sandbox / CEO snapshot audit events auto-refresh the Topbar pill + Sidebar bottom indicator + CEO briefing badge across every open tab without a page reload. Phase 15H adds a small read-only Safety Sync indicator in the Topbar that surfaces the WebSocket lifecycle. Phase 15I adds a read-only Safety Diagnostics mini panel on the Settings & Control page. Phase 15J adds the matching "View details" drawer that opens a sanitised Safety Diagnostics Details modal with sync / endpoint / refresh-source / safe-error-summary sections + a read-only guarantee paragraph. Production posture remains: `RuntimeKillSwitch` paused, `SandboxState` OFF, Phase 7E-Live-B / 7G-Live / Phase 8F all NOT approved.
 
 ## Current SaaS foundation status (historical — Phase 12D baseline)
 
