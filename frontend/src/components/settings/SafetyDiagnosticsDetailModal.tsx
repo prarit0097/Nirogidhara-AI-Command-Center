@@ -19,6 +19,7 @@
  *     sentence so a screen-reader user and code reviewers see the
  *     contract verbatim.
  */
+import { RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,9 +30,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/StatusPill";
+import { cn } from "@/lib/utils";
 import {
   useSafetyState,
   type SafetyEndpointStatus,
+  type SafetyRefreshSource,
   type SafetySyncStatus,
 } from "@/context/SafetyStateContext";
 
@@ -116,14 +119,14 @@ export function deriveRefreshSourceLabel(
   return "unknown";
 }
 
-function refreshSourceLabel(
-  source: "initial_load" | "audit_event" | "unknown",
-): string {
+function refreshSourceLabel(source: SafetyRefreshSource): string {
   switch (source) {
     case "initial_load":
       return "Initial load";
     case "audit_event":
       return "Audit event";
+    case "manual_refresh":
+      return "Manual refresh";
     case "unknown":
     default:
       return "Unknown";
@@ -197,16 +200,24 @@ export function SafetyDiagnosticsDetailModal({
     killSwitchStatus,
     sandboxStatus,
     briefingStatus,
+    // Phase 15L — real refresh source + manual-refresh trigger.
+    lastRefreshSource,
+    refreshing,
+    refreshSafetyState,
   } = useSafetyState();
 
   const sync = syncVisual(safetySyncStatus);
   const ks = endpointVisual(killSwitchStatus);
   const sb = endpointVisual(sandboxStatus);
   const br = endpointVisual(briefingStatus);
-  const refreshSource = deriveRefreshSourceLabel(
-    lastSafetyRefreshAt,
-    lastSafetyEventAt,
-  );
+  // Phase 15L — prefer the provider's `lastRefreshSource` field
+  // (set explicitly inside fetchAll). Fall back to the Phase 15J
+  // timestamp heuristic when the provider has no source yet
+  // (e.g. the inert hook-outside-provider snapshot).
+  const refreshSource: SafetyRefreshSource =
+    lastRefreshSource !== "unknown"
+      ? lastRefreshSource
+      : deriveRefreshSourceLabel(lastSafetyRefreshAt, lastSafetyEventAt);
   const errors = buildErrorSummary({
     killSwitchStatus,
     sandboxStatus,
@@ -337,7 +348,38 @@ export function SafetyDiagnosticsDetailModal({
           events, or change business data.
         </p>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-2">
+          {/* Phase 15L — read-only "Refresh status" inside the
+              detail drawer. Reuses the shared refreshSafetyState
+              callback; never mutates safety or business state. */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void refreshSafetyState();
+            }}
+            disabled={refreshing}
+            data-testid="safety-diagnostics-detail-refresh"
+            aria-label={
+              refreshing
+                ? "Refreshing Safety Diagnostics"
+                : "Refresh Safety Diagnostics status"
+            }
+          >
+            <RefreshCw
+              className={cn(
+                "h-3.5 w-3.5",
+                refreshing && "animate-spin",
+              )}
+              aria-hidden
+            />
+            <span
+              data-testid="safety-diagnostics-detail-refresh-label"
+              className="ml-1.5"
+            >
+              {refreshing ? "Refreshing…" : "Refresh status"}
+            </span>
+          </Button>
           <Button
             type="button"
             variant="secondary"

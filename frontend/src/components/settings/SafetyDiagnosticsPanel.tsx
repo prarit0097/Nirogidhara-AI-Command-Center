@@ -14,9 +14,10 @@
  *     panel renders only enum statuses + ISO->locale timestamps.
  */
 import { useState } from "react";
-import { Activity, ShieldCheck } from "lucide-react";
+import { Activity, RefreshCw, ShieldCheck } from "lucide-react";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   useSafetyState,
   type SafetyEndpointStatus,
@@ -113,6 +114,9 @@ export function SafetyDiagnosticsPanel() {
     killSwitchStatus,
     sandboxStatus,
     briefingStatus,
+    // Phase 15L — manual refresh wiring.
+    refreshing,
+    refreshSafetyState,
   } = useSafetyState();
 
   // Phase 15J — local-only modal state for the read-only details
@@ -143,6 +147,39 @@ export function SafetyDiagnosticsPanel() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Phase 15L — read-only "Refresh status" trigger.
+              Re-fetches the same three safety GET endpoints the
+              provider already owns. GET-only; never POST/PATCH/
+              DELETE; never mutates safety or business state. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="safety-diagnostics-refresh-status"
+            onClick={() => {
+              void refreshSafetyState();
+            }}
+            disabled={refreshing}
+            aria-label={
+              refreshing
+                ? "Refreshing Safety Diagnostics"
+                : "Refresh Safety Diagnostics status"
+            }
+          >
+            <RefreshCw
+              className={cn(
+                "h-3.5 w-3.5",
+                refreshing && "animate-spin",
+              )}
+              aria-hidden
+            />
+            <span
+              data-testid="safety-diagnostics-refresh-status-label"
+              className="ml-1.5"
+            >
+              {refreshing ? "Refreshing…" : "Refresh status"}
+            </span>
+          </Button>
           {/* Phase 15J — read-only "View details" trigger. Opens a
               local modal; never calls the backend. */}
           <Button

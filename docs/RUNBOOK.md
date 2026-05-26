@@ -470,6 +470,27 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Manual safety diagnostics refresh (Phase 15L)
+
+The Safety Diagnostics panel and its "View details" drawer each have a small **Refresh status** button. Use it when the Director wants to re-fetch the safety endpoint state without reloading the page (e.g. just after switching a setting on another tab, or to verify a recent server change).
+
+What the button does:
+- Re-fires the same three GET endpoints the provider already owns: `GET /api/v1/saas/runtime-live-gate/kill-switch/`, `GET /api/ai/sandbox/status/`, `GET /api/v1/ceo-orchestration/snapshots/sidebar-status/`. **GET-only — no POST/PATCH/DELETE.**
+- Updates the "Last safety refresh" timestamp on both the panel and drawer.
+- Flips the drawer's "Refresh source" row to `Manual refresh` for that wave.
+- Re-evaluates the per-endpoint health pills (kill switch / sandbox / briefing).
+
+What it does NOT do:
+- Does not resume AI, toggle sandbox, rollback prompts, generate briefing, or change any business data.
+- Does not create an AuditEvent.
+- Does not enqueue a Celery task.
+- Does not call any provider (Razorpay / Meta Cloud / Delhivery / Vapi / LLMs).
+
+Operator notes:
+- The button shows `Refreshing…` and disables while a wave is in flight. Rapid concurrent clicks coalesce to a single wave — there is no risk of accidentally spamming the backend.
+- If the session expired since the last refresh, the manual refresh triggers Phase 15K's clean session-expired UX: one `Session expired` toast + redirect to `/login` with the banner. Endpoint pills correctly flip to `Error` after a 401 — they never falsely claim `OK`.
+- The Phase 15J detail drawer's `Refresh source` row now reads the real provider value: `Initial load` after first mount, `Audit event` when an allow-listed WebSocket event triggered a debounced refresh, `Manual refresh` when the operator clicked the button.
+
 ### Session expiry UX (Phase 15K)
 
 When the backend returns HTTP 401 (JWT missing, expired, or invalid), the chrome now shows **one** clean message instead of the previous per-widget technical toast spam.

@@ -289,15 +289,20 @@ describe("Phase 15I - SafetyDiagnosticsPanel render", () => {
     ).toContain("Offline");
   });
 
-  it("panel contains NO action buttons (only the Phase 15J 'View details' read-only trigger), NO anchors, NO mutation labels", () => {
+  it("panel contains NO action buttons (only the Phase 15J 'View details' + Phase 15L 'Refresh status' read-only triggers), NO anchors, NO mutation labels", () => {
     renderPanel();
     const panel = screen.getByTestId("safety-diagnostics-panel");
-    // Phase 15J introduced a read-only "View details" button. Every
-    // OTHER button is still forbidden, so we filter the testid for
-    // the allow-listed trigger and assert nothing else is present.
+    // Phase 15J introduced "View details" + Phase 15L introduced
+    // "Refresh status". Both are read-only triggers (one opens a
+    // local modal, the other re-fires GET-only fetches). Every OTHER
+    // button is still forbidden, so we filter the testid for the
+    // two allow-listed triggers and assert nothing else is present.
+    const allowedTestids = new Set([
+      "safety-diagnostics-view-details",
+      "safety-diagnostics-refresh-status",
+    ]);
     const buttons = Array.from(panel.querySelectorAll("button")).filter(
-      (b) =>
-        b.getAttribute("data-testid") !== "safety-diagnostics-view-details",
+      (b) => !allowedTestids.has(b.getAttribute("data-testid") ?? ""),
     );
     expect(buttons.length).toBe(0);
     expect(panel.querySelector("a")).toBeNull();

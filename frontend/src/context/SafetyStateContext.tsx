@@ -162,6 +162,28 @@ export type SafetySyncStatus =
  */
 export type SafetyEndpointStatus = "loading" | "ok" | "error";
 
+/**
+ * Phase 15L - source of the most recent refresh attempt. Exposed
+ * so the Safety Diagnostics drawer can render the "Refresh source"
+ * row from the actual provider state rather than the Phase 15J
+ * timestamp-comparison heuristic. Buckets:
+ *
+ *   - "initial_load"  - the first fetch issued on provider mount.
+ *   - "audit_event"   - a Phase 15G WebSocket event triggered a
+ *                       debounced fetchAll().
+ *   - "manual_refresh" - the operator clicked the Phase 15L
+ *                       "Refresh status" button on the Safety
+ *                       Diagnostics panel or detail drawer.
+ *   - "unknown"       - no refresh has run yet (only really visible
+ *                       during the very first render before
+ *                       fetchAll resolves).
+ */
+export type SafetyRefreshSource =
+  | "initial_load"
+  | "audit_event"
+  | "manual_refresh"
+  | "unknown";
+
 export interface SafetyStateValue {
   // ---- raw snapshots ----------------------------------------------------
   killSwitch: SaasRuntimeLiveGateKillSwitch | null;
@@ -190,6 +212,19 @@ export interface SafetyStateValue {
   sandboxStatus: SafetyEndpointStatus;
   /** Health of the Phase 15B /ceo-orchestration/snapshots/sidebar-status/ GET. */
   briefingStatus: SafetyEndpointStatus;
+  // ---- Phase 15L manual refresh (read-only) -----------------------------
+  /** Source of the most recent refresh attempt. */
+  lastRefreshSource: SafetyRefreshSource;
+  /** True while a manual refresh round-trip is in flight. */
+  refreshing: boolean;
+  /**
+   * Operator-triggered re-fetch of the same three safety GETs the
+   * provider already owns. GET-only; never POST/PATCH/DELETE; never
+   * mutates business or safety state. Idempotent — concurrent
+   * clicks while a refresh is already in flight return the
+   * in-flight promise rather than firing a second wave of fetches.
+   */
+  refreshSafetyState: () => Promise<void>;
   // ---- callbacks --------------------------------------------------------
   /** Re-fetches all three endpoints once. Returns when all settle. */
   refresh: () => Promise<void>;
@@ -267,6 +302,16 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
     string | null
   >(null);
 
+  // Phase 15L - manual refresh tracking.
+  const [lastRefreshSource, setLastRefreshSource] = useState<SafetyRefreshSource>(
+    "unknown",
+  );
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  // In-flight promise — used so concurrent calls to
+  // refreshSafetyState() return the same fetch instead of firing
+  // a second parallel wave.
+  const inFlightManualRefresh = useRef<Promise<void> | null>(null);
+
   // Guard against state updates after unmount (StrictMode dev render
   // pairs + Phase 13A 401 interceptor that auto-clears storage).
   const mounted = useRef(true);
@@ -277,7 +322,9 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const fetchAll = useCallback(async (): Promise<void> => {
+  const fetchAll = useCallback(async (
+    source: SafetyRefreshSource = "initial_load",
+  ): Promise<void> => {
     if (mounted.current) setLoading(true);
     const results = await Promise.allSettled([
       api.getSaasRuntimeLiveGateKillSwitch(),
@@ -332,6 +379,10 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       setBriefingError(classifyBriefingError(brRes.reason));
     }
 
+    // Phase 15L - record the source of this refresh attempt so
+    // the diagnostics drawer can render "Refresh source" from
+    // real state rather than the Phase 15J timestamp heuristic.
+    setLastRefreshSource(source);
     setLoading(false);
   }, []);
 
@@ -359,7 +410,9 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
         // so the indicator reflects the latest event-triggered
         // refresh attempt even if the network round-trip is slow.
         setLastSafetyRefreshAt(new Date().toISOString());
-        void fetchAll();
+        // Phase 15L - tag the refresh source so the diagnostics
+        // drawer's "Refresh source" row reports "Audit event".
+        void fetchAll("audit_event");
       }, SAFETY_REFRESH_DEBOUNCE_MS);
     };
 
@@ -481,6 +534,27 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Phase 15L - manual GET-only refresh triggered by the Safety
+  // Diagnostics panel/drawer "Refresh status" button. Wraps the
+  // existing fetchAll() with a `manual_refresh` source tag plus
+  // a `refreshing` flag for button disable/loading state.
+  // Idempotent under concurrent clicks: while a manual refresh
+  // is in flight, additional calls return the same promise.
+  const refreshSafetyState = useCallback(async (): Promise<void> => {
+    if (!mounted.current) return;
+    if (inFlightManualRefresh.current !== null) {
+      return inFlightManualRefresh.current;
+    }
+    setRefreshing(true);
+    setLastSafetyRefreshAt(new Date().toISOString());
+    const promise = fetchAll("manual_refresh").finally(() => {
+      if (mounted.current) setRefreshing(false);
+      inFlightManualRefresh.current = null;
+    });
+    inFlightManualRefresh.current = promise;
+    return promise;
+  }, [fetchAll]);
+
   const value = useMemo<SafetyStateValue>(
     () => ({
       killSwitch,
@@ -498,7 +572,10 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       killSwitchStatus,
       sandboxStatus,
       briefingStatus,
+      lastRefreshSource,
+      refreshing,
       refresh: fetchAll,
+      refreshSafetyState,
       setKillSwitch,
     }),
     [
@@ -517,7 +594,10 @@ export function SafetyStateProvider({ children }: { children: ReactNode }) {
       killSwitchStatus,
       sandboxStatus,
       briefingStatus,
+      lastRefreshSource,
+      refreshing,
       fetchAll,
+      refreshSafetyState,
       setKillSwitch,
     ],
   );
@@ -571,7 +651,11 @@ export function useSafetyState(): SafetyStateValue {
     killSwitchStatus: "loading",
     sandboxStatus: "loading",
     briefingStatus: "loading",
+    // Phase 15L - inert defaults for the manual refresh fields.
+    lastRefreshSource: "unknown",
+    refreshing: false,
     refresh: async () => undefined,
+    refreshSafetyState: async () => undefined,
     setKillSwitch: () => undefined,
   };
 }
