@@ -7,7 +7,7 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Operational baseline (Phase 15M).** Current operational baseline is **Phase 15M — Foundation Release Freeze + Director Sign-off Pack** (docs-only, commit `8fc77d6`; safety shell frozen at `eefd8b3`). This API reference catalogues endpoints through the Phase 12D-era surfaces (read-only) plus Phase 15B (`/api/v1/ceo-orchestration/snapshots/sidebar-status/`) and Phase 15C (`/api/v1/audit/timeline/`) where documented. Test-count strings inside this file (e.g. "2730 backend tests + 82 frontend tests") describe the **historical Phase 12D snapshot** and are no longer current; current verification baseline lives in [`../nd.md`](../nd.md). Phase 8F live execute, Phase 7E-Live-B, and Phase 7G-Live remain **NOT approved**. Phase 8F state changes and execute remain CLI-only; HTTP endpoints are read-only.
+> **Operational baseline (Phase 15M + Phase 16B).** Current operational baseline is **Phase 16B — Customer Lifecycle UI Backbone** (shipped on top of Phase 15M Foundation Release Freeze; safety shell frozen at `eefd8b3`). This API reference catalogues endpoints through the Phase 12D-era surfaces (read-only) plus Phase 15B (`/api/v1/ceo-orchestration/snapshots/sidebar-status/`), Phase 15C (`/api/v1/audit/timeline/`), and Phase 16B's two new endpoints (`POST /api/leads/import-csv/` and `GET /api/customers/{id}/timeline/`) where documented. Phase 16B also extended `POST /api/leads/` with consent + email + notes + disease_category fields and added a typed `409 Conflict` response for phone / email duplicates. Test-count strings inside this file (e.g. "2730 backend tests + 82 frontend tests") describe the **historical Phase 12D snapshot** and are no longer current; current verification baseline lives in [`../nd.md`](../nd.md). Phase 8F live execute, Phase 7E-Live-B, and Phase 7G-Live remain **NOT approved**. Phase 8F state changes and execute remain CLI-only; HTTP endpoints are read-only.
 
 > **Historical Phase 12D baseline note (preserved for context):** endpoint body documented
 > through Phase 8F read-only surfaces. Historical verification baseline:
@@ -43,10 +43,13 @@ All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 
 | Method | Path | Returns |
 | --- | --- | --- |
-| GET | `/api/leads/` | `Lead[]` (now exposes optional `metaLeadgenId`, `metaPageId`, `metaFormId`, `metaAdId`, `metaCampaignId`, `sourceDetail` — all populated when ingested via the Meta webhook) |
+| GET | `/api/leads/` | `Lead[]` (now exposes optional `metaLeadgenId`, `metaPageId`, `metaFormId`, `metaAdId`, `metaCampaignId`, `sourceDetail` — all populated when ingested via the Meta webhook; Phase 16B adds `consentCall`, `consentWhatsapp`, `consentMarketing`, `email`, `notes`, `diseaseCategory`) |
 | GET | `/api/leads/{id}/` | `Lead` |
+| POST | `/api/leads/` | `Lead` (201). **Phase 16B:** payload accepts `consentCall` / `consentWhatsapp` / `consentMarketing` (all default `false`), `email`, `notes`, `diseaseCategory`. Returns **409** with `{detail, duplicate: true, field: "phone"\|"email", existingLeadId}` when the phone or email already exists. Operations role and above. |
+| POST | `/api/leads/import-csv/` | **Phase 16B — NEW.** CSV lead import. Payload `{csv: string, source?: string}`. Returns summary `{totalRows, createdCount, duplicateCount, errorCount, createdLeadIds[], rowErrors[{rowNumber, reason, phoneLast4}], truncatedErrorList}`. Required CSV columns: `name`, `phone`. Optional aliases: `email`, `source`, `disease/category`, `state`, `city`, `notes`, `consent_call`, `consent_whatsapp`, `consent_marketing`. Duplicates (within CSV OR against existing Leads) are **skipped, never overwritten**. Phone digits in error rows masked to last-4. Max 1000 rows / 50 row-errors per import. Operations role and above. **No WhatsApp / call / payment side-effect.** |
 | GET | `/api/customers/` | `Customer[]` |
 | GET | `/api/customers/{id}/` | `Customer` |
+| GET | `/api/customers/{id}/timeline/` | **Phase 16B — NEW.** Customer 360 unified timeline. Returns `{customerId, calls[], orders[], payments[], shipments[]}` — up to 50 rows per bucket sorted by recency. Calls / Orders matched via `phone`; Payments via `customer_phone` ∪ `customer` name; Shipments via `order_id` from the matched orders. **Distinct from the WhatsApp-only `/api/whatsapp/customers/{id}/timeline/`** which surfaces conversations / messages / internal notes only. Operations role and above. |
 
 ## Orders
 
