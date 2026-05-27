@@ -1,13 +1,15 @@
 # Backend Roadmap (Phase 2+)
 
-## Current SaaS runtime gate status
+> **Operational baseline note (Phase 15M):** This roadmap contains historical shipped/planned backend gates through the Phase 12D Tier-4 calling baseline. **Current operational baseline is Phase 15M** (foundation release freeze, docs-only, commit `8fc77d6`; safety shell frozen at `eefd8b3`). The next approved planning step is **Phase 16A — Business MVP Gap Audit** (planning-only; separate Director directive required to start). Any Phase 8F / 7E-Live-B / 7G-Live live-execution references remain **historical and locked unless separately approved** in writing by the Director. For current truth read [`../nd.md`](../nd.md) head-of-file and [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md).
 
-Current baseline is **Test Hygiene Hotfix-1**. Phase 6T, Phase 7B → 7I
+## Historical SaaS runtime gate snapshot (Phase 12D / Test Hygiene Hotfix-1)
+
+Historical baseline as of the Phase 12D era was **Test Hygiene Hotfix-1**. Phase 6T, Phase 7B → 7I
 with hotfixes, Phase 8A → 8F with hotfixes, Phase 8F-Hotfix-1,
 Phase 8F-Hotfix-2, and Test Hygiene Hotfix-1 are ✅ shipped.
-Verification baseline is **2730 backend tests +
+Historical verification baseline was **2730 backend tests +
 82 frontend tests**, green on both local SQLite and the VPS Postgres
-full-suite run. Test Hygiene Hotfix-1 is test-only: it pins integration
+full-suite run at that snapshot. Test Hygiene Hotfix-1 is test-only: it pins integration
 modes to mock inside `backend/tests/conftest.py` so `.env.production`
 values do not leak into the suite; it did not touch production code,
 models, migrations, services, views, env flags, `.env*` files, or

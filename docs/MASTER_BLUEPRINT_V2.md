@@ -4,6 +4,10 @@
 
 ---
 
+> **Operational supersession note (Phase 15M).** This blueprint v2 reflects the project's strategic framing as of its original revision date below and contains historical Phase 12D / Phase 8F-era wording. **Current operational truth is [`../nd.md`](../nd.md) + [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md)** (Phase 15M foundation release freeze; safety shell frozen at commit `eefd8b3`; docs/sign-off at `8fc77d6`). Where this blueprint and `nd.md` disagree on any operational detail, **`nd.md` wins** and the blueprint is the historical strategic mirror. Next planned work is **Phase 16A — Business MVP Gap Audit** (planning-only, awaiting Director directive). This blueprint is not edited section-by-section as new phases ship; it is preserved as the strategic v2 snapshot.
+
+---
+
 ## Document Control
 
 | Field | Value |

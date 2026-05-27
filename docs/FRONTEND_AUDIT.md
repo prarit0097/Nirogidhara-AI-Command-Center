@@ -3,9 +3,11 @@
 Frontend was generated using Lovable, then refined for the AI command-center
 direction.
 
-## Status (current)
+> **Current operational UI baseline is Phase 15M freeze.** The safety shell is **frozen** at commit `eefd8b3` (docs/sign-off at `8fc77d6`). Use [`nd.md`](../nd.md) and [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md) for current truth. The "Historical frontend audit snapshot" below is preserved as the Phase 12D-era reference; any "current" wording inside it is historical, not current.
 
-**Phase 12D baseline.** `/saas-admin` now renders the Phase 6 →
+## Historical frontend audit snapshot
+
+**Phase 12D baseline.** `/saas-admin` rendered the Phase 6 →
 Phase 8F read-only section grid, with no execute buttons and CLI-only
 review/approve banners on every section:
 
@@ -135,7 +137,7 @@ create-shipment, place-call, run-live, replay-webhook, apply-mutation,
 or activate-connector controls.
 Current total: 23 pages. Sidebar groups include Overview, Sales, Operations, AI Layer, Governance, Insights, Messaging, and System.
 
-## Phase 9-10 Frontend Additions (as of Phase 12D baseline)
+## Phase 9-10 Frontend Additions (historical — Phase 12D baseline)
 
 **Test baseline:** 82 frontend tests (unchanged across Phase 9-10 —
 new UI cards land in `/saas-admin` which is rendered read-only and

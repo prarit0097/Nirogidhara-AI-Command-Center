@@ -7,14 +7,14 @@ interfaces in `frontend/src/types/domain.ts`.
 All paths are prefixed by `/api/`. JSON in, JSON out. CORS allows
 `http://localhost:8080` by default.
 
-> **Phase 12D baseline:** endpoint body is documented
-> through Phase 8F read-only surfaces. Current verification baseline:
+> **Operational baseline (Phase 15M).** Current operational baseline is **Phase 15M — Foundation Release Freeze + Director Sign-off Pack** (docs-only, commit `8fc77d6`; safety shell frozen at `eefd8b3`). This API reference catalogues endpoints through the Phase 12D-era surfaces (read-only) plus Phase 15B (`/api/v1/ceo-orchestration/snapshots/sidebar-status/`) and Phase 15C (`/api/v1/audit/timeline/`) where documented. Test-count strings inside this file (e.g. "2730 backend tests + 82 frontend tests") describe the **historical Phase 12D snapshot** and are no longer current; current verification baseline lives in [`../nd.md`](../nd.md). Phase 8F live execute, Phase 7E-Live-B, and Phase 7G-Live remain **NOT approved**. Phase 8F state changes and execute remain CLI-only; HTTP endpoints are read-only.
+
+> **Historical Phase 12D baseline note (preserved for context):** endpoint body documented
+> through Phase 8F read-only surfaces. Historical verification baseline:
 > **2730 backend tests + 82 frontend tests**, green on local SQLite
-> and VPS Postgres. Phase 8F gate id=1 was recovered/approved on
+> and VPS Postgres at that snapshot. Phase 8F gate id=1 was recovered/approved on
 > the VPS on 2026-05-14 and attempt id=1 was minted, but **Phase 8F
-> execute was NOT run**. Phase 8F live execute, Phase 7E-Live-B,
-> and Phase 7G-Live remain **NOT approved**. Phase 8F state changes
-> and execute remain CLI-only; HTTP endpoints are read-only.
+> execute was NOT run**.
 >
 ## Health
 

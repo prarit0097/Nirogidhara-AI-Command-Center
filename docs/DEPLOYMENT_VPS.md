@@ -1554,10 +1554,12 @@ verification commands above to confirm posture stayed locked.
 
 ---
 
-## 11. Phase 12D Production Posture (current baseline as of 2026-05-16)
+## 11. Production Posture (historical — Phase 12D snapshot as of 2026-05-16)
 
-**Test baseline:** 2730 backend tests + 82 frontend tests. All green
-after Phase 12D.
+> **Operational baseline note (Phase 15M).** The current operational baseline is **Phase 15M — Foundation Release Freeze + Director Sign-off Pack** (docs-only). Safety shell is **frozen at commit `eefd8b3`**; docs/sign-off at `8fc77d6`. For current production posture see [`../nd.md`](../nd.md) head-of-file + [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). The numbers in this section are the **historical Phase 12D snapshot**; do not treat them as current.
+
+**Historical test baseline (Phase 12D):** 2730 backend tests + 82 frontend tests. All green
+at that snapshot. Current verification baseline lives in `nd.md`.
 
 **VPS path / compose / env:** `/opt/nirogidhara-command`,
 `docker-compose.prod.yml`, `.env.production` (never committed, never
