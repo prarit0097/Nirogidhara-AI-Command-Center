@@ -470,6 +470,30 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Business MVP Gap Audit (Phase 16A)
+
+Phase 16A is the first post-Phase-15M planning phase. It is a **docs-only, read-only audit** of the actual repo + deployed architecture to identify what is missing for the Nirogidhara AI Command Center to become useful for real internal business operations.
+
+**Read the audit:** [`docs/PHASE_16A_BUSINESS_MVP_GAP_AUDIT.md`](PHASE_16A_BUSINESS_MVP_GAP_AUDIT.md). It contains:
+
+1. Executive summary (one-page Director verdict).
+2. Current production baseline (Phase 15M frozen at `eefd8b3`, AI Paused, Sandbox OFF, no live-mutation phases approved).
+3. Audit method (6 parallel Explore agents producing concrete file/line evidence; zero code mutated).
+4. Business MVP area matrix (65 ranked rows with status + evidence + gap + launch-impact + next-phase recommendation).
+5. End-to-end workflow audit (13 customer-lifecycle steps; only 3 are fully automatable today).
+6. Launch blockers categorised P0 / P1 / P2 / P3.
+7. Recommended Phase 16B → 16G roadmap.
+8. What NOT to build yet (10 explicit defers).
+9. 10 Director decisions needed before commissioning Phase 16B.
+10. Safe next action.
+11. Evidence appendix (backend apps, frontend pages, sidebar nav, URL routes, env flags, Celery beat schedule, health endpoint contract, test counts, docs reviewed).
+
+**Verdict:** **READY ONLY FOR SAFETY / GOVERNANCE / READ-ONLY OBSERVABILITY. NOT READY FOR REAL BUSINESS OPERATIONS.**
+
+**Recommended next phase:** **Phase 16B — Customer Lifecycle UI Backbone** (wire existing backend services to frontend action buttons). Backend mostly already exists; this phase is frontend-wiring-first.
+
+**Phase 15 safety shell remains FROZEN** at code commit `eefd8b3`. Phase 16A does not modify any frozen surface. Phase 16B must be **separately approved** by a written Director directive that names "Phase 16B — Customer Lifecycle UI Backbone kick-off". Coding agents must NOT interpret silence as authorisation.
+
 ### Foundation Release Freeze / Director Sign-off (Phase 15M)
 
 Phase 15M closes the Phase 15 safety-shell foundation chapter with a **docs-only release-freeze attestation**. The 16 sub-phases shipped between Phase 14D and Phase 15L form the v1.0 read-only Director safety command center; Phase 15M freezes that foundation at commit `eefd8b3` and hands off to **Phase 16A — Business MVP Gap Audit** as the next planned work (separate Director directive required to start).
