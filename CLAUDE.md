@@ -5,13 +5,15 @@
 
 ---
 
-## Current operational baseline (post Phase 15L — read this first)
+## Current operational baseline (post Phase 15M — read this first)
 
 **`nd.md` is the canonical source of truth for current state. If anything below disagrees with `nd.md`, `nd.md` wins.**
 
-The "Phase 14A baseline status update" and similar entries below were correct at the time they were written but are now **historical narrative**. Since they were authored the repo has shipped Phase 14B / 14C / 14D / 14E / 14E-Hotfix-1 / 14F / 15A / 15B / 15C / 15D / 15E / 15F / **15G**.
+**Phase 15M is the foundation release freeze.** The 16 sub-phases between Phase 14D and Phase 15L form the v1.0 read-only Director safety command center; Phase 15M (docs-only) freezes them at commit `eefd8b3`. Do **NOT** add new "Phase 15X" sub-phases unless one of: production P0 blocker, P1 security defect, P1 compliance defect, or an explicit Director directive that names "Phase 15M freeze override". See [`docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md) for the freeze rule, route-wise smoke checklist, Director sign-off checklist, accepted risks, production safety posture, Phase 16A handoff, and rollback plan. Next planned work is **Phase 16A — Business MVP Gap Audit** (planning-only, separate Director directive required to start).
 
-**Current operational baseline (as of Phase 15L):**
+The "Phase 14A baseline status update" and similar entries below were correct at the time they were written but are now **historical narrative**. Since they were authored the repo has shipped Phase 14B / 14C / 14D / 14E / 14E-Hotfix-1 / 14F / 15A / 15B / 15C / 15D / 15E / 15F / 15G / 15H / 15I / 15J / 15K / 15L / **15M**.
+
+**Current operational baseline (as of Phase 15M):**
 
 - Frontend chrome ships a shared `SafetyStateProvider` + `useSafetyState()` (Phase 15F) that auto-refreshes via the Phase 4A `/ws/audit/events/` WebSocket on allow-listed events (Phase 15G — `runtime.kill_switch.*` / `ai.sandbox.*` / `ceo_orchestration.snapshot.*`, debounced at 750ms). A read-only Topbar Safety Sync indicator (Phase 15H) surfaces the WebSocket lifecycle as `connecting` / `live` / `reconnecting` / `offline` / `unavailable`. A read-only Safety Diagnostics mini panel on `/settings` (Phase 15I) shows sync status + per-endpoint health (`OK` / `Loading` / `Error`) for the three Phase 14D/14E/15B endpoints + last-event / last-refresh timestamps. A read-only "View details" drawer (Phase 15J) opens a Safety Diagnostics Details modal with sanitised sync / endpoint / refresh-source / safe-error-summary sections plus a literal read-only guarantee paragraph.
 - Live Director UI surfaces: Topbar Safety Compact Pill (Phase 15D + 15E responsive polish), Sidebar Director Briefing badge (Phase 15B), Audit Timeline at `/operations/audit-timeline` (Phase 15C), Rollback History modal (Phase 15A), Rollback System UI (Phase 14F), Sandbox Mode UI (Phase 14E + Hotfix-1), AI Kill Switch UI (Phase 14D), Director login flow (Phase 13A), Founder Operating Model lock (Phase 14A; see `nd.md` §1.5).

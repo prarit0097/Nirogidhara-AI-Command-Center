@@ -470,6 +470,37 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Foundation Release Freeze / Director Sign-off (Phase 15M)
+
+Phase 15M closes the Phase 15 safety-shell foundation chapter with a **docs-only release-freeze attestation**. The 16 sub-phases shipped between Phase 14D and Phase 15L form the v1.0 read-only Director safety command center; Phase 15M freezes that foundation at commit `eefd8b3` and hands off to **Phase 16A — Business MVP Gap Audit** as the next planned work (separate Director directive required to start).
+
+**Read the pack:** [`docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). It contains:
+
+1. The verified baseline (commit `eefd8b3`, AI Paused, Sandbox OFF, Briefing STALE, Phase 7E-Live-B / 7G-Live / 8F all NOT approved / not staged, 275 / 275 frontend tests passing, migrations + check clean).
+2. The 16 frozen sub-phases with commit hashes.
+3. The freeze rule (8 numbered items).
+4. A route-wise smoke checklist (8 sub-checklists) the Director runs before sign-off.
+5. The Director sign-off checklist (12 initial-boxes).
+6. Accepted risks (7 items).
+7. The production safety posture table.
+8. The Phase 16A scope + explicit non-goals.
+9. The rollback plan (per-sub-phase `git revert` + full chrome revert — never touches business data).
+
+**Freeze rule — what is allowed:**
+
+- **Routine maintenance is allowed** if rendered output + tested behaviour are unchanged: dep bumps, lint auto-fixes, prettier reformatting, type tightening, test-only edits, comment / JSDoc fixes. Document each one as a `chore:` commit; do NOT label them as new Phase 15X sub-phases.
+- **Phase 16A onwards is allowed** as long as it does not modify the frozen Phase 15 chrome surfaces. The Director must explicitly authorise Phase 16A start with a written directive that names "Phase 16A — Business MVP Gap Audit kick-off".
+
+**Freeze rule — what is blocked:**
+
+- No new "Phase 15X" sub-phases unless one of: production P0 blocker, P1 security defect, P1 compliance defect, or an explicit Director directive that names "Phase 15M freeze override".
+- No new safety endpoints (GET, POST, or WebSocket).
+- No expansion of existing safety endpoints to return new keys / raw payloads / raw secrets / full phones / customer PII / prompt bodies / hidden reasoning / provider payloads.
+- No new diagnostics rows, new sync states, new badge tones, new toast variants, new tooltip helpers, new keyboard shortcuts, new responsive breakpoints, new icon swaps, new copy edits on the frozen surfaces.
+- No code change to `frontend/src/context/SafetyStateContext.tsx`, `frontend/src/components/layout/Topbar.tsx`, `frontend/src/components/layout/Sidebar.tsx`, `frontend/src/components/settings/SafetyDiagnostics*.tsx`, `frontend/src/components/auth/SessionExpiredBanner.tsx`, `frontend/src/services/realtime.ts`, `frontend/src/pages/AuditTimeline.tsx`, `backend/apps/audit/views.py` (`AuditTimelineView`), `backend/apps/agents/ceo_orchestration/views.py` (sidebar-status endpoint) without the gate above being met.
+
+If a proposed change feels borderline, **ask the Director before touching the file** rather than after. Coding agents must not interpret silence as authorisation.
+
 ### Manual safety diagnostics refresh (Phase 15L)
 
 The Safety Diagnostics panel and its "View details" drawer each have a small **Refresh status** button. Use it when the Director wants to re-fetch the safety endpoint state without reloading the page (e.g. just after switching a setting on another tab, or to verify a recent server change).
