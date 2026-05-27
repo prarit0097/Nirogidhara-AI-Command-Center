@@ -501,6 +501,11 @@ Phase 15M closes the Phase 15 safety-shell foundation chapter with a **docs-only
 
 If a proposed change feels borderline, **ask the Director before touching the file** rather than after. Coding agents must not interpret silence as authorisation.
 
+**Accepted known warnings under the freeze:**
+
+- **Phase 4A pytest test-DB teardown warning** — a full backend `pytest` run can produce a non-blocking teardown warning (`database test_nirogidhara is being accessed by one other session`) caused by the Phase 4A `WebSocketCommunicator` fixture holding a Daphne consumer open during test DB teardown. **Non-blocking** if the test suite still reaches 100% pass. Do not retry-loop or `sleep` around it; do not redesign the consumer to silence it. Documented in detail at [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md) §8 item 1.
+- Other accepted risks (WebSocket reconnect attempt counter not exposed; CEO Director Briefing typically `STALE` in production by default; VPS `.env.production` deviation flagged for Director reconciliation; Phase 8F-Hotfix recovery CLI-only; review-state surfaces CLI-only across Phase 6Q–6T / 7B / 7E / 7F / 7G / 8A–8F; pytest mock-mode pinning) are catalogued in the Phase 15M sign-off pack §8.
+
 ### Manual safety diagnostics refresh (Phase 15L)
 
 The Safety Diagnostics panel and its "View details" drawer each have a small **Refresh status** button. Use it when the Director wants to re-fetch the safety endpoint state without reloading the page (e.g. just after switching a setting on another tab, or to verify a recent server change).
