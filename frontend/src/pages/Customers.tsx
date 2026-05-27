@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
 import type {
+  CustomerTimelineResponse,
   WhatsAppCustomerTimeline,
   WhatsAppInternalNote,
   WhatsAppMessage,
@@ -33,6 +34,10 @@ export default function Customers() {
     null,
   );
   const [waLoading, setWaLoading] = useState(false);
+  // Phase 16B — Customer 360 unified timeline (calls/orders/payments/shipments).
+  const [timeline, setTimeline] = useState<CustomerTimelineResponse | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
 
   useEffect(() => { api.getCustomers().then((c) => { setCustomers(c); setActive(c[0]); }); }, []);
 
@@ -46,6 +51,35 @@ export default function Customers() {
       .getCustomerWhatsAppTimeline(active.id)
       .then((data) => setWaTimeline(data))
       .finally(() => setWaLoading(false));
+  }, [active?.id]);
+
+  // Phase 16B — hydrate Calls / Orders / Payments / Delivery tabs.
+  useEffect(() => {
+    if (!active?.id) {
+      setTimeline(null);
+      setTimelineError(null);
+      return;
+    }
+    let cancelled = false;
+    setTimelineLoading(true);
+    setTimelineError(null);
+    api
+      .getCustomerTimeline(active.id)
+      .then((data) => {
+        if (!cancelled) setTimeline(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : "Could not load timeline";
+          setTimelineError(msg.slice(0, 160));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTimelineLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [active?.id]);
 
   if (!active) return <div className="h-96 grid place-items-center text-muted-foreground">Loading…</div>;
@@ -133,25 +167,18 @@ export default function Customers() {
               </TabsContent>
 
               <TabsContent value="calls" className="surface-card p-6 mt-3">
-                <h3 className="font-display text-lg font-semibold mb-3">Call timeline</h3>
-                <ol className="relative border-l border-border ml-3 space-y-5">
-                  {[
-                    { time: "Today 10:42", who: "Calling AI · Vaani-3", note: "Order punched, 12% discount, ₹499 advance taken." },
-                    { time: "Yesterday 16:05", who: "Calling AI · Vaani-3", note: "Discussed lifestyle, language switched to Hinglish." },
-                    { time: "2d ago 11:11", who: "Priya (Human)", note: "First contact — interested, callback requested." },
-                  ].map((c, i) => (
-                    <li key={i} className="ml-4">
-                      <span className="absolute -left-[7px] mt-1.5 h-3 w-3 rounded-full bg-primary ring-4 ring-background" />
-                      <div className="text-xs text-muted-foreground">{c.time} · {c.who}</div>
-                      <div className="text-sm">{c.note}</div>
-                    </li>
-                  ))}
-                </ol>
+                <CallsTab loading={timelineLoading} error={timelineError} timeline={timeline} />
               </TabsContent>
 
-              <TabsContent value="orders" className="surface-card p-6 mt-3"><EmptyTab icon={CreditCard} text="No order history fetched yet." /></TabsContent>
-              <TabsContent value="payments" className="surface-card p-6 mt-3"><EmptyTab icon={CreditCard} text="Razorpay & PayU payments will appear here." /></TabsContent>
-              <TabsContent value="delivery" className="surface-card p-6 mt-3"><EmptyTab icon={Truck} text="Delhivery shipment history view." /></TabsContent>
+              <TabsContent value="orders" className="surface-card p-6 mt-3">
+                <OrdersTab loading={timelineLoading} error={timelineError} timeline={timeline} />
+              </TabsContent>
+              <TabsContent value="payments" className="surface-card p-6 mt-3">
+                <PaymentsTab loading={timelineLoading} error={timelineError} timeline={timeline} />
+              </TabsContent>
+              <TabsContent value="delivery" className="surface-card p-6 mt-3">
+                <DeliveryTab loading={timelineLoading} error={timelineError} timeline={timeline} />
+              </TabsContent>
               <TabsContent value="whatsapp" className="surface-card p-6 mt-3">
                 <WhatsAppTab timeline={waTimeline} loading={waLoading} />
               </TabsContent>
@@ -193,6 +220,186 @@ export default function Customers() {
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+// Phase 16B — Customer 360 tab hydration. Each sub-tab consumes the
+// unified `getCustomerTimeline` payload (calls / orders / payments /
+// shipments) and renders compact tables. Loading + error + empty states
+// are handled per-tab.
+
+interface TimelineTabProps {
+  loading: boolean;
+  error: string | null;
+  timeline: CustomerTimelineResponse | null;
+}
+
+function timelineHeader(label: string) {
+  return <h3 className="font-display text-lg font-semibold mb-3">{label}</h3>;
+}
+
+function timelineStatusBanner(loading: boolean, error: string | null) {
+  if (loading) {
+    return (
+      <div className="text-sm text-muted-foreground py-2" data-testid="customer-timeline-loading">
+        Loading…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div
+        className="rounded-lg bg-destructive/10 border border-destructive/20 text-destructive p-2.5 text-xs mb-3"
+        data-testid="customer-timeline-error"
+      >
+        {error}
+      </div>
+    );
+  }
+  return null;
+}
+
+function CallsTab({ loading, error, timeline }: TimelineTabProps) {
+  return (
+    <>
+      {timelineHeader("Call timeline")}
+      {timelineStatusBanner(loading, error)}
+      {!loading && !error && (timeline?.calls?.length ?? 0) === 0 && (
+        <EmptyTab icon={Phone} text="No call history for this customer yet." />
+      )}
+      {timeline && timeline.calls.length > 0 && (
+        <ol
+          className="relative border-l border-border ml-3 space-y-5"
+          data-testid="customer-calls-list"
+        >
+          {timeline.calls.map((c) => (
+            <li key={c.id} className="ml-4">
+              <span className="absolute -left-[7px] mt-1.5 h-3 w-3 rounded-full bg-primary ring-4 ring-background" />
+              <div className="text-xs text-muted-foreground">
+                {c.createdAt} · {c.agent || "—"} ·{" "}
+                <StatusPill tone="info">{c.status}</StatusPill>
+              </div>
+              <div className="text-sm">
+                {c.duration && <span className="text-muted-foreground">[{c.duration}] </span>}
+                {c.summary || "No summary captured."}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </>
+  );
+}
+
+function OrdersTab({ loading, error, timeline }: TimelineTabProps) {
+  return (
+    <>
+      {timelineHeader("Order history")}
+      {timelineStatusBanner(loading, error)}
+      {!loading && !error && (timeline?.orders?.length ?? 0) === 0 && (
+        <EmptyTab icon={CreditCard} text="No orders for this customer yet." />
+      )}
+      {timeline && timeline.orders.length > 0 && (
+        <div className="overflow-x-auto" data-testid="customer-orders-list">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-3 py-2">Order</th>
+                <th className="text-left font-medium py-2">Product</th>
+                <th className="text-left font-medium py-2">Stage</th>
+                <th className="text-right font-medium px-3 py-2">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeline.orders.map((o) => (
+                <tr key={o.id} className="border-t border-border/60">
+                  <td className="px-3 py-2 font-mono text-xs">{o.id}</td>
+                  <td className="py-2">{o.product || "—"}</td>
+                  <td className="py-2"><StatusPill tone="info">{o.stage}</StatusPill></td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums">₹{o.amount?.toLocaleString?.() ?? o.amount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+function PaymentsTab({ loading, error, timeline }: TimelineTabProps) {
+  return (
+    <>
+      {timelineHeader("Payments")}
+      {timelineStatusBanner(loading, error)}
+      {!loading && !error && (timeline?.payments?.length ?? 0) === 0 && (
+        <EmptyTab icon={CreditCard} text="No payment records for this customer yet." />
+      )}
+      {timeline && timeline.payments.length > 0 && (
+        <div className="overflow-x-auto" data-testid="customer-payments-list">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-3 py-2">Payment</th>
+                <th className="text-left font-medium py-2">Order</th>
+                <th className="text-left font-medium py-2">Status</th>
+                <th className="text-left font-medium py-2">Gateway</th>
+                <th className="text-right font-medium px-3 py-2">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeline.payments.map((p) => (
+                <tr key={p.id} className="border-t border-border/60">
+                  <td className="px-3 py-2 font-mono text-xs">{p.id}</td>
+                  <td className="py-2 font-mono text-xs">{p.orderId}</td>
+                  <td className="py-2"><StatusPill tone={p.status === "Paid" ? "success" : p.status === "Failed" ? "danger" : "warning"}>{p.status}</StatusPill></td>
+                  <td className="py-2 text-xs">{p.gateway}</td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums">₹{p.amount?.toLocaleString?.() ?? p.amount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+function DeliveryTab({ loading, error, timeline }: TimelineTabProps) {
+  return (
+    <>
+      {timelineHeader("Delhivery shipments")}
+      {timelineStatusBanner(loading, error)}
+      {!loading && !error && (timeline?.shipments?.length ?? 0) === 0 && (
+        <EmptyTab icon={Truck} text="No shipments for this customer yet." />
+      )}
+      {timeline && timeline.shipments.length > 0 && (
+        <div className="overflow-x-auto" data-testid="customer-shipments-list">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-3 py-2">AWB</th>
+                <th className="text-left font-medium py-2">Order</th>
+                <th className="text-left font-medium py-2">Status</th>
+                <th className="text-left font-medium py-2">Courier</th>
+                <th className="text-left font-medium py-2">ETA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeline.shipments.map((s) => (
+                <tr key={s.awb} className="border-t border-border/60">
+                  <td className="px-3 py-2 font-mono text-xs">{s.awb}</td>
+                  <td className="py-2 font-mono text-xs">{s.orderId}</td>
+                  <td className="py-2"><StatusPill tone={s.status === "Delivered" ? "success" : s.status === "RTO" ? "danger" : "info"}>{s.status}</StatusPill></td>
+                  <td className="py-2 text-xs">{s.courier}</td>
+                  <td className="py-2 text-xs">{s.eta || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

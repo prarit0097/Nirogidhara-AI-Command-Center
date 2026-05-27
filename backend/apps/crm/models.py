@@ -54,6 +54,19 @@ class Lead(models.Model):
     raw_source_payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Phase 16B — Lead-level consent + email + notes + disease_category.
+    # Mirrors the existing Customer consent triplet so a Lead captures
+    # consent at intake (before optional conversion to Customer). Defaults
+    # are SAFE — every new lead starts with all three consents False;
+    # downstream WhatsApp / calling paths continue to gate on these flags
+    # via the existing consent enforcement (apps.whatsapp.consent).
+    consent_call = models.BooleanField(default=False)
+    consent_whatsapp = models.BooleanField(default=False)
+    consent_marketing = models.BooleanField(default=False)
+    email = models.CharField(max_length=160, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    disease_category = models.CharField(max_length=80, blank=True, default="")
+
     # Phase 6B — Default Org Data Backfill. Nullable; backfilled by
     # ``backfill_default_organization_data`` to the seeded default org +
     # branch. Phase 6C will add tenant-scoped queryset filtering once
@@ -77,7 +90,13 @@ class Lead(models.Model):
 
     class Meta:
         ordering = ("-created_at",)
-        indexes = (models.Index(fields=("status",)), models.Index(fields=("state",)))
+        indexes = (
+            models.Index(fields=("status",)),
+            models.Index(fields=("state",)),
+            # Phase 16B — cheap duplicate-detection lookups on phone + email.
+            models.Index(fields=("phone",), name="crm_lead_phone_idx"),
+            models.Index(fields=("email",), name="crm_lead_email_idx"),
+        )
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.id} · {self.name}"

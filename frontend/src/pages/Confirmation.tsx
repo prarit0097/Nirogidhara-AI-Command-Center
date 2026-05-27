@@ -1,16 +1,31 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
-import { CheckCircle2, Clock, Shield, ShieldAlert, X } from "lucide-react";
+import type { ConfirmationOutcome } from "@/types/domain";
+import { CheckCircle2, Clock, Loader2, Shield, ShieldAlert, X } from "lucide-react";
 import { toast } from "sonner";
 
 const STEPS = ["name", "address", "product", "amount", "intent"];
 
 export default function Confirmation() {
   const [queue, setQueue] = useState<any[]>([]);
-  useEffect(() => { api.getConfirmationQueue().then(setQueue); }, []);
+  const [loadingQueue, setLoadingQueue] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoadingQueue(true);
+    try {
+      const rows = await api.getConfirmationQueue();
+      setQueue(rows ?? []);
+    } finally {
+      setLoadingQueue(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   return (
     <>
@@ -30,20 +45,55 @@ export default function Confirmation() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        {queue.map((o) => (
-          <ConfirmationCard key={o.id} order={o} />
-        ))}
-      </div>
+      {loadingQueue && queue.length === 0 ? (
+        <div className="surface-card p-8 text-center text-sm text-muted-foreground" data-testid="confirmation-loading">
+          <Loader2 className="h-5 w-5 mx-auto mb-2 animate-spin opacity-60" />
+          Loading confirmation queue…
+        </div>
+      ) : queue.length === 0 ? (
+        <div className="surface-card p-8 text-center text-sm text-muted-foreground" data-testid="confirmation-empty">
+          No orders waiting for confirmation right now.
+        </div>
+      ) : (
+        <div className="grid lg:grid-cols-2 gap-4">
+          {queue.map((o) => (
+            <ConfirmationCard key={o.id} order={o} onActionDone={refresh} />
+          ))}
+        </div>
+      )}
     </>
   );
 }
 
-function ConfirmationCard({ order }: { order: any }) {
+interface ConfirmationCardProps {
+  order: any;
+  onActionDone: () => void;
+}
+
+function ConfirmationCard({ order, onActionDone }: ConfirmationCardProps) {
   const [check, setCheck] = useState<Record<string, boolean>>({});
+  const [pendingAction, setPendingAction] = useState<ConfirmationOutcome | null>(null);
   const completed = STEPS.filter((s) => check[s]).length;
+
+  const handleOutcome = async (outcome: ConfirmationOutcome, label: string) => {
+    if (pendingAction) return;
+    setPendingAction(outcome);
+    try {
+      await api.confirmOrder(order.id, outcome);
+      if (outcome === "confirmed") toast.success(`${order.id} confirmed`);
+      else if (outcome === "rescue_needed") toast.warning(`${order.id} sent to RTO Rescue`);
+      else toast.info(`${order.id} cancelled`);
+      onActionDone();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `${label} failed`;
+      toast.error(`Could not ${label}: ${message.slice(0, 160)}`);
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
   return (
-    <div className="surface-card p-5 hover:shadow-elevated transition">
+    <div className="surface-card p-5 hover:shadow-elevated transition" data-testid={`confirmation-card-${order.id}`}>
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="font-display text-lg font-semibold">{order.customerName}</div>
@@ -78,14 +128,48 @@ function ConfirmationCard({ order }: { order: any }) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" className="bg-gradient-hero text-primary-foreground" onClick={() => toast.success(`${order.id} confirmed`)}>
-          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />Confirmed
+        <Button
+          size="sm"
+          className="bg-gradient-hero text-primary-foreground"
+          disabled={!!pendingAction}
+          onClick={() => handleOutcome("confirmed", "confirm")}
+          data-testid={`confirmation-confirmed-${order.id}`}
+        >
+          {pendingAction === "confirmed" ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+          )}
+          {pendingAction === "confirmed" ? "Confirming…" : "Confirmed"}
         </Button>
-        <Button size="sm" variant="outline" onClick={() => toast.warning(`${order.id} sent to RTO Rescue`)}>
-          <Shield className="h-3.5 w-3.5 mr-1" />Rescue needed
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!!pendingAction}
+          onClick={() => handleOutcome("rescue_needed", "send to rescue")}
+          data-testid={`confirmation-rescue-${order.id}`}
+        >
+          {pendingAction === "rescue_needed" ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <Shield className="h-3.5 w-3.5 mr-1" />
+          )}
+          {pendingAction === "rescue_needed" ? "Working…" : "Rescue needed"}
         </Button>
-        <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => toast.error(`${order.id} cancelled`)}>
-          <X className="h-3.5 w-3.5 mr-1" />Cancelled
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-destructive hover:text-destructive"
+          disabled={!!pendingAction}
+          onClick={() => handleOutcome("cancelled", "cancel")}
+          data-testid={`confirmation-cancel-${order.id}`}
+        >
+          {pendingAction === "cancelled" ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <X className="h-3.5 w-3.5 mr-1" />
+          )}
+          {pendingAction === "cancelled" ? "Cancelling…" : "Cancelled"}
         </Button>
       </div>
     </div>

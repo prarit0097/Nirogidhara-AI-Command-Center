@@ -1,5 +1,30 @@
 # Phase 16A — Business MVP Gap Audit
 
+> **Phase 16B follow-up status (2026-05-27):** **Phase 16B — Customer Lifecycle UI Backbone is SHIPPED.** Six of the audit's launch-blocker items are now resolved or substantially mitigated:
+>
+> - **P0 #1 Confirmation queue UI not wired** → **RESOLVED.** Buttons now call `POST /api/orders/{id}/confirm/` with real loading / success / error states.
+> - **P0 #2 Customer 360 Calls / Orders / Payments / Delivery tabs empty** → **RESOLVED.** New `GET /api/customers/{id}/timeline/` endpoint hydrates all four tabs.
+> - **P0 #9 Lead consent fields missing on Lead model** → **RESOLVED.** Migration `crm.0004_phase16b_lead_consent_fields` adds `consent_call` / `consent_whatsapp` / `consent_marketing` (default False).
+> - **P1 #11 Lead duplicate detection** → **RESOLVED.** `apps.crm.services.create_lead` now raises `LeadDuplicateError` on phone / email collision; endpoint returns HTTP 409 with `{duplicate, field, existingLeadId}`.
+> - **P1 #12 Order kanban detail sheet has no action buttons** → **RESOLVED for safe internal transitions.** Detail sheet exposes NEW_LEAD → INTERESTED → PAYMENT_LINK_SENT → ORDER_PUNCHED → CONFIRMATION_PENDING via existing `transition_order` service. Dispatched / Delivered / RTO deliberately not exposed.
+> - **P1 #15 No "Create Order" UI** → **PARTIALLY MITIGATED** by the new "Create Lead" form (lead creation works from UI; order creation from UI is still Phase 16C+ scope).
+>
+> **Items still open after Phase 16B (carried to Phase 16C / 16D / 16E / 16F):**
+>
+> - P0 #3 `ShipmentCreateView` hardcoded to `create_mock_shipment()` — deferred to Phase 16D.
+> - P0 #4 Phase 7E-Live-B / 7G-Live / 8F all NOT approved — deferred to Phase 16D / 16E.
+> - P0 #5 Director Daily Briefing approval UI missing — deferred to Phase 16C (recommended next phase).
+> - P0 #6 No UI for human calling agent — deferred to Phase 16G if scope desired.
+> - P0 #7 No UI for org-role assignment — deferred to Phase 16C.
+> - P0 #8 Production Claim Vault seed is demo-v2 — deferred to Phase 16E.
+> - P0 #10 RTO Rescue buttons toast-only — deferred to Phase 16D.
+>
+> **The original audit body below is preserved verbatim as the canonical reference.** Phase 15 safety shell remains FROZEN at code commit `eefd8b3`.
+>
+> For Phase 16B implementation details see [`nd.md`](../nd.md) §0 head + the Phase 16B entry in §8.
+
+---
+
 > **Status:** SHIPPED — docs-only / read-only audit.
 > **Phase 15 safety shell remains FROZEN at code commit `eefd8b3`.** This audit does **NOT** modify any backend code, frontend code, migration, env file, Celery beat schedule, runtime state, business state, or safety state. Phase 16A is a planning-only gap audit; the implementation phases it recommends (Phase 16B and beyond) require **separate explicit Director directives** before any code change.
 

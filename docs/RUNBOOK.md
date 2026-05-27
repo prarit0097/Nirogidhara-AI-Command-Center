@@ -470,6 +470,61 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Customer Lifecycle UI Backbone (Phase 16B)
+
+Phase 16B converted six previously read-only / toast-only frontend surfaces into real workflow surfaces. **No external provider call** fires from any Phase 16B path — Phase 15 safety shell remains FROZEN.
+
+**What the Director can do now (that wasn't possible in Phase 16A):**
+
+1. **Confirmation Queue actions** — navigate to `/confirmation`. Click `Confirmed`, `Rescue needed`, or `Cancelled` on a queued order. The button shows a spinner while the request is in flight, then the queue refreshes. Behaviour:
+   - `Confirmed` → `Order.stage` → `Confirmed`, success toast.
+   - `Rescue needed` → `Order.rescue_status` set to `"Rescue Needed (confirmation)"`, stage stays `Confirmation Pending`, warning toast.
+   - `Cancelled` → `Order.stage` → `Cancelled`, info toast.
+   - **No WhatsApp / no payment / no courier side-effect fires.**
+2. **Customer 360 full timeline** — navigate to `/customers`, pick a customer. The Calls / Orders / Payments / Delivery tabs now hydrate from a single read-only endpoint (`GET /api/customers/{id}/timeline/`). Empty states render cleanly when a customer has no history in a given bucket. Existing PII masking policy on phone numbers stays in force.
+3. **Order Kanban safe transitions** — navigate to `/orders`, click any order card. The detail sheet now shows "Safe transitions" buttons appropriate to the current stage (e.g. `New Lead → Interested`, `Interested → Payment Link Sent`, `Order Punched → Confirmation Pending`). `Confirmation Pending → Confirmed` is intentionally NOT available here — use the Confirmation Queue page so the checklist enforces the verification flow. `Dispatched / Out for Delivery / Delivered / RTO` are NOT exposed because those require their own backend workflows.
+4. **Manual New Lead form** — navigate to `/leads`, click `New Lead`. Required: name + phone. Optional: email, source, disease/problem, state, city, notes, three consent checkboxes (default OFF). On submit, a 409 duplicate response (existing Lead with same phone OR email) surfaces an inline yellow banner naming the existing Lead id — the new lead is NOT created.
+5. **CSV Lead Import** — navigate to `/leads`, click `Import`. Either paste a CSV blob (header + rows) into the textarea OR upload a `.csv` file. Minimum columns: `name`, `phone`. Optional aliases accepted: `email`, `source`, `disease/category`, `state`, `city`, `notes`, `consent_call`, `consent_whatsapp`, `consent_marketing`. After submit, the response summary shows `total_rows / created / duplicates / errors` plus a row-error list with phones masked to last-4. Duplicate rows (within the CSV OR against existing Leads) are **SKIPPED, never overwritten**. Up to 1000 rows per import; up to 50 row-errors surface in the response.
+6. **Lead-level consent** — every new Lead (manual form, CSV import, or API POST) starts with `consent_call=false`, `consent_whatsapp=false`, `consent_marketing=false`. Downstream WhatsApp / calling paths continue to gate on these flags via the existing consent enforcement (`apps.whatsapp.consent`). The Meta Lead Ads webhook ingest path is unchanged (its own `meta_leadgen_id` idempotency model applies; consent fields default to False).
+
+**How to interpret CSV import results:**
+
+- `created_count` — leads actually inserted into the DB.
+- `duplicate_count` — rows skipped because the phone or email already exists (either within the same CSV or against an existing Lead). No silent overwrite.
+- `error_count` — rows that hit a parsing / validation error (missing `name` or `phone`; unexpected exception during `create_lead`).
+- `row_errors[]` — sanitised list. Each entry has `rowNumber`, `reason` (short string), `phoneLast4` (last-4 digits only — never full E.164).
+- `truncatedErrorList=true` means the import exceeded the 50-error surface cap; inspect the CSV directly to find the rest.
+
+**Safety reminders (Phase 16B specifically):**
+
+- No WhatsApp message is sent from any Phase 16B path.
+- No payment gateway is called.
+- No Delhivery / courier provider is called.
+- No Vapi / voice provider is called.
+- No AI provider (OpenAI / Anthropic / NVIDIA / OpenRouter) is called.
+- No Celery task is enqueued that would trigger any provider action.
+- The Phase 15 safety shell (Topbar pill, Sidebar status, Settings safety cards, Audit Timeline, Rollback modals, Diagnostics panel, Detail drawer) is **NOT modified** by Phase 16B. Verify after deploy: same `AI Paused` state, `Sandbox OFF`, briefing badge unchanged.
+
+**Local testing commands (Phase 16B):**
+
+```bash
+# Backend — just the Phase 16B suite.
+cd backend
+python -m pytest tests/test_phase16b_customer_lifecycle.py -q
+# Backend — full suite (catches any regression).
+python -m pytest -q --tb=short
+
+# Frontend — just the Phase 16B suite.
+cd ../frontend
+npm test -- --run src/test/phase16b_customer_lifecycle.test.tsx
+# Frontend — full suite + lint + build.
+npm test -- --run
+npm run lint
+npm run build
+```
+
+**Migration applied by Phase 16B:** `crm.0004_phase16b_lead_consent_fields` — adds 6 nullable / default-False columns to the `Lead` table and 2 cheap indexes (`crm_lead_phone_idx`, `crm_lead_email_idx`). Forward-only. On the VPS, run `docker compose -f docker-compose.prod.yml exec backend python manage.py migrate` after `git pull`. **Take a Postgres backup first** (see deploy commands below).
+
 ### Business MVP Gap Audit (Phase 16A)
 
 Phase 16A is the first post-Phase-15M planning phase. It is a **docs-only, read-only audit** of the actual repo + deployed architecture to identify what is missing for the Nirogidhara AI Command Center to become useful for real internal business operations.

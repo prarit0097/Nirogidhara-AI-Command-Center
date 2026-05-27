@@ -677,8 +677,8 @@ export interface PaymentLinkResponse {
 export interface CreateLeadPayload {
   name: string;
   phone: string;
-  state: string;
-  city: string;
+  state?: string;
+  city?: string;
   language?: string;
   source?: string;
   campaign?: string;
@@ -687,6 +687,94 @@ export interface CreateLeadPayload {
   qualityScore?: number;
   assignee?: string;
   duplicate?: boolean;
+  // Phase 16B — lead-level consent + intake fields.
+  email?: string;
+  diseaseCategory?: string;
+  notes?: string;
+  consentCall?: boolean;
+  consentWhatsapp?: boolean;
+  consentMarketing?: boolean;
+}
+
+// Phase 16B — CSV lead import payload + response shape.
+export interface LeadImportCsvPayload {
+  csv: string;
+  source?: string;
+}
+
+export interface LeadImportRowError {
+  rowNumber: number;
+  reason: string;
+  phoneLast4?: string;
+}
+
+export interface LeadImportResult {
+  totalRows: number;
+  createdCount: number;
+  duplicateCount: number;
+  errorCount: number;
+  createdLeadIds: string[];
+  rowErrors: LeadImportRowError[];
+  truncatedErrorList: boolean;
+}
+
+// Phase 16B — Customer 360 unified timeline payload.
+export interface CustomerTimelineCall {
+  id: string;
+  createdAt: string;
+  agent: string;
+  status: string;
+  duration: string;
+  sentiment: string;
+  summary: string;
+}
+
+export interface CustomerTimelineOrder {
+  id: string;
+  createdAt: string;
+  stage: OrderStage;
+  product: string;
+  quantity: number;
+  amount: number;
+  paymentStatus: string;
+  rtoRisk: string;
+  agent: string;
+}
+
+export interface CustomerTimelinePayment {
+  id: string;
+  createdAt: string;
+  orderId: string;
+  amount: number;
+  status: string;
+  gateway: string;
+  type: string;
+}
+
+export interface CustomerTimelineShipment {
+  awb: string;
+  orderId: string;
+  status: string;
+  courier: string;
+  eta: string;
+  deliveredAt: string;
+  trackingUrl: string;
+}
+
+export interface CustomerTimelineResponse {
+  customerId: string;
+  calls: CustomerTimelineCall[];
+  orders: CustomerTimelineOrder[];
+  payments: CustomerTimelinePayment[];
+  shipments: CustomerTimelineShipment[];
+}
+
+/** Phase 16B — typed error returned by createLead on phone/email duplicate. */
+export interface LeadDuplicateConflict {
+  duplicate: true;
+  field: "phone" | "email";
+  existingLeadId: string;
+  detail: string;
 }
 
 export interface UpdateLeadPayload {

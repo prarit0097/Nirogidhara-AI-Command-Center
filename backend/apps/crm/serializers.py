@@ -15,6 +15,11 @@ class LeadSerializer(serializers.ModelSerializer):
     metaAdId = serializers.CharField(source="meta_ad_id", read_only=True)
     metaCampaignId = serializers.CharField(source="meta_campaign_id", read_only=True)
     sourceDetail = serializers.CharField(source="source_detail", read_only=True)
+    # Phase 16B
+    consentCall = serializers.BooleanField(source="consent_call", required=False)
+    consentWhatsapp = serializers.BooleanField(source="consent_whatsapp", required=False)
+    consentMarketing = serializers.BooleanField(source="consent_marketing", required=False)
+    diseaseCategory = serializers.CharField(source="disease_category", required=False)
 
     class Meta:
         model = Lead
@@ -22,6 +27,7 @@ class LeadSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "phone",
+            "email",
             "state",
             "city",
             "language",
@@ -40,6 +46,11 @@ class LeadSerializer(serializers.ModelSerializer):
             "metaAdId",
             "metaCampaignId",
             "sourceDetail",
+            "consentCall",
+            "consentWhatsapp",
+            "consentMarketing",
+            "diseaseCategory",
+            "notes",
         )
 
 
@@ -86,12 +97,20 @@ class CustomerSerializer(serializers.ModelSerializer):
 
 
 class LeadCreateSerializer(serializers.Serializer):
-    """Inbound payload for POST /api/leads/. camelCase field names."""
+    """Inbound payload for POST /api/leads/. camelCase field names.
+
+    Phase 16B adds the lead-level consent triplet + email + notes +
+    disease_category. ``state`` and ``city`` are now optional (manual-form
+    intake often captures phone + name first).
+    """
 
     name = serializers.CharField(max_length=120)
     phone = serializers.CharField(max_length=24)
-    state = serializers.CharField(max_length=60)
-    city = serializers.CharField(max_length=80)
+    email = serializers.CharField(
+        max_length=160, required=False, allow_blank=True, default=""
+    )
+    state = serializers.CharField(max_length=60, required=False, allow_blank=True, default="")
+    city = serializers.CharField(max_length=80, required=False, allow_blank=True, default="")
     language = serializers.CharField(max_length=40, required=False, default="Hinglish")
     source = serializers.CharField(max_length=60, required=False, default="Manual")
     campaign = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
@@ -110,6 +129,46 @@ class LeadCreateSerializer(serializers.Serializer):
     )
     assignee = serializers.CharField(max_length=80, required=False, allow_blank=True, default="")
     duplicate = serializers.BooleanField(required=False, default=False)
+    # Phase 16B — consent + intake context.
+    consentCall = serializers.BooleanField(
+        required=False, default=False, source="consent_call"
+    )
+    consentWhatsapp = serializers.BooleanField(
+        required=False, default=False, source="consent_whatsapp"
+    )
+    consentMarketing = serializers.BooleanField(
+        required=False, default=False, source="consent_marketing"
+    )
+    diseaseCategory = serializers.CharField(
+        max_length=80, required=False, allow_blank=True, default="", source="disease_category"
+    )
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+# Phase 16B — CSV import payload + result serializers.
+class LeadImportCsvPayloadSerializer(serializers.Serializer):
+    csv = serializers.CharField(allow_blank=False)
+    source = serializers.CharField(
+        max_length=60, required=False, allow_blank=True, default="CSV Import"
+    )
+
+
+class LeadImportRowErrorSerializer(serializers.Serializer):
+    rowNumber = serializers.IntegerField(source="row_number")
+    reason = serializers.CharField()
+    phoneLast4 = serializers.CharField(source="phone_last4", required=False)
+
+
+class LeadImportResultSerializer(serializers.Serializer):
+    totalRows = serializers.IntegerField(source="total_rows")
+    createdCount = serializers.IntegerField(source="created_count")
+    duplicateCount = serializers.IntegerField(source="duplicate_count")
+    errorCount = serializers.IntegerField(source="error_count")
+    createdLeadIds = serializers.ListField(
+        child=serializers.CharField(), source="created_lead_ids"
+    )
+    rowErrors = LeadImportRowErrorSerializer(many=True, source="row_errors")
+    truncatedErrorList = serializers.BooleanField(source="truncated_error_list")
 
 
 class LeadUpdateSerializer(serializers.Serializer):

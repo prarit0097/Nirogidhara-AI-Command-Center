@@ -64,7 +64,10 @@ import type {
   CreateLeadPayload,
   CreateOrderPayload,
   Customer,
+  CustomerTimelineResponse,
   CustomerWritePayload,
+  LeadImportCsvPayload,
+  LeadImportResult,
   DashboardMetrics,
   KPITrend,
   Lead,
@@ -697,6 +700,38 @@ export const api = {
 
   createLead: (payload: CreateLeadPayload) =>
     safeMutate<Lead>("/leads/", "POST", payload, () => optimisticLead(payload)),
+
+  // Phase 16B — CSV lead import. Backend response is the safe summary
+  // (createdCount / duplicateCount / errorCount + sanitised rowErrors with
+  // phones masked to last-4). NEVER triggers WhatsApp / call / payment.
+  importLeadsCsv: (payload: LeadImportCsvPayload) =>
+    safeMutate<LeadImportResult>(
+      "/leads/import-csv/",
+      "POST",
+      payload,
+      () => ({
+        totalRows: 0,
+        createdCount: 0,
+        duplicateCount: 0,
+        errorCount: 0,
+        createdLeadIds: [],
+        rowErrors: [],
+        truncatedErrorList: false,
+      }),
+    ),
+
+  // Phase 16B — Customer 360 unified timeline (calls/orders/payments/shipments).
+  getCustomerTimeline: (customerId: string) =>
+    safeFetch<CustomerTimelineResponse>(
+      `/customers/${customerId}/timeline/`,
+      () => ({
+        customerId,
+        calls: [],
+        orders: [],
+        payments: [],
+        shipments: [],
+      }),
+    ),
 
   updateLead: (id: string, payload: UpdateLeadPayload) =>
     safeMutate<Lead>(`/leads/${id}/`, "PATCH", payload, () => {

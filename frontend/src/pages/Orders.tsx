@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
+import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
+import type { OrderStage } from "@/types/domain";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Clock, CreditCard, IndianRupee, MapPin, ShieldAlert, User } from "lucide-react";
+import { Clock, CreditCard, IndianRupee, Loader2, MapPin, ShieldAlert, User } from "lucide-react";
+import { toast } from "sonner";
 
 const COLUMNS = ["New Lead", "Interested", "Payment Link Sent", "Order Punched", "Confirmation Pending", "Confirmed", "Dispatched", "Out for Delivery", "Delivered", "RTO"];
 
@@ -13,11 +16,29 @@ const STAGE_TONE: Record<string, any> = {
   "Dispatched": "info", "Out for Delivery": "info", "Delivered": "success", "RTO": "danger",
 };
 
+// Phase 16B — safe internal transitions allowed from the Orders detail sheet.
+// This is a deliberate subset of the full Order.Stage enum: transitions that
+// would imply a real external side-effect (Dispatched / Out for Delivery /
+// Delivered / RTO) are NOT exposed here — those land via their own backend
+// services (Phase 7G dispatch, Delhivery tracking webhook, payment webhook).
+// "Confirmation Pending" is also excluded so operators are forced to use the
+// dedicated Confirmation Queue checklist surface.
+const ORDER_NEXT_STAGE_OPTIONS: Partial<Record<OrderStage, Array<{ stage: OrderStage; label: string }>>> = {
+  "New Lead": [{ stage: "Interested", label: "Mark Interested" }],
+  "Interested": [{ stage: "Payment Link Sent", label: "Mark Payment Link Sent" }],
+  "Payment Link Sent": [{ stage: "Order Punched", label: "Mark Order Punched" }],
+  "Order Punched": [{ stage: "Confirmation Pending", label: "Move to Confirmation" }],
+};
+
 export default function Orders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [active, setActive] = useState<any | null>(null);
 
-  useEffect(() => { api.getOrders().then(setOrders); }, []);
+  const loadOrders = useCallback(() => {
+    api.getOrders().then(setOrders);
+  }, []);
+
+  useEffect(() => { loadOrders(); }, [loadOrders]);
 
   return (
     <>
@@ -77,22 +98,93 @@ export default function Orders() {
       <Sheet open={!!active} onOpenChange={() => setActive(null)}>
         <SheetContent className="sm:max-w-md w-full overflow-y-auto">
           {active && (
-            <>
-              <SheetHeader>
-                <SheetTitle className="font-display text-2xl">{active.id}</SheetTitle>
-                <SheetDescription>{active.product} · {active.quantity} pack</SheetDescription>
-              </SheetHeader>
-              <div className="mt-6 space-y-4">
-                <Row icon={User} label="Customer" value={active.customerName} sub={active.phone} />
-                <Row icon={MapPin} label="Address" value={`${active.city}, ${active.state}`} />
-                <Row icon={IndianRupee} label="Amount" value={`₹${active.amount.toLocaleString()}`} sub={`${active.discountPct}% discount`} />
-                <Row icon={CreditCard} label="Payment" value={active.paymentStatus} sub={active.advancePaid ? `Advance ₹${active.advanceAmount}` : "No advance"} />
-                <Row icon={ShieldAlert} label="RTO Risk" value={`${active.rtoRisk} (${active.rtoScore}/100)`} />
-              </div>
-            </>
+            <OrderDetailSheet
+              order={active}
+              onTransitioned={() => {
+                loadOrders();
+                setActive(null);
+              }}
+            />
           )}
         </SheetContent>
       </Sheet>
+    </>
+  );
+}
+
+interface OrderDetailSheetProps {
+  order: any;
+  onTransitioned: () => void;
+}
+
+function OrderDetailSheet({ order, onTransitioned }: OrderDetailSheetProps) {
+  const [pendingStage, setPendingStage] = useState<OrderStage | null>(null);
+  const stage: OrderStage = order.stage;
+  const options = ORDER_NEXT_STAGE_OPTIONS[stage] ?? [];
+
+  const handleTransition = async (nextStage: OrderStage, label: string) => {
+    if (pendingStage) return;
+    setPendingStage(nextStage);
+    try {
+      await api.transitionOrder(order.id, nextStage);
+      toast.success(`${order.id} → ${nextStage}`);
+      onTransitioned();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `Transition failed`;
+      toast.error(`Could not ${label}: ${message.slice(0, 180)}`);
+    } finally {
+      setPendingStage(null);
+    }
+  };
+
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle className="font-display text-2xl">{order.id}</SheetTitle>
+        <SheetDescription>{order.product} · {order.quantity} pack</SheetDescription>
+      </SheetHeader>
+      <div className="mt-6 space-y-4">
+        <Row icon={User} label="Customer" value={order.customerName} sub={order.phone} />
+        <Row icon={MapPin} label="Address" value={`${order.city}, ${order.state}`} />
+        <Row icon={IndianRupee} label="Amount" value={`₹${order.amount.toLocaleString()}`} sub={`${order.discountPct}% discount`} />
+        <Row icon={CreditCard} label="Payment" value={order.paymentStatus} sub={order.advancePaid ? `Advance ₹${order.advanceAmount}` : "No advance"} />
+        <Row icon={ShieldAlert} label="RTO Risk" value={`${order.rtoRisk} (${order.rtoScore}/100)`} />
+        <div className="rounded-xl bg-muted/40 p-3 space-y-2">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Current stage</div>
+          <StatusPill tone={STAGE_TONE[stage] ?? "info"}>{stage}</StatusPill>
+        </div>
+        {options.length > 0 ? (
+          <div className="space-y-2" data-testid={`order-transition-options-${order.id}`}>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Safe transitions</div>
+            <div className="flex flex-wrap gap-2">
+              {options.map((opt) => (
+                <Button
+                  key={opt.stage}
+                  size="sm"
+                  variant="outline"
+                  disabled={!!pendingStage}
+                  onClick={() => handleTransition(opt.stage, opt.label)}
+                  data-testid={`order-transition-${order.id}-${opt.stage.replace(/\s+/g, "-").toLowerCase()}`}
+                >
+                  {pendingStage === opt.stage ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  ) : null}
+                  {pendingStage === opt.stage ? "Working…" : opt.label}
+                </Button>
+              ))}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              Internal stage transitions only — no shipment, payment, WhatsApp or call side-effects fire from this surface.
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            {stage === "Confirmation Pending"
+              ? "Use the Confirmation Queue checklist to action this order."
+              : "No safe internal transitions available from this stage."}
+          </div>
+        )}
+      </div>
     </>
   );
 }

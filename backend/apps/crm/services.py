@@ -6,6 +6,9 @@ return the model instance. Views serialize and respond.
 """
 from __future__ import annotations
 
+import csv
+import io
+from dataclasses import dataclass, field
 from typing import Any
 
 from django.db import transaction
@@ -17,12 +20,68 @@ from apps.audit.signals import write_event
 from .integrations.meta_client import MetaLead, expand_lead
 from .models import Customer, Lead, MetaLeadEvent
 
+
+# Phase 16B — Lead duplicate detection raises this typed error so views can
+# translate to a clean DRF 409 / 400 response. Carries the existing Lead's id
+# so the operator can navigate to the duplicate.
+class LeadDuplicateError(ValueError):
+    """Raised when create_lead detects a phone or email duplicate."""
+
+    def __init__(self, *, field_name: str, existing_lead_id: str, value_suffix: str = ""):
+        self.field_name = field_name
+        self.existing_lead_id = existing_lead_id
+        self.value_suffix = value_suffix
+        super().__init__(
+            f"Duplicate {field_name}: lead {existing_lead_id} already exists"
+        )
+
 # Cross-app import only for the by_user type hint; runtime never imports User
 # here so Django app loading order stays unaffected.
 try:  # pragma: no cover - typing only
     from apps.accounts.models import User
 except ImportError:  # pragma: no cover
     User = Any  # type: ignore[misc, assignment]
+
+
+def _phone_last4(phone: str) -> str:
+    """Return last-4 digits for audit / error messages — never the full phone."""
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    return digits[-4:] if len(digits) >= 4 else "????"
+
+
+def _check_lead_duplicate(
+    *, phone: str, email: str = "", skip_dedup: bool = False
+) -> None:
+    """Raise LeadDuplicateError if a Lead with the same phone or email exists.
+
+    Phase 16B duplicate detection:
+      - Phone (normalised on raw stored value) is the primary key.
+      - Email is checked only when both the new payload and the existing row
+        have a non-blank value.
+
+    The Meta Lead Ads webhook ingest path passes ``skip_dedup=True`` because
+    that path does its own ``meta_leadgen_id`` based idempotency check.
+    """
+    if skip_dedup:
+        return
+    phone_clean = (phone or "").strip()
+    if phone_clean:
+        existing = Lead.objects.filter(phone=phone_clean).first()
+        if existing is not None:
+            raise LeadDuplicateError(
+                field_name="phone",
+                existing_lead_id=existing.id,
+                value_suffix=_phone_last4(phone_clean),
+            )
+    email_clean = (email or "").strip().lower()
+    if email_clean:
+        existing = Lead.objects.filter(email__iexact=email_clean).first()
+        if existing is not None:
+            raise LeadDuplicateError(
+                field_name="email",
+                existing_lead_id=existing.id,
+                value_suffix=email_clean[:1] + "***",
+            )
 
 
 @transaction.atomic
@@ -40,7 +99,22 @@ def create_lead(
     quality_score: int = 50,
     assignee: str = "",
     duplicate: bool = False,
+    # Phase 16B — new optional fields
+    consent_call: bool = False,
+    consent_whatsapp: bool = False,
+    consent_marketing: bool = False,
+    email: str = "",
+    notes: str = "",
+    disease_category: str = "",
+    skip_dedup: bool = False,
 ) -> Lead:
+    """Create a Lead with optional consent fields + duplicate detection.
+
+    Phase 16B: raises ``LeadDuplicateError`` if phone or email matches an
+    existing Lead, unless ``skip_dedup=True`` (used only by the Meta webhook
+    ingest path which has its own ``meta_leadgen_id`` based idempotency).
+    """
+    _check_lead_duplicate(phone=phone, email=email, skip_dedup=skip_dedup)
     lead = Lead.objects.create(
         id=next_id("LD", Lead, base=10300),
         name=name,
@@ -57,6 +131,12 @@ def create_lead(
         assignee=assignee,
         duplicate=duplicate,
         created_at_label="just now",
+        consent_call=consent_call,
+        consent_whatsapp=consent_whatsapp,
+        consent_marketing=consent_marketing,
+        email=(email or "").strip().lower(),
+        notes=notes,
+        disease_category=disease_category,
     )
     # `lead.created` AuditEvent is fired by the existing post_save signal.
     return lead
@@ -233,6 +313,12 @@ def ingest_meta_lead(meta_lead: MetaLead) -> tuple[Lead, str]:
         action = "updated"
         lead = existing
     else:
+        # Phase 16B note: the Meta webhook path bypasses ``create_lead``'s
+        # new duplicate-detection (it has its own ``meta_leadgen_id``
+        # idempotency via ``MetaLeadEvent`` + the prior ``existing``
+        # lookup above). Defaults for the new Phase 16B Lead fields fall
+        # back to the model defaults (consent_call/whatsapp/marketing =
+        # False, email/notes/disease_category = "").
         lead = Lead.objects.create(
             id=next_id("LD", Lead, base=10300),
             status=Lead.Status.NEW,
@@ -260,6 +346,283 @@ def ingest_meta_lead(meta_lead: MetaLead) -> tuple[Lead, str]:
         },
     )
     return lead, action
+
+
+# ----- Phase 16B — CSV Lead Import -----
+
+
+@dataclass
+class LeadImportRowError:
+    """One malformed CSV row + its safe sanitised reason. NEVER contains
+    raw phone digits beyond the last 4."""
+
+    row_number: int
+    reason: str
+    phone_last4: str = ""
+
+
+@dataclass
+class LeadImportResult:
+    """Aggregate result of a CSV import run."""
+
+    total_rows: int = 0
+    created_count: int = 0
+    duplicate_count: int = 0
+    error_count: int = 0
+    created_lead_ids: list[str] = field(default_factory=list)
+    row_errors: list[LeadImportRowError] = field(default_factory=list)
+    truncated_error_list: bool = False
+
+
+# Max rows accepted per CSV upload (defensive — protects backend from a
+# pathological 1-million-row upload). Phase 16B is internal-pilot scope.
+LEAD_IMPORT_MAX_ROWS = 1000
+LEAD_IMPORT_MAX_ERROR_ROWS = 50
+
+# Canonical column names accepted in the CSV header (case-insensitive).
+# Any of these → name field; phone → phone; etc.
+_HEADER_ALIASES = {
+    "name": "name",
+    "full name": "name",
+    "fullname": "name",
+    "customer": "name",
+    "customer name": "name",
+    "phone": "phone",
+    "phone number": "phone",
+    "mobile": "phone",
+    "mobile number": "phone",
+    "contact": "phone",
+    "email": "email",
+    "email address": "email",
+    "state": "state",
+    "city": "city",
+    "language": "language",
+    "source": "source",
+    "campaign": "campaign",
+    "product": "product_interest",
+    "product interest": "product_interest",
+    "interest": "product_interest",
+    "disease": "disease_category",
+    "disease category": "disease_category",
+    "category": "disease_category",
+    "notes": "notes",
+    "note": "notes",
+    "consent_call": "consent_call",
+    "consent call": "consent_call",
+    "consent_whatsapp": "consent_whatsapp",
+    "consent whatsapp": "consent_whatsapp",
+    "consent_marketing": "consent_marketing",
+    "consent marketing": "consent_marketing",
+}
+
+
+def _truthy(value: str) -> bool:
+    """Lenient boolean parser for CSV consent columns."""
+    return (value or "").strip().lower() in {"1", "true", "yes", "y", "t"}
+
+
+def import_leads_csv(
+    *,
+    raw_csv: str,
+    by_user: "User",
+    default_source: str = "CSV Import",
+) -> LeadImportResult:
+    """Parse a CSV blob and create Lead rows safely.
+
+    Rules:
+      - Header row required.
+      - Required columns: ``name``, ``phone``. Missing either → row error.
+      - Optional columns map per ``_HEADER_ALIASES``.
+      - Duplicate phones (across the CSV OR against existing Leads) are
+        SKIPPED, NOT overwritten. Counted in ``duplicate_count``.
+      - Row errors are capped at LEAD_IMPORT_MAX_ERROR_ROWS to keep the
+        response payload small; ``truncated_error_list`` is set True past
+        the cap.
+      - NEVER sends WhatsApp, never calls a customer, never triggers any
+        external provider. Only inserts Lead rows.
+      - PII in the response is masked to phone last-4.
+    """
+    result = LeadImportResult()
+    try:
+        reader = csv.DictReader(io.StringIO(raw_csv))
+    except Exception as exc:  # noqa: BLE001 - malformed CSV
+        result.error_count = 1
+        result.row_errors.append(
+            LeadImportRowError(row_number=0, reason=f"Malformed CSV: {exc}")
+        )
+        return result
+
+    if not reader.fieldnames:
+        result.error_count = 1
+        result.row_errors.append(
+            LeadImportRowError(row_number=0, reason="CSV has no header row")
+        )
+        return result
+
+    # Build a lowercased-header → canonical-column map for this CSV.
+    header_map: dict[str, str] = {}
+    for raw_header in reader.fieldnames:
+        if raw_header is None:
+            continue
+        key = raw_header.strip().lower()
+        if key in _HEADER_ALIASES:
+            header_map[raw_header] = _HEADER_ALIASES[key]
+
+    if "name" not in header_map.values() or "phone" not in header_map.values():
+        result.error_count = 1
+        result.row_errors.append(
+            LeadImportRowError(
+                row_number=0,
+                reason="CSV missing required header(s): 'name' and 'phone'",
+            )
+        )
+        return result
+
+    # Track phones SEEN within this CSV so two rows in the same upload with
+    # the same phone get the second one classified as duplicate.
+    seen_phones_in_csv: set[str] = set()
+    seen_emails_in_csv: set[str] = set()
+
+    for row_idx, raw_row in enumerate(reader, start=2):  # row 1 = header
+        if result.total_rows >= LEAD_IMPORT_MAX_ROWS:
+            result.error_count += 1
+            if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
+                result.row_errors.append(
+                    LeadImportRowError(
+                        row_number=row_idx,
+                        reason=(
+                            f"Row capped — Phase 16B max {LEAD_IMPORT_MAX_ROWS} rows per import"
+                        ),
+                    )
+                )
+            else:
+                result.truncated_error_list = True
+            continue
+        result.total_rows += 1
+
+        # Translate the row into canonical kwargs.
+        canonical: dict[str, str] = {}
+        for raw_header, raw_value in raw_row.items():
+            if raw_header is None or raw_header not in header_map:
+                continue
+            canonical_key = header_map[raw_header]
+            canonical[canonical_key] = (raw_value or "").strip()
+
+        name = canonical.get("name", "")
+        phone = canonical.get("phone", "")
+        email = canonical.get("email", "").lower()
+
+        if not name or not phone:
+            result.error_count += 1
+            if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
+                result.row_errors.append(
+                    LeadImportRowError(
+                        row_number=row_idx,
+                        reason="Missing required 'name' or 'phone'",
+                        phone_last4=_phone_last4(phone),
+                    )
+                )
+            else:
+                result.truncated_error_list = True
+            continue
+
+        # In-CSV duplicate check.
+        if phone in seen_phones_in_csv:
+            result.duplicate_count += 1
+            if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
+                result.row_errors.append(
+                    LeadImportRowError(
+                        row_number=row_idx,
+                        reason="Duplicate phone within CSV",
+                        phone_last4=_phone_last4(phone),
+                    )
+                )
+            else:
+                result.truncated_error_list = True
+            continue
+        if email and email in seen_emails_in_csv:
+            result.duplicate_count += 1
+            if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
+                result.row_errors.append(
+                    LeadImportRowError(
+                        row_number=row_idx,
+                        reason="Duplicate email within CSV",
+                        phone_last4=_phone_last4(phone),
+                    )
+                )
+            else:
+                result.truncated_error_list = True
+            continue
+
+        seen_phones_in_csv.add(phone)
+        if email:
+            seen_emails_in_csv.add(email)
+
+        try:
+            lead = create_lead(
+                name=name,
+                phone=phone,
+                state=canonical.get("state", ""),
+                city=canonical.get("city", ""),
+                language=canonical.get("language") or "Hinglish",
+                source=canonical.get("source") or default_source,
+                campaign=canonical.get("campaign", ""),
+                product_interest=canonical.get("product_interest", ""),
+                consent_call=_truthy(canonical.get("consent_call", "")),
+                consent_whatsapp=_truthy(canonical.get("consent_whatsapp", "")),
+                consent_marketing=_truthy(canonical.get("consent_marketing", "")),
+                email=email,
+                notes=canonical.get("notes", ""),
+                disease_category=canonical.get("disease_category", ""),
+            )
+        except LeadDuplicateError:
+            # Already-existing Lead in DB. Count and continue.
+            result.duplicate_count += 1
+            if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
+                result.row_errors.append(
+                    LeadImportRowError(
+                        row_number=row_idx,
+                        reason="Duplicate of existing Lead (phone or email)",
+                        phone_last4=_phone_last4(phone),
+                    )
+                )
+            else:
+                result.truncated_error_list = True
+            continue
+        except Exception as exc:  # noqa: BLE001 - per-row guard
+            result.error_count += 1
+            if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
+                result.row_errors.append(
+                    LeadImportRowError(
+                        row_number=row_idx,
+                        reason=str(exc)[:240],
+                        phone_last4=_phone_last4(phone),
+                    )
+                )
+            else:
+                result.truncated_error_list = True
+            continue
+
+        result.created_count += 1
+        result.created_lead_ids.append(lead.id)
+
+    write_event(
+        kind="lead.csv_import",
+        text=(
+            f"CSV lead import by {getattr(by_user, 'username', 'system')}: "
+            f"{result.created_count} created, {result.duplicate_count} duplicates, "
+            f"{result.error_count} errors"
+        ),
+        tone=AuditEvent.Tone.INFO,
+        payload={
+            "by": getattr(by_user, "username", ""),
+            "total_rows": result.total_rows,
+            "created_count": result.created_count,
+            "duplicate_count": result.duplicate_count,
+            "error_count": result.error_count,
+        },
+    )
+    return result
 
 
 def record_meta_event(

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill, toneForStatus } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LeadImportModal } from "@/components/leads/LeadImportModal";
+import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { api } from "@/services/api";
 import { Filter, Phone, Plus, Search, Upload, Flame, Snowflake, Sun, Copy } from "lucide-react";
 import { toast } from "sonner";
@@ -14,8 +16,14 @@ export default function Leads() {
   const [leads, setLeads] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
+  const [newLeadOpen, setNewLeadOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
-  useEffect(() => { api.getLeads().then(setLeads); }, []);
+  const refresh = useCallback(() => {
+    api.getLeads().then(setLeads);
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   const filtered = useMemo(() => leads.filter((l) => {
     if (status !== "All" && l.status !== status) return false;
@@ -33,10 +41,33 @@ export default function Leads() {
         description="Every lead from Meta, Google, influencer & inbound calls — auto-scored, deduplicated and routed to AI or human callers."
         actions={
           <>
-            <Button variant="outline" onClick={() => toast.info("Upload panel — connect Django /api/leads/import")}><Upload className="h-4 w-4 mr-1.5" />Import</Button>
-            <Button className="bg-gradient-hero text-primary-foreground"><Plus className="h-4 w-4 mr-1.5" />New Lead</Button>
+            <Button
+              variant="outline"
+              onClick={() => setImportOpen(true)}
+              data-testid="leads-import-button"
+            >
+              <Upload className="h-4 w-4 mr-1.5" />Import
+            </Button>
+            <Button
+              className="bg-gradient-hero text-primary-foreground"
+              onClick={() => setNewLeadOpen(true)}
+              data-testid="leads-new-button"
+            >
+              <Plus className="h-4 w-4 mr-1.5" />New Lead
+            </Button>
           </>
         }
+      />
+
+      <NewLeadModal
+        open={newLeadOpen}
+        onOpenChange={setNewLeadOpen}
+        onCreated={() => refresh()}
+      />
+      <LeadImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => refresh()}
       />
 
       <div className="surface-card p-4 mb-4 flex flex-wrap items-center gap-3">
