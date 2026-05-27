@@ -36,8 +36,8 @@ Phase 15M ships **zero backend code, zero frontend code, zero migrations, zero e
 | Commit (HEAD = origin/main) | `eefd8b3fb8cb6bfd5f4fbb7ea7c5e9149b4a5eef` (`eefd8b3 feat: phase 15l add safety diagnostics manual refresh`) |
 | Production URL | <https://ai.nirogidhara.com> |
 | Production server | Hostinger VPS, `/opt/nirogidhara-command`, Docker Compose 6-container stack (Postgres 16, Redis 7, Daphne backend, Celery worker, Celery beat, Nginx → SPA) |
-| Backend health | `GET /health/` → `{ "status": "ok" }` |
-| AI state | **AI Paused** (`RuntimeKillSwitch.enabled=False`) |
+| Backend health | `GET /api/healthz/` → `{"status":"ok","service":"nirogidhara-backend"}` |
+| AI state | **AI Paused** (`RuntimeKillSwitch.enabled=True` — kill switch active; AI execution blocked) |
 | Sandbox state | **OFF** (`SandboxState.is_enabled=False`) |
 | CEO Director Briefing | **STALE** in current production state (Phase 9F daily sweep not running on the production VPS by default) |
 | Phase 7E-Live-B real customer WhatsApp send | **NOT approved** |
@@ -184,7 +184,7 @@ This step exists for completeness; on a production VPS where the Director cannot
 
 ### 6.8 Backend health smoke
 
-- [ ] `curl -sf https://ai.nirogidhara.com/health/` returns `{"status":"ok"}`.
+- [ ] `curl -sf https://ai.nirogidhara.com/api/healthz/` returns `{"status":"ok","service":"nirogidhara-backend"}`.
 - [ ] `docker compose -f docker-compose.prod.yml ps` shows all six containers `Up`.
 - [ ] `docker compose -f docker-compose.prod.yml logs --since 60s backend` shows no `Traceback` lines.
 
@@ -231,7 +231,7 @@ If any of the above items changes meaningfully — for example, the daily CEO sw
 
 | Surface | State | Notes |
 | --- | --- | --- |
-| `RuntimeKillSwitch` | **Paused** (`enabled=False`) | AI execution blocked. Topbar / Sidebar / Settings all surface this consistently. |
+| `RuntimeKillSwitch` | **Paused** (`enabled=True` — kill switch active; AI execution blocked) | AI execution blocked. Topbar / Sidebar / Settings all surface this consistently. |
 | `SandboxState` | **OFF** (`is_enabled=False`) | AI is not running in shadow / dry-run mode. |
 | CEO Director Briefing | **STALE** | Daily sweep not running on the VPS by default. |
 | Safety Sync (WebSocket) | **Live** when the VPS is healthy | `/ws/audit/events/` reachable from the SPA; falls back to `reconnecting` on transient disconnect, `unavailable` when the browser cannot reach the server at all. |
