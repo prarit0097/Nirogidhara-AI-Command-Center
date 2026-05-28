@@ -17,11 +17,13 @@ nirogidhara-command/
   docs/       # RUNBOOK, BACKEND_API, FRONTEND_AUDIT, FUTURE_BACKEND_PLAN
 ```
 
-## Current operational baseline (post Phase 15M)
+## Current operational baseline (post Phase 16B — production verified)
 
 **`nd.md` is the canonical source of truth for current state. The "Current SaaS foundation status" section below is preserved as historical narrative through the Phase 12D Tier-4 calling baseline; for current state read `nd.md` head-of-file first.**
 
-**Phase 15M (docs-only) is the foundation release freeze.** It closes the Phase 15 safety-shell foundation chapter and points coding agents at [`docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md) for the freeze rule, route-wise smoke checklist, Director sign-off checklist, accepted risks, production safety posture, Phase 16A handoff, and rollback plan. **No new "Phase 15X" sub-phases** unless production P0 blocker, P1 security defect, P1 compliance defect, or an explicit Director directive that names "Phase 15M freeze override".
+**Phase 16B — Customer Lifecycle UI Backbone is PRODUCTION VERIFIED at commit `00c3295` after Hotfix-2, and is CLOSED.** Backend Phase 16B suite 30/30, `manage.py check` clean, `makemigrations --check` clean, health endpoint OK, browser validation passed. The Phase 16A audit was followed by the Phase 16B implementation + Hotfix-1 (`8c0c6b9`, superseded) + Hotfix-2 (`00c3295`, phone-only lead uniqueness + Orders responsive layout). **Next planned work is Phase 16C — Director Daily Briefing + Team Roles UI, which requires a separate written Director directive.** No live automation / WhatsApp / payment / courier / Vapi / AI-provider action is approved.
+
+**Phase 15M (docs-only) is the foundation release freeze.** It closes the Phase 15 safety-shell foundation chapter and points coding agents at [`docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md) for the freeze rule, route-wise smoke checklist, Director sign-off checklist, accepted risks, production safety posture, Phase 16A handoff, and rollback plan. **No new "Phase 15X" sub-phases** unless production P0 blocker, P1 security defect, P1 compliance defect, or an explicit Director directive that names "Phase 15M freeze override". The Phase 15 safety shell remains FROZEN and unchanged through Phase 16A / 16B / both hotfixes.
 
 **Phase 16A — Business MVP Gap Audit (docs-only / read-only) SHIPPED.** See [`docs/PHASE_16A_BUSINESS_MVP_GAP_AUDIT.md`](docs/PHASE_16A_BUSINESS_MVP_GAP_AUDIT.md).
 

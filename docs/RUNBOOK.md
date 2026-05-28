@@ -470,6 +470,41 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Phase 16B Production Verification (CLOSED at commit `00c3295`)
+
+**Phase 16B — Customer Lifecycle UI Backbone is PRODUCTION VERIFIED and CLOSED** at deploy commit `00c3295` (`fix: phase 16b phone uniqueness and responsive orders`), which folds in Hotfix-1 (`8c0c6b9`, superseded) and Hotfix-2 (`00c3295`).
+
+**Verification commands + expected outputs (run on the VPS):**
+
+```bash
+cd /opt/nirogidhara-command
+docker compose -f docker-compose.prod.yml exec backend python manage.py makemigrations --check --dry-run
+# Expected: No changes detected
+docker compose -f docker-compose.prod.yml exec backend python manage.py check
+# Expected: System check identified no issues (0 silenced).
+docker compose -f docker-compose.prod.yml exec backend python -m pytest tests/test_phase16b_customer_lifecycle.py --tb=no -q
+# Expected: 30 passed
+curl -sS https://ai.nirogidhara.com/api/healthz/
+# Expected: {"status":"ok","service":"nirogidhara-backend"}
+```
+
+**Browser checklist (all passed at `00c3295`):**
+1. Leads → New Lead with a fresh phone → creates lead.
+2. Leads → same phone + different email → "Duplicate phone blocked — existing lead found." (modal stays open, no lead created).
+3. Leads → same email + different phone → allowed (creates lead).
+4. Leads table has an `S.N.` column.
+5. Customer 360 → right-side cards no longer clip; tabs render cleanly.
+6. Orders Pipeline → no horizontal scroll; stages wrap vertically.
+7. Orders cards show "Manage status" + the internal-status-update safe copy.
+8. Safety shell unchanged: AI Paused, Sandbox OFF, Sync Live.
+9. No WhatsApp / payment / courier / Vapi / provider side effect observed.
+
+**Rollback note:** Phase 16B-Hotfix-2 added no migration (phone-only dedup is service-layer). A revert is a plain `git revert <commit>` + `docker compose up -d --build` — no DB rollback needed. The Phase 16B migration `crm.0004_phase16b_lead_consent_fields` (added at `bb12871`) is additive/forward-only; do not drop those columns on a revert.
+
+**No side effects:** Phase 16B + both hotfixes never call WhatsApp / Razorpay / PayU / Delhivery / Vapi / any AI provider, never enqueue a provider Celery task, never change `RuntimeKillSwitch` / `SandboxState`, never edit `.env*`. Phase 15 safety shell FROZEN at `eefd8b3`.
+
+**Next phase requires a directive:** Phase 16C — Director Daily Briefing + Team Roles UI — must NOT start without a separate written Director directive naming "Phase 16C ... kick-off".
+
 ### Phone-only Lead Uniqueness + Orders Responsive Pipeline (Phase 16B-Hotfix-2)
 
 Phase 16B-Hotfix-2 fixed the 2 remaining browser-validation issues. **Frontend + service-layer only — no migration, no provider side-effect, Phase 15 safety shell untouched.**

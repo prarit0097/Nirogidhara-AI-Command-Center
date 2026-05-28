@@ -6,11 +6,13 @@
 
 ---
 
-## Current operational baseline (post Phase 15M — read this first)
+## Current operational baseline (post Phase 16B — read this first)
 
 **`nd.md` is the canonical source of truth for current state. If anything in this file disagrees with `nd.md`, `nd.md` wins.**
 
-**Phase 15M is the foundation release freeze.** Phase 15A–L shipped a 16-piece read-only safety chrome on top of Phase 14D / 14E / 14F. **Phase 15M (docs-only) freezes that foundation at commit `eefd8b3`** and points coding agents at [`docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). Do **NOT** add new "Phase 15X" sub-phases unless: (a) production P0 blocker, (b) P1 security defect, (c) P1 compliance defect, or (d) an explicit Director directive that names "Phase 15M freeze override".
+**Phase 16B — Customer Lifecycle UI Backbone is PRODUCTION VERIFIED at commit `00c3295` after Hotfix-2, and is CLOSED.** Backend Phase 16B suite 30/30, `manage.py check` clean, `makemigrations --check` clean, health endpoint OK, browser validation passed. Hotfix-1 (`8c0c6b9`) superseded by Hotfix-2 (`00c3295`); lead uniqueness is phone-only, Orders Pipeline is responsive (no horizontal scroll). **Do NOT start Phase 16C — Director Daily Briefing + Team Roles UI — without a separate written Director directive that names "Phase 16C ... kick-off".** Coding agents must NOT continue a polish loop on Phase 16B; it is closed. No live automation / WhatsApp / payment / courier / Vapi / AI-provider action is approved.
+
+**Phase 15M is the foundation release freeze.** Phase 15A–L shipped a 16-piece read-only safety chrome on top of Phase 14D / 14E / 14F. **Phase 15M (docs-only) freezes that foundation at commit `eefd8b3`** and points coding agents at [`docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). Do **NOT** add new "Phase 15X" sub-phases unless: (a) production P0 blocker, (b) P1 security defect, (c) P1 compliance defect, or (d) an explicit Director directive that names "Phase 15M freeze override". Phase 15 safety shell remains FROZEN and unchanged through Phase 16A / 16B / both hotfixes.
 
 **Phase 16A — Business MVP Gap Audit (docs-only / read-only) SHIPPED.** See [`docs/PHASE_16A_BUSINESS_MVP_GAP_AUDIT.md`](docs/PHASE_16A_BUSINESS_MVP_GAP_AUDIT.md).
 

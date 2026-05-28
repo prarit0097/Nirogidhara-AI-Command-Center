@@ -2,7 +2,7 @@
 
 Documentation for the Nirogidhara AI Command Center.
 
-> **Current operational baseline: Phase 15M — Foundation Release Freeze.** Safety shell is frozen at code commit `eefd8b3`; sign-off pack created at `8fc77d6` and corrected through the docs hygiene chain `c75697f` → `c85a32e` → `966c246` → `aa0852a` → latest (see `nd.md` head-of-file for the live commit pointer). The canonical operational source of truth is [`../nd.md`](../nd.md) + [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). Next planned work is **Phase 16A — Business MVP Gap Audit** (planning-only, awaiting Director directive). The roadmap docs below cover phases up to the Phase-12D-era baseline plus the Phase 14D → 15M chrome; see `nd.md` head-of-file for current truth.
+> **Current operational baseline: Phase 16B — Customer Lifecycle UI Backbone, PRODUCTION VERIFIED at commit `00c3295` (after Hotfix-2) and CLOSED.** The Phase 15 safety shell remains frozen at code commit `eefd8b3` and unchanged through Phase 16A / 16B. The canonical operational source of truth is [`../nd.md`](../nd.md) head-of-file (with [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md) for the safety-shell freeze details). Phase 16A audit → Phase 16B implementation → Hotfix-1 (`8c0c6b9`, superseded) → Hotfix-2 (`00c3295`, phone-only lead uniqueness + Orders responsive layout). **Next planned work is Phase 16C — Director Daily Briefing + Team Roles UI, awaiting a separate written Director directive.** Historical docs below remain historical; `nd.md` wins for current truth.
 
 | File | Purpose |
 | --- | --- |
