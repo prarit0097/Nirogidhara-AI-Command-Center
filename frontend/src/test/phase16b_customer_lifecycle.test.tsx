@@ -267,12 +267,32 @@ describe("Phase 16B — NewLeadModal", () => {
     expect(banner.textContent).toContain("LD-99999");
     // Duplicate is NOT treated as created.
     expect(toastSuccess).not.toHaveBeenCalled();
+    // Phase 16B-Hotfix-2: phone-only message.
     expect(toastError).toHaveBeenCalledWith(
-      "Duplicate lead blocked — existing lead found.",
+      "Duplicate phone blocked — existing lead found.",
     );
+    // Never an "email"-duplicate message.
+    expect(banner.textContent?.toLowerCase()).not.toContain("email");
     expect(onCreated).not.toHaveBeenCalled();
     // Modal stays open (onOpenChange(false) NOT called).
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("same email + different phone (201) shows created success, not a duplicate", async () => {
+    apiM.createLead.mockResolvedValue({ id: "LD-20002", name: "Same Email" });
+    const onCreated = vi.fn();
+    render(
+      <NewLeadModal open={true} onOpenChange={vi.fn()} onCreated={onCreated} />,
+    );
+    fireEvent.change(screen.getByLabelText(/name \*/i), { target: { value: "Same Email" } });
+    fireEvent.change(screen.getByLabelText(/phone \*/i), { target: { value: "+919998882222" } });
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "shared@example.com" } });
+    fireEvent.click(screen.getByTestId("new-lead-submit"));
+    await waitFor(() => expect(apiM.createLead).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    // No duplicate banner; success toast fired.
+    expect(screen.queryByTestId("new-lead-duplicate")).not.toBeInTheDocument();
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringContaining("LD-20002"));
   });
 });
 

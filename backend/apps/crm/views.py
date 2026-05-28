@@ -39,14 +39,18 @@ class LeadViewSet(
         try:
             lead = services.create_lead(**payload.validated_data)
         except services.LeadDuplicateError as exc:
-            # Phase 16B: clean 409 with the existing lead id so the operator
-            # can navigate to the duplicate.
+            # Phase 16B-Hotfix-2: clean 409 with the existing lead id so the
+            # operator can navigate to the duplicate. Lead uniqueness is
+            # phone-only, so the field is always "phone" and the message is
+            # fixed. No full PII in the response (existing lead id only).
             return Response(
                 {
-                    "detail": str(exc),
+                    "detail": "Duplicate phone blocked — existing lead found.",
                     "duplicate": True,
-                    "field": exc.field_name,
+                    "field": "phone",
+                    "duplicate_field": "phone",
                     "existingLeadId": exc.existing_lead_id,
+                    "existing_lead_id": exc.existing_lead_id,
                 },
                 status=status.HTTP_409_CONFLICT,
             )

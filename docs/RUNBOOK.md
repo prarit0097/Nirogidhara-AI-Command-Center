@@ -470,6 +470,23 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Phone-only Lead Uniqueness + Orders Responsive Pipeline (Phase 16B-Hotfix-2)
+
+Phase 16B-Hotfix-2 fixed the 2 remaining browser-validation issues. **Frontend + service-layer only — no migration, no provider side-effect, Phase 15 safety shell untouched.**
+
+1. **Lead uniqueness is phone-only.** A Lead is a duplicate **only** when its normalized phone matches an existing Lead. Email is optional metadata, never a uniqueness key.
+   - Same email + **different** phone → creates a new Lead (allowed).
+   - Same normalized phone + **different** email → blocked as **"Duplicate phone blocked — existing lead found."**
+   - Phone normalization collapses `+91 98765 43210`, `919876543210`, `09876543210`, `9876543210`, and `098765-43210` all to the same 10-digit key, so the same number in any format is caught.
+   - CSV import dedup is also phone-only + normalized (both within the CSV and against existing Leads). The row-error reason for a DB collision reads "Duplicate phone of existing Lead".
+2. **Orders Pipeline — no horizontal scrolling.** The kanban now wraps all 10 stages into a responsive grid: 1 column on mobile, 2 on tablet, 3 on desktop, 4 on very wide screens. No page-level or internal horizontal scrollbar. Scroll vertically to see all stages. "Manage status" on each card + the safe-copy banner + the transition drawer all work exactly as before.
+
+**Validation checklist (Phase 16B-Hotfix-2):**
+1. `/leads` → New Lead → same email as an existing lead but a **new phone** → creates successfully.
+2. `/leads` → New Lead → **same phone** as an existing lead but a different email → blocked: "Duplicate phone blocked — existing lead found." (modal stays open; no lead created).
+3. `/orders` → all stages visible by wrapping/vertical scroll; **no left-right horizontal scrollbar**.
+4. `/orders` → "Manage status" still visible; click a card → safe internal transition still works, no provider side-effect.
+
 ### Customer Lifecycle UI Validation Fixes (Phase 16B-Hotfix-1)
 
 Phase 16B-Hotfix-1 fixed 4 browser-validation issues found after Phase 16B. **Frontend-only — no backend change, no migration, no provider side-effect, Phase 15 safety shell untouched.**

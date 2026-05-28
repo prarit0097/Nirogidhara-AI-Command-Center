@@ -63,23 +63,74 @@ def test_create_lead_raises_on_phone_duplicate() -> None:
 
 
 @pytest.mark.django_db
-def test_create_lead_raises_on_email_duplicate() -> None:
-    crm_services.create_lead(
+def test_create_lead_same_email_different_phone_is_allowed() -> None:
+    """Phase 16B-Hotfix-2: uniqueness is phone-only. The same email with a
+    different phone must create a SECOND lead (email is metadata, not a key).
+    """
+    first = crm_services.create_lead(
         name="Original",
         phone="+919999000003",
         state="MH",
         city="Mumbai",
-        email="a@example.com",
+        email="shared@example.com",
+    )
+    second = crm_services.create_lead(
+        name="Same Email New Phone",
+        phone="+919999000004",  # different phone
+        state="MH",
+        city="Pune",
+        email="Shared@Example.com",  # same email, different case
+    )
+    assert first.id != second.id
+    assert Lead.objects.filter(email="shared@example.com").count() == 2
+
+
+@pytest.mark.django_db
+def test_create_lead_same_phone_different_email_is_blocked() -> None:
+    """Phase 16B-Hotfix-2: same normalized phone with a different email is
+    still blocked, and the duplicate field is reported as ``phone``."""
+    crm_services.create_lead(
+        name="Original",
+        phone="+919999000010",
+        state="MH",
+        city="Mumbai",
+        email="one@example.com",
     )
     with pytest.raises(crm_services.LeadDuplicateError) as excinfo:
         crm_services.create_lead(
-            name="Dup",
-            phone="+919999000004",
+            name="Dup Phone New Email",
+            phone="+919999000010",
             state="MH",
             city="Pune",
-            email="A@Example.com",
+            email="two@example.com",  # different email — still blocked
         )
-    assert excinfo.value.field_name == "email"
+    assert excinfo.value.field_name == "phone"
+    assert excinfo.value.existing_lead_id.startswith("LD-")
+
+
+@pytest.mark.django_db
+def test_normalize_phone_collapses_indian_formats() -> None:
+    """+91 / 91 / 0 / bare / spaced / dashed all collapse to the 10-digit key."""
+    norm = crm_services.normalize_phone
+    assert norm("+919876543210") == "9876543210"
+    assert norm("919876543210") == "9876543210"
+    assert norm("09876543210") == "9876543210"
+    assert norm("9876543210") == "9876543210"
+    assert norm("+91 98765 43210") == "9876543210"
+    assert norm("098765-43210") == "9876543210"
+    assert norm("") == ""
+
+
+@pytest.mark.django_db
+def test_create_lead_phone_duplicate_across_formats_is_blocked() -> None:
+    """A lead stored as +91XXXXXXXXXX blocks a later bare-10-digit create."""
+    crm_services.create_lead(
+        name="Original", phone="+919876500011", state="MH", city="Mumbai"
+    )
+    with pytest.raises(crm_services.LeadDuplicateError):
+        crm_services.create_lead(
+            name="Bare Dup", phone="9876500011", state="MH", city="Pune"
+        )
 
 
 @pytest.mark.django_db
@@ -162,7 +213,32 @@ def test_post_leads_returns_409_on_phone_duplicate(
     body = res.json()
     assert body["duplicate"] is True
     assert body["field"] == "phone"
+    assert body["detail"] == "Duplicate phone blocked — existing lead found."
     assert body["existingLeadId"].startswith("LD-")
+    # No "email" wording anywhere in the duplicate response.
+    assert "email" not in body["detail"].lower()
+
+
+@pytest.mark.django_db
+def test_post_leads_same_email_new_phone_succeeds(
+    operations_user, auth_client
+) -> None:
+    """Phase 16B-Hotfix-2: same email + different phone must create (201),
+    NOT be blocked as a duplicate."""
+    client = auth_client(operations_user)
+    first = client.post(
+        "/api/leads/",
+        {"name": "First", "phone": "+919998000040", "email": "dup@example.com"},
+        format="json",
+    )
+    assert first.status_code == 201
+    second = client.post(
+        "/api/leads/",
+        {"name": "Second", "phone": "+919998000041", "email": "dup@example.com"},
+        format="json",
+    )
+    assert second.status_code == 201, second.content
+    assert second.json()["email"] == "dup@example.com"
 
 
 # --------------------------------------------------------------------------
@@ -220,6 +296,36 @@ def test_import_leads_csv_counts_db_duplicates(operations_user) -> None:
         "name,phone\n"
         "Will Skip,+919997222001\n"  # collides with DB
         "Fresh,+919997222002\n"
+    )
+    result = crm_services.import_leads_csv(raw_csv=csv, by_user=operations_user)
+    assert result.created_count == 1
+    assert result.duplicate_count == 1
+    assert result.error_count == 0
+
+
+@pytest.mark.django_db
+def test_import_leads_csv_same_email_different_phone_creates(operations_user) -> None:
+    """Phase 16B-Hotfix-2: CSV dedup is phone-only — two rows sharing an email
+    but with different phones both create."""
+    csv = (
+        "name,phone,email\n"
+        "Row One,+919997333001,team@example.com\n"
+        "Row Two,+919997333002,team@example.com\n"  # same email, new phone
+    )
+    result = crm_services.import_leads_csv(raw_csv=csv, by_user=operations_user)
+    assert result.created_count == 2
+    assert result.duplicate_count == 0
+    assert result.error_count == 0
+
+
+@pytest.mark.django_db
+def test_import_leads_csv_phone_duplicate_across_formats(operations_user) -> None:
+    """A +91-prefixed row and a bare-10-digit row for the same number collapse
+    to one create + one duplicate."""
+    csv = (
+        "name,phone\n"
+        "Plus Prefixed,+919997444001\n"
+        "Bare Digits,9997444001\n"  # same normalized phone
     )
     result = crm_services.import_leads_csv(raw_csv=csv, by_user=operations_user)
     assert result.created_count == 1

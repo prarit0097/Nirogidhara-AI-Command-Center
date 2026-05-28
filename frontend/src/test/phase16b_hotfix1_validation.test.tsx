@@ -214,3 +214,38 @@ describe("Phase 16B-Hotfix-1 — Orders transition discoverability", () => {
     );
   });
 });
+
+// ---- Phase 16B-Hotfix-2: Orders responsive layout (no horizontal scroll) ----
+
+describe("Phase 16B-Hotfix-2 — Orders responsive wrapped layout", () => {
+  it("renders a wrapped responsive stage grid, NOT a horizontal-scroll flex row", async () => {
+    apiM.getOrders.mockResolvedValue(SAMPLE_ORDERS);
+    const { container } = render(<Orders />);
+    const grid = await screen.findByTestId("orders-stage-grid");
+    // Responsive wrapping grid with column breakpoints.
+    expect(grid.className).toContain("grid");
+    expect(grid.className).toContain("grid-cols-1");
+    expect(grid.className).toMatch(/md:grid-cols-2/);
+    expect(grid.className).toMatch(/xl:grid-cols-3/);
+    // The old horizontal-scroll wrapper (overflow-x-auto + min-w-max flex row)
+    // must be gone — no element should carry both.
+    const horizontalScrollers = container.querySelectorAll(".overflow-x-auto");
+    horizontalScrollers.forEach((el) => {
+      expect(el.className).not.toContain("min-w-max");
+    });
+    // The grid itself does not force a min-width that would overflow the page.
+    expect(grid.className).not.toContain("min-w-max");
+  });
+
+  it("keeps the Manage status affordance + safe-copy banner after the layout change", async () => {
+    apiM.getOrders.mockResolvedValue(SAMPLE_ORDERS);
+    render(<Orders />);
+    await screen.findByTestId("order-card-NRG-HF1-A");
+    // "Manage status" affordance present on the card.
+    expect(screen.getByText("Manage status")).toBeInTheDocument();
+    // Safe-copy banner still present.
+    expect(screen.getByTestId("orders-transition-hint").textContent).toContain(
+      "no WhatsApp / payment / courier action",
+    );
+  });
+});

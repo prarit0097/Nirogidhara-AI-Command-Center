@@ -25,7 +25,12 @@ from .models import Customer, Lead, MetaLeadEvent
 # translate to a clean DRF 409 / 400 response. Carries the existing Lead's id
 # so the operator can navigate to the duplicate.
 class LeadDuplicateError(ValueError):
-    """Raised when create_lead detects a phone or email duplicate."""
+    """Raised when create_lead detects a duplicate.
+
+    Phase 16B-Hotfix-2: Lead uniqueness is **phone-only**. ``field_name`` is
+    always ``"phone"`` for the Lead create path; email is optional metadata
+    and is NOT a uniqueness key.
+    """
 
     def __init__(self, *, field_name: str, existing_lead_id: str, value_suffix: str = ""):
         self.field_name = field_name
@@ -43,45 +48,95 @@ except ImportError:  # pragma: no cover
     User = Any  # type: ignore[misc, assignment]
 
 
+def _phone_digits(phone: str) -> str:
+    """Return only the digit characters of a phone string."""
+    return "".join(ch for ch in (phone or "") if ch.isdigit())
+
+
 def _phone_last4(phone: str) -> str:
     """Return last-4 digits for audit / error messages — never the full phone."""
-    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    digits = _phone_digits(phone)
     return digits[-4:] if len(digits) >= 4 else "????"
 
 
-def _check_lead_duplicate(
-    *, phone: str, email: str = "", skip_dedup: bool = False
-) -> None:
-    """Raise LeadDuplicateError if a Lead with the same phone or email exists.
+def normalize_phone(phone: str) -> str:
+    """Phase 16B-Hotfix-2 — canonical phone key for duplicate detection.
 
-    Phase 16B duplicate detection:
-      - Phone (normalised on raw stored value) is the primary key.
-      - Email is checked only when both the new payload and the existing row
-        have a non-blank value.
+    Steps:
+      - trim, drop spaces / dashes / brackets / dots / plus (keep digits only)
+      - Indian-number prefix handling:
+        - 12 digits starting with ``91`` (``91XXXXXXXXXX``) → last 10
+        - 11 digits starting with ``0`` (``0XXXXXXXXXX``)   → last 10
+        - 13 digits starting with ``910`` edge             → last 10
+      - any other 10+ digit string → last 10 digits
+      - shorter strings → the digits as-is (best effort)
+
+    The canonical key is the last-10-digit local number, so ``+91 98765 43210``,
+    ``919876543210``, ``098765 43210`` and ``9876543210`` all collapse to
+    ``9876543210``. Returns ``""`` for an empty / digitless input.
+    """
+    digits = _phone_digits(phone)
+    if not digits:
+        return ""
+    if len(digits) == 12 and digits.startswith("91"):
+        return digits[-10:]
+    if len(digits) == 11 and digits.startswith("0"):
+        return digits[-10:]
+    if len(digits) == 13 and digits.startswith("910"):
+        return digits[-10:]
+    if len(digits) >= 10:
+        return digits[-10:]
+    return digits
+
+
+def find_lead_by_phone(phone: str) -> "Lead | None":
+    """Return an existing Lead whose normalized phone matches, else None.
+
+    Phase 16B-Hotfix-2: the candidate set is narrowed by the 10-digit key via
+    the existing ``crm_lead_phone_idx`` (``phone__contains``), then confirmed by
+    normalizing each candidate in Python so formatting differences (``+91`` vs
+    bare) collapse to the same key. Falls back to a digit-suffix scan for the
+    short-number edge case.
+    """
+    key = normalize_phone(phone)
+    if not key:
+        return None
+    # `phone__contains=key` cheaply catches the common stored shapes
+    # (`+91XXXXXXXXXX`, `XXXXXXXXXX`) where the 10 digits are contiguous.
+    for candidate in Lead.objects.filter(phone__contains=key).iterator():
+        if normalize_phone(candidate.phone) == key:
+            return candidate
+    # Defensive fallback for heavily-formatted stored phones (dashes/spaces)
+    # where the contiguous-substring filter above misses. Pilot-scale only.
+    suffix = key[-4:]
+    if len(suffix) == 4:
+        for candidate in Lead.objects.filter(phone__contains=suffix).iterator():
+            if normalize_phone(candidate.phone) == key:
+                return candidate
+    return None
+
+
+def _check_lead_duplicate(*, phone: str, skip_dedup: bool = False) -> None:
+    """Raise LeadDuplicateError if a Lead with the same normalized phone exists.
+
+    Phase 16B-Hotfix-2: duplicate detection is **phone-only**. Email is
+    optional metadata and is NOT a uniqueness key — the same email with a
+    different phone must be allowed to create a new Lead.
 
     The Meta Lead Ads webhook ingest path passes ``skip_dedup=True`` because
     that path does its own ``meta_leadgen_id`` based idempotency check.
     """
     if skip_dedup:
         return
-    phone_clean = (phone or "").strip()
-    if phone_clean:
-        existing = Lead.objects.filter(phone=phone_clean).first()
-        if existing is not None:
-            raise LeadDuplicateError(
-                field_name="phone",
-                existing_lead_id=existing.id,
-                value_suffix=_phone_last4(phone_clean),
-            )
-    email_clean = (email or "").strip().lower()
-    if email_clean:
-        existing = Lead.objects.filter(email__iexact=email_clean).first()
-        if existing is not None:
-            raise LeadDuplicateError(
-                field_name="email",
-                existing_lead_id=existing.id,
-                value_suffix=email_clean[:1] + "***",
-            )
+    if not (phone or "").strip():
+        return
+    existing = find_lead_by_phone(phone)
+    if existing is not None:
+        raise LeadDuplicateError(
+            field_name="phone",
+            existing_lead_id=existing.id,
+            value_suffix=_phone_last4(phone),
+        )
 
 
 @transaction.atomic
@@ -108,13 +163,15 @@ def create_lead(
     disease_category: str = "",
     skip_dedup: bool = False,
 ) -> Lead:
-    """Create a Lead with optional consent fields + duplicate detection.
+    """Create a Lead with optional consent fields + phone-only duplicate detection.
 
-    Phase 16B: raises ``LeadDuplicateError`` if phone or email matches an
-    existing Lead, unless ``skip_dedup=True`` (used only by the Meta webhook
-    ingest path which has its own ``meta_leadgen_id`` based idempotency).
+    Phase 16B-Hotfix-2: raises ``LeadDuplicateError`` only when the normalized
+    phone matches an existing Lead. Email is optional metadata — the same
+    email with a different phone creates a new Lead. ``skip_dedup=True`` is
+    used only by the Meta webhook ingest path (which has its own
+    ``meta_leadgen_id`` based idempotency).
     """
-    _check_lead_duplicate(phone=phone, email=email, skip_dedup=skip_dedup)
+    _check_lead_duplicate(phone=phone, skip_dedup=skip_dedup)
     lead = Lead.objects.create(
         id=next_id("LD", Lead, base=10300),
         name=name,
@@ -478,10 +535,11 @@ def import_leads_csv(
         )
         return result
 
-    # Track phones SEEN within this CSV so two rows in the same upload with
-    # the same phone get the second one classified as duplicate.
+    # Track NORMALIZED phones SEEN within this CSV so two rows in the same
+    # upload with the same phone (any formatting) get the second one
+    # classified as a duplicate. Phase 16B-Hotfix-2: phone-only — email is
+    # NOT a dedup key.
     seen_phones_in_csv: set[str] = set()
-    seen_emails_in_csv: set[str] = set()
 
     for row_idx, raw_row in enumerate(reader, start=2):  # row 1 = header
         if result.total_rows >= LEAD_IMPORT_MAX_ROWS:
@@ -526,8 +584,9 @@ def import_leads_csv(
                 result.truncated_error_list = True
             continue
 
-        # In-CSV duplicate check.
-        if phone in seen_phones_in_csv:
+        # In-CSV duplicate check — phone-only, normalized.
+        phone_key = normalize_phone(phone)
+        if phone_key and phone_key in seen_phones_in_csv:
             result.duplicate_count += 1
             if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
                 result.row_errors.append(
@@ -540,23 +599,9 @@ def import_leads_csv(
             else:
                 result.truncated_error_list = True
             continue
-        if email and email in seen_emails_in_csv:
-            result.duplicate_count += 1
-            if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
-                result.row_errors.append(
-                    LeadImportRowError(
-                        row_number=row_idx,
-                        reason="Duplicate email within CSV",
-                        phone_last4=_phone_last4(phone),
-                    )
-                )
-            else:
-                result.truncated_error_list = True
-            continue
 
-        seen_phones_in_csv.add(phone)
-        if email:
-            seen_emails_in_csv.add(email)
+        if phone_key:
+            seen_phones_in_csv.add(phone_key)
 
         try:
             lead = create_lead(
@@ -576,13 +621,13 @@ def import_leads_csv(
                 disease_category=canonical.get("disease_category", ""),
             )
         except LeadDuplicateError:
-            # Already-existing Lead in DB. Count and continue.
+            # Already-existing Lead in DB (same normalized phone). Count + skip.
             result.duplicate_count += 1
             if len(result.row_errors) < LEAD_IMPORT_MAX_ERROR_ROWS:
                 result.row_errors.append(
                     LeadImportRowError(
                         row_number=row_idx,
-                        reason="Duplicate of existing Lead (phone or email)",
+                        reason="Duplicate phone of existing Lead",
                         phone_last4=_phone_last4(phone),
                     )
                 )

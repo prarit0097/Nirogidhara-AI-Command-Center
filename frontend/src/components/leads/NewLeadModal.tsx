@@ -106,16 +106,18 @@ export function NewLeadModal({ open, onOpenChange, onCreated }: NewLeadModalProp
       // clear "duplicate blocked" message. The modal STAYS OPEN and
       // NO created-success toast fires.
       if (isApiError(err) && err.httpStatus === 409) {
+        // Phase 16B-Hotfix-2: Lead uniqueness is phone-only. The backend
+        // always reports `field: "phone"` on a duplicate; email is never a
+        // uniqueness key, so we never show a "duplicate email" message.
         const body = (err.body ?? {}) as {
-          field?: string;
           existingLeadId?: string;
+          existing_lead_id?: string;
         };
-        const field = body.field === "email" ? "email" : "phone";
         setDuplicate({
-          field,
-          existingLeadId: body.existingLeadId ?? "",
+          field: "phone",
+          existingLeadId: body.existingLeadId ?? body.existing_lead_id ?? "",
         });
-        toast.error("Duplicate lead blocked — existing lead found.");
+        toast.error("Duplicate phone blocked — existing lead found.");
         return; // modal stays open; do NOT close, do NOT show created toast
       }
       // Any other failure (network/offline, validation, 5xx) — show a

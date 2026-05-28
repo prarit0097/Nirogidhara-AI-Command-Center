@@ -52,12 +52,15 @@ export default function Orders() {
         Click any order card to open its detail panel and apply a safe internal stage transition. Internal status update only — no WhatsApp / payment / courier action.
       </div>
 
-      <div className="overflow-x-auto -mx-4 px-4 pb-2">
-        <div className="flex gap-4 min-w-max">
-          {COLUMNS.map((col) => {
+      {/* Phase 16B-Hotfix-2: responsive WRAPPED stage grid — no horizontal
+          scroll. Stages wrap into rows (1 col mobile, 2 tablet, 3 desktop,
+          4 on 2xl). `min-w-0` on the grid + each column lets card content
+          truncate instead of forcing a page-level horizontal scrollbar. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 min-w-0" data-testid="orders-stage-grid">
+        {COLUMNS.map((col) => {
             const items = orders.filter((o) => o.stage === col);
             return (
-              <div key={col} className="w-[280px] shrink-0">
+              <div key={col} className="min-w-0">
                 <div className="flex items-center justify-between mb-3 px-1">
                   <div className="flex items-center gap-2">
                     <span className={`h-2 w-2 rounded-full bg-${STAGE_TONE[col]} bg-current`} />
@@ -102,7 +105,6 @@ export default function Orders() {
               </div>
             );
           })}
-        </div>
       </div>
 
       <Sheet open={!!active} onOpenChange={() => setActive(null)}>
