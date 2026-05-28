@@ -10,6 +10,8 @@ below runs on the VPS unless explicitly marked _(local)_. Local dev keeps
 using `python manage.py runserver` + `npm run dev` — Docker is **production
 only**.
 
+> **Current operational baseline: Phase 16B — Customer Lifecycle UI Backbone, PRODUCTION VERIFIED at commit `00c3295` (after Hotfix-2).** This file remains the VPS deployment runbook; [`../nd.md`](../nd.md) head-of-file wins for current project truth. The Phase 15 safety shell remains FROZEN at code commit `eefd8b3`. **Next planned work is Phase 16C — Director Daily Briefing + Team Roles UI, which requires a separate written Director directive.** No live WhatsApp / payment / courier / Vapi / AI-provider automation is approved by this docs cleanup.
+
 ---
 
 ## 0. Why this stack
