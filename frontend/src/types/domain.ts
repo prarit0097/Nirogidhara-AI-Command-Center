@@ -7324,3 +7324,99 @@ export interface PostCallFollowUpSummary {
   byStatus: Partial<Record<PostCallFollowUpStatus, number>>;
   byFollowUpType: Partial<Record<PostCallFollowUpType, number>>;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 16C — Director Daily Briefing + Team Roles
+// ---------------------------------------------------------------------------
+
+export type DirectorBriefingOverviewStatus =
+  | "fresh"
+  | "stale"
+  | "missing"
+  | "unavailable";
+
+export type DirectorReviewDecisionStatus =
+  | "reviewed"
+  | "needs_action"
+  | "deferred";
+
+export interface DirectorBriefingSnapshotSummary {
+  status: DirectorBriefingOverviewStatus;
+  source: "system_snapshot" | "unavailable";
+  snapshotId: number | null;
+  generatedAt: string | null;
+  updatedAt: string | null;
+  ageMinutes: number | null;
+  healthScore: number | null;
+  healthTier: string | null;
+  briefingText: string;
+  alerts: string[];
+  top3Priorities: string[];
+}
+
+export interface DirectorBriefingReadiness {
+  baseline: string;
+  safetyShellFrozen: boolean;
+  liveAutomationApproved: boolean;
+  currentPhase: string;
+}
+
+export interface DirectorBriefingReview {
+  id: number;
+  reviewerUsername: string | null;
+  note: string;
+  decisionStatus: DirectorReviewDecisionStatus;
+  snapshotRef: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DirectorBriefingOverview {
+  briefing: DirectorBriefingSnapshotSummary;
+  readiness: DirectorBriefingReadiness;
+  latestReview: DirectorBriefingReview | null;
+  reviewCount: number;
+  generatedByProvider: false;
+}
+
+export interface CreateDirectorBriefingReviewPayload {
+  note: string;
+  decisionStatus: DirectorReviewDecisionStatus;
+  snapshotRef?: number | null;
+}
+
+export interface DirectorBriefingReviewsResponse {
+  items: DirectorBriefingReview[];
+  total: number;
+}
+
+export interface OperationalRoleOption {
+  value: string;
+  label: string;
+}
+
+export interface TeamRoleMember {
+  userId: number;
+  username: string;
+  displayName: string;
+  emailMasked: string;
+  accountRole: string;
+  operationalRole: string;
+  operationalRoleLabel: string;
+  isActive: boolean;
+  notes: string;
+  assignedAt: string | null;
+}
+
+export interface TeamRolesResponse {
+  members: TeamRoleMember[];
+  total: number;
+  operationalRoleOptions: OperationalRoleOption[];
+}
+
+export interface AssignTeamRolePayload {
+  userId: number;
+  operationalRole: string;
+  isActive?: boolean;
+  notes?: string;
+}

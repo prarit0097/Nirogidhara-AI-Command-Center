@@ -3,7 +3,12 @@
 Frontend was generated using Lovable, then refined for the AI command-center
 direction.
 
-> **Current operational UI baseline is Phase 16B — PRODUCTION VERIFIED at commit `00c3295`.** Leads CRM (New Lead modal, `S.N.` column, phone-only duplicate UX), Customer 360 (Calls / Orders / Payments / Delivery tabs hydrated, clean empty states, no right-side clipping), and Orders Pipeline (responsive wrapped layout, no horizontal scroll, "Manage status" affordance) are all browser-verified. The Phase 15 safety shell remains **frozen** at code commit `eefd8b3` and unchanged. Use [`nd.md`](../nd.md) head-of-file for current truth. The "Historical frontend audit snapshot" below is preserved as the Phase 12D-era reference; any "current" wording inside it is historical, not current. Next planned work: Phase 16C — Director Daily Briefing + Team Roles UI (separate Director directive required).
+> **Current operational UI baseline is Phase 16C — Director Daily Briefing + Team Roles UI (shipped).** Two new pages were added on top of the Phase 16B baseline:
+>
+> - **`/director-briefing`** (sidebar "AI Layer", icon NotebookPen) — read-only latest-briefing status pill (`fresh`/`stale`/`missing`/`unavailable`), business-readiness summary, decision checklist, pending blockers/risks, a safety-copy banner ("Review-only: no WhatsApp / payment / courier / calling / AI provider action…"), a clean empty state when no snapshot exists, and an internal-only "Record decision" panel (note + decision-status select + Save). Loading / empty / error states all render; responsive grid, no horizontal overflow.
+> - **`/team-roles`** (sidebar "System", icon UsersRound) — a members table (S.N. / user + masked email / account role / active status / per-row operational-role `<select>` / Save). Save is disabled until the role changes; empty state renders cleanly. Assignment is director/admin-gated server-side. No PII beyond masked email; responsive (`overflow-x-auto` table wrapper).
+>
+> **Both pages are internal-only and trigger NO provider / WhatsApp / payment / courier / Vapi / AI call.** The Phase 16B browser-verified surfaces (Leads CRM phone-only duplicate UX + `S.N.` column, Customer 360 hydrated tabs, Orders Pipeline responsive wrapped layout) are unchanged. The Phase 15 safety shell remains **frozen** at code commit `eefd8b3` and untouched. Use [`nd.md`](../nd.md) head-of-file for current truth. The "Historical frontend audit snapshot" below is preserved as the Phase 12D-era reference; any "current" wording inside it is historical, not current. Next planned work: Phase 16D (separate Director directive required).
 
 ## Historical frontend audit snapshot
 

@@ -9,13 +9,15 @@
 > - **P1 #12 Order kanban detail sheet has no action buttons** → **RESOLVED for safe internal transitions.** Detail sheet exposes NEW_LEAD → INTERESTED → PAYMENT_LINK_SENT → ORDER_PUNCHED → CONFIRMATION_PENDING via existing `transition_order` service. Dispatched / Delivered / RTO deliberately not exposed.
 > - **P1 #15 No "Create Order" UI** → **PARTIALLY MITIGATED** by the new "Create Lead" form (lead creation works from UI; order creation from UI is still Phase 16C+ scope).
 >
-> **Items still open after Phase 16B (carried to Phase 16C / 16D / 16E / 16F):**
+> **Phase 16C follow-up status (2026-05-28):** **Phase 16C — Director Daily Briefing + Team Roles UI SHIPPED** (internal-only / review-only; no provider call, no AI generation, Phase 15 safety shell untouched). It resolves/mitigates two of the audit's open blockers:
+> - **P0 #5 Director Daily Briefing approval UI missing → RESOLVED (review-only).** New `/director-briefing` page reads the latest snapshot status + records an internal-only Director review/decision via `POST /api/v1/director-ops/briefing-reviews/`. It does NOT generate an AI briefing or execute any business action.
+> - **P0 #7 No UI for org-role assignment → RESOLVED (internal labels).** New `/team-roles` page lists users and assigns one of 8 internal operational-role labels via `POST /api/v1/director-ops/team-roles/assign/` (director/admin-gated). Labels grant no provider access and activate no automation.
+>
+> **Items still open after Phase 16C (carried to Phase 16D / 16E / 16F / 16G):**
 >
 > - P0 #3 `ShipmentCreateView` hardcoded to `create_mock_shipment()` — deferred to Phase 16D.
 > - P0 #4 Phase 7E-Live-B / 7G-Live / 8F all NOT approved — deferred to Phase 16D / 16E.
-> - P0 #5 Director Daily Briefing approval UI missing — deferred to Phase 16C (recommended next phase).
 > - P0 #6 No UI for human calling agent — deferred to Phase 16G if scope desired.
-> - P0 #7 No UI for org-role assignment — deferred to Phase 16C.
 > - P0 #8 Production Claim Vault seed is demo-v2 — deferred to Phase 16E.
 > - P0 #10 RTO Rescue buttons toast-only — deferred to Phase 16D.
 >

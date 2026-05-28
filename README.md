@@ -17,11 +17,13 @@ nirogidhara-command/
   docs/       # RUNBOOK, BACKEND_API, FRONTEND_AUDIT, FUTURE_BACKEND_PLAN
 ```
 
-## Current operational baseline (post Phase 16B — production verified)
+## Current operational baseline (post Phase 16C)
 
 **`nd.md` is the canonical source of truth for current state. The "Current SaaS foundation status" section below is preserved as historical narrative through the Phase 12D Tier-4 calling baseline; for current state read `nd.md` head-of-file first.**
 
-**Phase 16B — Customer Lifecycle UI Backbone is PRODUCTION VERIFIED at commit `00c3295` after Hotfix-2, and is CLOSED.** Backend Phase 16B suite 30/30, `manage.py check` clean, `makemigrations --check` clean, health endpoint OK, browser validation passed. The Phase 16A audit was followed by the Phase 16B implementation + Hotfix-1 (`8c0c6b9`, superseded) + Hotfix-2 (`00c3295`, phone-only lead uniqueness + Orders responsive layout). **Next planned work is Phase 16C — Director Daily Briefing + Team Roles UI, which requires a separate written Director directive.** No live automation / WhatsApp / payment / courier / Vapi / AI-provider action is approved.
+**Phase 16C — Director Daily Briefing + Team Roles UI is SHIPPED (authorised by explicit Director directive).** New additive backend app `apps.directorops` + 4 internal-only endpoints under `/api/v1/director-ops/` + two frontend pages (`/director-briefing`, `/team-roles`). **Every Phase 16C path is internal-only / review-only — no AI briefing generation, no AI/WhatsApp/payment/courier/Vapi provider call, no business Celery enqueue, no `RuntimeKillSwitch` / `SandboxState` change.** Backend Phase 16C 17/17 + Phase 16B regression 30/30; frontend 305/305; lint 0 errors; build green; `makemigrations --check` + `manage.py check` clean. **Next planned work is Phase 16D, which requires a separate written Director directive.**
+
+**Phase 16B — Customer Lifecycle UI Backbone is PRODUCTION VERIFIED at commit `00c3295` after Hotfix-2, and is CLOSED.** Backend Phase 16B suite 30/30, `manage.py check` clean, `makemigrations --check` clean, health endpoint OK, browser validation passed. The Phase 16A audit was followed by the Phase 16B implementation + Hotfix-1 (`8c0c6b9`, superseded) + Hotfix-2 (`00c3295`, phone-only lead uniqueness + Orders responsive layout). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and untouched through Phase 16A / 16B / 16C. No live automation / WhatsApp / payment / courier / Vapi / AI-provider action is approved.
 
 **Phase 15M (docs-only) is the foundation release freeze.** It closes the Phase 15 safety-shell foundation chapter and points coding agents at [`docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md) for the freeze rule, route-wise smoke checklist, Director sign-off checklist, accepted risks, production safety posture, Phase 16A handoff, and rollback plan. **No new "Phase 15X" sub-phases** unless production P0 blocker, P1 security defect, P1 compliance defect, or an explicit Director directive that names "Phase 15M freeze override". The Phase 15 safety shell remains FROZEN and unchanged through Phase 16A / 16B / both hotfixes.
 

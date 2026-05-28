@@ -6896,3 +6896,67 @@ export const POST_CALL_FOLLOWUP_SUMMARY: Record<string, unknown> = {
     callback_confirmation: 1,
   },
 };
+
+// ---------------------------------------------------------------------------
+// Phase 16C — Director Daily Briefing + Team Roles (deterministic dev mocks).
+// These are dev-only fallbacks; production always reads the real backend.
+// ---------------------------------------------------------------------------
+
+export const DIRECTOR_BRIEFING_OVERVIEW = {
+  briefing: {
+    status: "missing",
+    source: "unavailable",
+    snapshotId: null,
+    generatedAt: null,
+    updatedAt: null,
+    ageMinutes: null,
+    healthScore: null,
+    healthTier: null,
+    briefingText: "",
+    alerts: [],
+    top3Priorities: [],
+  },
+  readiness: {
+    baseline:
+      "Phase 16B — Customer Lifecycle UI Backbone (production verified, closed)",
+    safetyShellFrozen: true,
+    liveAutomationApproved: false,
+    currentPhase: "Phase 16C — Director Daily Briefing + Team Roles UI",
+  },
+  latestReview: null,
+  reviewCount: 0,
+  generatedByProvider: false,
+};
+
+export const DIRECTOR_BRIEFING_REVIEWS = {
+  items: [],
+  total: 0,
+};
+
+export const TEAM_ROLES = {
+  members: [
+    {
+      userId: 1,
+      username: "director",
+      displayName: "Prarit Sidana",
+      emailMasked: "1***@gmail.com",
+      accountRole: "director",
+      operationalRole: "director_admin",
+      operationalRoleLabel: "Director / Admin",
+      isActive: true,
+      notes: "",
+      assignedAt: null,
+    },
+  ],
+  total: 1,
+  operationalRoleOptions: [
+    { value: "director_admin", label: "Director / Admin" },
+    { value: "calling_agent", label: "Calling Agent" },
+    { value: "confirmation_team", label: "Confirmation Team" },
+    { value: "warehouse_dispatch", label: "Warehouse / Dispatch" },
+    { value: "delivery_rto", label: "Delivery / RTO Team" },
+    { value: "qa_compliance", label: "QA / Compliance" },
+    { value: "finance_accounts", label: "Finance / Accounts" },
+    { value: "read_only_viewer", label: "Read-only Viewer" },
+  ],
+};

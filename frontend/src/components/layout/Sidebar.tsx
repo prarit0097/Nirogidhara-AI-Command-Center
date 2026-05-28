@@ -4,6 +4,7 @@ import {
   CreditCard, Truck, ShieldAlert, Bot, Sparkles, Gavel, Trophy,
   GraduationCap, FileBadge2, BarChart3, Settings2, Leaf, ChevronLeft,
   AlarmClock, ShieldCheck, MessageSquare, Inbox, Building2, ScrollText,
+  NotebookPen, UsersRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DirectorBriefingSidebarStatus } from "@/types/domain";
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/rto", label: "RTO Rescue Board", icon: ShieldAlert, group: "Operations" },
   { to: "/agents", label: "AI Agents Center", icon: Bot, group: "AI Layer" },
   { to: "/ceo-ai", label: "CEO AI Briefing", icon: Sparkles, group: "AI Layer" },
+  { to: "/director-briefing", label: "Director Daily Briefing", icon: NotebookPen, group: "AI Layer" },
   { to: "/caio", label: "CAIO Audit Center", icon: Gavel, group: "AI Layer" },
   { to: "/ai-scheduler", label: "AI Scheduler & Cost", icon: AlarmClock, group: "AI Layer" },
   { to: "/ai-governance", label: "AI Governance", icon: ShieldCheck, group: "AI Layer" },
@@ -32,6 +34,7 @@ const NAV = [
   { to: "/whatsapp-inbox", label: "WhatsApp Inbox", icon: Inbox, group: "Messaging" },
   { to: "/whatsapp-templates", label: "WhatsApp Templates", icon: MessageSquare, group: "Messaging" },
   { to: "/whatsapp-monitoring", label: "WhatsApp Monitoring", icon: ShieldCheck, group: "Messaging" },
+  { to: "/team-roles", label: "Team Roles", icon: UsersRound, group: "System" },
   { to: "/saas-admin", label: "SaaS Admin", icon: Building2, group: "System" },
   { to: "/settings", label: "Settings & Control", icon: Settings2, group: "System" },
 ];

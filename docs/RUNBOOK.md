@@ -7,7 +7,7 @@
 > SSL, commands, troubleshooting). Do not run the local-dev steps below
 > on the VPS.
 
-> **Current operational baseline: Phase 16B — Customer Lifecycle UI Backbone, PRODUCTION VERIFIED + CLOSED at commit `00c3295` (after Hotfix-2).** The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B. **Next planned work is Phase 16C — Director Daily Briefing + Team Roles UI, which requires a separate written Director directive before any code is touched.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Phase 16B Production Verification** section below for the verification checklist.
+> **Current operational baseline: Phase 16C — Director Daily Briefing + Team Roles UI, SHIPPED.** The Phase 16B Customer Lifecycle UI Backbone remains PRODUCTION VERIFIED + CLOSED at commit `00c3295`; Phase 16C adds the operational-leadership layer (internal-only, review-only). The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules still hold: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B / 16C. **Next planned work is Phase 16D, which requires a separate written Director directive before any code is touched.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Director Daily Briefing + Team Roles (Phase 16C)** and **Phase 16B Production Verification** sections below.
 
 How to bring the full stack up locally on Windows / macOS / Linux.
 
@@ -471,6 +471,34 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 | `Safety: State unavailable` | grey | All three fetches failed. Check `docker compose -f docker-compose.prod.yml logs --since 60s backend`. |
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
+
+### Director Daily Briefing + Team Roles (Phase 16C)
+
+Phase 16C adds the operational-leadership layer. **Both surfaces are internal-only and review-only — nothing here calls a provider, generates an AI briefing, sends WhatsApp, takes a payment, books a shipment, places a call, enqueues a business Celery job, or changes `RuntimeKillSwitch` / `SandboxState`.**
+
+**Director Daily Briefing — `/director-briefing` (sidebar → "AI Layer"):**
+
+- Shows the latest CEO/Director snapshot status (`fresh` / `stale` / `missing` / `unavailable`) read from the existing Phase 9F snapshot. If none exists, a clean empty state renders: *"No briefing snapshot available yet. This page does not generate a briefing or call AI providers."* — the page never generates a briefing.
+- Shows the business-readiness summary (baseline Phase 16B production verified · safety shell frozen · live automation NOT approved · current phase Phase 16C), a decision checklist, and the pending launch-blockers/risk list.
+- **Save a Director note/decision:** type a note, pick a decision status (`Reviewed` / `Needs action` / `Deferred`), click **Record decision**. `Needs action` requires a note. This stores an internal `DirectorBriefingReview` row only (via `POST /api/v1/director-ops/briefing-reviews/`). Refresh the page — the latest review persists ("Last review: …"). Requires director/admin.
+
+**Team Roles — `/team-roles` (sidebar → "System"):**
+
+- Lists users with a masked email, account role, active status, and an internal operational-role label.
+- **Assign a role:** change the per-row operational-role dropdown (Director/Admin · Calling Agent · Confirmation Team · Warehouse/Dispatch · Delivery/RTO Team · QA/Compliance · Finance/Accounts · Read-only Viewer) and click **Save**. The Save button is disabled until the role changes. Stores a `TeamRoleAssignment` row (via `POST /api/v1/director-ops/team-roles/assign/`). Refresh — the role persists. **Assignment requires director/admin; non-admins get 403 and cannot change roles.** A role label grants NO provider access and activates NO automation — it is an internal coordination label only.
+
+**Permissions:** briefing endpoints are director/admin only; team-roles *list* requires any authenticated user; team-role *assignment* requires director/admin. Every endpoint blocks unauthenticated callers (401/403).
+
+**No provider side effects (Phase 16C):** asserted in `backend/tests/test_phase16c_director_roles.py` by patching `queue_template_message` / `send_freeform_text_message` / `trigger_call_for_lead` / `create_shipment` (all `assert_not_called`) across the briefing + review + team-role paths, plus `RuntimeKillSwitch` count + sandbox state unchanged.
+
+**Validation checklist (Phase 16C):**
+1. `/director-briefing` → renders latest status or the clean empty state; no AI generation triggered.
+2. `/director-briefing` → save a note → toast success → refresh → review persists.
+3. `/team-roles` → users list or clean empty state; assign a role → Save → refresh → role persists.
+4. Non-admin (viewer/operations) cannot assign roles (403). Unauthenticated callers blocked.
+5. Phase 15 safety shell unchanged (Topbar Safety Pill / Sync / AI Paused / Sandbox OFF / Diagnostics all intact).
+
+**Rollback (Phase 16C):** Phase 16C only adds the additive `directorops` app + two frontend pages. To roll back, `git revert` the Phase 16C commit and redeploy; the `directorops` tables can remain (unused) or be dropped via a forward migration with Director approval — never drop production columns manually.
 
 ### Phase 16B Production Verification (CLOSED at commit `00c3295`)
 

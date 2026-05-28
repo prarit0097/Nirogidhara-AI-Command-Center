@@ -2769,6 +2769,83 @@ export const api = {
       { toolName, input },
       () => M.MCP_SIMULATION_RESULT as McpToolSimulationResult,
     ),
+
+  // ---------- Phase 16C — Director Daily Briefing + Team Roles ----------
+  // Internal-only. None of these methods triggers an AI provider, WhatsApp,
+  // payment, courier, or Vapi call — they read/write internal review +
+  // operational-role rows only.
+
+  getDirectorBriefingOverview: () =>
+    safeFetch<import("@/types/domain").DirectorBriefingOverview>(
+      "/v1/director-ops/briefing-overview/",
+      () => M.DIRECTOR_BRIEFING_OVERVIEW as import(
+        "@/types/domain"
+      ).DirectorBriefingOverview,
+    ),
+
+  getDirectorBriefingReviews: () =>
+    safeFetch<import("@/types/domain").DirectorBriefingReviewsResponse>(
+      "/v1/director-ops/briefing-reviews/",
+      () => M.DIRECTOR_BRIEFING_REVIEWS as import(
+        "@/types/domain"
+      ).DirectorBriefingReviewsResponse,
+    ),
+
+  createDirectorBriefingReview: (
+    payload: import("@/types/domain").CreateDirectorBriefingReviewPayload,
+  ) =>
+    safeMutate<import("@/types/domain").DirectorBriefingReview>(
+      "/v1/director-ops/briefing-reviews/",
+      "POST",
+      payload,
+      () => ({
+        id: Date.now(),
+        reviewerUsername: "you",
+        note: payload.note,
+        decisionStatus: payload.decisionStatus,
+        snapshotRef: payload.snapshotRef ?? null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+    ),
+
+  getTeamRoles: () =>
+    safeFetch<import("@/types/domain").TeamRolesResponse>(
+      "/v1/director-ops/team-roles/",
+      () => M.TEAM_ROLES as import("@/types/domain").TeamRolesResponse,
+    ),
+
+  assignTeamRole: (
+    payload: import("@/types/domain").AssignTeamRolePayload,
+  ) =>
+    safeMutate<import("@/types/domain").TeamRoleMember>(
+      "/v1/director-ops/team-roles/assign/",
+      "POST",
+      payload,
+      () => {
+        const base = (
+          M.TEAM_ROLES as import("@/types/domain").TeamRolesResponse
+        ).members.find((m) => m.userId === payload.userId);
+        const label =
+          (
+            M.TEAM_ROLES as import("@/types/domain").TeamRolesResponse
+          ).operationalRoleOptions.find(
+            (o) => o.value === payload.operationalRole,
+          )?.label ?? payload.operationalRole;
+        return {
+          userId: payload.userId,
+          username: base?.username ?? `user-${payload.userId}`,
+          displayName: base?.displayName ?? `User ${payload.userId}`,
+          emailMasked: base?.emailMasked ?? "",
+          accountRole: base?.accountRole ?? "",
+          operationalRole: payload.operationalRole,
+          operationalRoleLabel: label,
+          isActive: payload.isActive ?? true,
+          notes: payload.notes ?? "",
+          assignedAt: new Date().toISOString(),
+        };
+      },
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

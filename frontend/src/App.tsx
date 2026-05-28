@@ -32,6 +32,8 @@ import PendingPaymentsPage from "./pages/PendingPayments";
 import LearningProposalsPage from "./pages/LearningProposals";
 import CallingDashboardPage from "./pages/CallingDashboard";
 import AuditTimelinePage from "./pages/AuditTimeline";
+import DirectorBriefingPage from "./pages/DirectorBriefing";
+import TeamRolesPage from "./pages/TeamRoles";
 import Login from "@/pages/Login";
 import RequireAuth from "@/components/RequireAuth";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -63,6 +65,7 @@ const App = () => (
             <Route path="/rto" element={<RtoPage />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/ceo-ai" element={<CeoAiPage />} />
+            <Route path="/director-briefing" element={<DirectorBriefingPage />} />
             <Route path="/caio" element={<CaioPage />} />
             <Route path="/rewards" element={<RewardsPage />} />
             <Route path="/learning" element={<LearningPage />} />
@@ -97,6 +100,7 @@ const App = () => (
               path="/operations/audit-timeline"
               element={<AuditTimelinePage />}
             />
+            <Route path="/team-roles" element={<TeamRolesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           {/* Phase 13A — Director login. Public route, no AppLayout shell. */}
