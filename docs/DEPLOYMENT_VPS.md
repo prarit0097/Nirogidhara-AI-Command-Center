@@ -1558,7 +1558,7 @@ verification commands above to confirm posture stayed locked.
 
 ## 11. Production Posture (historical — Phase 12D snapshot as of 2026-05-16)
 
-> **Operational baseline note (Phase 15M).** The current operational baseline is **Phase 15M — Foundation Release Freeze + Director Sign-off Pack** (docs-only). Safety shell is **frozen at commit `eefd8b3`**; docs/sign-off at `8fc77d6`. For current production posture see [`../nd.md`](../nd.md) head-of-file + [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). The numbers in this section are the **historical Phase 12D snapshot**; do not treat them as current.
+> **Historical note (superseded).** At Phase 15M the operational baseline was the **Foundation Release Freeze + Director Sign-off Pack** (docs-only; safety shell frozen at commit `eefd8b3`, docs/sign-off at `8fc77d6`). **That baseline has since advanced to Phase 16B — Customer Lifecycle UI Backbone, PRODUCTION VERIFIED + CLOSED at commit `00c3295`.** The Phase 15 safety shell remains frozen at `eefd8b3`. **Phase 16C is next planned only and requires a separate written Director directive.** For current production posture see [`../nd.md`](../nd.md) head-of-file + [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). The numbers in this section are the **historical Phase 12D snapshot**; do not treat them as current.
 
 **Historical test baseline (Phase 12D):** 2730 backend tests + 82 frontend tests. All green
 at that snapshot. Current verification baseline lives in `nd.md`.
