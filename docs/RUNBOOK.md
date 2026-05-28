@@ -7,7 +7,7 @@
 > SSL, commands, troubleshooting). Do not run the local-dev steps below
 > on the VPS.
 
-> **Current operational baseline: Phase 16C — Director Daily Briefing + Team Roles UI, PRODUCTION VERIFIED + CLOSED at commit `687ef41`.** The Phase 16B Customer Lifecycle UI Backbone is the previous verified baseline at commit `00c3295`; Phase 16C adds the operational-leadership layer (internal-only, review-only). The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules still hold: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B / 16C. **Next planned work is Phase 16D — Payment / Logistics Integration Hardening, which requires a separate written Director directive before any code is touched.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Director Daily Briefing + Team Roles (Phase 16C)** and **Phase 16B Production Verification** sections below.
+> **Current operational baseline: Phase 16D — Uploaded Customer Data Campaigns + Calling Lifecycle, IMPLEMENTED + PUSHED (VPS production verification pending).** Phase 16C (Director Daily Briefing + Team Roles, `687ef41`) and Phase 16B (Customer Lifecycle UI Backbone, `00c3295`) are earlier verified baselines. The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules still hold: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B / 16C / 16D. **Next planned work is Phase 16E — Payment / Logistics Integration Hardening, which requires a separate written Director directive before any code is touched.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Uploaded Data Campaigns + Calling Lifecycle (Phase 16D)**, **Director Daily Briefing + Team Roles (Phase 16C)** and **Phase 16B Production Verification** sections below.
 
 How to bring the full stack up locally on Windows / macOS / Linux.
 
@@ -471,6 +471,55 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 | `Safety: State unavailable` | grey | All three fetches failed. Check `docker compose -f docker-compose.prod.yml logs --since 60s backend`. |
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
+
+### Uploaded Data Campaigns + Calling Lifecycle (Phase 16D)
+
+Phase 16D lets the Director work existing offline / old customer data through the same calling → order lifecycle as fresh leads. **Everything here is internal-only — no Vapi/AI call, no WhatsApp/Meta Cloud, no Razorpay/PayU, no Delhivery, no AI/LLM, no business Celery enqueue, no `RuntimeKillSwitch` / `SandboxState` change.** Phones are stored to enable calling but are shown masked (last-4) and never logged.
+
+**1. Upload a dataset — `/operations/data-imports` (sidebar → Operations, director/admin):**
+- Give the dataset a name + optional problem/disease + source label.
+- Either paste CSV or choose a `.csv` file. **Minimum columns: `name`, `phone`.** Auto-detected aliases include `mobile`/`contact`/`whatsapp` (phone), `disease`/`category` (problem), `city`, `state`, `notes`/`remark`, `product`/`medicine`, `source`, `old status`, `last order date`.
+- Example CSV:
+  ```csv
+  name,phone,disease,city,state,notes
+  Ramesh,+919812345678,Joint pain,Mumbai,Maharashtra,old customer
+  ```
+- Click **Upload + validate**. The summary shows total / valid / duplicate / invalid + problem-wise breakdown + masked rejected-row samples. **No Lead/Customer/Order is created at upload.**
+
+**2. Validation statuses (per row):** `valid` · `missing_required` (no name or phone) · `invalid_phone` (doesn't normalize to 10 digits) · `duplicate_in_file` (same normalized phone earlier in the file) · `duplicate_existing` (matches an existing Lead/Customer). Dedup is **phone-only** (email is never a key), reusing the live CRM `normalize_phone` / `find_lead_by_phone` rules.
+
+**3. Create a campaign:** on the datasets table, click **Create campaign** (director/admin). This creates an `ImportedCallingCampaign` + one queue item (status `pending`) per VALID row. (Refuses with `no_valid_rows` if the dataset has zero valid rows.)
+
+**4. Run the calling lifecycle — `/operations/import-campaigns` (director/admin/operations):**
+- Open a campaign → its call queue table appears (masked phone, status, attempts).
+- Pick an **outcome** per contact and click **Record**: `interested` / `not interested` / `callback` / `wrong number` / `no answer` / `already ordered` / `angry → senior review` / `medical emergency → escalate`. Medical-emergency + angry outcomes raise an inline escalation warning for human senior review. **No provider is contacted.**
+- For an **interested** contact, click **Create order** → an internal `Order` is created (stage *Order Punched*) via the existing safe order service, the contact links to it, and the order then flows through the normal Confirmation Queue / order lifecycle. **No payment / courier / WhatsApp side effect.**
+
+**Permissions:** upload + create-campaign = director/admin; record outcome + create-order = director/admin/operations (the calling agent); all reads require authentication.
+
+**VPS deploy (Phase 16D adds migration `data_imports.0001_initial`):**
+```bash
+cd /opt/nirogidhara-command
+git pull origin main
+mkdir -p backups
+docker compose -f docker-compose.prod.yml exec -T postgres sh -lc 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backups/phase16d_pre_deploy_$(date +%F_%H%M%S).sql
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml exec backend python manage.py migrate --noinput
+docker compose -f docker-compose.prod.yml exec backend python manage.py makemigrations --check --dry-run   # → No changes detected
+docker compose -f docker-compose.prod.yml exec backend python manage.py check
+docker compose -f docker-compose.prod.yml exec backend python -m pytest tests/test_phase16d_import_campaigns.py --tb=no -q
+docker compose -f docker-compose.prod.yml restart nginx
+curl -sS https://ai.nirogidhara.com/api/healthz/
+```
+
+**Validation checklist (Phase 16D):**
+1. `/operations/data-imports` → upload a small CSV → valid/duplicate/invalid counts render; no customer contacted.
+2. Create a campaign from the valid rows → appears on `/operations/import-campaigns`.
+3. Open the campaign → record outcomes (interested / not interested / callback / wrong number / medical emergency escalation).
+4. Create an order from an interested row → it appears in the existing Orders / Confirmation flow.
+5. No WhatsApp / payment / courier / Vapi / provider side effect. Phase 15 safety shell unchanged.
+
+**Rollback (Phase 16D):** additive only. `git revert` the Phase 16D commit + redeploy; the `data_imports` tables can remain (unused) or be dropped via a forward migration with Director approval. Never drop production tables manually; restore the DB backup only on a severe issue with Director approval.
 
 ### Director Daily Briefing + Team Roles (Phase 16C — PRODUCTION VERIFIED at `687ef41`)
 

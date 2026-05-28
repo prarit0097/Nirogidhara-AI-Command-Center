@@ -1,6 +1,6 @@
 # Phase 16A — Business MVP Gap Audit
 
-> **Phase 16B follow-up status (2026-05-27):** **Phase 16B — Customer Lifecycle UI Backbone is PRODUCTION VERIFIED at commit `00c3295` after Hotfix-2, and is CLOSED.** Verification: backend Phase 16B suite 30/30, `manage.py check` clean, `makemigrations --check` clean, `GET /api/healthz/` OK, browser validation passed (lead creation, phone-only duplicate blocking, `S.N.` column, Customer 360 layout, Orders responsive pipeline, safety shell unchanged). Hotfix-1 (`8c0c6b9`) was superseded by Hotfix-2 (`00c3295`), which delivered **phone-only lead uniqueness** (same email + different phone allowed; same normalized phone blocked) and the **Orders Pipeline responsive wrapped layout** (no horizontal-scroll dependency). **Phase 16C — Director Daily Briefing + Team Roles UI has since SHIPPED and is PRODUCTION VERIFIED + CLOSED at commit `687ef41`** (see the Phase 16C follow-up note below), mitigating the Director-briefing-UI + team-roles-UI launch blockers. The current next planned work is **Phase 16D — Payment / Logistics Integration Hardening** (NOT started; separate Director directive required). Six of the audit's launch-blocker items are now resolved or substantially mitigated:
+> **Phase 16B follow-up status (2026-05-27):** **Phase 16B — Customer Lifecycle UI Backbone is PRODUCTION VERIFIED at commit `00c3295` after Hotfix-2, and is CLOSED.** Verification: backend Phase 16B suite 30/30, `manage.py check` clean, `makemigrations --check` clean, `GET /api/healthz/` OK, browser validation passed (lead creation, phone-only duplicate blocking, `S.N.` column, Customer 360 layout, Orders responsive pipeline, safety shell unchanged). Hotfix-1 (`8c0c6b9`) was superseded by Hotfix-2 (`00c3295`), which delivered **phone-only lead uniqueness** (same email + different phone allowed; same normalized phone blocked) and the **Orders Pipeline responsive wrapped layout** (no horizontal-scroll dependency). **Phase 16C — Director Daily Briefing + Team Roles UI has since SHIPPED and is PRODUCTION VERIFIED + CLOSED at commit `687ef41`** (see the Phase 16C follow-up note below), mitigating the Director-briefing-UI + team-roles-UI launch blockers. The current next planned work is **Phase 16E — Payment / Logistics Integration Hardening** (NOT started; separate Director directive required). Six of the audit's launch-blocker items are now resolved or substantially mitigated:
 >
 > - **P0 #1 Confirmation queue UI not wired** → **RESOLVED.** Buttons now call `POST /api/orders/{id}/confirm/` with real loading / success / error states.
 > - **P0 #2 Customer 360 Calls / Orders / Payments / Delivery tabs empty** → **RESOLVED.** New `GET /api/customers/{id}/timeline/` endpoint hydrates all four tabs.
@@ -13,13 +13,15 @@
 > - **P0 #5 Director Daily Briefing approval UI missing → RESOLVED (review-only).** New `/director-briefing` page reads the latest snapshot status + records an internal-only Director review/decision via `POST /api/v1/director-ops/briefing-reviews/`. It does NOT generate an AI briefing or execute any business action.
 > - **P0 #7 No UI for org-role assignment → RESOLVED (internal labels).** New `/team-roles` page lists users and assigns one of 8 internal operational-role labels via `POST /api/v1/director-ops/team-roles/assign/` (director/admin-gated). Labels grant no provider access and activate no automation.
 >
-> **Items still open after Phase 16C (carried to Phase 16D / 16E / 16F / 16G):**
+> **Phase 16D follow-up status (2026-05-28):** **Phase 16D — Uploaded Customer Data Campaigns + Calling Lifecycle IMPLEMENTED + PUSHED** (VPS production verification pending; internal-only — no provider call, Phase 15 safety shell untouched). New app `apps.data_imports` lets the Director upload existing customer data (CSV), validate + phone-only dedup, build a manual calling campaign + queue, record outcomes, and create internal Orders for interested contacts — closing the offline/old-data → order gap. The Director re-prioritised the roadmap: **"Payment / Logistics Integration Hardening" is now Phase 16E** (was previously slotted as 16D).
 >
-> - P0 #3 `ShipmentCreateView` hardcoded to `create_mock_shipment()` — deferred to Phase 16D.
-> - P0 #4 Phase 7E-Live-B / 7G-Live / 8F all NOT approved — deferred to Phase 16D / 16E.
-> - P0 #6 No UI for human calling agent — deferred to Phase 16G if scope desired.
+> **Items still open after Phase 16D (carried to Phase 16E / 16F / 16G):**
+>
+> - P0 #3 `ShipmentCreateView` hardcoded to `create_mock_shipment()` — deferred to Phase 16E (Payment / Logistics Integration Hardening).
+> - P0 #4 Phase 7E-Live-B / 7G-Live / 8F all NOT approved — deferred to Phase 16E / live-gate directives.
+> - P0 #6 No UI for human calling agent — **PARTIALLY MITIGATED** by Phase 16D Imported Campaigns queue (manual outcome recording + create-order); a full agent console is deferred to Phase 16G if scope desired.
 > - P0 #8 Production Claim Vault seed is demo-v2 — deferred to Phase 16E.
-> - P0 #10 RTO Rescue buttons toast-only — deferred to Phase 16D.
+> - P0 #10 RTO Rescue buttons toast-only — deferred to Phase 16E.
 >
 > **The original audit body below is preserved verbatim as the canonical reference.** Phase 15 safety shell remains FROZEN at code commit `eefd8b3`.
 >
@@ -285,7 +287,7 @@ Phase 16B is **entirely additive** to the Phase 15 chrome — does NOT modify an
 4. **Backup / restore runbook** in `docs/DEPLOYMENT_VPS.md`. Resolves P1 #13.
 5. **Centralised logging** — Loki or Datadog wiring + structured backend log format. Resolves P1 #14.
 
-### Phase 16D — Payment / Logistics Integration Hardening
+### Phase 16E — Payment / Logistics Integration Hardening
 
 **Goal:** make the existing Razorpay + Delhivery gates actually run live, safely.
 
@@ -369,7 +371,7 @@ Before commissioning Phase 16B, the Director needs to answer these yes/no questi
 3. **Director issues a written Phase 16B directive** that names exactly one of:
    - "Phase 16B — Customer Lifecycle UI Backbone kick-off — scope: items 1-6 from §7 Phase 16B" (recommended)
    - "Phase 16C — Director Daily Briefing + Team Roles UI kick-off" (if Director wants the briefing first)
-   - "Phase 16D — Payment / Logistics Integration Hardening kick-off" (if Director wants a live shipment first)
+   - "Phase 16E — Payment / Logistics Integration Hardening kick-off" (if Director wants a live shipment first)
    - "Phase 16E — WhatsApp Business Workflow Activation kick-off" (if Director wants live customer messages first)
 4. **Coding agents do NOT interpret silence as authorisation.** No Phase 16B file should be created until the directive lands.
 

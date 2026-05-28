@@ -6960,3 +6960,111 @@ export const TEAM_ROLES = {
     { value: "read_only_viewer", label: "Read-only Viewer" },
   ],
 };
+
+// ---------------------------------------------------------------------------
+// Phase 16D — Uploaded Data Campaigns + Calling Lifecycle (dev-only mocks).
+// ---------------------------------------------------------------------------
+
+export const IMPORTS_OVERVIEW = {
+  datasetCount: 2,
+  validContacts: 38,
+  duplicateCount: 7,
+  invalidCount: 5,
+  activeCampaigns: 1,
+  pendingCalls: 24,
+  interestedRate: 31.5,
+  orderCreatedCount: 4,
+};
+
+export const IMPORTED_DATASETS = {
+  items: [
+    {
+      id: 1,
+      name: "Joint pain — 2024 customers",
+      sourceLabel: "Old Excel export",
+      problemCategory: "Joint pain",
+      originalFilename: "joint_pain_2024.csv",
+      uploadedBy: "director",
+      status: "ready",
+      totalRows: 50,
+      validRows: 38,
+      duplicateRows: 7,
+      invalidRows: 5,
+      importedRows: 4,
+      createdAt: "2026-05-28T08:00:00Z",
+      updatedAt: "2026-05-28T08:00:00Z",
+    },
+  ],
+  total: 1,
+};
+
+export const IMPORTED_DATASET_DETAIL = {
+  ...IMPORTED_DATASETS.items[0],
+  errorSamples: [
+    {
+      rowNumber: 3,
+      validationStatus: "invalid_phone",
+      reason: "Phone does not normalize to a 10-digit number",
+      phoneLast4: "12",
+    },
+    {
+      rowNumber: 9,
+      validationStatus: "duplicate_in_file",
+      reason: "Duplicate phone earlier in this file",
+      phoneLast4: "5678",
+    },
+  ],
+  problemBreakdown: [{ problemCategory: "Joint pain", count: 38 }],
+  campaignIds: [1],
+};
+
+export const IMPORTED_CAMPAIGNS = {
+  items: [
+    {
+      id: 1,
+      name: "Joint pain campaign",
+      datasetId: 1,
+      problemCategory: "Joint pain",
+      status: "active",
+      assignedTeam: "calling_agent",
+      totalContacts: 38,
+      pendingCount: 24,
+      completedCount: 14,
+      interestedCount: 9,
+      notInterestedCount: 3,
+      callbackCount: 2,
+      wrongNumberCount: 0,
+      orderCreatedCount: 4,
+      createdBy: "director",
+      createdAt: "2026-05-28T08:10:00Z",
+      updatedAt: "2026-05-28T08:10:00Z",
+    },
+  ],
+  total: 1,
+};
+
+export const IMPORTED_QUEUE = {
+  items: [
+    {
+      id: 1,
+      campaignId: 1,
+      dataRowId: 1,
+      name: "Ramesh",
+      phoneMasked: "****5678",
+      problemCategory: "Joint pain",
+      city: "Mumbai",
+      state: "MH",
+      assignedAgent: null,
+      status: "pending",
+      lastOutcome: "",
+      callAttempts: 0,
+      nextFollowUpAt: null,
+      notes: "",
+      escalationFlag: "",
+      linkedOrderId: null,
+      createdAt: "2026-05-28T08:10:00Z",
+      updatedAt: "2026-05-28T08:10:00Z",
+    },
+  ],
+  total: 1,
+};

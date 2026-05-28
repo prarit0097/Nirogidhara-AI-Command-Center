@@ -34,6 +34,8 @@ import CallingDashboardPage from "./pages/CallingDashboard";
 import AuditTimelinePage from "./pages/AuditTimeline";
 import DirectorBriefingPage from "./pages/DirectorBriefing";
 import TeamRolesPage from "./pages/TeamRoles";
+import DataImportsPage from "./pages/DataImports";
+import ImportedCampaignsPage from "./pages/ImportedCampaigns";
 import Login from "@/pages/Login";
 import RequireAuth from "@/components/RequireAuth";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -99,6 +101,14 @@ const App = () => (
             <Route
               path="/operations/audit-timeline"
               element={<AuditTimelinePage />}
+            />
+            <Route
+              path="/operations/data-imports"
+              element={<DataImportsPage />}
+            />
+            <Route
+              path="/operations/import-campaigns"
+              element={<ImportedCampaignsPage />}
             />
             <Route path="/team-roles" element={<TeamRolesPage />} />
             <Route path="/settings" element={<SettingsPage />} />

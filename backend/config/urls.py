@@ -103,5 +103,9 @@ urlpatterns = [
         "api/v1/director-ops/",
         include("apps.directorops.urls"),
     ),
+    path(
+        "api/v1/imports/",
+        include("apps.data_imports.urls"),
+    ),
     path("api/", include(api_patterns)),
 ]

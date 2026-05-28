@@ -2846,6 +2846,139 @@ export const api = {
         };
       },
     ),
+
+  // ---------- Phase 16D — Uploaded Data Campaigns + Calling Lifecycle ----------
+  // Internal-only. None of these methods triggers a Vapi/AI call, WhatsApp,
+  // payment, courier, or any provider — they read/write imported dataset /
+  // campaign / queue rows and (on create-order) a pure internal Order.
+
+  getImportsOverview: () =>
+    safeFetch<import("@/types/domain").ImportsOverview>(
+      "/v1/imports/overview/",
+      () => M.IMPORTS_OVERVIEW as import("@/types/domain").ImportsOverview,
+    ),
+
+  getImportDatasets: () =>
+    safeFetch<import("@/types/domain").ImportedDatasetsResponse>(
+      "/v1/imports/datasets/",
+      () =>
+        M.IMPORTED_DATASETS as import(
+          "@/types/domain"
+        ).ImportedDatasetsResponse,
+    ),
+
+  getImportDataset: (id: number) =>
+    safeFetch<import("@/types/domain").ImportedDatasetDetail>(
+      `/v1/imports/datasets/${id}/`,
+      () =>
+        M.IMPORTED_DATASET_DETAIL as import(
+          "@/types/domain"
+        ).ImportedDatasetDetail,
+    ),
+
+  getImportDatasetRows: (id: number, status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return safeFetch<import("@/types/domain").ImportedDataRowsResponse>(
+      `/v1/imports/datasets/${id}/rows/${qs}`,
+      () => ({ items: [], total: 0 }),
+    );
+  },
+
+  uploadImportDataset: (
+    payload: import("@/types/domain").UploadDatasetPayload,
+  ) =>
+    safeMutate<import("@/types/domain").ImportedDatasetDetail>(
+      "/v1/imports/datasets/upload/",
+      "POST",
+      payload,
+      () =>
+        M.IMPORTED_DATASET_DETAIL as import(
+          "@/types/domain"
+        ).ImportedDatasetDetail,
+    ),
+
+  createImportCampaign: (
+    datasetId: number,
+    payload: import("@/types/domain").CreateImportedCampaignPayload = {},
+  ) =>
+    safeMutate<import("@/types/domain").ImportedCampaign>(
+      `/v1/imports/datasets/${datasetId}/create-campaign/`,
+      "POST",
+      payload,
+      () =>
+        (M.IMPORTED_CAMPAIGNS as import(
+          "@/types/domain"
+        ).ImportedCampaignsResponse).items[0],
+    ),
+
+  getImportCampaigns: () =>
+    safeFetch<import("@/types/domain").ImportedCampaignsResponse>(
+      "/v1/imports/campaigns/",
+      () =>
+        M.IMPORTED_CAMPAIGNS as import(
+          "@/types/domain"
+        ).ImportedCampaignsResponse,
+    ),
+
+  getImportCampaign: (id: number) =>
+    safeFetch<import("@/types/domain").ImportedCampaign>(
+      `/v1/imports/campaigns/${id}/`,
+      () =>
+        (M.IMPORTED_CAMPAIGNS as import(
+          "@/types/domain"
+        ).ImportedCampaignsResponse).items[0],
+    ),
+
+  getImportCampaignQueue: (id: number, status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return safeFetch<import("@/types/domain").ImportedQueueResponse>(
+      `/v1/imports/campaigns/${id}/queue/${qs}`,
+      () => M.IMPORTED_QUEUE as import("@/types/domain").ImportedQueueResponse,
+    );
+  },
+
+  recordImportOutcome: (
+    queueItemId: number,
+    payload: import("@/types/domain").RecordImportedOutcomePayload,
+  ) =>
+    safeMutate<import("@/types/domain").ImportedQueueItem>(
+      `/v1/imports/queue/${queueItemId}/outcome/`,
+      "POST",
+      payload,
+      () => {
+        const base = (
+          M.IMPORTED_QUEUE as import("@/types/domain").ImportedQueueResponse
+        ).items.find((q) => q.id === queueItemId);
+        return {
+          ...(base as import("@/types/domain").ImportedQueueItem),
+          status: payload.outcome as import("@/types/domain").ImportedQueueStatus,
+          lastOutcome: payload.outcome,
+          escalationFlag:
+            payload.outcome === "medical_emergency"
+              ? "medical_emergency"
+              : payload.outcome === "angry_escalation"
+                ? "senior_review"
+                : "",
+        };
+      },
+    ),
+
+  createImportOrder: (
+    queueItemId: number,
+    payload: import("@/types/domain").CreateImportedOrderPayload = {},
+  ) =>
+    safeMutate<import("@/types/domain").CreateImportedOrderResponse>(
+      `/v1/imports/queue/${queueItemId}/create-order/`,
+      "POST",
+      payload,
+      () => ({
+        queueItem: (
+          M.IMPORTED_QUEUE as import("@/types/domain").ImportedQueueResponse
+        ).items[0],
+        orderId: "NRG-00000",
+        orderStage: "Order Punched",
+      }),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

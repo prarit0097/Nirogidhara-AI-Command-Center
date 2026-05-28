@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "apps.caio",
     "apps.learning",
     "apps.directorops",
+    "apps.data_imports",
 ]
 
 MIDDLEWARE = [

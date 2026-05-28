@@ -7420,3 +7420,207 @@ export interface AssignTeamRolePayload {
   isActive?: boolean;
   notes?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 16D — Uploaded Customer Data Campaigns + Calling Lifecycle
+// ---------------------------------------------------------------------------
+
+export type ImportedDatasetStatus =
+  | "uploaded"
+  | "validating"
+  | "ready"
+  | "failed"
+  | "archived";
+
+export type ImportedRowValidationStatus =
+  | "valid"
+  | "duplicate_in_file"
+  | "duplicate_existing"
+  | "invalid_phone"
+  | "missing_required"
+  | "skipped"
+  | "imported";
+
+export type ImportedCampaignStatus =
+  | "draft"
+  | "active"
+  | "paused"
+  | "completed"
+  | "archived";
+
+export type ImportedQueueStatus =
+  | "pending"
+  | "assigned"
+  | "called"
+  | "callback"
+  | "interested"
+  | "not_interested"
+  | "wrong_number"
+  | "order_created"
+  | "closed";
+
+export type ImportedCallOutcome =
+  | "interested"
+  | "not_interested"
+  | "callback"
+  | "wrong_number"
+  | "no_answer"
+  | "already_ordered"
+  | "angry_escalation"
+  | "medical_emergency";
+
+export interface ImportedDataset {
+  id: number;
+  name: string;
+  sourceLabel: string;
+  problemCategory: string;
+  originalFilename: string;
+  uploadedBy: string | null;
+  status: ImportedDatasetStatus;
+  totalRows: number;
+  validRows: number;
+  duplicateRows: number;
+  invalidRows: number;
+  importedRows: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportedRowErrorSample {
+  rowNumber: number;
+  validationStatus: ImportedRowValidationStatus;
+  reason: string;
+  phoneLast4: string;
+}
+
+export interface ImportedProblemBreakdownItem {
+  problemCategory: string;
+  count: number;
+}
+
+export interface ImportedDatasetDetail extends ImportedDataset {
+  errorSamples: ImportedRowErrorSample[];
+  problemBreakdown: ImportedProblemBreakdownItem[];
+  campaignIds?: number[];
+}
+
+export interface ImportedDatasetsResponse {
+  items: ImportedDataset[];
+  total: number;
+}
+
+export interface UploadDatasetPayload {
+  name: string;
+  csv: string;
+  sourceLabel?: string;
+  problemCategory?: string;
+  originalFilename?: string;
+}
+
+export interface ImportedDataRow {
+  id: number;
+  rowNumber: number;
+  name: string;
+  phoneMasked: string;
+  problemCategory: string;
+  city: string;
+  state: string;
+  product: string;
+  oldStatus: string;
+  lastOrderDate: string;
+  validationStatus: ImportedRowValidationStatus;
+  validationMessage: string;
+  linkedLeadId: string | null;
+  linkedCustomerId: string | null;
+}
+
+export interface ImportedDataRowsResponse {
+  items: ImportedDataRow[];
+  total: number;
+}
+
+export interface ImportedCampaign {
+  id: number;
+  name: string;
+  datasetId: number | null;
+  problemCategory: string;
+  status: ImportedCampaignStatus;
+  assignedTeam: string;
+  totalContacts: number;
+  pendingCount: number;
+  completedCount: number;
+  interestedCount: number;
+  notInterestedCount: number;
+  callbackCount: number;
+  wrongNumberCount: number;
+  orderCreatedCount: number;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportedCampaignsResponse {
+  items: ImportedCampaign[];
+  total: number;
+}
+
+export interface ImportedQueueItem {
+  id: number;
+  campaignId: number;
+  dataRowId: number | null;
+  name: string;
+  phoneMasked: string;
+  problemCategory: string;
+  city: string;
+  state: string;
+  assignedAgent: string | null;
+  status: ImportedQueueStatus;
+  lastOutcome: string;
+  callAttempts: number;
+  nextFollowUpAt: string | null;
+  notes: string;
+  escalationFlag: string;
+  linkedOrderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportedQueueResponse {
+  items: ImportedQueueItem[];
+  total: number;
+}
+
+export interface RecordImportedOutcomePayload {
+  outcome: ImportedCallOutcome;
+  notes?: string;
+  nextFollowUpAt?: string | null;
+}
+
+export interface CreateImportedOrderPayload {
+  product?: string;
+  amount?: number;
+  quantity?: number;
+}
+
+export interface CreateImportedOrderResponse {
+  queueItem: ImportedQueueItem;
+  orderId: string;
+  orderStage: string;
+}
+
+export interface ImportsOverview {
+  datasetCount: number;
+  validContacts: number;
+  duplicateCount: number;
+  invalidCount: number;
+  activeCampaigns: number;
+  pendingCalls: number;
+  interestedRate: number;
+  orderCreatedCount: number;
+}
+
+export interface CreateImportedCampaignPayload {
+  name?: string;
+  problemCategory?: string;
+  assignedTeam?: string;
+}
