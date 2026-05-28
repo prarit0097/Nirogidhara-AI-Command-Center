@@ -11,7 +11,7 @@
 
 **Phase 15M — Foundation Release Freeze + Director Sign-off Pack**
 
-Read-only attestation that the Phase 15 safety/UI foundation is feature-complete and frozen. Next planned work is **Phase 16A — Business MVP Gap Audit** (separate Director directive required to start).
+Read-only attestation that the Phase 15 safety/UI foundation is feature-complete and frozen. *(As authored at Phase 15M sign-off, the next planned work was Phase 16A — Business MVP Gap Audit. That has since shipped, along with Phase 16B; the current next planned work is **Phase 16C — Director Daily Briefing + Team Roles UI**, separate Director directive required. See the supersession note at the top of this file and `nd.md` head-of-file for current truth.)*
 
 ---
 
