@@ -561,7 +561,7 @@ Phase 16B converted six previously read-only / toast-only frontend surfaces into
 **How to interpret CSV import results:**
 
 - `created_count` — leads actually inserted into the DB.
-- `duplicate_count` — rows skipped because the phone or email already exists (either within the same CSV or against an existing Lead). No silent overwrite.
+- `duplicate_count` — rows skipped because the **normalized phone** already exists (either within the same CSV or against an existing Lead). Phone-only per Hotfix-2 — email is NOT a dedup key. No silent overwrite.
 - `error_count` — rows that hit a parsing / validation error (missing `name` or `phone`; unexpected exception during `create_lead`).
 - `row_errors[]` — sanitised list. Each entry has `rowNumber`, `reason` (short string), `phoneLast4` (last-4 digits only — never full E.164).
 - `truncatedErrorList=true` means the import exceeded the 50-error surface cap; inspect the CSV directly to find the rest.

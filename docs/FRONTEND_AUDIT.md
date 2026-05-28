@@ -3,7 +3,7 @@
 Frontend was generated using Lovable, then refined for the AI command-center
 direction.
 
-> **Current operational UI baseline is Phase 15M freeze.** The safety shell is **frozen** at commit `eefd8b3` (docs/sign-off at `8fc77d6`). Use [`nd.md`](../nd.md) and [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md) for current truth. The "Historical frontend audit snapshot" below is preserved as the Phase 12D-era reference; any "current" wording inside it is historical, not current.
+> **Current operational UI baseline is Phase 16B — PRODUCTION VERIFIED at commit `00c3295`.** Leads CRM (New Lead modal, `S.N.` column, phone-only duplicate UX), Customer 360 (Calls / Orders / Payments / Delivery tabs hydrated, clean empty states, no right-side clipping), and Orders Pipeline (responsive wrapped layout, no horizontal scroll, "Manage status" affordance) are all browser-verified. The Phase 15 safety shell remains **frozen** at code commit `eefd8b3` and unchanged. Use [`nd.md`](../nd.md) head-of-file for current truth. The "Historical frontend audit snapshot" below is preserved as the Phase 12D-era reference; any "current" wording inside it is historical, not current. Next planned work: Phase 16C — Director Daily Briefing + Team Roles UI (separate Director directive required).
 
 ## Historical frontend audit snapshot
 

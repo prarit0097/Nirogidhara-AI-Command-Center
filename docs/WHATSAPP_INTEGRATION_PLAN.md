@@ -6,7 +6,7 @@
 
 ---
 
-> **Operational baseline note (Phase 15M).** Current overall project baseline is **Phase 15M — Foundation Release Freeze + Director Sign-off Pack** (docs-only, commit `8fc77d6`; safety shell frozen at `eefd8b3`). All WhatsApp live / broadcast / campaign / lifecycle / handoff / rescue-discount / Day-20 reorder flows **remain locked / OFF** unless the Director explicitly approves a specific phase. The snapshot below is the historical Phase 12D-era WhatsApp status; safety flags, approval requirements, and Claim Vault gating are unchanged. For current truth read [`../nd.md`](../nd.md) head-of-file and [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md).
+> **Operational baseline note (Phase 16B — production verified).** Current overall project baseline is **Phase 16B — Customer Lifecycle UI Backbone, PRODUCTION VERIFIED + CLOSED at commit `00c3295`** (the Phase 15 safety shell remains frozen at `eefd8b3`). All WhatsApp live / broadcast / campaign / lifecycle / handoff / rescue-discount / Day-20 reorder flows **remain locked / OFF** unless the Director explicitly approves a specific phase. This doc is **historical** for WhatsApp integration unless updated later; the snapshot below is the Phase 12D-era WhatsApp status; safety flags, approval requirements, and Claim Vault gating are unchanged. For current truth read [`../nd.md`](../nd.md) head-of-file. Next planned work: Phase 16C — Director Daily Briefing + Team Roles UI (separate Director directive required).
 
 ## Historical WhatsApp status snapshot (2026-05-19, Phase 12D baseline)
 

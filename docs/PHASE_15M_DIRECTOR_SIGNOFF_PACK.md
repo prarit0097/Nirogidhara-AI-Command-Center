@@ -1,5 +1,7 @@
 # Phase 15M — Foundation Release Freeze + Director Sign-off Pack
 
+> **Supersession note (current truth):** This is a point-in-time Phase 15M sign-off artifact. The Phase 15 **safety shell** remains frozen at `eefd8b3` and this pack is still the authority on that freeze. But the **current overall operational baseline has advanced to Phase 16B — Customer Lifecycle UI Backbone (PRODUCTION VERIFIED + CLOSED at `00c3295`)**, and the next planned work is **Phase 16C — Director Daily Briefing + Team Roles UI** (NOT Phase 16A, which has already shipped). For current truth read [`../nd.md`](../nd.md) head-of-file. References to "Phase 16A next" below are historical to this pack's authoring date.
+>
 > **Status:** SHIPPED — docs-only release-freeze attestation.
 > **Phase 15 safety shell is FROZEN as of this commit.** No further small Safety / UX polish phases unless a production P0/P1 blocker, security defect, or compliance defect is observed, or the Director explicitly authorises a critical follow-on phase.
 

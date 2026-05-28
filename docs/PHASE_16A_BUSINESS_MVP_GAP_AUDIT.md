@@ -5,7 +5,7 @@
 > - **P0 #1 Confirmation queue UI not wired** → **RESOLVED.** Buttons now call `POST /api/orders/{id}/confirm/` with real loading / success / error states.
 > - **P0 #2 Customer 360 Calls / Orders / Payments / Delivery tabs empty** → **RESOLVED.** New `GET /api/customers/{id}/timeline/` endpoint hydrates all four tabs.
 > - **P0 #9 Lead consent fields missing on Lead model** → **RESOLVED.** Migration `crm.0004_phase16b_lead_consent_fields` adds `consent_call` / `consent_whatsapp` / `consent_marketing` (default False).
-> - **P1 #11 Lead duplicate detection** → **RESOLVED.** `apps.crm.services.create_lead` now raises `LeadDuplicateError` on phone / email collision; endpoint returns HTTP 409 with `{duplicate, field, existingLeadId}`.
+> - **P1 #11 Lead duplicate detection** → **RESOLVED (phone-only per Hotfix-2 `00c3295`).** `apps.crm.services.create_lead` raises `LeadDuplicateError` on a **normalized-phone** match only; endpoint returns HTTP 409 "Duplicate phone blocked — existing lead found." with `{duplicate, field: "phone", existingLeadId}`. Same email + different phone is allowed; email is metadata, NOT a uniqueness key.
 > - **P1 #12 Order kanban detail sheet has no action buttons** → **RESOLVED for safe internal transitions.** Detail sheet exposes NEW_LEAD → INTERESTED → PAYMENT_LINK_SENT → ORDER_PUNCHED → CONFIRMATION_PENDING via existing `transition_order` service. Dispatched / Delivered / RTO deliberately not exposed.
 > - **P1 #15 No "Create Order" UI** → **PARTIALLY MITIGATED** by the new "Create Lead" form (lead creation works from UI; order creation from UI is still Phase 16C+ scope).
 >
@@ -268,7 +268,7 @@ Scope (one narrow ticket per piece, in priority order):
 2. **Customer 360 tabs hydration** — load Calls / Orders / Payments / Delivery rows from existing GET endpoints into the four empty tabs. Resolves P0 #2.
 3. **Order kanban detail sheet action buttons** — allow stage transitions via `transition_order` API. Resolves P1 #12.
 4. **Manual Create Lead form** + **Lead Import CSV** — replace the two toast-only buttons in `Leads.tsx`. Resolves P1 #15-equivalent.
-5. **Lead duplicate-detection service** — extend `services.create_lead` with phone/email-based dedup. Resolves P1 #11.
+5. **Lead duplicate-detection service** — extend `services.create_lead` with duplicate detection. Resolves P1 #11. *(Implemented PHONE-ONLY in Hotfix-2 `00c3295` — normalized phone is the uniqueness key; email is metadata only.)*
 6. **Lead consent fields** — migration to add `consent_call` / `consent_whatsapp` / `consent_marketing` to `Lead` model (mirror `Customer`). Resolves P1 #9.
 
 Phase 16B is **entirely additive** to the Phase 15 chrome — does NOT modify any frozen safety surface.

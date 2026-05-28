@@ -1,6 +1,6 @@
 # Backend Roadmap (Phase 2+)
 
-> **Operational baseline note (Phase 15M):** This roadmap contains historical shipped/planned backend gates through the Phase 12D Tier-4 calling baseline. **Current operational baseline is Phase 15M** (foundation release freeze, docs-only, commit `8fc77d6`; safety shell frozen at `eefd8b3`). The next approved planning step is **Phase 16A — Business MVP Gap Audit** (planning-only; separate Director directive required to start). Any Phase 8F / 7E-Live-B / 7G-Live live-execution references remain **historical and locked unless separately approved** in writing by the Director. For current truth read [`../nd.md`](../nd.md) head-of-file and [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md).
+> **Operational baseline note (Phase 16B — production verified):** This roadmap contains historical shipped/planned backend gates through the Phase 12D Tier-4 calling baseline. **Current operational baseline is Phase 16B — Customer Lifecycle UI Backbone, PRODUCTION VERIFIED + CLOSED at commit `00c3295`** (after Hotfix-2; on top of the Phase 15M Foundation Release Freeze, safety shell frozen at `eefd8b3`). The next planned step is **Phase 16C — Director Daily Briefing + Team Roles UI** (separate Director directive required to start). Any Phase 8F / 7E-Live-B / 7G-Live live-execution references remain **historical and locked unless separately approved** in writing by the Director. For current truth read [`../nd.md`](../nd.md) head-of-file.
 
 ## Historical SaaS runtime gate snapshot (Phase 12D / Test Hygiene Hotfix-1)
 
