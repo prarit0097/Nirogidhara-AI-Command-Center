@@ -10,7 +10,7 @@ below runs on the VPS unless explicitly marked _(local)_. Local dev keeps
 using `python manage.py runserver` + `npm run dev` — Docker is **production
 only**.
 
-> **Current operational baseline: Phase 16B — Customer Lifecycle UI Backbone, PRODUCTION VERIFIED at commit `00c3295` (after Hotfix-2).** This file remains the VPS deployment runbook; [`../nd.md`](../nd.md) head-of-file wins for current project truth. The Phase 15 safety shell remains FROZEN at code commit `eefd8b3`. **Next planned work is Phase 16C — Director Daily Briefing + Team Roles UI, which requires a separate written Director directive.** No live WhatsApp / payment / courier / Vapi / AI-provider automation is approved by this docs cleanup.
+> **Current operational baseline: Phase 16C — Director Daily Briefing + Team Roles UI, PRODUCTION VERIFIED at commit `687ef41`.** Phase 16B — Customer Lifecycle UI Backbone is the previous verified baseline at commit `00c3295`. This file remains the valid VPS deployment runbook; [`../nd.md`](../nd.md) head-of-file wins for current project truth. The Phase 16C deploy used a pre-deploy DB backup at `backups/phase16c_pre_deploy_2026-05-28_113356.sql` (2.7M). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3`. **Next planned work is Phase 16D — Payment / Logistics Integration Hardening (NOT started; requires a separate written Director directive).** No live WhatsApp / payment / courier / Vapi / AI-provider automation is approved by this docs cleanup.
 
 ---
 
@@ -1558,7 +1558,7 @@ verification commands above to confirm posture stayed locked.
 
 ## 11. Production Posture (historical — Phase 12D snapshot as of 2026-05-16)
 
-> **Historical note (superseded).** At Phase 15M the operational baseline was the **Foundation Release Freeze + Director Sign-off Pack** (docs-only; safety shell frozen at commit `eefd8b3`, docs/sign-off at `8fc77d6`). **That baseline has since advanced to Phase 16B — Customer Lifecycle UI Backbone, PRODUCTION VERIFIED + CLOSED at commit `00c3295`.** The Phase 15 safety shell remains frozen at `eefd8b3`. **Phase 16C is next planned only and requires a separate written Director directive.** For current production posture see [`../nd.md`](../nd.md) head-of-file + [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). The numbers in this section are the **historical Phase 12D snapshot**; do not treat them as current.
+> **Historical note (superseded).** At Phase 15M the operational baseline was the **Foundation Release Freeze + Director Sign-off Pack** (docs-only; safety shell frozen at commit `eefd8b3`, docs/sign-off at `8fc77d6`). **That baseline has since advanced to Phase 16C — Director Daily Briefing + Team Roles UI, PRODUCTION VERIFIED + CLOSED at commit `687ef41`** (Phase 16B — Customer Lifecycle UI Backbone is the previous verified baseline at `00c3295`). The Phase 15 safety shell remains frozen at `eefd8b3`. **Phase 16D — Payment / Logistics Integration Hardening is next planned only and requires a separate written Director directive.** For current production posture see [`../nd.md`](../nd.md) head-of-file + [`PHASE_15M_DIRECTOR_SIGNOFF_PACK.md`](PHASE_15M_DIRECTOR_SIGNOFF_PACK.md). The numbers in this section are the **historical Phase 12D snapshot**; do not treat them as current.
 
 **Historical test baseline (Phase 12D):** 2730 backend tests + 82 frontend tests. All green
 at that snapshot. Current verification baseline lives in `nd.md`.

@@ -7,23 +7,24 @@ ndmemory.txt — Nirogidhara AI Command Center · Master Handoff
 
 This file is the Phase 14B Doc Sync v3 frozen snapshot. Since this file
 was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
-14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final).
+14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C.
 
-Current operational baseline is **Phase 16B — Customer Lifecycle UI
-Backbone, PRODUCTION VERIFIED + CLOSED at commit 00c3295** (after
-Hotfix-2). Lead uniqueness is PHONE-ONLY (normalized). The Phase 15
-safety shell remains frozen at commit eefd8b3.
+Current operational baseline is **Phase 16C — Director Daily Briefing +
+Team Roles UI, PRODUCTION VERIFIED + CLOSED at commit 687ef41**. Phase 16B
+— Customer Lifecycle UI Backbone is the previous verified baseline at commit
+00c3295; lead uniqueness is PHONE-ONLY (normalized). The Phase 15 safety
+shell remains frozen at commit eefd8b3.
 
 Read these for current truth:
   - nd.md                                  (canonical source of truth)
   - docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md (Phase 15 safety-shell freeze
                                             rule + smoke checklist + rollback)
-  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16B" headers)
+  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16C" headers)
   - docs/RUNBOOK.md                        (operator playbooks, includes
-                                            Phase 16B production-verification)
+                                            Phase 16C production-verification)
 
-Next planned work: Phase 16C — Director Daily Briefing + Team Roles UI
-(separate Director directive required). Phase 15 safety shell is frozen —
+Next planned work: Phase 16D — Payment / Logistics Integration Hardening
+(NOT started; separate Director directive required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".
 

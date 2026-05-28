@@ -7,7 +7,7 @@
 > SSL, commands, troubleshooting). Do not run the local-dev steps below
 > on the VPS.
 
-> **Current operational baseline: Phase 16C — Director Daily Briefing + Team Roles UI, SHIPPED.** The Phase 16B Customer Lifecycle UI Backbone remains PRODUCTION VERIFIED + CLOSED at commit `00c3295`; Phase 16C adds the operational-leadership layer (internal-only, review-only). The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules still hold: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B / 16C. **Next planned work is Phase 16D, which requires a separate written Director directive before any code is touched.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Director Daily Briefing + Team Roles (Phase 16C)** and **Phase 16B Production Verification** sections below.
+> **Current operational baseline: Phase 16C — Director Daily Briefing + Team Roles UI, PRODUCTION VERIFIED + CLOSED at commit `687ef41`.** The Phase 16B Customer Lifecycle UI Backbone is the previous verified baseline at commit `00c3295`; Phase 16C adds the operational-leadership layer (internal-only, review-only). The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules still hold: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B / 16C. **Next planned work is Phase 16D — Payment / Logistics Integration Hardening, which requires a separate written Director directive before any code is touched.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Director Daily Briefing + Team Roles (Phase 16C)** and **Phase 16B Production Verification** sections below.
 
 How to bring the full stack up locally on Windows / macOS / Linux.
 
@@ -472,9 +472,11 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
-### Director Daily Briefing + Team Roles (Phase 16C)
+### Director Daily Briefing + Team Roles (Phase 16C — PRODUCTION VERIFIED at `687ef41`)
 
 Phase 16C adds the operational-leadership layer. **Both surfaces are internal-only and review-only — nothing here calls a provider, generates an AI briefing, sends WhatsApp, takes a payment, books a shipment, places a call, enqueues a business Celery job, or changes `RuntimeKillSwitch` / `SandboxState`.**
+
+**VPS production verification (2026-05-28):** deployed commit `687ef41`; pre-deploy DB backup `backups/phase16c_pre_deploy_2026-05-28_113356.sql` (size 2.7M); docker rebuild successful + containers healthy; `migrate` reported no pending migrations; `makemigrations --check --dry-run` → No changes detected; `manage.py check` → 0 issues; `tests/test_phase16c_director_roles.py` → 17 passed; `tests/test_phase16b_customer_lifecycle.py` → 30 passed (Phase 16B sanity after 16C); `curl -sS https://ai.nirogidhara.com/api/healthz/` → `{"status":"ok","service":"nirogidhara-backend"}`. Browser validation passed (see checklist below). Phase 16C is **PRODUCTION VERIFIED + CLOSED**.
 
 **Director Daily Briefing — `/director-briefing` (sidebar → "AI Layer"):**
 
@@ -498,7 +500,7 @@ Phase 16C adds the operational-leadership layer. **Both surfaces are internal-on
 4. Non-admin (viewer/operations) cannot assign roles (403). Unauthenticated callers blocked.
 5. Phase 15 safety shell unchanged (Topbar Safety Pill / Sync / AI Paused / Sandbox OFF / Diagnostics all intact).
 
-**Rollback (Phase 16C):** Phase 16C only adds the additive `directorops` app + two frontend pages. To roll back, `git revert` the Phase 16C commit and redeploy; the `directorops` tables can remain (unused) or be dropped via a forward migration with Director approval — never drop production columns manually.
+**Rollback (Phase 16C):** Phase 16C only adds the additive `directorops` app + two frontend pages. To roll back the code, `git revert 687ef41` and redeploy. A pre-deploy DB backup exists at `backups/phase16c_pre_deploy_2026-05-28_113356.sql` (2.7M). The `directorops` tables can remain (unused) or be dropped via a forward migration with Director approval — **never drop production columns manually, and only restore the DB backup if a severe issue occurs AND the Director approves.**
 
 ### Phase 16B Production Verification (CLOSED at commit `00c3295`)
 
