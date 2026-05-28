@@ -26,17 +26,24 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/services/api", () => ({
-  api: {
-    getConfirmationQueue: vi.fn(),
-    confirmOrder: vi.fn(),
-    createLead: vi.fn(),
-    importLeadsCsv: vi.fn(),
-  },
-}));
+// Phase 16B-Hotfix-1: keep the REAL ApiError / isApiError exports (the
+// NewLeadModal imports isApiError to detect 409 duplicates) while mocking
+// only the `api` object.
+vi.mock("@/services/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/api")>();
+  return {
+    ...actual,
+    api: {
+      getConfirmationQueue: vi.fn(),
+      confirmOrder: vi.fn(),
+      createLead: vi.fn(),
+      importLeadsCsv: vi.fn(),
+    },
+  };
+});
 
 import { toast } from "sonner";
-import { api } from "@/services/api";
+import { api, ApiError } from "@/services/api";
 import Confirmation from "@/pages/Confirmation";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { LeadImportModal } from "@/components/leads/LeadImportModal";
@@ -227,12 +234,23 @@ describe("Phase 16B — NewLeadModal", () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
   });
 
-  it("shows a duplicate banner on 409 backend response", async () => {
+  it("shows a duplicate-blocked banner + error toast on 409, no created success, modal stays open", async () => {
     apiM.createLead.mockRejectedValue(
-      new Error("HTTP 409: Duplicate phone: lead LD-99999 already exists"),
+      new ApiError(409, {
+        duplicate: true,
+        field: "phone",
+        existingLeadId: "LD-99999",
+        detail: "Duplicate phone: lead LD-99999 already exists",
+      }),
     );
+    const onCreated = vi.fn();
+    const onOpenChange = vi.fn();
     render(
-      <NewLeadModal open={true} onOpenChange={vi.fn()} onCreated={vi.fn()} />,
+      <NewLeadModal
+        open={true}
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+      />,
     );
     fireEvent.change(screen.getByLabelText(/name \*/i), {
       target: { value: "Dup" },
@@ -244,9 +262,17 @@ describe("Phase 16B — NewLeadModal", () => {
     await waitFor(() =>
       expect(screen.getByTestId("new-lead-duplicate")).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("new-lead-duplicate").textContent).toContain(
-      "phone",
+    const banner = screen.getByTestId("new-lead-duplicate");
+    expect(banner.textContent).toContain("phone");
+    expect(banner.textContent).toContain("LD-99999");
+    // Duplicate is NOT treated as created.
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith(
+      "Duplicate lead blocked — existing lead found.",
     );
+    expect(onCreated).not.toHaveBeenCalled();
+    // Modal stays open (onOpenChange(false) NOT called).
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });
 

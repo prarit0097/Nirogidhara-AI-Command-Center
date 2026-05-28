@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
 import type { OrderStage } from "@/types/domain";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Clock, CreditCard, IndianRupee, Loader2, MapPin, ShieldAlert, User } from "lucide-react";
+import { ArrowRightLeft, Clock, CreditCard, IndianRupee, Loader2, MapPin, ShieldAlert, User } from "lucide-react";
 import { toast } from "sonner";
 
 const COLUMNS = ["New Lead", "Interested", "Payment Link Sent", "Order Punched", "Confirmation Pending", "Confirmed", "Dispatched", "Out for Delivery", "Delivered", "RTO"];
@@ -46,6 +46,12 @@ export default function Orders() {
         description="End-to-end visibility from lead to delivery. Drag-style kanban with order age, RTO risk and assigned agent."
       />
 
+      {/* Phase 16B-Hotfix-1: make the transition affordance discoverable. */}
+      <div className="surface-card px-4 py-2.5 mb-4 text-xs text-muted-foreground flex items-center gap-2" data-testid="orders-transition-hint">
+        <ArrowRightLeft className="h-3.5 w-3.5 text-primary" />
+        Click any order card to open its detail panel and apply a safe internal stage transition. Internal status update only — no WhatsApp / payment / courier action.
+      </div>
+
       <div className="overflow-x-auto -mx-4 px-4 pb-2">
         <div className="flex gap-4 min-w-max">
           {COLUMNS.map((col) => {
@@ -64,7 +70,8 @@ export default function Orders() {
                     <button
                       key={o.id}
                       onClick={() => setActive(o)}
-                      className="w-full text-left surface-card p-3.5 hover:shadow-elevated transition-all"
+                      className="w-full text-left surface-card p-3.5 hover:shadow-elevated hover:border-primary/40 transition-all group"
+                      data-testid={`order-card-${o.id}`}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="font-medium text-sm truncate">{o.customerName}</div>
@@ -80,6 +87,9 @@ export default function Orders() {
                       <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
                         <span className="truncate">{o.agent}</span>
                         <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{o.ageHours}h</span>
+                      </div>
+                      <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-primary opacity-70 group-hover:opacity-100 transition-opacity">
+                        <ArrowRightLeft className="h-3 w-3" />Manage status
                       </div>
                     </button>
                   ))}

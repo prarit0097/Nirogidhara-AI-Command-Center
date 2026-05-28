@@ -277,6 +277,40 @@ export class AuthExpiredError extends Error {
 }
 
 /**
+ * Phase 16B-Hotfix-1 — typed error carrying a real HTTP error
+ * RESPONSE from the backend (status + parsed JSON body). This is
+ * deliberately distinct from a network/offline failure: when the
+ * backend reaches a decision and returns 4xx/5xx (e.g. a 409 for a
+ * duplicate lead), the call site MUST see that decision instead of
+ * `safeMutate` silently substituting an optimistic mock that would
+ * mask the failure as a fake success. `safeMutate` re-throws this
+ * error (like AuthExpiredError) rather than falling back.
+ */
+export class ApiError extends Error {
+  public readonly isApiError = true as const;
+  public readonly httpStatus: number;
+  public readonly body: unknown;
+
+  constructor(httpStatus: number, body: unknown, message?: string) {
+    super(message ?? `HTTP ${httpStatus}`);
+    this.name = "ApiError";
+    this.httpStatus = httpStatus;
+    this.body = body;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
+/** Phase 16B-Hotfix-1 — predicate mirror for ApiError. */
+export function isApiError(err: unknown): err is ApiError {
+  if (err instanceof ApiError) return true;
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { isApiError?: unknown }).isApiError === true
+  );
+}
+
+/**
  * Phase 15K - predicate so call sites can detect auth expiry
  * without reaching for `instanceof AuthExpiredError` everywhere.
  * Tolerates non-Error values; returns false for anything that
@@ -425,7 +459,23 @@ async function safeMutate<T>(
         notifySessionExpiredOnce();
         throw new AuthExpiredError();
       }
-      throw new Error(`HTTP ${res.status} for ${method} ${path}`);
+      // Phase 16B-Hotfix-1 - a real HTTP error RESPONSE (e.g. a 409
+      // duplicate-lead conflict) is a deliberate backend decision,
+      // NOT an offline scenario. Parse the JSON body if present and
+      // throw a typed ApiError so the call site can react to it
+      // (show a duplicate-blocked message) instead of `safeMutate`
+      // masking it with an optimistic mock that fakes success.
+      let parsedBody: unknown = null;
+      try {
+        parsedBody = await res.json();
+      } catch {
+        parsedBody = null;
+      }
+      throw new ApiError(
+        res.status,
+        parsedBody,
+        `HTTP ${res.status} for ${method} ${path}`,
+      );
     }
     if (res.status === 204) {
       return undefined as unknown as T;
@@ -436,6 +486,15 @@ async function safeMutate<T>(
     // expired mutation. Surface the typed error to the caller so
     // the chrome's session-expired UX wins.
     if (isAuthError(error)) {
+      throw error;
+    }
+    // Phase 16B-Hotfix-1 - never substitute optimistic mock for a
+    // real backend error response. A 409 duplicate / 400 validation /
+    // 403 / 404 / 5xx all carry a deliberate backend decision the
+    // call site must see. Only a genuine network/offline failure
+    // (fetch itself rejected → not an ApiError) falls back to the
+    // optimistic mock so designers / CI keep rendering offline.
+    if (isApiError(error)) {
       throw error;
     }
     const key = `${method} ${path}`;

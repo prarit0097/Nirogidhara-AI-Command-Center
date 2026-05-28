@@ -470,6 +470,25 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Customer Lifecycle UI Validation Fixes (Phase 16B-Hotfix-1)
+
+Phase 16B-Hotfix-1 fixed 4 browser-validation issues found after Phase 16B. **Frontend-only — no backend change, no migration, no provider side-effect, Phase 15 safety shell untouched.**
+
+1. **Duplicate lead is now correctly blocked.** Previously, creating a lead with a duplicate phone showed a misleading success toast (`"Lead LD-... created"`) even though no row was created — the frontend `safeMutate` helper was masking the backend's HTTP 409 with an optimistic mock. Now: a duplicate shows **"Duplicate lead blocked — existing lead found."**, renders an inline yellow banner naming the existing Lead id, and **keeps the New Lead modal open** so you can correct the phone/email. No lead is created. (Backend already returned 409 correctly; this was purely a frontend display bug.)
+2. **Leads CRM table S.N. column.** The first column is now `S.N.` — a 1-based serial over the **current filtered/search result** (not the database id). Filtering or searching re-numbers the visible rows from 1.
+3. **Customer 360 layout.** The right-side summary rail (Reorder probability / Satisfaction / Family) no longer clips or pushes the page horizontally. On smaller widths it stacks below the profile + tabs. The 8 tabs wrap instead of overflowing.
+4. **Orders transition is discoverable.** The Orders Pipeline page now shows a hint banner above the kanban: *"Click any order card to open its detail panel and apply a safe internal stage transition. Internal status update only — no WhatsApp / payment / courier action."* Each order card shows a "Manage status" affordance. Click a card → detail sheet → safe internal stage-transition buttons (e.g. New Lead → Interested). The transition is an internal status update only — it never sends WhatsApp, takes payment, books a shipment, or calls a customer.
+
+**How to use the order transition safely:**
+- Open `/orders`, click any order card.
+- The detail sheet shows the current stage + stage-appropriate "Safe transitions" buttons.
+- Buttons only appear for safe internal transitions (New Lead → Interested → Payment Link Sent → Order Punched → Confirmation Pending). `Confirmation Pending → Confirmed` is intentionally NOT here — use the Confirmation Queue page. `Dispatched / Delivered / RTO` are NOT exposed (they require their own backend workflows).
+- On click: spinner → success toast → list refreshes. On error: error toast, no state change.
+
+**Duplicate lead expected behavior (validation reference):**
+- Create a lead with a fresh phone → `201` → "Lead LD-... created" success toast → lead appears in list.
+- Create another lead with the SAME phone (or email) → `409` → "Duplicate lead blocked — existing lead found." + inline banner with existing Lead id → modal stays open → no new lead created.
+
 ### Customer Lifecycle UI Backbone (Phase 16B)
 
 Phase 16B converted six previously read-only / toast-only frontend surfaces into real workflow surfaces. **No external provider call** fires from any Phase 16B path — Phase 15 safety shell remains FROZEN.

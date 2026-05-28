@@ -12,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/services/api";
+import { api, isApiError } from "@/services/api";
 import type { CreateLeadPayload, Lead } from "@/types/domain";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -98,22 +98,30 @@ export function NewLeadModal({ open, onOpenChange, onCreated }: NewLeadModalProp
       setForm(EMPTY_FORM);
       onOpenChange(false);
     } catch (err) {
-      // Phase 16B: parse the backend's 409 duplicate payload (which
-      // safeMutate surfaces as `Error("HTTP 409: ...")`) and show a clean
-      // inline duplicate banner.
-      const message = err instanceof Error ? err.message : "Could not create lead";
-      const lower = message.toLowerCase();
-      if (lower.includes("duplicate") || lower.includes("http 409")) {
-        const match = message.match(/lead\s+(LD-\d+)/i);
-        const field = lower.includes("email") ? "email" : "phone";
+      // Phase 16B-Hotfix-1: the backend returns a typed 409 for a
+      // duplicate phone/email. `safeMutate` now surfaces that as a
+      // typed `ApiError` (status 409 + parsed body) instead of
+      // masking it with an optimistic mock. We parse the structured
+      // body — `{duplicate, field, existingLeadId}` — and show a
+      // clear "duplicate blocked" message. The modal STAYS OPEN and
+      // NO created-success toast fires.
+      if (isApiError(err) && err.httpStatus === 409) {
+        const body = (err.body ?? {}) as {
+          field?: string;
+          existingLeadId?: string;
+        };
+        const field = body.field === "email" ? "email" : "phone";
         setDuplicate({
           field,
-          existingLeadId: match ? match[1] : "",
+          existingLeadId: body.existingLeadId ?? "",
         });
-        toast.warning(`Duplicate ${field} — see banner below`);
-      } else {
-        toast.error(message.slice(0, 200));
+        toast.error("Duplicate lead blocked — existing lead found.");
+        return; // modal stays open; do NOT close, do NOT show created toast
       }
+      // Any other failure (network/offline, validation, 5xx) — show a
+      // safe error toast; do not fake success.
+      const message = err instanceof Error ? err.message : "Could not create lead";
+      toast.error(message.slice(0, 200));
     } finally {
       setSubmitting(false);
     }

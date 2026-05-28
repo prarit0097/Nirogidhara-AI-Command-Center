@@ -88,9 +88,13 @@ export default function Customers() {
     <>
       <PageHeader eyebrow="Sales" title="Customer 360" description="Complete customer profile — calls, orders, payments, delivery, consent and reorder potential." />
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-6">
+      {/* Phase 16B-Hotfix-1: `min-w-0` on the grid + columns stops wide tab
+          content (tables / long timelines) from forcing horizontal page
+          overflow. The right summary rail stacks below the profile on
+          smaller widths via the responsive grid template. */}
+      <div className="grid lg:grid-cols-[300px_minmax(0,1fr)] gap-6 min-w-0">
         {/* Customer list */}
-        <div className="surface-card p-3 max-h-[700px] overflow-auto scrollbar-thin">
+        <div className="surface-card p-3 max-h-[700px] overflow-auto scrollbar-thin min-w-0">
           {customers.map((c) => (
             <button key={c.id} onClick={() => setActive(c)} className={`w-full text-left p-3 rounded-xl mb-1 transition ${active.id === c.id ? "bg-gradient-emerald-soft border border-primary/20" : "hover:bg-muted/60"}`}>
               <div className="flex items-center gap-2.5">
@@ -107,7 +111,7 @@ export default function Customers() {
         </div>
 
         {/* Profile */}
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0">
           <div className="surface-elevated p-6 relative overflow-hidden">
             <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-gold opacity-10 blur-2xl" />
             <div className="flex flex-col md:flex-row md:items-start gap-4 md:gap-6 relative">
@@ -136,9 +140,9 @@ export default function Customers() {
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-[1fr_340px] gap-6">
-            <Tabs defaultValue="overview">
-              <TabsList className="bg-muted/60">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-6 min-w-0">
+            <Tabs defaultValue="overview" className="min-w-0">
+              <TabsList className="bg-muted/60 flex-wrap h-auto">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="calls">Calls</TabsTrigger>
                 <TabsTrigger value="orders">Orders</TabsTrigger>

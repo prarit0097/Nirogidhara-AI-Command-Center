@@ -91,7 +91,8 @@ export default function Leads() {
           <table className="w-full text-sm min-w-[1000px]">
             <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left font-medium px-4 py-3">Lead</th>
+                <th className="text-left font-medium px-4 py-3 w-12">S.N.</th>
+                <th className="text-left font-medium py-3">Lead</th>
                 <th className="text-left font-medium py-3">Source / Campaign</th>
                 <th className="text-left font-medium py-3">Interest</th>
                 <th className="text-left font-medium py-3">Quality</th>
@@ -101,10 +102,15 @@ export default function Leads() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((l) => {
+              {filtered.map((l, idx) => {
                 const QI = QUALITY_ICON[l.quality];
                 return (
                   <tr key={l.id} className="border-t border-border/60 hover:bg-muted/30 transition">
+                    {/* Phase 16B-Hotfix-1: S.N. is a display index over the
+                        current filtered/search result — NOT the database id. */}
+                    <td className="px-4 py-3 text-muted-foreground tabular-nums" data-testid={`lead-sn-${idx + 1}`}>
+                      {idx + 1}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="font-medium flex items-center gap-2">
                         {l.name}
@@ -130,7 +136,7 @@ export default function Leads() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-12 text-muted-foreground text-sm">No leads match your filters.</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-muted-foreground text-sm">No leads match your filters.</td></tr>
               )}
             </tbody>
           </table>
