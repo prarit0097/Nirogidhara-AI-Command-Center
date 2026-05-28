@@ -320,4 +320,4 @@ After any rollback, run the §6 smoke checklist again — items that depended on
 
 ---
 
-> **End of Phase 15M Director Sign-off Pack.** Safety foundation v1.0 is frozen. Next planned work is Phase 16A Business MVP Gap Audit, awaiting Director directive.
+> **End of Phase 15M Director Sign-off Pack.** Safety foundation v1.0 is frozen. *(As authored at Phase 15M sign-off, the next planned work was Phase 16A — Business MVP Gap Audit. Phase 16A and Phase 16B have since shipped; Phase 16B is PRODUCTION VERIFIED + CLOSED at `00c3295`, and the current next planned work is **Phase 16C — Director Daily Briefing + Team Roles UI**, separate Director directive required. See the supersession note at the top of this file and `nd.md` head-of-file for current truth.)*
