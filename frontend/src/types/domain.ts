@@ -7624,3 +7624,82 @@ export interface CreateImportedCampaignPayload {
   problemCategory?: string;
   assignedTeam?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 16E — Payment / Logistics Integration Hardening
+// ---------------------------------------------------------------------------
+
+export type IntegrationProviderStatus =
+  | "ready"
+  | "blocked"
+  | "unavailable"
+  | "misconfigured";
+
+export interface IntegrationProviderReadiness {
+  provider: string;
+  label: string;
+  mode: string; // "mock" | "test" | "live-gated" | "unavailable"
+  rawMode: string;
+  configured: boolean;
+  secretRefsPresent: Record<string, boolean>;
+  liveEnabled: boolean;
+  liveGateRequired: boolean;
+  liveGatePresent: boolean;
+  status: IntegrationProviderStatus;
+  blockedReasons: string[];
+  safeActions: string[];
+}
+
+export interface IntegrationSafetySummary {
+  aiPaused: boolean;
+  sandboxOn: boolean;
+  providerLiveActionsLocked: boolean;
+  hardeningMode: boolean;
+  phase: string;
+}
+
+export interface IntegrationWorkflowGate {
+  liveEnabled: boolean;
+  liveGateRequired: boolean;
+  liveGatePresent: boolean;
+  note: string;
+}
+
+export interface PaymentLogisticsReadiness {
+  safety: IntegrationSafetySummary;
+  payments: IntegrationProviderReadiness[];
+  logistics: IntegrationProviderReadiness[];
+  orderWorkflowGates: {
+    paymentGate: IntegrationWorkflowGate;
+    shipmentGate: IntegrationWorkflowGate;
+  };
+  noSideEffect: boolean;
+  generatedByProvider: false;
+}
+
+export interface IntegrationPaymentEvent {
+  id: string;
+  orderId: string;
+  gateway: string;
+  status: string;
+  amount: number;
+  hasPaymentUrl: boolean;
+  gatewayRefLast6: string;
+  createdAt: string;
+}
+
+export interface IntegrationShipmentEvent {
+  awbLast6: string;
+  orderId: string;
+  courier: string;
+  status: string;
+  delhiveryStatus: string;
+  createdAt: string;
+}
+
+export interface PaymentLogisticsRecentEvents {
+  payments: IntegrationPaymentEvent[];
+  shipments: IntegrationShipmentEvent[];
+  paymentTotal: number;
+  shipmentTotal: number;
+}

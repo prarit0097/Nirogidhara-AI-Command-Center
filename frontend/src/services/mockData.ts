@@ -7068,3 +7068,96 @@ export const IMPORTED_QUEUE = {
   ],
   total: 1,
 };
+
+// ---------------------------------------------------------------------------
+// Phase 16E — Payment / Logistics Integration Hardening (dev-only mocks).
+// ---------------------------------------------------------------------------
+
+export const PAYMENT_LOGISTICS_READINESS = {
+  safety: {
+    aiPaused: true,
+    sandboxOn: false,
+    providerLiveActionsLocked: true,
+    hardeningMode: true,
+    phase: "16E",
+  },
+  payments: [
+    {
+      provider: "razorpay",
+      label: "Razorpay",
+      mode: "mock",
+      rawMode: "mock",
+      configured: true,
+      secretRefsPresent: { keyId: false, keySecret: false, webhookSecret: false },
+      liveEnabled: false,
+      liveGateRequired: true,
+      liveGatePresent: false,
+      status: "ready",
+      blockedReasons: [],
+      safeActions: ["View readiness (mock — no network)."],
+    },
+    {
+      provider: "payu",
+      label: "PayU",
+      mode: "unavailable",
+      rawMode: "unavailable",
+      configured: false,
+      secretRefsPresent: { merchantKey: false, salt: false },
+      liveEnabled: false,
+      liveGateRequired: true,
+      liveGatePresent: false,
+      status: "unavailable",
+      blockedReasons: [
+        "PayU adapter is not implemented (deferred). Only a mock fallback exists in the payments service.",
+        "Missing merchant key / salt configuration (presence check only).",
+      ],
+      safeActions: ["View readiness (PayU deferred — no network)."],
+    },
+  ],
+  logistics: [
+    {
+      provider: "delhivery",
+      label: "Delhivery",
+      mode: "mock",
+      rawMode: "mock",
+      configured: true,
+      secretRefsPresent: {
+        apiToken: false,
+        apiBaseUrl: false,
+        pickupLocation: false,
+        webhookSecret: false,
+      },
+      liveEnabled: false,
+      liveGateRequired: true,
+      liveGatePresent: false,
+      status: "ready",
+      blockedReasons: [],
+      safeActions: [
+        "Create a mock shipment via the existing operations flow (no network).",
+      ],
+    },
+  ],
+  orderWorkflowGates: {
+    paymentGate: {
+      liveEnabled: false,
+      liveGateRequired: true,
+      liveGatePresent: false,
+      note: "Live payment link creation / capture / refund is blocked without a Director live gate.",
+    },
+    shipmentGate: {
+      liveEnabled: false,
+      liveGateRequired: true,
+      liveGatePresent: false,
+      note: "Live Delhivery AWB booking is blocked without a Director live gate; HTTP shipment creation runs mock-only in Phase 16E.",
+    },
+  },
+  noSideEffect: true,
+  generatedByProvider: false,
+};
+
+export const PAYMENT_LOGISTICS_RECENT_EVENTS = {
+  payments: [],
+  shipments: [],
+  paymentTotal: 0,
+  shipmentTotal: 0,
+};

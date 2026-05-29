@@ -472,6 +472,55 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
 
+### Payment & Logistics Integration Hardening (Phase 16E)
+
+Phase 16E adds a read-only payment + logistics readiness surface and hardens the shipment-create endpoint so no LIVE provider action can fire by accident. **Everything here is internal/read-only — no live Razorpay/PayU payment link, no capture/refund, no live PayU API, no live Delhivery AWB, no WhatsApp/Meta Cloud, no Vapi, no AI/LLM, no business Celery enqueue, no `RuntimeKillSwitch` / `SandboxState` change.**
+
+**View the Payment & Logistics page — `/operations/payment-logistics` (sidebar → Operations, Wallet icon):**
+- A no-side-effect safety banner confirms the page triggers no live action.
+- Safety chips show AI Paused / Sandbox OFF / live provider actions Locked / Phase 16E hardening.
+- Three readiness cards: **Razorpay**, **PayU**, **Delhivery**.
+
+**How to interpret readiness:**
+- **mode** — `mock` (default; deterministic, no network), `test` (provider staging/sandbox), `live-gated` (live requested but blocked without a Director gate), or `unavailable` (no adapter — PayU).
+- **status** — `ready` (safe to use in its mode), `blocked` (live requested without a gate), `misconfigured` (test/live mode but credentials absent), or `unavailable` (PayU — no adapter).
+- **secretRefsPresent** — presence booleans only; the page never shows secret values.
+- **blocked reasons** — plain-language explanation, e.g. "Live Delhivery booking blocked — Director live gate required."
+- **PayU** is always `unavailable`: no real adapter exists (only an enum + a mock fallback); the missing merchant-key/salt is documented. No PayU dependency was added.
+
+**How to verify no live provider side effect:**
+- `GET /api/v1/integrations/payment-logistics/readiness/` is a pure read — it computes from settings + the kill switch/sandbox, calls no provider.
+- `GET /api/v1/integrations/payment-logistics/recent-events/` lists existing Payment/Shipment rows only (AWB + gateway ref masked to last-6).
+- `POST /api/shipments/` is hardened: in `mock` mode it mints a deterministic AWB (no network); in `test` mode it uses the Delhivery staging adapter; in `live` mode it returns **HTTP 409 "Live Delhivery booking blocked — Director live gate required."** — it never books a live production AWB. The only live booking path remains the controlled CLI-only Phase 7G-Live gate.
+- The defensive backend test patches `queue_template_message` / `send_freeform_text_message` / `trigger_call_for_lead` / `razorpay_client.create_payment_link` / `delhivery_client.create_awb` and asserts none are called during readiness reads, with kill-switch + sandbox state unchanged.
+
+**Permissions:** readiness + recent-events reads require authentication (read-only viewers may view). There are no Phase 16E mutation endpoints.
+
+**Deploy (Phase 16E — no migration):**
+```bash
+cd /opt/nirogidhara-command
+git pull origin main
+git log --oneline -5
+docker compose -f docker-compose.prod.yml up -d --build
+sleep 20
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml exec backend python manage.py makemigrations --check --dry-run   # → No changes detected
+docker compose -f docker-compose.prod.yml exec backend python manage.py check
+docker compose -f docker-compose.prod.yml exec backend python -m pytest tests/test_phase16e_payment_logistics.py --tb=no -q
+docker compose -f docker-compose.prod.yml restart nginx
+curl -sS https://ai.nirogidhara.com/api/healthz/
+```
+
+**Validation checklist (Phase 16E):**
+1. Hard refresh; safety shell unchanged (AI Paused / Sandbox OFF / Sync Live).
+2. `/operations/payment-logistics` loads; Razorpay + PayU + Delhivery readiness cards render.
+3. Blocked reasons + safe actions visible; PayU shows unavailable.
+4. No live action button is enabled (only "Live actions disabled" copy).
+5. No WhatsApp / payment / courier / Vapi / AI-provider side effect observed.
+6. Phase 16D / 16C / 16B pages still work (Data Imports, Imported Campaigns, Director Briefing, Team Roles, Orders Pipeline).
+
+**Rollback (Phase 16E):** additive + a frontend-visible shipment-view hardening. `git revert` the Phase 16E commit + redeploy; no DB change to undo (no migration). The shipment endpoint reverts to the prior always-mock-alias behaviour.
+
 ### Uploaded Data Campaigns + Calling Lifecycle (Phase 16D)
 
 > **Phase 16D-Hotfix-1 (route aliases):** the canonical routes are **`/operations/data-imports`** and **`/operations/imported-campaigns`**. Top-level aliases `/data-imports` and `/imported-campaigns` also work, and `/operations/import-campaigns` (the path first shipped in `b74b737`) is kept as a back-compat alias. All resolve to the same two pages; the sidebar links point at the canonical `/operations/...` paths.

@@ -36,6 +36,7 @@ import DirectorBriefingPage from "./pages/DirectorBriefing";
 import TeamRolesPage from "./pages/TeamRoles";
 import DataImportsPage from "./pages/DataImports";
 import ImportedCampaignsPage from "./pages/ImportedCampaigns";
+import PaymentLogisticsPage from "./pages/PaymentLogistics";
 import Login from "@/pages/Login";
 import RequireAuth from "@/components/RequireAuth";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -120,6 +121,10 @@ const App = () => (
               element={<ImportedCampaignsPage />}
             />
             <Route path="/imported-campaigns" element={<ImportedCampaignsPage />} />
+            <Route
+              path="/operations/payment-logistics"
+              element={<PaymentLogisticsPage />}
+            />
             <Route path="/team-roles" element={<TeamRolesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

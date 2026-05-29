@@ -2979,6 +2979,27 @@ export const api = {
         orderStage: "Order Punched",
       }),
     ),
+
+  // ---------- Phase 16E — Payment / Logistics Integration Hardening ----------
+  // Read-only. No live payment link, capture/refund, or Delhivery AWB booking.
+
+  getPaymentLogisticsReadiness: () =>
+    safeFetch<import("@/types/domain").PaymentLogisticsReadiness>(
+      "/v1/integrations/payment-logistics/readiness/",
+      () =>
+        M.PAYMENT_LOGISTICS_READINESS as import(
+          "@/types/domain"
+        ).PaymentLogisticsReadiness,
+    ),
+
+  getPaymentLogisticsRecentEvents: (limit: number = 25) =>
+    safeFetch<import("@/types/domain").PaymentLogisticsRecentEvents>(
+      `/v1/integrations/payment-logistics/recent-events/?limit=${limit}`,
+      () =>
+        M.PAYMENT_LOGISTICS_RECENT_EVENTS as import(
+          "@/types/domain"
+        ).PaymentLogisticsRecentEvents,
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

@@ -107,5 +107,9 @@ urlpatterns = [
         "api/v1/imports/",
         include("apps.data_imports.urls"),
     ),
+    path(
+        "api/v1/integrations/",
+        include("apps.integration_hardening.urls"),
+    ),
     path("api/", include(api_patterns)),
 ]
