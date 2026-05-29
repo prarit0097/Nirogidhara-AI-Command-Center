@@ -10,12 +10,16 @@ was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C.
 
 Current operational baseline is **Phase 16D — Uploaded Customer Data
-Campaigns + Calling Lifecycle, IMPLEMENTED + PUSHED (VPS production
-verification pending)** — new internal-only app apps.data_imports
+Campaigns + Calling Lifecycle, PRODUCTION VERIFIED on the VPS + CLOSED
+(commit c0be74a, after Hotfix-1)** — new internal-only app apps.data_imports
 (/api/v1/imports/): upload customer-data CSV → validate + phone-only dedup →
 manual calling campaign + queue → record outcomes → create internal Order via
 the existing safe create_order; no Vapi/AI/WhatsApp/payment/courier provider
-call. Phase 16C — Director Daily Briefing + Team Roles UI (687ef41) and Phase
+call. Browser-validated end-to-end (10-valid-contact dataset → campaign →
+queue → outcomes → internal Order NRG-8949879991 from Aarav Sharma under Order
+Punched). Canonical routes /operations/data-imports + /operations/imported-campaigns.
+Safety state: AI Paused / Sandbox OFF / Sync Live. Phase 16C — Director Daily
+Briefing + Team Roles UI (687ef41) and Phase
 16B — Customer Lifecycle UI Backbone (00c3295) are earlier verified baselines;
 lead uniqueness is PHONE-ONLY (normalized). The Phase 15 safety shell remains
 frozen at commit eefd8b3.
