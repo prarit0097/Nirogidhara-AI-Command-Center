@@ -106,10 +106,20 @@ const App = () => (
               path="/operations/data-imports"
               element={<DataImportsPage />}
             />
+            {/* Phase 16D-Hotfix-1 — top-level alias for the data-imports page. */}
+            <Route path="/data-imports" element={<DataImportsPage />} />
+            {/* Phase 16D-Hotfix-1 — canonical imported-campaigns route.
+                `/operations/import-campaigns` is kept as a back-compat alias
+                for the path shipped in b74b737. */}
+            <Route
+              path="/operations/imported-campaigns"
+              element={<ImportedCampaignsPage />}
+            />
             <Route
               path="/operations/import-campaigns"
               element={<ImportedCampaignsPage />}
             />
+            <Route path="/imported-campaigns" element={<ImportedCampaignsPage />} />
             <Route path="/team-roles" element={<TeamRolesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

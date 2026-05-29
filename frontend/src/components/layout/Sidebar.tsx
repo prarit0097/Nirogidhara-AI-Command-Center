@@ -21,7 +21,7 @@ const NAV = [
   { to: "/delivery", label: "Delhivery & Tracking", icon: Truck, group: "Operations" },
   { to: "/rto", label: "RTO Rescue Board", icon: ShieldAlert, group: "Operations" },
   { to: "/operations/data-imports", label: "Data Imports", icon: Upload, group: "Operations" },
-  { to: "/operations/import-campaigns", label: "Imported Campaigns", icon: Megaphone, group: "Operations" },
+  { to: "/operations/imported-campaigns", label: "Imported Campaigns", icon: Megaphone, group: "Operations" },
   { to: "/agents", label: "AI Agents Center", icon: Bot, group: "AI Layer" },
   { to: "/ceo-ai", label: "CEO AI Briefing", icon: Sparkles, group: "AI Layer" },
   { to: "/director-briefing", label: "Director Daily Briefing", icon: NotebookPen, group: "AI Layer" },

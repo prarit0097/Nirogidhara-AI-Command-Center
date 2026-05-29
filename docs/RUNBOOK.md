@@ -474,6 +474,8 @@ Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbo
 
 ### Uploaded Data Campaigns + Calling Lifecycle (Phase 16D)
 
+> **Phase 16D-Hotfix-1 (route aliases):** the canonical routes are **`/operations/data-imports`** and **`/operations/imported-campaigns`**. Top-level aliases `/data-imports` and `/imported-campaigns` also work, and `/operations/import-campaigns` (the path first shipped in `b74b737`) is kept as a back-compat alias. All resolve to the same two pages; the sidebar links point at the canonical `/operations/...` paths.
+
 Phase 16D lets the Director work existing offline / old customer data through the same calling → order lifecycle as fresh leads. **Everything here is internal-only — no Vapi/AI call, no WhatsApp/Meta Cloud, no Razorpay/PayU, no Delhivery, no AI/LLM, no business Celery enqueue, no `RuntimeKillSwitch` / `SandboxState` change.** Phones are stored to enable calling but are shown masked (last-4) and never logged.
 
 **1. Upload a dataset — `/operations/data-imports` (sidebar → Operations, director/admin):**
