@@ -7703,3 +7703,123 @@ export interface PaymentLogisticsRecentEvents {
   paymentTotal: number;
   shipmentTotal: number;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 16F — Controlled Internal Pilot Readiness + End-to-End Dry Run
+// ---------------------------------------------------------------------------
+
+export type PilotGateStatus = "pass" | "blocked" | "warning" | "skipped";
+
+export type PilotScenarioType =
+  | "fresh_lead"
+  | "imported_campaign"
+  | "existing_order"
+  | "payment_logistics"
+  | "full_lifecycle";
+
+export type PilotDryRunStatus =
+  | "draft"
+  | "passed"
+  | "warning"
+  | "blocked"
+  | "failed";
+
+export type PilotDecisionType =
+  | "reviewed"
+  | "approved_for_next_phase"
+  | "deferred"
+  | "blocked";
+
+export interface PilotGateResult {
+  key: string;
+  label: string;
+  status: PilotGateStatus;
+  detail: string;
+}
+
+export interface PilotSafetySnapshot {
+  aiPaused: boolean;
+  sandboxOn: boolean;
+  syncLive: boolean;
+  providerLiveActionsLocked: boolean;
+  phase15ShellFrozen: boolean;
+  phase: string;
+}
+
+export interface PilotSignoffChecklistKey {
+  key: string;
+  label: string;
+}
+
+export interface PilotReadiness {
+  safety: PilotSafetySnapshot;
+  automationFlags: Record<string, boolean | string>;
+  paymentReadiness: IntegrationProviderReadiness;
+  payuReadiness: IntegrationProviderReadiness;
+  logisticsReadiness: IntegrationProviderReadiness;
+  claimVault: { status: PilotGateStatus; message: string; demoCount: number; total: number };
+  teamRoles: { status: PilotGateStatus; message: string; assignedRoles: string[] };
+  dataCounts: {
+    leads: number;
+    customers: number;
+    orders: number;
+    importedCampaigns: number;
+  };
+  gates: PilotGateResult[];
+  blockedLiveActions: string[];
+  signoffChecklistKeys: PilotSignoffChecklistKey[];
+  noSideEffect: boolean;
+  generatedByProvider: false;
+}
+
+export interface PilotDryRun {
+  id: number;
+  name: string;
+  scenarioType: PilotScenarioType;
+  status: PilotDryRunStatus;
+  resultSummary: string;
+  selectedLeadId: string | null;
+  selectedCustomerId: string | null;
+  selectedOrderId: string | null;
+  selectedImportCampaignId: number | null;
+  selectedQueueItemId: number | null;
+  createdBy: string | null;
+  providerActionsAttempted: boolean;
+  providerActionsBlocked: boolean;
+  createdAt: string;
+  updatedAt: string;
+  gateResults?: PilotGateResult[];
+  blockedReasons?: string[];
+  safetySnapshot?: PilotSafetySnapshot;
+  decisions?: PilotDecision[];
+}
+
+export interface PilotDecision {
+  id: number;
+  dryRunId: number;
+  decision: PilotDecisionType;
+  note: string;
+  signoffChecklist: Record<string, boolean>;
+  decidedBy: string | null;
+  createdAt: string;
+}
+
+export interface PilotDryRunsResponse {
+  items: PilotDryRun[];
+  total: number;
+}
+
+export interface CreatePilotDryRunPayload {
+  name: string;
+  scenarioType: PilotScenarioType;
+  selectedOrderId?: string;
+  selectedLeadId?: string;
+  selectedImportCampaignId?: number;
+  selectedQueueItemId?: number;
+}
+
+export interface ReviewPilotDryRunPayload {
+  decision: PilotDecisionType;
+  note?: string;
+  signoffChecklist?: Record<string, boolean>;
+}

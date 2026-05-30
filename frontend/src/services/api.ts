@@ -3000,6 +3000,63 @@ export const api = {
           "@/types/domain"
         ).PaymentLogisticsRecentEvents,
     ),
+
+  // ---------- Phase 16F — Controlled Internal Pilot Readiness + Dry Run ----------
+  // Read-only / dry-run. No provider call, no live payment/courier/WhatsApp/Vapi.
+
+  getPilotReadiness: () =>
+    safeFetch<import("@/types/domain").PilotReadiness>(
+      "/v1/pilot/readiness/",
+      () => M.PILOT_READINESS as import("@/types/domain").PilotReadiness,
+    ),
+
+  getPilotDryRuns: (limit: number = 50) =>
+    safeFetch<import("@/types/domain").PilotDryRunsResponse>(
+      `/v1/pilot/dry-runs/?limit=${limit}`,
+      () => M.PILOT_DRY_RUNS as import("@/types/domain").PilotDryRunsResponse,
+    ),
+
+  getPilotDryRun: (id: number) =>
+    safeFetch<import("@/types/domain").PilotDryRun>(
+      `/v1/pilot/dry-runs/${id}/`,
+      () => (M.PILOT_DRY_RUNS as import("@/types/domain").PilotDryRunsResponse).items[0],
+    ),
+
+  createPilotDryRun: (
+    payload: import("@/types/domain").CreatePilotDryRunPayload,
+  ) =>
+    safeMutate<import("@/types/domain").PilotDryRun>(
+      "/v1/pilot/dry-runs/",
+      "POST",
+      payload,
+      () => ({
+        ...(M.PILOT_DRY_RUNS as import("@/types/domain").PilotDryRunsResponse).items[0],
+        name: payload.name,
+        scenarioType: payload.scenarioType,
+      }),
+    ),
+
+  reviewPilotDryRun: (
+    dryRunId: number,
+    payload: import("@/types/domain").ReviewPilotDryRunPayload,
+  ) =>
+    safeMutate<import("@/types/domain").PilotDecision>(
+      `/v1/pilot/dry-runs/${dryRunId}/review/`,
+      "POST",
+      payload,
+      () => ({
+        id: Date.now(),
+        dryRunId,
+        decision: payload.decision,
+        note: payload.note ?? "",
+        signoffChecklist: {
+          ...(payload.signoffChecklist ?? {}),
+          live_provider_gate_not_approved: true,
+        },
+        decidedBy: "you",
+        createdAt: new Date().toISOString(),
+      }),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

@@ -111,5 +111,9 @@ urlpatterns = [
         "api/v1/integrations/",
         include("apps.integration_hardening.urls"),
     ),
+    path(
+        "api/v1/pilot/",
+        include("apps.pilot.urls"),
+    ),
     path("api/", include(api_patterns)),
 ]

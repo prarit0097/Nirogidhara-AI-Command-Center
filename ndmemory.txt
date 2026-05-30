@@ -7,26 +7,31 @@ ndmemory.txt — Nirogidhara AI Command Center · Master Handoff
 
 This file is the Phase 14B Doc Sync v3 frozen snapshot. Since this file
 was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
-14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C.
+14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C /
+16D / 16E / 16F.
 
-Current operational baseline is **Phase 16E — Payment / Logistics
-Integration Hardening, PRODUCTION VERIFIED on the VPS + CLOSED (commit
-36395f6)** — new internal-only app apps.integration_hardening (NO models;
-read-only readiness services). VPS browser-validated: /operations/payment-logistics
-in hardening mode (AI Paused / Sandbox OFF / Sync Live / Live Provider Actions
-Locked; Razorpay blocked, PayU unavailable, Delhivery ready/mock; payment +
-shipment gates live-blocked; recent events visible; no live provider action).
-Two endpoints under
-/api/v1/integrations/payment-logistics/ (readiness, recent-events) + page
-/operations/payment-logistics. Readiness reports Razorpay (mock/test/live-gated),
-PayU (unavailable — no adapter/dependency), Delhivery (mock/test/live-gated) with
-presence-only secret checks (never values), live blocked without a Director gate.
-ShipmentViewSet.create() hardened: mock → deterministic AWB (unchanged);
-test → Delhivery staging adapter (Phase 2C preserved); live → HTTP 409
-"Live Delhivery booking blocked — Director live gate required." No live
-Razorpay/PayU/Delhivery action, no WhatsApp/Vapi/AI call, no Celery enqueue,
-no safety-state change. Phase 16D — Uploaded Customer Data Campaigns +
-Calling Lifecycle (PRODUCTION VERIFIED on the VPS, commit c0be74a; canonical
+Current operational baseline is **Phase 16F — Controlled Internal Pilot
+Readiness + End-to-End Dry Run, IMPLEMENTED + PUSHED to origin/main (VPS
+production verification pending)** — new internal-only app apps.pilot (2 models
+PilotDryRun / PilotDecision; migration pilot.0001_initial; pure CreateModel).
+Four endpoints under /api/v1/pilot/ (readiness, dry-runs list/create,
+dry-run detail, dry-run review) + page /operations/pilot-readiness. The dry-run
+engine is DB-only and REUSES the Phase 16E readiness services +
+apps.compliance.coverage.build_coverage_report — it duplicates no provider logic.
+Readiness returns a 12-gate matrix where provider live-gate gates show "blocked"
+as the EXPECTED safe state; every stored PilotDryRun row carries
+provider_actions_attempted=False + provider_actions_blocked=True; review
+force-locks signoff_checklist["live_provider_gate_not_approved"]=True. NO
+WhatsApp / Meta Cloud / Vapi / AI / Razorpay / PayU / Delhivery live action,
+NO payment link, NO AWB, NO Celery enqueue, NO RuntimeKillSwitch / SandboxState
+change (asserted by a defensive test patching the five outbound entrypoints).
+Permissions: dry-run create + review = director/admin/superuser; reads = auth.
+
+Phase 16E — Payment / Logistics Integration Hardening (PRODUCTION VERIFIED on
+the VPS + CLOSED, commit 36395f6; new internal-only app apps.integration_hardening
+[NO models; read-only readiness services]; /operations/payment-logistics in
+hardening mode; ShipmentViewSet.create() live → HTTP 409), Phase 16D — Uploaded
+Customer Data Campaigns + Calling Lifecycle (PRODUCTION VERIFIED, commit c0be74a;
 routes /operations/data-imports + /operations/imported-campaigns; internal
 Order NRG-8949879991 from Aarav Sharma under Order Punched), Phase 16C —
 Director Daily Briefing + Team Roles UI (687ef41), and Phase 16B — Customer
@@ -38,11 +43,11 @@ Read these for current truth:
   - nd.md                                  (canonical source of truth)
   - docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md (Phase 15 safety-shell freeze
                                             rule + smoke checklist + rollback)
-  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16E" headers)
+  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16F" headers)
   - docs/RUNBOOK.md                        (operator playbooks, includes
-                                            Phase 16E Payment & Logistics)
+                                            Phase 16F Pilot Readiness)
 
-Next planned work: Phase 16F (NOT started; separate Director directive
+Next planned work: Phase 16G (NOT started; separate Director directive
 required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".

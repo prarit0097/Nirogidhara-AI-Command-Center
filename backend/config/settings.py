@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "apps.directorops",
     "apps.data_imports",
     "apps.integration_hardening",
+    "apps.pilot",
 ]
 
 MIDDLEWARE = [

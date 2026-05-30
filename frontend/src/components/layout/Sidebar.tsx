@@ -4,7 +4,7 @@ import {
   CreditCard, Truck, ShieldAlert, Bot, Sparkles, Gavel, Trophy,
   GraduationCap, FileBadge2, BarChart3, Settings2, Leaf, ChevronLeft,
   AlarmClock, ShieldCheck, MessageSquare, Inbox, Building2, ScrollText,
-  NotebookPen, UsersRound, Upload, Megaphone, Wallet,
+  NotebookPen, UsersRound, Upload, Megaphone, Wallet, Rocket,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DirectorBriefingSidebarStatus } from "@/types/domain";
@@ -23,6 +23,7 @@ const NAV = [
   { to: "/operations/data-imports", label: "Data Imports", icon: Upload, group: "Operations" },
   { to: "/operations/imported-campaigns", label: "Imported Campaigns", icon: Megaphone, group: "Operations" },
   { to: "/operations/payment-logistics", label: "Payment & Logistics", icon: Wallet, group: "Operations" },
+  { to: "/operations/pilot-readiness", label: "Pilot Readiness", icon: Rocket, group: "Operations" },
   { to: "/agents", label: "AI Agents Center", icon: Bot, group: "AI Layer" },
   { to: "/ceo-ai", label: "CEO AI Briefing", icon: Sparkles, group: "AI Layer" },
   { to: "/director-briefing", label: "Director Daily Briefing", icon: NotebookPen, group: "AI Layer" },

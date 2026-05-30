@@ -10,7 +10,23 @@ below runs on the VPS unless explicitly marked _(local)_. Local dev keeps
 using `python manage.py runserver` + `npm run dev` — Docker is **production
 only**.
 
-> **Current operational baseline: Phase 16E — Payment / Logistics Integration Hardening, PRODUCTION VERIFIED on the VPS + CLOSED (commit `36395f6`).** Phase 16E added the additive `apps.integration_hardening` app — **NO models, NO migration** (read-only readiness services) — plus a surgical hardening of `ShipmentViewSet.create()`. Deploy was a code rebuild + restart (no migrate needed; `makemigrations --check` reports no changes). **VPS validation proof:**
+> **Current operational baseline: Phase 16F — Controlled Internal Pilot Readiness + End-to-End Dry Run, IMPLEMENTED + PUSHED to `origin/main` (VPS production verification pending).** Phase 16F added the additive `apps.pilot` app — **2 models (`PilotDryRun` / `PilotDecision`), migration `pilot.0001_initial`** (pure CreateModel; no existing table altered) — plus a DB-only dry-run engine reusing the Phase 16E readiness services. **Phase 16F ADDS a migration, so the VPS deploy REQUIRES `migrate` after a pre-deploy backup:**
+>
+> ```bash
+> cd /opt/nirogidhara-command
+> docker compose -f docker-compose.prod.yml exec -T db pg_dump -U nirogidhara nirogidhara > backups/phase16f_pre_deploy_$(date +%F_%H%M%S).sql
+> git pull origin main && docker compose -f docker-compose.prod.yml up -d --build && sleep 20
+> docker compose -f docker-compose.prod.yml exec backend python manage.py makemigrations --check --dry-run   # → No changes detected
+> docker compose -f docker-compose.prod.yml exec backend python manage.py migrate                            # → applies pilot.0001_initial
+> docker compose -f docker-compose.prod.yml exec backend python manage.py check                              # → 0 issues
+> docker compose -f docker-compose.prod.yml exec backend python -m pytest tests/test_phase16f_pilot_readiness.py --tb=no -q   # → [100%]
+> docker compose -f docker-compose.prod.yml restart nginx
+> curl -sS https://ai.nirogidhara.com/api/healthz/                                                            # → {"status":"ok","service":"nirogidhara-backend"}
+> ```
+>
+> Director browser validation of `/operations/pilot-readiness` is **pending** (rehearse: page loads with the no-side-effect banner + 12-gate matrix [provider gates blocked]; run an internal dry-run → it appears with a verdict + `provider_actions_blocked=True`; no live action button; safety shell unchanged). **The Phase 16E proof below remains the most recently VPS-verified deploy.**
+>
+> **Phase 16E — Payment / Logistics Integration Hardening, PRODUCTION VERIFIED on the VPS + CLOSED (commit `36395f6`).** Phase 16E added the additive `apps.integration_hardening` app — **NO models, NO migration** (read-only readiness services) — plus a surgical hardening of `ShipmentViewSet.create()`. Deploy was a code rebuild + restart (no migrate needed; `makemigrations --check` reports no changes). **VPS validation proof:**
 >
 > ```bash
 > docker compose -f docker-compose.prod.yml exec backend python manage.py makemigrations --check --dry-run   # → No changes detected
@@ -19,7 +35,7 @@ only**.
 > curl -sS https://ai.nirogidhara.com/api/healthz/                                                            # → {"status":"ok","service":"nirogidhara-backend"}
 > ```
 >
-> Director browser validation of `/operations/payment-logistics` passed (hardening mode; Razorpay blocked / PayU unavailable / Delhivery ready/mock; payment + shipment gates live-blocked; recent events visible; no live provider action triggered). Phase 16D (Uploaded Data Campaigns, `c0be74a`), Phase 16C (Director Daily Briefing + Team Roles, `687ef41`), and Phase 16B (Customer Lifecycle UI Backbone, `00c3295`) are earlier verified baselines. This file remains the valid VPS deployment runbook; [`../nd.md`](../nd.md) head-of-file wins for current project truth. The Phase 15 safety shell remains FROZEN at code commit `eefd8b3`. **Next planned work is Phase 16F (NOT started; requires a separate written Director directive).** No live WhatsApp / payment / courier / Vapi / AI-provider automation is approved.
+> Director browser validation of `/operations/payment-logistics` passed (hardening mode; Razorpay blocked / PayU unavailable / Delhivery ready/mock; payment + shipment gates live-blocked; recent events visible; no live provider action triggered). Phase 16D (Uploaded Data Campaigns, `c0be74a`), Phase 16C (Director Daily Briefing + Team Roles, `687ef41`), and Phase 16B (Customer Lifecycle UI Backbone, `00c3295`) are earlier verified baselines. This file remains the valid VPS deployment runbook; [`../nd.md`](../nd.md) head-of-file wins for current project truth. The Phase 15 safety shell remains FROZEN at code commit `eefd8b3`. **Next planned work is Phase 16G (NOT started; requires a separate written Director directive).** No live WhatsApp / payment / courier / Vapi / AI-provider automation is approved.
 
 ---
 

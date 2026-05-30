@@ -7,7 +7,7 @@
 > SSL, commands, troubleshooting). Do not run the local-dev steps below
 > on the VPS.
 
-> **Current operational baseline: Phase 16E — Payment / Logistics Integration Hardening, PRODUCTION VERIFIED on the VPS and CLOSED (commit `36395f6`).** Phase 16D (Uploaded Customer Data Campaigns, `c0be74a`), Phase 16C (Director Daily Briefing + Team Roles, `687ef41`), and Phase 16B (Customer Lifecycle UI Backbone, `00c3295`) are earlier verified baselines. The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules still hold: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B / 16C / 16D / 16E. **Next planned work is Phase 16F (NOT started; requires a separate written Director directive before any code is touched). No live provider activation is approved.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Payment & Logistics Integration Hardening (Phase 16E)**, **Uploaded Data Campaigns + Calling Lifecycle (Phase 16D)**, **Director Daily Briefing + Team Roles (Phase 16C)** and **Phase 16B Production Verification** sections below.
+> **Current operational baseline: Phase 16F — Controlled Internal Pilot Readiness + End-to-End Dry Run, IMPLEMENTED + PUSHED (VPS production verification pending).** Phase 16E (Payment / Logistics Integration Hardening, `36395f6`), Phase 16D (Uploaded Customer Data Campaigns, `c0be74a`), Phase 16C (Director Daily Briefing + Team Roles, `687ef41`), and Phase 16B (Customer Lifecycle UI Backbone, `00c3295`) are earlier verified baselines. The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules still hold: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B / 16C / 16D / 16E / 16F. **Next planned work is Phase 16G (NOT started; requires a separate written Director directive before any code is touched). No live provider activation is approved.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Controlled Internal Pilot Readiness (Phase 16F)**, **Payment & Logistics Integration Hardening (Phase 16E)**, **Uploaded Data Campaigns + Calling Lifecycle (Phase 16D)**, **Director Daily Briefing + Team Roles (Phase 16C)** and **Phase 16B Production Verification** sections below.
 
 How to bring the full stack up locally on Windows / macOS / Linux.
 
@@ -471,6 +471,60 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 | `Safety: State unavailable` | grey | All three fetches failed. Check `docker compose -f docker-compose.prod.yml logs --since 60s backend`. |
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
+
+### Controlled Internal Pilot Readiness + End-to-End Dry Run (Phase 16F — IMPLEMENTED + PUSHED, VPS verification pending)
+
+Phase 16F adds an internal-only **pilot readiness dashboard + DB-only dry-run engine** so the Director can rehearse a full business flow (lead / imported customer → call outcome → order → confirmation → payment-readiness gate → shipment-readiness gate → delivery/RTO readiness → pilot result summary → blocked live-action reasons → Director sign-off checklist) **without ever triggering a live external provider**. New additive app `apps.pilot` (2 models — `PilotDryRun` / `PilotDecision`; migration `pilot.0001_initial`) + 4 endpoints under `/api/v1/pilot/` + one frontend page (`/operations/pilot-readiness`). It reuses the Phase 16E readiness output + `apps.compliance.coverage.build_coverage_report` — it never duplicates provider logic. **Every Phase 16F path is internal/DB-only — it NEVER sends WhatsApp / Meta Cloud, NEVER places a Vapi/AI call, NEVER calls Razorpay/PayU live or creates a payment link, NEVER books a Delhivery shipment / AWB, NEVER calls any AI/LLM provider, NEVER enqueues a business Celery job, NEVER mutates `RuntimeKillSwitch` / `SandboxState`** (asserted by a defensive test that patches the five outbound entrypoints + asserts safety state unchanged). Each `PilotDryRun` row is stored with `provider_actions_attempted=False` + `provider_actions_blocked=True`.
+
+**Open the Pilot Readiness page — `/operations/pilot-readiness` (sidebar → Operations, Rocket icon):**
+- A no-side-effect safety banner confirms the dry-run "does NOT send WhatsApp, take a payment, book a shipment, place a call".
+- Safety chips show AI Paused / Sandbox OFF / Sync Live / Live Provider Actions Locked / Phase 15 shell frozen.
+- A **12-gate readiness matrix** (`pilot-gate-matrix`): lead/customer data, payment readiness (live-blocked), shipment readiness (live-blocked), WhatsApp automation (blocked), Vapi/AI calling (blocked), Claim Vault coverage, team roles, safety state, etc. Provider live-gate gates show **blocked** as the EXPECTED safe state.
+
+**How to run an internal dry-run:**
+- Enter a run name, pick a scenario (`fresh_lead` / `imported_campaign` / `existing_order` / `payment_logistics` / `full_lifecycle` — default `full_lifecycle`), click **Run internal dry-run**. It POSTs `/api/v1/pilot/dry-runs/`, the backend evaluates readiness DB-only and stores the verdict.
+
+**How to interpret gates + verdict:**
+- A provider live-gate **blocked** gate is the SAFE/expected state and does NOT fail the run.
+- A provider gate showing **warning** (a live-automation flag is ON) → verdict **blocked** (unsafe — investigate the flag before any pilot).
+- A non-provider **warning** (e.g. Claim Vault demo seeds) → verdict **warning**.
+- All gates safe → verdict **passed**.
+
+**How to record a Director review (optional):**
+- `POST /api/v1/pilot/dry-runs/{id}/review/` with `{decision, note, signoffChecklist}`. The backend force-locks `signoff_checklist["live_provider_gate_not_approved"]=True` on every review so a review can never imply live approval. Decisions: `reviewed` / `approved_for_next_phase` / `deferred` / `blocked`.
+
+**How to verify no provider side effect:**
+- Readiness + dry-run + review are pure DB reads/writes; they compute from settings + the kill switch/sandbox and call no provider. The defensive test (`tests/test_phase16f_pilot_readiness.py`) patches `queue_template_message` / `send_freeform_text_message` / `trigger_call_for_lead` / `razorpay_client.create_payment_link` / `delhivery_client.create_awb` and asserts all stay `assert_not_called` with kill-switch + sandbox unchanged.
+
+**Permissions:** readiness + dry-run reads require authentication (viewers may read). Dry-run create + review require director / admin / superuser (`AuthenticatedReadAdminWrite`).
+
+**Deploy (Phase 16F — ADDS migration `pilot.0001_initial`, so `migrate` is required):**
+```bash
+cd /opt/nirogidhara-command
+# Backup before any migration
+docker compose -f docker-compose.prod.yml exec -T db pg_dump -U nirogidhara nirogidhara > backups/phase16f_pre_deploy_$(date +%F_%H%M%S).sql
+git pull origin main
+git log --oneline -5
+docker compose -f docker-compose.prod.yml up -d --build
+sleep 20
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml exec backend python manage.py makemigrations --check --dry-run   # → No changes detected
+docker compose -f docker-compose.prod.yml exec backend python manage.py migrate
+docker compose -f docker-compose.prod.yml exec backend python manage.py check
+docker compose -f docker-compose.prod.yml exec backend python -m pytest tests/test_phase16f_pilot_readiness.py --tb=no -q
+docker compose -f docker-compose.prod.yml restart nginx
+curl -sS https://ai.nirogidhara.com/api/healthz/
+```
+
+**Validation checklist (Phase 16F):**
+1. Hard refresh; safety shell unchanged (AI Paused / Sandbox OFF / Sync Live).
+2. `/operations/pilot-readiness` loads; safety banner + 12-gate matrix render; provider gates show blocked.
+3. Run an internal dry-run; it appears in the recent dry-runs table with a verdict; `provider_actions_blocked=True`.
+4. No live action button exists anywhere on the page (only "Run internal dry-run").
+5. No WhatsApp / payment / courier / Vapi / AI-provider side effect observed.
+6. Phase 16E / 16D / 16C / 16B pages still work (Payment & Logistics, Data Imports, Imported Campaigns, Director Briefing, Team Roles, Orders Pipeline).
+
+**Rollback (Phase 16F):** additive new app. `git revert` the Phase 16F commit + redeploy. The `pilot.0001_initial` migration creates two new tables that are unused after revert — they can be left in place (no FK from existing tables points into them) or dropped manually if desired; no existing table is altered.
 
 ### Payment & Logistics Integration Hardening (Phase 16E — PRODUCTION VERIFIED at `36395f6`)
 
