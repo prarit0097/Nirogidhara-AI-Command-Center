@@ -13,15 +13,15 @@
 > - **P0 #5 Director Daily Briefing approval UI missing → RESOLVED (review-only).** New `/director-briefing` page reads the latest snapshot status + records an internal-only Director review/decision via `POST /api/v1/director-ops/briefing-reviews/`. It does NOT generate an AI briefing or execute any business action.
 > - **P0 #7 No UI for org-role assignment → RESOLVED (internal labels).** New `/team-roles` page lists users and assigns one of 8 internal operational-role labels via `POST /api/v1/director-ops/team-roles/assign/` (director/admin-gated). Labels grant no provider access and activate no automation.
 >
-> **Phase 16D follow-up status (2026-05-28):** **Phase 16D — Uploaded Customer Data Campaigns + Calling Lifecycle IMPLEMENTED + PUSHED** (VPS production verification pending; internal-only — no provider call, Phase 15 safety shell untouched). New app `apps.data_imports` lets the Director upload existing customer data (CSV), validate + phone-only dedup, build a manual calling campaign + queue, record outcomes, and create internal Orders for interested contacts — closing the offline/old-data → order gap. The Director re-prioritised the roadmap: **"Payment / Logistics Integration Hardening" is now Phase 16E** (was previously slotted as 16D).
+> **Phase 16E follow-up status (2026-05-30):** **Phase 16E — Payment / Logistics Integration Hardening is PRODUCTION VERIFIED + CLOSED at `36395f6`** (internal/read-only — no live provider call, Phase 15 safety shell untouched). New app `apps.integration_hardening` adds a read-only Payment & Logistics readiness surface (`/operations/payment-logistics`) for Razorpay / PayU (unavailable, no adapter/dependency) / Delhivery, and **hardened `ShipmentViewSet.create()`** so the HTTP endpoint can no longer book a live production Delhivery AWB (live → HTTP 409 "Director live gate required"). This resolves the P0 #3 `ShipmentCreateView` hardcoded-mock ambiguity and locks live provider actions behind a future Director gate. **Phase 16D — Uploaded Customer Data Campaigns + Calling Lifecycle is PRODUCTION VERIFIED + CLOSED at `c0be74a`** (internal-only; closed the offline/old-data → order gap).
 >
-> **Items still open after Phase 16D (carried to Phase 16E / 16F / 16G):**
+> **Items still open after Phase 16E (carried to Phase 16F / 16G):**
 >
-> - P0 #3 `ShipmentCreateView` hardcoded to `create_mock_shipment()` — deferred to Phase 16E (Payment / Logistics Integration Hardening).
-> - P0 #4 Phase 7E-Live-B / 7G-Live / 8F all NOT approved — deferred to Phase 16E / live-gate directives.
+> - P0 #3 `ShipmentCreateView` hardcoded to `create_mock_shipment()` — **RESOLVED by Phase 16E** (explicit mode dispatch; live HTTP booking blocked without a Director gate).
+> - P0 #4 Phase 7E-Live-B / 7G-Live / 8F all **NOT approved** — live activation remains future and requires explicit written Director directives (live-gate phases).
 > - P0 #6 No UI for human calling agent — **PARTIALLY MITIGATED** by Phase 16D Imported Campaigns queue (manual outcome recording + create-order); a full agent console is deferred to Phase 16G if scope desired.
-> - P0 #8 Production Claim Vault seed is demo-v2 — deferred to Phase 16E.
-> - P0 #10 RTO Rescue buttons toast-only — deferred to Phase 16E.
+> - P0 #8 Production Claim Vault seed is demo-v2 — deferred (Phase 16F+).
+> - P0 #10 RTO Rescue buttons toast-only — deferred (Phase 16F+).
 >
 > **The original audit body below is preserved verbatim as the canonical reference.** Phase 15 safety shell remains FROZEN at code commit `eefd8b3`.
 >

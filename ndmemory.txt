@@ -10,9 +10,13 @@ was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C.
 
 Current operational baseline is **Phase 16E — Payment / Logistics
-Integration Hardening, IMPLEMENTED + PUSHED (VPS production verification
-pending)** — new internal-only app apps.integration_hardening (NO models;
-read-only readiness services). Two endpoints under
+Integration Hardening, PRODUCTION VERIFIED on the VPS + CLOSED (commit
+36395f6)** — new internal-only app apps.integration_hardening (NO models;
+read-only readiness services). VPS browser-validated: /operations/payment-logistics
+in hardening mode (AI Paused / Sandbox OFF / Sync Live / Live Provider Actions
+Locked; Razorpay blocked, PayU unavailable, Delhivery ready/mock; payment +
+shipment gates live-blocked; recent events visible; no live provider action).
+Two endpoints under
 /api/v1/integrations/payment-logistics/ (readiness, recent-events) + page
 /operations/payment-logistics. Readiness reports Razorpay (mock/test/live-gated),
 PayU (unavailable — no adapter/dependency), Delhivery (mock/test/live-gated) with
