@@ -8,6 +8,8 @@ from .models import (
     PilotPlan,
     PilotPlanEvent,
     PilotPlanReview,
+    PilotTask,
+    PilotTaskEvent,
 )
 
 
@@ -48,4 +50,22 @@ class PilotPlanEventAdmin(admin.ModelAdmin):
 class PilotPlanReviewAdmin(admin.ModelAdmin):
     list_display = ("id", "pilot_plan", "decision", "decided_by", "created_at")
     list_filter = ("decision",)
+    readonly_fields = ("created_at",)
+
+
+@admin.register(PilotTask)
+class PilotTaskAdmin(admin.ModelAdmin):
+    list_display = (
+        "id", "pilot_plan", "team_role", "title", "status",
+        "assigned_to", "provider_actions_blocked", "created_at",
+    )
+    list_filter = ("team_role", "status", "priority", "provider_actions_blocked")
+    search_fields = ("title", "assigned_team_label")
+    readonly_fields = ("created_at", "updated_at", "started_at", "completed_at")
+
+
+@admin.register(PilotTaskEvent)
+class PilotTaskEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "task", "event_type", "actor", "created_at")
+    list_filter = ("event_type",)
     readonly_fields = ("created_at",)

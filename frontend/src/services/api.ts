@@ -3130,6 +3130,90 @@ export const api = {
       `/v1/pilot/plans/${planId}/events/`,
       () => ({ items: [] }),
     ),
+
+  // ---------- Phase 16H — Internal Pilot Execution Workbench ----------
+  // Internal task queues only. No provider call, no live payment/courier/
+  // WhatsApp/Vapi/AI. Task transitions change only the internal task state.
+
+  getPilotExecutionSummary: (planId?: number) =>
+    safeFetch<import("@/types/domain").PilotExecutionSummary>(
+      planId ? `/v1/pilot/execution/summary/?plan=${planId}` : "/v1/pilot/execution/summary/",
+      () => M.PILOT_EXECUTION_SUMMARY as import("@/types/domain").PilotExecutionSummary,
+    ),
+
+  getPilotPlanTasks: (planId: number, team?: string) =>
+    safeFetch<import("@/types/domain").PilotTasksResponse>(
+      team
+        ? `/v1/pilot/plans/${planId}/tasks/?team=${team}`
+        : `/v1/pilot/plans/${planId}/tasks/`,
+      () => M.PILOT_TASKS as import("@/types/domain").PilotTasksResponse,
+    ),
+
+  getPilotTasks: (planId?: number) =>
+    safeFetch<import("@/types/domain").PilotTasksResponse>(
+      planId ? `/v1/pilot/tasks/?plan=${planId}` : "/v1/pilot/tasks/",
+      () => M.PILOT_TASKS as import("@/types/domain").PilotTasksResponse,
+    ),
+
+  getPilotTask: (taskId: number) =>
+    safeFetch<import("@/types/domain").PilotTask>(
+      `/v1/pilot/tasks/${taskId}/`,
+      () => (M.PILOT_TASKS as import("@/types/domain").PilotTasksResponse).items[0],
+    ),
+
+  generatePilotTasks: (planId: number, teams?: string[]) =>
+    safeMutate<import("@/types/domain").GeneratePilotTasksResponse>(
+      `/v1/pilot/plans/${planId}/tasks/`,
+      "POST",
+      teams ? { teams } : {},
+      () => ({
+        items: (M.PILOT_TASKS as import("@/types/domain").PilotTasksResponse).items,
+        created: (M.PILOT_TASKS as import("@/types/domain").PilotTasksResponse).items.length,
+      }),
+    ),
+
+  createPilotTask: (payload: import("@/types/domain").CreatePilotTaskPayload) =>
+    safeMutate<import("@/types/domain").PilotTask>(
+      "/v1/pilot/tasks/",
+      "POST",
+      payload,
+      () => ({
+        ...(M.PILOT_TASKS as import("@/types/domain").PilotTasksResponse).items[0],
+        id: Date.now(),
+        title: payload.title,
+        teamRole: payload.teamRole,
+        status: "todo",
+        providerActionsBlocked: true,
+      }),
+    ),
+
+  transitionPilotTask: (
+    taskId: number,
+    payload: import("@/types/domain").TransitionPilotTaskPayload,
+  ) =>
+    safeMutate<import("@/types/domain").PilotTask>(
+      `/v1/pilot/tasks/${taskId}/transition/`,
+      "POST",
+      payload,
+      () => (M.PILOT_TASKS as import("@/types/domain").PilotTasksResponse).items[0],
+    ),
+
+  assignPilotTask: (
+    taskId: number,
+    payload: import("@/types/domain").AssignPilotTaskPayload,
+  ) =>
+    safeMutate<import("@/types/domain").PilotTask>(
+      `/v1/pilot/tasks/${taskId}/assign/`,
+      "POST",
+      payload,
+      () => (M.PILOT_TASKS as import("@/types/domain").PilotTasksResponse).items[0],
+    ),
+
+  getPilotTaskEvents: (taskId: number) =>
+    safeFetch<{ items: import("@/types/domain").PilotTaskEvent[] }>(
+      `/v1/pilot/tasks/${taskId}/events/`,
+      () => ({ items: [] }),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

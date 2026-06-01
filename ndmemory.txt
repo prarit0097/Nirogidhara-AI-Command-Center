@@ -8,11 +8,40 @@ ndmemory.txt — Nirogidhara AI Command Center · Master Handoff
 This file is the Phase 14B Doc Sync v3 frozen snapshot. Since this file
 was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C /
-16D / 16E / 16F / 16G.
+16D / 16E / 16F / 16G / 16H.
 
-Current operational baseline is **Phase 16G — Internal Pilot Control Center /
-Pilot Execution Dashboard, PRODUCTION VERIFIED on the VPS and CLOSED at commit
-38e8dc8** — extends the existing internal-only app apps.pilot
+Current operational baseline is **Phase 16H — Internal Pilot Execution Workbench
++ Role-Based Task Queues, IMPLEMENTED + PUSHED to origin/main (VPS production
+verification pending)** — extends the existing internal-only app apps.pilot
+(2 new models PilotTask / PilotTaskEvent; migration pilot.0003_phase16h_pilot_execution;
+pure CreateModel) + 7 endpoints under /api/v1/pilot/ (execution/summary,
+plans/<id>/tasks GET+POST [POST=generate role queues], tasks GET+POST,
+tasks/<id> GET+PATCH, tasks/<id>/transition, tasks/<id>/assign, tasks/<id>/events)
++ page /operations/pilot-workbench. Converts an approved pilot plan into
+role-based internal task queues (Calling / Confirmation / Dispatch-Warehouse /
+Delivery-RTO / QA-Compliance / Finance), tracks task status (todo → in_progress
+→ done, plus blocked[needs reason] / unblock / skip / cancel), and reports
+per-team execution progress. A transition changes ONLY the internal task record —
+provider_actions_allowed stays False and provider_actions_blocked stays True at
+every task status INCLUDING in_progress and done. generate_tasks_for_plan refuses
+unless the plan is approved/running (HTTP 409) and is idempotent per team. Tasks
+reference/observe linked Order / imported campaign / queue item, never mutate
+them. NO WhatsApp / Meta Cloud / Vapi / AI / Razorpay / PayU / Delhivery live
+action, NO payment link, NO AWB, NO Celery enqueue, NO RuntimeKillSwitch /
+SandboxState change (asserted by a defensive test across generate → assign →
+start → complete). Permissions: generate / create / update / transition / assign
+= director/admin/superuser; reads = auth. Verification: backend 19 Phase 16H +
+19 16G + 16 16F + 13 16E + 22 16D + 17 16C + 30 16B = 136 passed; makemigrations
+--check + manage.py check clean; frontend 357/357 (+10); lint 0; build green.
+Docs say implemented/pushed; VPS production verification (deploy + browser
+validation) is pending. Phase 16H ADDS migration pilot.0003_phase16h_pilot_execution
+→ VPS deploy requires migrate. Next planned work: Phase 16I — NOT started;
+requires a separate written Director directive. Commit: feat: phase 16h pilot
+execution workbench.
+
+Phase 16G — Internal Pilot Control Center / Pilot Execution Dashboard is
+PRODUCTION VERIFIED on the VPS and CLOSED at commit 38e8dc8 — extends the
+existing internal-only app apps.pilot
 (3 new models PilotPlan / PilotPlanEvent / PilotPlanReview; migration
 pilot.0002_phase16g_pilot_control; pure CreateModel) + 6 endpoints under
 /api/v1/pilot/ (control/summary, plans list/create, plan detail/update, plan
@@ -43,8 +72,9 @@ untracked backups/; makemigrations --check → "No changes detected"; manage.py
 check → "0 issues"; pytest tests/test_phase16g_pilot_control.py → 19 passed
 [100%]; GET /api/healthz/ → {"status": "ok", "service": "nirogidhara-backend"}.
 Phase 16G ADDS migration pilot.0002_phase16g_pilot_control → a fresh VPS deploy
-requires migrate (already applied on the VPS). Phase 16G is CLOSED. Next planned
-work: Phase 16H — NOT started; requires a separate written Director directive.
+requires migrate (already applied on the VPS). Phase 16G is CLOSED and is the
+previous verified baseline (Phase 16H has since shipped + been pushed, VPS
+verification pending; the current next-planned work is Phase 16I).
 Commit: 38e8dc8 (feat: phase 16g pilot control center).
 
 Phase 16F — Controlled Internal Pilot Readiness + End-to-End Dry Run is
@@ -95,11 +125,11 @@ Read these for current truth:
   - nd.md                                  (canonical source of truth)
   - docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md (Phase 15 safety-shell freeze
                                             rule + smoke checklist + rollback)
-  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16G" headers)
+  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16H" headers)
   - docs/RUNBOOK.md                        (operator playbooks, includes
-                                            Phase 16G Pilot Control)
+                                            Phase 16H Pilot Workbench)
 
-Next planned work: Phase 16H (NOT started; separate Director directive
+Next planned work: Phase 16I (NOT started; separate Director directive
 required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".

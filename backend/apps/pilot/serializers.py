@@ -9,6 +9,8 @@ from .models import (
     PilotPlan,
     PilotPlanEvent,
     PilotPlanReview,
+    PilotTask,
+    PilotTaskEvent,
 )
 
 
@@ -117,4 +119,53 @@ def serialize_pilot_plan_review(r: PilotPlanReview) -> dict[str, Any]:
         "note": r.note,
         "decidedBy": r.decided_by.username if r.decided_by_id else None,
         "createdAt": r.created_at,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 16H — Internal Pilot Execution Workbench serializers
+# ---------------------------------------------------------------------------
+
+
+def serialize_pilot_task(t: PilotTask, *, detail: bool = False) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "id": t.pk,
+        "pilotPlanId": t.pilot_plan_id,
+        "teamRole": t.team_role,
+        "title": t.title,
+        "status": t.status,
+        "priority": t.priority,
+        "sequence": t.sequence,
+        "assignedTo": t.assigned_to.username if t.assigned_to_id else None,
+        "assignedTeamLabel": t.assigned_team_label,
+        "blockedReason": t.blocked_reason,
+        "linkedOrderId": t.linked_order_id,
+        "linkedImportCampaignId": t.linked_import_campaign_id,
+        "linkedQueueItemId": t.linked_queue_item_id,
+        "providerActionsAllowed": t.provider_actions_allowed,
+        "providerActionsBlocked": t.provider_actions_blocked,
+        "createdBy": t.created_by.username if t.created_by_id else None,
+        "startedAt": t.started_at,
+        "completedAt": t.completed_at,
+        "createdAt": t.created_at,
+        "updatedAt": t.updated_at,
+    }
+    if detail:
+        out["description"] = t.description
+        out["checklist"] = list(t.checklist or [])
+        out["events"] = [
+            serialize_pilot_task_event(e)
+            for e in t.events.all().order_by("-created_at")[:50]
+        ]
+    return out
+
+
+def serialize_pilot_task_event(e: PilotTaskEvent) -> dict[str, Any]:
+    return {
+        "id": e.pk,
+        "taskId": e.task_id,
+        "eventType": e.event_type,
+        "note": e.note,
+        "actor": e.actor.username if e.actor_id else None,
+        "createdAt": e.created_at,
     }

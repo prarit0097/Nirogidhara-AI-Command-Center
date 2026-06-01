@@ -332,3 +332,160 @@ class PilotPlanReview(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"PilotPlanReview #{self.pk} ({self.decision})"
+
+
+# ---------------------------------------------------------------------------
+# Phase 16H — Internal Pilot Execution Workbench + Role-Based Task Queues
+# ---------------------------------------------------------------------------
+#
+# A `PilotTask` is an INTERNAL, DB-only unit of work generated from an approved
+# pilot plan and routed to a team queue (Calling / Confirmation / Dispatch /
+# Delivery-RTO / QA-Compliance / Finance). Task transitions move only this
+# record's state — they NEVER call a provider, never enqueue a provider Celery
+# job, and never mutate the Phase 15 safety shell. `provider_actions_allowed`
+# stays False and `provider_actions_blocked` stays True at every status.
+
+
+class PilotTeamRole(models.TextChoices):
+    """The internal team queues a pilot task can be routed to.
+
+    Mirrors `apps.directorops.TeamRoleAssignment.OperationalRole` (minus the
+    read-only viewer), kept as a local enum so the pilot app has no hard import
+    dependency on directorops.
+    """
+
+    CALLING = "calling_agent", "Calling"
+    CONFIRMATION = "confirmation_team", "Confirmation"
+    WAREHOUSE_DISPATCH = "warehouse_dispatch", "Dispatch / Warehouse"
+    DELIVERY_RTO = "delivery_rto", "Delivery / RTO"
+    QA_COMPLIANCE = "qa_compliance", "QA / Compliance"
+    FINANCE_ACCOUNTS = "finance_accounts", "Finance / Accounts"
+    DIRECTOR_ADMIN = "director_admin", "Director / Admin"
+
+
+class PilotTask(models.Model):
+    """One internal, role-routed execution task for a pilot plan."""
+
+    class Status(models.TextChoices):
+        TODO = "todo", "To do"
+        IN_PROGRESS = "in_progress", "In progress"
+        BLOCKED = "blocked", "Blocked"
+        DONE = "done", "Done"
+        SKIPPED = "skipped", "Skipped"
+        CANCELLED = "cancelled", "Cancelled"
+
+    class Priority(models.TextChoices):
+        LOW = "low", "Low"
+        NORMAL = "normal", "Normal"
+        HIGH = "high", "High"
+
+    pilot_plan = models.ForeignKey(
+        PilotPlan, on_delete=models.CASCADE, related_name="tasks",
+    )
+    team_role = models.CharField(
+        max_length=24, choices=PilotTeamRole.choices, db_index=True,
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16, choices=Status.choices,
+        default=Status.TODO, db_index=True,
+    )
+    priority = models.CharField(
+        max_length=8, choices=Priority.choices, default=Priority.NORMAL,
+    )
+    sequence = models.IntegerField(default=0)
+
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="pilot_tasks_assigned",
+    )
+    assigned_team_label = models.CharField(max_length=64, blank=True, default="")
+
+    # Internal execution checklist — list of {key, label, done} dicts. Stored as
+    # JSON so it can evolve without a migration. NEVER authorises a live action.
+    checklist = models.JSONField(default=list, blank=True)
+    blocked_reason = models.CharField(max_length=200, blank=True, default="")
+
+    # Optional references — observed/referenced, NEVER mutated by the task.
+    linked_order = models.ForeignKey(
+        "orders.Order", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    linked_import_campaign = models.ForeignKey(
+        "data_imports.ImportedCallingCampaign", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    linked_queue_item = models.ForeignKey(
+        "data_imports.ImportedCallQueueItem", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+
+    # Locked-safety contract: a task NEVER authorises a live provider action.
+    provider_actions_allowed = models.BooleanField(default=False)
+    provider_actions_attempted = models.BooleanField(default=False)
+    provider_actions_blocked = models.BooleanField(default=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="pilot_tasks_created",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="pilot_tasks_updated",
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sequence", "-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at"], name="pilot_tk_created_idx"),
+            models.Index(fields=["status"], name="pilot_tk_status_idx"),
+            models.Index(fields=["team_role"], name="pilot_tk_team_idx"),
+            models.Index(fields=["pilot_plan", "team_role"], name="pilot_tk_plan_team_idx"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"PilotTask #{self.pk} ({self.team_role}/{self.status})"
+
+
+class PilotTaskEvent(models.Model):
+    """An internal lifecycle event for a pilot task (no PII)."""
+
+    class EventType(models.TextChoices):
+        CREATED = "created", "Created"
+        ASSIGNED = "assigned", "Assigned"
+        STARTED = "started", "Started"
+        BLOCKED = "blocked", "Blocked"
+        UNBLOCKED = "unblocked", "Unblocked"
+        COMPLETED = "completed", "Completed"
+        SKIPPED = "skipped", "Skipped"
+        CANCELLED = "cancelled", "Cancelled"
+        CHECKLIST_UPDATED = "checklist_updated", "Checklist updated"
+        NOTE_ADDED = "note_added", "Note added"
+
+    task = models.ForeignKey(
+        PilotTask, on_delete=models.CASCADE, related_name="events",
+    )
+    event_type = models.CharField(
+        max_length=20, choices=EventType.choices, db_index=True,
+    )
+    note = models.TextField(blank=True, default="")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at"], name="pilot_te_created_idx"),
+            models.Index(fields=["event_type"], name="pilot_te_type_idx"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"PilotTaskEvent #{self.pk} ({self.event_type})"

@@ -7391,3 +7391,93 @@ export const PILOT_CONTROL_SUMMARY = {
   noSideEffect: true,
   generatedByProvider: false,
 };
+
+// ---------- Phase 16H — Internal Pilot Execution Workbench ----------
+
+export const PILOT_TASKS = {
+  items: [
+    {
+      id: 1,
+      pilotPlanId: 1,
+      teamRole: "calling_agent",
+      title: "Call assigned pilot contacts (internal log only)",
+      status: "in_progress",
+      priority: "normal",
+      sequence: 0,
+      assignedTo: "director",
+      assignedTeamLabel: "calling-pod-1",
+      blockedReason: "",
+      linkedOrderId: null,
+      linkedImportCampaignId: null,
+      linkedQueueItemId: null,
+      providerActionsAllowed: false,
+      providerActionsBlocked: true,
+      createdBy: "director",
+      startedAt: "2026-06-01T09:00:00Z",
+      completedAt: null,
+      createdAt: "2026-06-01T08:30:00Z",
+      updatedAt: "2026-06-01T09:00:00Z",
+      description: "",
+      checklist: [{ key: "step_1", label: "Call assigned pilot contacts", done: false }],
+      events: [
+        { id: 1, taskId: 1, eventType: "created", note: "Task generated from pilot plan.", actor: "director", createdAt: "2026-06-01T08:30:00Z" },
+        { id: 2, taskId: 1, eventType: "started", note: "", actor: "director", createdAt: "2026-06-01T09:00:00Z" },
+      ],
+    },
+    {
+      id: 2,
+      pilotPlanId: 1,
+      teamRole: "confirmation_team",
+      title: "Review punched pilot orders (internal)",
+      status: "todo",
+      priority: "normal",
+      sequence: 10,
+      assignedTo: null,
+      assignedTeamLabel: "",
+      blockedReason: "",
+      linkedOrderId: null,
+      linkedImportCampaignId: null,
+      linkedQueueItemId: null,
+      providerActionsAllowed: false,
+      providerActionsBlocked: true,
+      createdBy: "director",
+      startedAt: null,
+      completedAt: null,
+      createdAt: "2026-06-01T08:30:00Z",
+      updatedAt: "2026-06-01T08:30:00Z",
+      description: "",
+      checklist: [],
+      events: [],
+    },
+  ],
+  total: 2,
+};
+
+export const PILOT_EXECUTION_SUMMARY = {
+  planId: 1,
+  byTeam: [
+    { teamRole: "calling_agent", teamLabel: "Calling", total: 3, todo: 1, inProgress: 1, blocked: 0, done: 1, skipped: 0, cancelled: 0, progressPct: 33 },
+    { teamRole: "confirmation_team", teamLabel: "Confirmation", total: 3, todo: 3, inProgress: 0, blocked: 0, done: 0, skipped: 0, cancelled: 0, progressPct: 0 },
+  ],
+  overall: { total: 6, todo: 4, inProgress: 1, blocked: 0, done: 1, skipped: 0, cancelled: 0, progressPct: 17 },
+  teamPerformance: [
+    { teamRole: "calling_agent", teamLabel: "Calling", total: 3, todo: 1, inProgress: 1, blocked: 0, done: 1, skipped: 0, cancelled: 0, progressPct: 33 },
+  ],
+  blockedLiveActions: [
+    "Live Razorpay/PayU payment link / capture / refund — blocked (Director live gate required).",
+    "Live Delhivery AWB booking / shipment — blocked (Director live gate required).",
+    "WhatsApp / Meta Cloud send — blocked (broad automation OFF).",
+    "Vapi / voice calling — blocked (AI calling disabled).",
+    "AI/LLM provider calls — not invoked in any pilot path.",
+  ],
+  safety: {
+    aiPaused: true,
+    sandboxOn: false,
+    syncLive: true,
+    providerLiveActionsLocked: true,
+    phase15ShellFrozen: true,
+    phase: "16H",
+  },
+  noSideEffect: true,
+  generatedByProvider: false,
+};

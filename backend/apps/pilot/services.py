@@ -655,3 +655,323 @@ def get_pilot_summary() -> dict[str, Any]:
         "noSideEffect": True,
         "generatedByProvider": False,
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 16H — Internal Pilot Execution Workbench services
+# ---------------------------------------------------------------------------
+#
+# Generate role-based task queues from an approved pilot plan, track task
+# status, and report execution progress. **None of these functions calls a
+# provider, enqueues a provider Celery job, or mutates the Phase 15 safety
+# shell.** Every task keeps `provider_actions_allowed=False` and
+# `provider_actions_blocked=True` at every status. Linked Order / campaign /
+# queue-item rows are referenced/observed, never mutated.
+
+
+class PilotTaskStateError(Exception):
+    """Raised when an invalid pilot-task transition is requested."""
+
+
+# team_role -> default internal task titles (each a safe, internal-only step).
+_DEFAULT_TASK_TEMPLATES: dict[str, list[str]] = {
+    "calling_agent": [
+        "Call assigned pilot contacts (internal log only)",
+        "Record call outcomes (interested / callback / not interested)",
+        "Flag escalations (angry / medical emergency) for senior review",
+    ],
+    "confirmation_team": [
+        "Review punched pilot orders (internal)",
+        "Confirm order details with the contact (internal note only)",
+        "Move confirmed orders to the next internal stage",
+    ],
+    "warehouse_dispatch": [
+        "Prepare internal packing list for confirmed pilot orders",
+        "Mark orders ready-to-dispatch (internal only — NO live AWB)",
+    ],
+    "delivery_rto": [
+        "Track internal delivery status for dispatched pilot orders",
+        "Record delivery / RTO outcomes (internal only)",
+    ],
+    "qa_compliance": [
+        "Review call scripts against the Claim Vault",
+        "Spot-check pilot interactions for compliance (internal)",
+    ],
+    "finance_accounts": [
+        "Reconcile internal pilot order / payment records",
+        "Flag pending payments for review (NO live capture / refund)",
+    ],
+}
+
+# Default teams seeded for a full-lifecycle pilot, in execution order.
+_DEFAULT_TEAM_ORDER = [
+    "calling_agent", "confirmation_team", "warehouse_dispatch",
+    "delivery_rto", "qa_compliance", "finance_accounts",
+]
+
+# action -> (allowed from-statuses, target status, event_type)
+_PILOT_TASK_TRANSITIONS: dict[str, tuple[set[str], str, str]] = {
+    "start": ({"todo"}, "in_progress", "started"),
+    "block": ({"in_progress"}, "blocked", "blocked"),
+    "unblock": ({"blocked"}, "in_progress", "unblocked"),
+    "complete": ({"in_progress"}, "done", "completed"),
+    "skip": ({"todo", "in_progress", "blocked"}, "skipped", "skipped"),
+    "cancel": ({"todo", "in_progress", "blocked"}, "cancelled", "cancelled"),
+}
+
+PILOT_TASK_ACTIONS = tuple(_PILOT_TASK_TRANSITIONS.keys())
+
+
+def _task_actor(user):
+    return user if (user and getattr(user, "is_authenticated", False)) else None
+
+
+def _record_task_event(task, event_type: str, *, actor=None, note: str = "") -> None:
+    from .models import PilotTaskEvent
+
+    PilotTaskEvent.objects.create(
+        task=task,
+        event_type=event_type,
+        note=str(note or "")[:4000],
+        actor=_task_actor(actor),
+    )
+
+
+def _default_checklist(title: str) -> list[dict[str, Any]]:
+    return [{"key": "step_1", "label": title, "done": False}]
+
+
+def generate_tasks_for_plan(plan, *, teams=None, created_by=None) -> list:
+    """Seed role-based internal task queues for an approved/running plan.
+
+    Idempotent per team: a team that already has tasks is skipped. Never calls
+    a provider. Returns the list of newly-created PilotTask rows.
+    """
+    from .models import PilotTask, PilotTeamRole
+
+    valid_roles = {c for c, _ in PilotTeamRole.choices}
+    requested = [t for t in (teams or _DEFAULT_TEAM_ORDER) if t in valid_roles]
+    actor = _task_actor(created_by)
+    created: list = []
+
+    for team_index, team_role in enumerate(requested):
+        if plan.tasks.filter(team_role=team_role).exists():
+            continue  # idempotent — don't duplicate a team's queue
+        titles = _DEFAULT_TASK_TEMPLATES.get(team_role, [])
+        for i, title in enumerate(titles):
+            task = PilotTask.objects.create(
+                pilot_plan=plan,
+                team_role=team_role,
+                title=title[:200],
+                sequence=team_index * 10 + i,
+                checklist=_default_checklist(title),
+                provider_actions_allowed=False,
+                provider_actions_attempted=False,
+                provider_actions_blocked=True,
+                created_by=actor,
+                updated_by=actor,
+            )
+            _record_task_event(task, "created", actor=actor, note="Task generated from pilot plan.")
+            created.append(task)
+    return created
+
+
+def create_pilot_task(plan, *, team_role: str, title: str, created_by=None, **fields):
+    """Create a single internal task. No provider call."""
+    from .models import PilotTask
+
+    actor = _task_actor(created_by)
+    task = PilotTask.objects.create(
+        pilot_plan=plan,
+        team_role=team_role,
+        title=str(title or "").strip()[:200],
+        description=str(fields.get("description", "") or ""),
+        priority=fields.get("priority") or PilotTask.Priority.NORMAL,
+        sequence=int(fields.get("sequence") or 0),
+        assigned_team_label=str(fields.get("assigned_team_label", "") or "")[:64],
+        checklist=fields.get("checklist") or _default_checklist(title),
+        linked_order_id=fields.get("linked_order_id"),
+        linked_import_campaign_id=fields.get("linked_import_campaign_id"),
+        linked_queue_item_id=fields.get("linked_queue_item_id"),
+        provider_actions_allowed=False,
+        provider_actions_attempted=False,
+        provider_actions_blocked=True,
+        created_by=actor,
+        updated_by=actor,
+    )
+    _record_task_event(task, "created", actor=actor, note="Task created (internal).")
+    return task
+
+
+_TASK_EDITABLE = {
+    "title", "description", "priority", "sequence", "team_role",
+    "assigned_team_label",
+}
+
+
+def update_pilot_task(task, *, updated_by=None, **fields):
+    """Update editable config; re-asserts the provider-lock contract."""
+    for key, value in fields.items():
+        if key not in _TASK_EDITABLE:
+            continue
+        if key == "title":
+            value = str(value or "").strip()[:200]
+        elif key == "assigned_team_label":
+            value = str(value or "")[:64]
+        elif key == "sequence":
+            value = int(value or 0)
+        setattr(task, key, value)
+    task.provider_actions_allowed = False
+    task.provider_actions_attempted = False
+    task.provider_actions_blocked = True
+    if _task_actor(updated_by):
+        task.updated_by = updated_by
+    task.save()
+    return task
+
+
+def assign_pilot_task(task, *, assignee=None, team_label: str = "", actor=None):
+    """Assign a task to a user and/or a team label (no status change)."""
+    if assignee is not None:
+        task.assigned_to = assignee if getattr(assignee, "pk", None) else None
+    if team_label:
+        task.assigned_team_label = str(team_label)[:64]
+    if _task_actor(actor):
+        task.updated_by = actor
+    task.provider_actions_allowed = False
+    task.provider_actions_blocked = True
+    task.save(update_fields=[
+        "assigned_to", "assigned_team_label", "updated_by",
+        "provider_actions_allowed", "provider_actions_blocked", "updated_at",
+    ])
+    label = task.assigned_to.username if task.assigned_to_id else (task.assigned_team_label or "team")
+    _record_task_event(task, "assigned", actor=actor, note=f"Assigned to {label}")
+    return task
+
+
+def transition_pilot_task(task, action: str, *, actor=None, note: str = ""):
+    """Move a pilot task's internal status. No provider call, ever."""
+    from django.utils import timezone
+
+    rule = _PILOT_TASK_TRANSITIONS.get(action)
+    if rule is None:
+        raise PilotTaskStateError(f"unknown_action:{action}")
+    from_states, target, event_type = rule
+    if task.status not in from_states:
+        raise PilotTaskStateError(f"invalid_transition:{task.status}->{target} via {action}")
+    if action == "block" and not str(note or "").strip():
+        raise PilotTaskStateError("block_requires_reason")
+
+    task.status = target
+    if action == "start" and task.started_at is None:
+        task.started_at = timezone.now()
+    if action == "complete":
+        task.completed_at = timezone.now()
+    if action == "block":
+        task.blocked_reason = str(note or "")[:200]
+    if action == "unblock":
+        task.blocked_reason = ""
+    task.provider_actions_allowed = False
+    task.provider_actions_attempted = False
+    task.provider_actions_blocked = True
+    if _task_actor(actor):
+        task.updated_by = actor
+    task.save()
+    _record_task_event(task, event_type, actor=actor, note=note)
+    return task
+
+
+def update_task_checklist(task, *, checklist, actor=None):
+    """Replace the internal checklist (list of {key,label,done})."""
+    clean: list[dict[str, Any]] = []
+    if isinstance(checklist, list):
+        for item in checklist:
+            if not isinstance(item, dict):
+                continue
+            clean.append({
+                "key": str(item.get("key", ""))[:64],
+                "label": str(item.get("label", ""))[:200],
+                "done": bool(item.get("done", False)),
+            })
+    task.checklist = clean
+    task.provider_actions_allowed = False
+    task.provider_actions_blocked = True
+    task.save(update_fields=[
+        "checklist", "provider_actions_allowed", "provider_actions_blocked", "updated_at",
+    ])
+    _record_task_event(task, "checklist_updated", actor=actor)
+    return task
+
+
+_DONE_STATUSES = {"done", "skipped", "cancelled"}
+
+
+def _team_breakdown(qs) -> dict[str, Any]:
+    from django.db.models import Count
+
+    from .models import PilotTask
+
+    counts = {s: 0 for s, _ in PilotTask.Status.choices}
+    for row in qs.values("status").annotate(n=Count("id")):
+        counts[row["status"]] = row["n"]
+    total = sum(counts.values())
+    done = counts.get("done", 0)
+    closed = sum(counts.get(s, 0) for s in _DONE_STATUSES)
+    progress = round((closed / total) * 100) if total else 0
+    return {
+        "total": total,
+        "todo": counts.get("todo", 0),
+        "inProgress": counts.get("in_progress", 0),
+        "blocked": counts.get("blocked", 0),
+        "done": done,
+        "skipped": counts.get("skipped", 0),
+        "cancelled": counts.get("cancelled", 0),
+        "progressPct": progress,
+    }
+
+
+def get_execution_summary(plan=None) -> dict[str, Any]:
+    """Execution progress dashboard: per-team breakdown + overall + safety."""
+    from .models import PilotTask, PilotTeamRole
+
+    qs = PilotTask.objects.all()
+    if plan is not None:
+        qs = qs.filter(pilot_plan=plan)
+
+    by_team = []
+    for role, label in PilotTeamRole.choices:
+        team_qs = qs.filter(team_role=role)
+        if not team_qs.exists():
+            continue
+        breakdown = _team_breakdown(team_qs)
+        breakdown["teamRole"] = role
+        breakdown["teamLabel"] = label
+        by_team.append(breakdown)
+
+    overall = _team_breakdown(qs)
+    readiness = build_readiness()
+    return {
+        "planId": plan.pk if plan is not None else None,
+        "byTeam": by_team,
+        "overall": overall,
+        "blockedLiveActions": readiness["blockedLiveActions"],
+        "safety": readiness["safety"],
+        "noSideEffect": True,
+        "generatedByProvider": False,
+    }
+
+
+def get_team_performance() -> list[dict[str, Any]]:
+    """Aggregate task performance per team across all pilots (read-only)."""
+    from .models import PilotTask, PilotTeamRole
+
+    out = []
+    for role, label in PilotTeamRole.choices:
+        team_qs = PilotTask.objects.filter(team_role=role)
+        if not team_qs.exists():
+            continue
+        breakdown = _team_breakdown(team_qs)
+        breakdown["teamRole"] = role
+        breakdown["teamLabel"] = label
+        out.append(breakdown)
+    return out

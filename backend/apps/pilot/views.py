@@ -20,6 +20,8 @@ from .models import (
     PilotDryRun,
     PilotPlan,
     PilotPlanReview,
+    PilotTask,
+    PilotTeamRole,
 )
 from .permissions import AuthenticatedReadAdminWrite
 from .serializers import (
@@ -28,12 +30,16 @@ from .serializers import (
     serialize_pilot_event,
     serialize_pilot_plan,
     serialize_pilot_plan_review,
+    serialize_pilot_task,
+    serialize_pilot_task_event,
 )
 
 _VALID_SCENARIOS = {c for c, _ in PilotDryRun.ScenarioType.choices}
 _VALID_DECISIONS = {c for c, _ in PilotDecision.Decision.choices}
 _VALID_PILOT_TYPES = {c for c, _ in PilotPlan.PilotType.choices}
 _VALID_PLAN_DECISIONS = {c for c, _ in PilotPlanReview.Decision.choices}
+_VALID_TEAM_ROLES = {c for c, _ in PilotTeamRole.choices}
+_VALID_TASK_STATUSES = {c for c, _ in PilotTask.Status.choices}
 
 
 def _parse_int(raw, default: int, *, lo: int = 1, hi: int = 200) -> int:
@@ -474,3 +480,256 @@ class PilotControlSummaryView(APIView):
 
     def get(self, request):
         return Response(services.get_pilot_summary())
+
+
+# ===========================================================================
+# Phase 16H — Internal Pilot Execution Workbench + Role-Based Task Queues
+# ===========================================================================
+
+
+def _user_ref(user_id):
+    """Resolve an optional assignee user id; else None."""
+    if not user_id:
+        return None
+    try:
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.filter(pk=int(user_id)).first()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+class PilotPlanTasksView(APIView):
+    """``GET`` list / ``POST`` generate role-based task queues for a plan."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request, pk: int):
+        plan = PilotPlan.objects.filter(pk=pk).first()
+        if plan is None:
+            return Response({"detail": "not_found"}, status=404)
+        qs = plan.tasks.all()
+        team = request.query_params.get("team")
+        if team:
+            qs = qs.filter(team_role=team)
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return Response({"items": [serialize_pilot_task(t) for t in qs]})
+
+    def post(self, request, pk: int):
+        """Generate the default role-based task queues for this plan."""
+        plan = PilotPlan.objects.filter(pk=pk).first()
+        if plan is None:
+            return Response({"detail": "not_found"}, status=404)
+        if plan.status not in {
+            PilotPlan.Status.APPROVED_INTERNAL, PilotPlan.Status.RUNNING_INTERNAL,
+        }:
+            return Response(
+                {
+                    "detail": "plan_not_ready_for_execution",
+                    "reason": "Plan must be approved_internal or running_internal.",
+                    "status": plan.status,
+                },
+                status=409,
+            )
+        data = request.data if isinstance(request.data, dict) else {}
+        teams = data.get("teams")
+        if teams is not None and not isinstance(teams, list):
+            teams = None
+        created = services.generate_tasks_for_plan(
+            plan, teams=teams, created_by=request.user
+        )
+        write_event(
+            kind="pilot.tasks.generated",
+            text=f"Pilot plan #{plan.pk}: generated {len(created)} internal task(s)",
+            payload={
+                "pilot_plan_id": plan.pk,
+                "created_count": len(created),
+                "provider_actions_allowed": False,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        return Response(
+            {"items": [serialize_pilot_task(t) for t in created], "created": len(created)},
+            status=201,
+        )
+
+
+class PilotTasksView(APIView):
+    """``GET`` global task list / ``POST`` create a single task (admin)."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        qs = PilotTask.objects.all()
+        plan_id = request.query_params.get("plan")
+        if plan_id:
+            qs = qs.filter(pilot_plan_id=plan_id)
+        team = request.query_params.get("team")
+        if team:
+            qs = qs.filter(team_role=team)
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        limit = _parse_int(request.query_params.get("limit"), 100, lo=1, hi=200)
+        return Response({
+            "items": [serialize_pilot_task(t) for t in qs[:limit]],
+            "total": qs.count(),
+        })
+
+    def post(self, request):
+        data = request.data if isinstance(request.data, dict) else {}
+        plan = PilotPlan.objects.filter(pk=data.get("pilotPlanId")).first()
+        if plan is None:
+            return Response({"detail": "plan_not_found", "field": "pilotPlanId"}, status=400)
+        team_role = str(data.get("teamRole", "") or "")
+        if team_role not in _VALID_TEAM_ROLES:
+            return Response(
+                {"detail": "invalid_team_role", "field": "teamRole", "allowed": sorted(_VALID_TEAM_ROLES)},
+                status=400,
+            )
+        title = str(data.get("title", "") or "").strip()
+        if not title:
+            return Response({"detail": "title_required", "field": "title"}, status=400)
+        task = services.create_pilot_task(
+            plan, team_role=team_role, title=title, created_by=request.user,
+            description=str(data.get("description", "") or ""),
+            priority=data.get("priority"),
+            sequence=data.get("sequence") or 0,
+            assigned_team_label=str(data.get("assignedTeamLabel", "") or ""),
+        )
+        write_event(
+            kind="pilot.task.created",
+            text=f"Pilot task #{task.pk} ({task.team_role}) created",
+            payload={"pilot_plan_id": plan.pk, "task_id": task.pk, "team_role": task.team_role,
+                     "provider_actions_allowed": False, "by": getattr(request.user, "username", "")},
+            user=request.user,
+        )
+        return Response(serialize_pilot_task(task, detail=True), status=201)
+
+
+class PilotTaskDetailView(APIView):
+    """``GET`` detail (+events) / ``PATCH`` update a task (admin)."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request, pk: int):
+        task = PilotTask.objects.filter(pk=pk).first()
+        if task is None:
+            return Response({"detail": "not_found"}, status=404)
+        return Response(serialize_pilot_task(task, detail=True))
+
+    def patch(self, request, pk: int):
+        task = PilotTask.objects.filter(pk=pk).first()
+        if task is None:
+            return Response({"detail": "not_found"}, status=404)
+        data = request.data if isinstance(request.data, dict) else {}
+        if "teamRole" in data and data["teamRole"] not in _VALID_TEAM_ROLES:
+            return Response({"detail": "invalid_team_role", "field": "teamRole"}, status=400)
+        fields: dict[str, Any] = {}
+        mapping = {
+            "title": "title", "description": "description", "priority": "priority",
+            "sequence": "sequence", "teamRole": "team_role",
+            "assignedTeamLabel": "assigned_team_label",
+        }
+        for in_key, field in mapping.items():
+            if in_key in data:
+                fields[field] = data[in_key]
+        if "checklist" in data:
+            services.update_task_checklist(task, checklist=data["checklist"], actor=request.user)
+        if fields:
+            services.update_pilot_task(task, updated_by=request.user, **fields)
+        task.refresh_from_db()
+        return Response(serialize_pilot_task(task, detail=True))
+
+
+class PilotTaskTransitionView(APIView):
+    """``POST`` an internal task status transition (admin). No provider call."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def post(self, request, pk: int):
+        task = PilotTask.objects.filter(pk=pk).first()
+        if task is None:
+            return Response({"detail": "not_found"}, status=404)
+        data = request.data if isinstance(request.data, dict) else {}
+        action = str(data.get("action", "") or "")
+        if action not in services.PILOT_TASK_ACTIONS:
+            return Response(
+                {"detail": "invalid_action", "field": "action", "allowed": sorted(services.PILOT_TASK_ACTIONS)},
+                status=400,
+            )
+        try:
+            services.transition_pilot_task(
+                task, action, actor=request.user, note=str(data.get("note", "") or "")
+            )
+        except services.PilotTaskStateError as exc:
+            reason = str(exc)
+            status_code = 400 if reason == "block_requires_reason" else 409
+            return Response({"detail": "invalid_transition", "reason": reason}, status=status_code)
+        write_event(
+            kind="pilot.task.transitioned",
+            text=f"Pilot task #{task.pk} → {task.status} ({action})",
+            payload={"task_id": task.pk, "action": action, "status": task.status,
+                     "provider_actions_allowed": False, "by": getattr(request.user, "username", "")},
+            user=request.user,
+        )
+        task.refresh_from_db()
+        return Response(serialize_pilot_task(task, detail=True))
+
+
+class PilotTaskAssignView(APIView):
+    """``POST`` assign a task to a user and/or team label (admin)."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def post(self, request, pk: int):
+        task = PilotTask.objects.filter(pk=pk).first()
+        if task is None:
+            return Response({"detail": "not_found"}, status=404)
+        data = request.data if isinstance(request.data, dict) else {}
+        assignee = _user_ref(data.get("assigneeId"))
+        team_label = str(data.get("teamLabel", "") or "")
+        services.assign_pilot_task(task, assignee=assignee, team_label=team_label, actor=request.user)
+        write_event(
+            kind="pilot.task.assigned",
+            text=f"Pilot task #{task.pk} assigned",
+            payload={"task_id": task.pk, "provider_actions_allowed": False,
+                     "by": getattr(request.user, "username", "")},
+            user=request.user,
+        )
+        task.refresh_from_db()
+        return Response(serialize_pilot_task(task, detail=True))
+
+
+class PilotTaskEventsView(APIView):
+    """``GET`` the internal event log for a pilot task."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request, pk: int):
+        task = PilotTask.objects.filter(pk=pk).first()
+        if task is None:
+            return Response({"detail": "not_found"}, status=404)
+        limit = _parse_int(request.query_params.get("limit"), 100, lo=1, hi=200)
+        events = task.events.all().order_by("-created_at")[:limit]
+        return Response({"items": [serialize_pilot_task_event(e) for e in events]})
+
+
+class PilotExecutionSummaryView(APIView):
+    """``GET /api/v1/pilot/execution/summary/`` — execution progress dashboard."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        plan = None
+        plan_id = request.query_params.get("plan")
+        if plan_id:
+            plan = PilotPlan.objects.filter(pk=plan_id).first()
+            if plan is None:
+                return Response({"detail": "plan_not_found"}, status=404)
+        summary = services.get_execution_summary(plan)
+        summary["teamPerformance"] = services.get_team_performance()
+        return Response(summary)

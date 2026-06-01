@@ -8,12 +8,19 @@ from .views import (
     PilotDryRunDetailView,
     PilotDryRunReviewView,
     PilotDryRunsView,
+    PilotExecutionSummaryView,
     PilotPlanDetailView,
     PilotPlanEventsView,
     PilotPlanReviewView,
     PilotPlansView,
+    PilotPlanTasksView,
     PilotPlanTransitionView,
     PilotReadinessView,
+    PilotTaskAssignView,
+    PilotTaskDetailView,
+    PilotTaskEventsView,
+    PilotTasksView,
+    PilotTaskTransitionView,
 )
 
 app_name = "pilot"
@@ -39,4 +46,12 @@ urlpatterns = [
     ),
     path("plans/<int:pk>/review/", PilotPlanReviewView.as_view(), name="plan-review"),
     path("plans/<int:pk>/events/", PilotPlanEventsView.as_view(), name="plan-events"),
+    # Phase 16H — internal pilot execution workbench + role-based task queues
+    path("execution/summary/", PilotExecutionSummaryView.as_view(), name="execution-summary"),
+    path("plans/<int:pk>/tasks/", PilotPlanTasksView.as_view(), name="plan-tasks"),
+    path("tasks/", PilotTasksView.as_view(), name="tasks"),
+    path("tasks/<int:pk>/", PilotTaskDetailView.as_view(), name="task-detail"),
+    path("tasks/<int:pk>/transition/", PilotTaskTransitionView.as_view(), name="task-transition"),
+    path("tasks/<int:pk>/assign/", PilotTaskAssignView.as_view(), name="task-assign"),
+    path("tasks/<int:pk>/events/", PilotTaskEventsView.as_view(), name="task-events"),
 ]

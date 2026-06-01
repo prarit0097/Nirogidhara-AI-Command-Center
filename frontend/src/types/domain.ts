@@ -7981,3 +7981,125 @@ export interface ReviewPilotPlanPayload {
   decision: PilotPlanReviewDecision;
   note?: string;
 }
+
+// ---------- Phase 16H — Internal Pilot Execution Workbench ----------
+
+export type PilotTeamRole =
+  | "calling_agent"
+  | "confirmation_team"
+  | "warehouse_dispatch"
+  | "delivery_rto"
+  | "qa_compliance"
+  | "finance_accounts"
+  | "director_admin";
+
+export type PilotTaskStatus =
+  | "todo"
+  | "in_progress"
+  | "blocked"
+  | "done"
+  | "skipped"
+  | "cancelled";
+
+export type PilotTaskAction =
+  | "start"
+  | "block"
+  | "unblock"
+  | "complete"
+  | "skip"
+  | "cancel";
+
+export interface PilotTaskChecklistItem {
+  key: string;
+  label: string;
+  done: boolean;
+}
+
+export interface PilotTaskEvent {
+  id: number;
+  taskId: number;
+  eventType: string;
+  note: string;
+  actor: string | null;
+  createdAt: string;
+}
+
+export interface PilotTask {
+  id: number;
+  pilotPlanId: number;
+  teamRole: PilotTeamRole;
+  title: string;
+  status: PilotTaskStatus;
+  priority: "low" | "normal" | "high";
+  sequence: number;
+  assignedTo: string | null;
+  assignedTeamLabel: string;
+  blockedReason: string;
+  linkedOrderId: string | null;
+  linkedImportCampaignId: number | null;
+  linkedQueueItemId: number | null;
+  providerActionsAllowed: boolean;
+  providerActionsBlocked: boolean;
+  createdBy: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  description?: string;
+  checklist?: PilotTaskChecklistItem[];
+  events?: PilotTaskEvent[];
+}
+
+export interface PilotTasksResponse {
+  items: PilotTask[];
+  total?: number;
+}
+
+export interface PilotExecutionTeamBreakdown {
+  teamRole: PilotTeamRole;
+  teamLabel: string;
+  total: number;
+  todo: number;
+  inProgress: number;
+  blocked: number;
+  done: number;
+  skipped: number;
+  cancelled: number;
+  progressPct: number;
+}
+
+export interface PilotExecutionSummary {
+  planId: number | null;
+  byTeam: PilotExecutionTeamBreakdown[];
+  overall: Omit<PilotExecutionTeamBreakdown, "teamRole" | "teamLabel">;
+  teamPerformance?: PilotExecutionTeamBreakdown[];
+  blockedLiveActions: string[];
+  safety: PilotSafetySnapshot;
+  noSideEffect: boolean;
+  generatedByProvider: false;
+}
+
+export interface GeneratePilotTasksResponse {
+  items: PilotTask[];
+  created: number;
+}
+
+export interface CreatePilotTaskPayload {
+  pilotPlanId: number;
+  teamRole: PilotTeamRole;
+  title: string;
+  description?: string;
+  priority?: "low" | "normal" | "high";
+  sequence?: number;
+  assignedTeamLabel?: string;
+}
+
+export interface TransitionPilotTaskPayload {
+  action: PilotTaskAction;
+  note?: string;
+}
+
+export interface AssignPilotTaskPayload {
+  assigneeId?: number;
+  teamLabel?: string;
+}

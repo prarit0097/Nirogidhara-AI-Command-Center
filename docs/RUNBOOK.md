@@ -7,7 +7,9 @@
 > SSL, commands, troubleshooting). Do not run the local-dev steps below
 > on the VPS.
 
-> **Current operational baseline: Phase 16G — Internal Pilot Control Center / Pilot Execution Dashboard, PRODUCTION VERIFIED on the VPS and CLOSED (commit `38e8dc8`).** Phase 16G extends the existing `apps.pilot` app with a Director/Admin pilot-management surface (`/operations/pilot-control`) — create / configure / internally approve / start / pause / resume / complete / cancel / review a controlled pilot plan, all DB-only, with `provider_actions_allowed` locked false at every state including `running_internal`. **VPS proof:** browser validation of `/operations/pilot-control` (title Internal Pilot Control Center; sidebar Pilot Control; safety shell AI Paused / Sandbox OFF / Sync Live / Live Provider Actions Locked; status counters + Create pilot plan form + Pilot plans panel rendered; safety copy confirms internal control only / no live provider automation; no live side effect); `makemigrations --check` → "No changes detected"; `manage.py check` → "0 issues"; `pytest tests/test_phase16g_pilot_control.py --tb=no -q` → 19 passed `[100%]`; `GET /api/healthz/` → `{"status": "ok", "service": "nirogidhara-backend"}`. It ADDS migration `pilot.0002_phase16g_pilot_control`, so a fresh VPS deploy requires `migrate` (already applied on the VPS). See the **Internal Pilot Control Center (Phase 16G)** section below. Phase 16F (`967ed3d`) is the previous verified baseline.
+> **Current operational baseline: Phase 16H — Internal Pilot Execution Workbench + Role-Based Task Queues, IMPLEMENTED + PUSHED (VPS production verification pending).** Phase 16H extends the existing `apps.pilot` app with a Director/Admin execution workbench (`/operations/pilot-workbench`) — convert an approved internal pilot plan into role-based internal task queues (Calling / Confirmation / Dispatch-Warehouse / Delivery-RTO / QA-Compliance / Finance), track task status (`todo → in_progress → done`, plus `blocked`/`unblock`/`skip`/`cancel`), and view per-team execution progress, all DB-only with `provider_actions_allowed` locked false at every task status including `in_progress`/`done`. It ADDS migration `pilot.0003_phase16h_pilot_execution`, so the VPS deploy requires `migrate`. See the **Internal Pilot Execution Workbench (Phase 16H)** section below. Phase 16G (`38e8dc8`) is the previous verified baseline.
+>
+> **Phase 16G — Internal Pilot Control Center / Pilot Execution Dashboard, PRODUCTION VERIFIED on the VPS and CLOSED (commit `38e8dc8`).** Phase 16G extends the existing `apps.pilot` app with a Director/Admin pilot-management surface (`/operations/pilot-control`) — create / configure / internally approve / start / pause / resume / complete / cancel / review a controlled pilot plan, all DB-only, with `provider_actions_allowed` locked false at every state including `running_internal`. **VPS proof:** browser validation of `/operations/pilot-control` (title Internal Pilot Control Center; sidebar Pilot Control; safety shell AI Paused / Sandbox OFF / Sync Live / Live Provider Actions Locked; status counters + Create pilot plan form + Pilot plans panel rendered; safety copy confirms internal control only / no live provider automation; no live side effect); `makemigrations --check` → "No changes detected"; `manage.py check` → "0 issues"; `pytest tests/test_phase16g_pilot_control.py --tb=no -q` → 19 passed `[100%]`; `GET /api/healthz/` → `{"status": "ok", "service": "nirogidhara-backend"}`. It ADDS migration `pilot.0002_phase16g_pilot_control`, so a fresh VPS deploy requires `migrate` (already applied on the VPS). See the **Internal Pilot Control Center (Phase 16G)** section below. Phase 16F (`967ed3d`) is the previous verified baseline.
 >
 > **Phase 16F — Controlled Internal Pilot Readiness + End-to-End Dry Run, PRODUCTION VERIFIED on the VPS and CLOSED (commit `967ed3d`).** Phase 16E (Payment / Logistics Integration Hardening, `36395f6`), Phase 16D (Uploaded Customer Data Campaigns, `c0be74a`), Phase 16C (Director Daily Briefing + Team Roles, `687ef41`), and Phase 16B (Customer Lifecycle UI Backbone, `00c3295`) are earlier verified baselines. **VPS proof:** browser validation of `/operations/pilot-readiness` (Controlled Internal Pilot Readiness title; safety shell AI Paused / Sandbox OFF / Sync Live / Live Provider Actions Locked; gate matrix Lead/Customer PASS, Calling outcome PASS, Order creation PASS, Confirmation PASS, Payment readiness BLOCKED, Shipment readiness BLOCKED, Vapi/AI calling BLOCKED, Safety state PASS; internal dry-run ran → toast "Internal dry-run recorded: blocked." + recent list 1 BLOCKED run [correct]; sign-off checklist visible; no live side effect); `migrate --noinput` → "No migrations to apply."; regression suite + targeted `tests/test_phase16f_pilot_readiness.py` → `[100%]`; `GET /api/healthz/` → `{"status": "ok", "service": "nirogidhara-backend"}`. Observed gate-matrix warning "WhatsApp live automation blocked — WARNING" / "WhatsApp automation appears enabled — review before pilot." is a risk to review before any future pilot, NOT a blocker. The canonical operational source of truth is [`nd.md`](../nd.md) head-of-file. Phase 16B final verified rules still hold: phone-only Lead duplicate detection (HTTP 409; same email + different phone is ALLOWED, only the same normalized phone is BLOCKED — email is metadata) and Orders responsive layout (no horizontal scroll). The Phase 15 safety shell remains FROZEN at code commit `eefd8b3` and unchanged through Phase 16A / 16B / 16C / 16D / 16E / 16F / 16G. **(Historical close-state: Phase 16G was next at 16F close — it has since shipped and is PRODUCTION VERIFIED + CLOSED at `38e8dc8`; the current next planned work is Phase 16H — NOT started; requires a separate written Director directive before any code is touched.) No live provider activation is approved.** No provider call / WhatsApp send / Celery enqueue / live automation is approved. See the **Internal Pilot Control Center (Phase 16G)**, **Controlled Internal Pilot Readiness (Phase 16F)**, **Payment & Logistics Integration Hardening (Phase 16E)**, **Uploaded Data Campaigns + Calling Lifecycle (Phase 16D)**, **Director Daily Briefing + Team Roles (Phase 16C)** and **Phase 16B Production Verification** sections below.
 
@@ -473,6 +475,59 @@ A small compact pill on the Topbar (right of the Org badge, before the Live indi
 | `Safety: State unavailable` | grey | All three fetches failed. Check `docker compose -f docker-compose.prod.yml logs --since 60s backend`. |
 
 Hover the pill for the long-form breakdown (`Kill Switch: Paused/Running. Sandbox: ON/OFF. Briefing: READY/STALE/CRIT/MISSING. Read-only summary.`). Screen readers get the same string via `aria-label`.
+
+### Internal Pilot Execution Workbench (Phase 16H — IMPLEMENTED + PUSHED, VPS verification pending)
+
+Phase 16H adds the internal execution layer above the Phase 16G control center: a Director/Admin **Pilot Execution Workbench** that converts an approved internal pilot plan into **role-based internal task queues** and tracks per-team progress. It **extends the existing `apps.pilot` app** (2 additive models `PilotTask` / `PilotTaskEvent`; migration `pilot.0003_phase16h_pilot_execution`) + 7 endpoints under `/api/v1/pilot/` + the page `/operations/pilot-workbench`. **Every Phase 16H path is internal/DB-only — it NEVER sends WhatsApp/Meta Cloud, places a Vapi call, calls Razorpay/PayU live or creates a payment link, books a live Delhivery AWB, calls any AI/LLM provider, enqueues a business Celery job, or mutates `RuntimeKillSwitch` / `SandboxState`** (asserted by a defensive test). A task's `provider_actions_allowed` stays `false` and `provider_actions_blocked` stays `true` at every status — **including `in_progress` and `done`** — because live execution is a future, separately-gated phase.
+
+**Open the Pilot Workbench — `/operations/pilot-workbench` (sidebar → Operations, ListChecks icon):**
+- A no-side-effect safety banner: "Internal control only — no live provider automation."
+- Safety chips: AI Paused / Sandbox OFF / Sync Live / Live Provider Actions Locked.
+- A plan selector + a **Generate role-based task queues** button, an **Execution progress** dashboard (per-team progress bars + overall %), the **Role-based task queues** with per-task internal-only transition buttons, and a blocked-live-actions panel.
+
+**How to generate role-based task queues:** select an `approved_internal` / `running_internal` pilot plan, click **Generate role-based task queues** → `POST /api/v1/pilot/plans/<id>/tasks/`. The backend seeds default internal tasks per team from a safe template table; it refuses with HTTP 409 if the plan is not approved/running, and is idempotent per team (a team that already has tasks is skipped).
+
+**How to track / progress tasks (internally):** each task card shows internal-only action buttons that call `POST /api/v1/pilot/tasks/<id>/transition/` with the matching `action`:
+- **Start** (`start`): `todo → in_progress`
+- **Block** (`block`): `in_progress → blocked` (requires a reason — else HTTP 400 `block_requires_reason`)
+- **Unblock** (`unblock`): `blocked → in_progress`
+- **Complete** (`complete`): `in_progress → done`
+- **Skip** (`skip`) / **Cancel** (`cancel`): from any non-terminal status
+An out-of-order transition returns HTTP 409; an unknown action returns 400. Assign a task to a user/team via `POST /api/v1/pilot/tasks/<id>/assign/`; replace the internal checklist via `PATCH /api/v1/pilot/tasks/<id>/`. None of these calls trigger a provider.
+
+**How to read the execution progress dashboard:** `GET /api/v1/pilot/execution/summary/[?plan=<id>]` returns a per-team breakdown (todo / in_progress / blocked / done / skipped / cancelled + progress %), overall progress, team performance (all-pilots aggregate), the blocked-live-actions list, and the safety snapshot.
+
+**How to confirm no provider side effects:** the entire flow hits only `/api/v1/pilot/` endpoints (DB-only). The defensive test `tests/test_phase16h_pilot_execution.py` patches `queue_template_message` / `send_freeform_text_message` / `trigger_call_for_lead` / `razorpay_client.create_payment_link` / `delhivery_client.create_awb` and asserts all stay `assert_not_called` across the full generate → assign → start → complete flow, with sandbox + kill-switch state unchanged, and a completed task still reporting `provider_actions_blocked=True`.
+
+**Permissions:** generate / create / update / transition / assign require director / admin / superuser; list / detail / summary / events reads require auth (read-only viewers may view). Non-admin mutation → 403.
+
+**Deploy (Phase 16H — ADDS migration `pilot.0003_phase16h_pilot_execution`, so `migrate` is required):**
+```bash
+cd /opt/nirogidhara-command
+docker compose -f docker-compose.prod.yml exec -T postgres sh -lc 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backups/phase16h_pre_deploy_$(date +%F_%H%M%S).sql
+git pull origin main
+git log --oneline -5
+docker compose -f docker-compose.prod.yml up -d --build
+sleep 20
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml exec backend python manage.py makemigrations --check --dry-run   # → No changes detected
+docker compose -f docker-compose.prod.yml exec backend python manage.py migrate                            # → applies pilot.0003_phase16h_pilot_execution
+docker compose -f docker-compose.prod.yml exec backend python manage.py check
+docker compose -f docker-compose.prod.yml exec backend python -m pytest tests/test_phase16h_pilot_execution.py --tb=no -q
+docker compose -f docker-compose.prod.yml restart nginx
+curl -sS https://ai.nirogidhara.com/api/healthz/
+```
+
+**Validation checklist (Phase 16H):**
+1. Hard refresh; safety shell unchanged (AI Paused / Sandbox OFF / Sync Live).
+2. `/operations/pilot-workbench` loads; safety banner + execution dashboard render.
+3. Select an approved pilot plan; click Generate role-based task queues; tasks appear by team.
+4. Start → Block (with reason) → Unblock → Complete a task; progress bars update.
+5. No live action button exists anywhere (only internal task-status actions).
+6. No WhatsApp / payment / courier / Vapi / AI-provider side effect observed.
+7. Phase 16G / 16F / 16E / 16D / 16C / 16B pages still work (Pilot Control, Pilot Readiness, Payment & Logistics, Data Imports, Imported Campaigns, Director Briefing, Team Roles, Orders Pipeline).
+
+**Rollback (Phase 16H):** additive (extends `apps.pilot`). For code rollback, `git revert` the Phase 16H commit + redeploy; the `pilot.0003_phase16h_pilot_execution` migration creates two new tables that are unused after revert — leave them in place (no FK from existing tables points into them) or drop manually; no existing table is altered. Prefer a forward-fix migration over manually dropping production tables. For a docs-only finalization commit, rollback is `git revert` of that docs commit (no runtime/migration impact).
 
 ### Internal Pilot Control Center (Phase 16G — PRODUCTION VERIFIED on the VPS and CLOSED at `38e8dc8`)
 
