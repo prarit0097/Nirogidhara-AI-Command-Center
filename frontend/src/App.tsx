@@ -38,6 +38,7 @@ import DataImportsPage from "./pages/DataImports";
 import ImportedCampaignsPage from "./pages/ImportedCampaigns";
 import PaymentLogisticsPage from "./pages/PaymentLogistics";
 import PilotReadinessPage from "./pages/PilotReadiness";
+import PilotControlPage from "./pages/PilotControl";
 import Login from "@/pages/Login";
 import RequireAuth from "@/components/RequireAuth";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -129,6 +130,10 @@ const App = () => (
             <Route
               path="/operations/pilot-readiness"
               element={<PilotReadinessPage />}
+            />
+            <Route
+              path="/operations/pilot-control"
+              element={<PilotControlPage />}
             />
             <Route path="/team-roles" element={<TeamRolesPage />} />
             <Route path="/settings" element={<SettingsPage />} />

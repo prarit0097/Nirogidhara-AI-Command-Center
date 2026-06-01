@@ -7823,3 +7823,161 @@ export interface ReviewPilotDryRunPayload {
   note?: string;
   signoffChecklist?: Record<string, boolean>;
 }
+
+// ---------- Phase 16G — Internal Pilot Control Center ----------
+
+export type PilotPlanType =
+  | "imported_campaign"
+  | "fresh_leads"
+  | "existing_orders"
+  | "payment_logistics"
+  | "full_lifecycle";
+
+export type PilotPlanStatus =
+  | "draft"
+  | "ready_for_review"
+  | "approved_internal"
+  | "running_internal"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+export type PilotPlanAction =
+  | "mark_ready"
+  | "approve_internal"
+  | "start_internal"
+  | "pause"
+  | "resume_internal"
+  | "complete"
+  | "cancel";
+
+export type PilotPlanReviewDecision =
+  | "reviewed"
+  | "approved_internal"
+  | "deferred"
+  | "blocked";
+
+export interface PilotPlanEvent {
+  id: number;
+  pilotPlanId: number;
+  eventType: string;
+  note: string;
+  actor: string | null;
+  createdAt: string;
+}
+
+export interface PilotPlanReview {
+  id: number;
+  pilotPlanId: number;
+  decision: PilotPlanReviewDecision;
+  note: string;
+  decidedBy: string | null;
+  createdAt: string;
+}
+
+export interface PilotPlanMetrics {
+  campaign:
+    | {
+        name: string;
+        totalContacts: number;
+        pending: number;
+        completed: number;
+        interested: number;
+        notInterested: number;
+        callback: number;
+        wrongNumber: number;
+        ordersCreated: number;
+      }
+    | null;
+  dataset:
+    | {
+        name: string;
+        totalRows: number;
+        validRows: number;
+        duplicateRows: number;
+        invalidRows: number;
+      }
+    | null;
+  linkedOrderId: string | null;
+  linkedDryRunId: number | null;
+  dryRunStatus: string | null;
+  paymentReadinessStatus: string | null;
+  shipmentReadinessStatus: string | null;
+  blockedLiveActions: string[];
+}
+
+export interface PilotPlan {
+  id: number;
+  name: string;
+  pilotType: PilotPlanType;
+  status: PilotPlanStatus;
+  ownerUser: string | null;
+  ownerTeam: string;
+  problemCategory: string;
+  productCategory: string;
+  objective: string;
+  riskNote: string;
+  allowedListNote: string;
+  maxContacts: number;
+  plannedStartAt: string | null;
+  plannedEndAt: string | null;
+  linkedImportCampaignId: number | null;
+  linkedDatasetId: number | null;
+  linkedOrderId: string | null;
+  linkedDryRunId: number | null;
+  safetyAcknowledged: boolean;
+  providerActionsAllowed: boolean;
+  providerActionsAttempted: boolean;
+  providerActionsBlocked: boolean;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  events?: PilotPlanEvent[];
+  reviews?: PilotPlanReview[];
+  gateStatus?: PilotGateResult[];
+  metrics?: PilotPlanMetrics;
+}
+
+export interface PilotPlansResponse {
+  items: PilotPlan[];
+  total: number;
+}
+
+export interface PilotControlSummary {
+  statusCounts: Record<string, number>;
+  totalPlans: number;
+  activePlans: number;
+  safety: PilotSafetySnapshot;
+  gates: PilotGateResult[];
+  blockedLiveActions: string[];
+  noSideEffect: boolean;
+  generatedByProvider: false;
+}
+
+export interface CreatePilotPlanPayload {
+  name: string;
+  pilotType: PilotPlanType;
+  ownerTeam?: string;
+  problemCategory?: string;
+  productCategory?: string;
+  objective?: string;
+  riskNote?: string;
+  allowedListNote?: string;
+  maxContacts?: number;
+  safetyAcknowledged?: boolean;
+  linkedImportCampaignId?: number;
+  linkedDatasetId?: number;
+  linkedOrderId?: string;
+  linkedDryRunId?: number;
+}
+
+export interface TransitionPilotPlanPayload {
+  action: PilotPlanAction;
+  note?: string;
+}
+
+export interface ReviewPilotPlanPayload {
+  decision: PilotPlanReviewDecision;
+  note?: string;
+}

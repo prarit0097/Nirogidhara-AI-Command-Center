@@ -15,12 +15,25 @@ from rest_framework.views import APIView
 from apps.audit.signals import write_event
 
 from . import services
-from .models import PilotDecision, PilotDryRun
+from .models import (
+    PilotDecision,
+    PilotDryRun,
+    PilotPlan,
+    PilotPlanReview,
+)
 from .permissions import AuthenticatedReadAdminWrite
-from .serializers import serialize_decision, serialize_dry_run
+from .serializers import (
+    serialize_decision,
+    serialize_dry_run,
+    serialize_pilot_event,
+    serialize_pilot_plan,
+    serialize_pilot_plan_review,
+)
 
 _VALID_SCENARIOS = {c for c, _ in PilotDryRun.ScenarioType.choices}
 _VALID_DECISIONS = {c for c, _ in PilotDecision.Decision.choices}
+_VALID_PILOT_TYPES = {c for c, _ in PilotPlan.PilotType.choices}
+_VALID_PLAN_DECISIONS = {c for c, _ in PilotPlanReview.Decision.choices}
 
 
 def _parse_int(raw, default: int, *, lo: int = 1, hi: int = 200) -> int:
@@ -201,3 +214,263 @@ class PilotDryRunReviewView(APIView):
         )
 
         return Response(serialize_decision(dec), status=201)
+
+
+# ===========================================================================
+# Phase 16G — Internal Pilot Control Center
+# ===========================================================================
+
+
+def _ref_int(app_label: str, model_name: str, value):
+    if value in (None, ""):
+        return None
+    try:
+        from django.apps import apps
+
+        pk = int(value)
+        model = apps.get_model(app_label, model_name)
+        return pk if model.objects.filter(pk=pk).exists() else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _ref_str(app_label: str, model_name: str, value):
+    if not value:
+        return None
+    try:
+        from django.apps import apps
+
+        model = apps.get_model(app_label, model_name)
+        return value if model.objects.filter(pk=value).exists() else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+class PilotPlansView(APIView):
+    """``GET`` list pilot plans / ``POST`` create a pilot plan (admin)."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        qs = PilotPlan.objects.all().order_by("-created_at")
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        pilot_type = request.query_params.get("type")
+        if pilot_type:
+            qs = qs.filter(pilot_type=pilot_type)
+        limit = _parse_int(request.query_params.get("limit"), 50, lo=1, hi=200)
+        items = [serialize_pilot_plan(p) for p in qs[:limit]]
+        return Response({"items": items, "total": qs.count()})
+
+    def post(self, request):
+        data = request.data if isinstance(request.data, dict) else {}
+        name = str(data.get("name", "") or "").strip()
+        if not name:
+            return Response({"detail": "name_required", "field": "name"}, status=400)
+        pilot_type = str(data.get("pilotType", "") or PilotPlan.PilotType.FULL_LIFECYCLE)
+        if pilot_type not in _VALID_PILOT_TYPES:
+            return Response(
+                {
+                    "detail": "invalid_pilot_type",
+                    "field": "pilotType",
+                    "allowed": sorted(_VALID_PILOT_TYPES),
+                },
+                status=400,
+            )
+
+        plan = services.create_pilot_plan(
+            name=name,
+            pilot_type=pilot_type,
+            created_by=request.user,
+            owner_team=str(data.get("ownerTeam", "") or ""),
+            problem_category=str(data.get("problemCategory", "") or ""),
+            product_category=str(data.get("productCategory", "") or ""),
+            objective=str(data.get("objective", "") or ""),
+            risk_note=str(data.get("riskNote", "") or ""),
+            allowed_list_note=str(data.get("allowedListNote", "") or ""),
+            max_contacts=data.get("maxContacts") or 0,
+            safety_acknowledged=bool(data.get("safetyAcknowledged", False)),
+            linked_import_campaign_id=_ref_int(
+                "data_imports", "ImportedCallingCampaign",
+                data.get("linkedImportCampaignId"),
+            ),
+            linked_dataset_id=_ref_int(
+                "data_imports", "ImportedDataset", data.get("linkedDatasetId"),
+            ),
+            linked_order_id=_ref_str("orders", "Order", data.get("linkedOrderId")),
+            linked_dry_run_id=_ref_int("pilot", "PilotDryRun", data.get("linkedDryRunId")),
+        )
+
+        write_event(
+            kind="pilot.plan.created",
+            text=f"Pilot plan #{plan.pk} '{plan.name}' ({plan.pilot_type}) created",
+            payload={
+                "pilot_plan_id": plan.pk,
+                "pilot_type": plan.pilot_type,
+                "status": plan.status,
+                "provider_actions_allowed": False,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        return Response(serialize_pilot_plan(plan, detail=True), status=201)
+
+
+class PilotPlanDetailView(APIView):
+    """``GET`` detail (+events/reviews/metrics/gate) / ``PATCH`` update (admin)."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request, pk: int):
+        plan = PilotPlan.objects.filter(pk=pk).first()
+        if plan is None:
+            return Response({"detail": "not_found"}, status=404)
+        out = serialize_pilot_plan(plan, detail=True)
+        out["gateStatus"] = services.get_pilot_gate_status(plan)
+        out["metrics"] = services.get_pilot_metrics(plan)
+        return Response(out)
+
+    def patch(self, request, pk: int):
+        plan = PilotPlan.objects.filter(pk=pk).first()
+        if plan is None:
+            return Response({"detail": "not_found"}, status=404)
+        data = request.data if isinstance(request.data, dict) else {}
+        fields: dict[str, Any] = {}
+        mapping = {
+            "name": "name", "pilotType": "pilot_type", "ownerTeam": "owner_team",
+            "problemCategory": "problem_category", "productCategory": "product_category",
+            "objective": "objective", "riskNote": "risk_note",
+            "allowedListNote": "allowed_list_note", "maxContacts": "max_contacts",
+            "safetyAcknowledged": "safety_acknowledged",
+        }
+        for in_key, field in mapping.items():
+            if in_key in data:
+                fields[field] = data[in_key]
+        if "pilotType" in data and data["pilotType"] not in _VALID_PILOT_TYPES:
+            return Response({"detail": "invalid_pilot_type", "field": "pilotType"}, status=400)
+        if "linkedImportCampaignId" in data:
+            fields["linked_import_campaign_id"] = _ref_int(
+                "data_imports", "ImportedCallingCampaign", data.get("linkedImportCampaignId")
+            )
+        if "linkedDatasetId" in data:
+            fields["linked_dataset_id"] = _ref_int(
+                "data_imports", "ImportedDataset", data.get("linkedDatasetId")
+            )
+        if "linkedOrderId" in data:
+            fields["linked_order_id"] = _ref_str("orders", "Order", data.get("linkedOrderId"))
+        if "linkedDryRunId" in data:
+            fields["linked_dry_run_id"] = _ref_int("pilot", "PilotDryRun", data.get("linkedDryRunId"))
+
+        services.update_pilot_plan(plan, updated_by=request.user, **fields)
+        plan.refresh_from_db()
+        return Response(serialize_pilot_plan(plan, detail=True))
+
+
+class PilotPlanTransitionView(APIView):
+    """``POST`` an internal status transition (admin). No provider call."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def post(self, request, pk: int):
+        plan = PilotPlan.objects.filter(pk=pk).first()
+        if plan is None:
+            return Response({"detail": "not_found"}, status=404)
+        data = request.data if isinstance(request.data, dict) else {}
+        action = str(data.get("action", "") or "")
+        if action not in services.PILOT_ACTIONS:
+            return Response(
+                {
+                    "detail": "invalid_action",
+                    "field": "action",
+                    "allowed": sorted(services.PILOT_ACTIONS),
+                },
+                status=400,
+            )
+        try:
+            services.transition_pilot_plan(
+                plan, action, actor=request.user, note=str(data.get("note", "") or "")
+            )
+        except services.PilotPlanStateError as exc:
+            return Response(
+                {"detail": "invalid_transition", "reason": str(exc)}, status=409
+            )
+
+        write_event(
+            kind="pilot.plan.transitioned",
+            text=f"Pilot plan #{plan.pk} → {plan.status} ({action})",
+            payload={
+                "pilot_plan_id": plan.pk,
+                "action": action,
+                "status": plan.status,
+                "provider_actions_allowed": False,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        plan.refresh_from_db()
+        out = serialize_pilot_plan(plan, detail=True)
+        out["gateStatus"] = services.get_pilot_gate_status(plan)
+        return Response(out)
+
+
+class PilotPlanReviewView(APIView):
+    """``POST`` record an internal Director review (admin). Record-only."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def post(self, request, pk: int):
+        plan = PilotPlan.objects.filter(pk=pk).first()
+        if plan is None:
+            return Response({"detail": "not_found"}, status=404)
+        data = request.data if isinstance(request.data, dict) else {}
+        decision = str(data.get("decision", "") or PilotPlanReview.Decision.REVIEWED)
+        if decision not in _VALID_PLAN_DECISIONS:
+            return Response(
+                {
+                    "detail": "invalid_decision",
+                    "field": "decision",
+                    "allowed": sorted(_VALID_PLAN_DECISIONS),
+                },
+                status=400,
+            )
+        review = services.record_pilot_review(
+            plan,
+            decision=decision,
+            note=str(data.get("note", "") or ""),
+            decided_by=request.user,
+        )
+        write_event(
+            kind="pilot.plan.reviewed",
+            text=f"Pilot plan #{plan.pk} reviewed: {decision}",
+            payload={
+                "pilot_plan_id": plan.pk,
+                "decision": decision,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        return Response(serialize_pilot_plan_review(review), status=201)
+
+
+class PilotPlanEventsView(APIView):
+    """``GET`` the internal event log for a pilot plan."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request, pk: int):
+        plan = PilotPlan.objects.filter(pk=pk).first()
+        if plan is None:
+            return Response({"detail": "not_found"}, status=404)
+        limit = _parse_int(request.query_params.get("limit"), 100, lo=1, hi=200)
+        events = plan.events.all().order_by("-created_at")[:limit]
+        return Response({"items": [serialize_pilot_event(e) for e in events]})
+
+
+class PilotControlSummaryView(APIView):
+    """``GET /api/v1/pilot/control/summary/`` — control-center summary."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        return Response(services.get_pilot_summary())

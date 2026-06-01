@@ -8,12 +8,41 @@ ndmemory.txt — Nirogidhara AI Command Center · Master Handoff
 This file is the Phase 14B Doc Sync v3 frozen snapshot. Since this file
 was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C /
-16D / 16E / 16F.
+16D / 16E / 16F / 16G.
 
-Current operational baseline is **Phase 16F — Controlled Internal Pilot
-Readiness + End-to-End Dry Run, PRODUCTION VERIFIED on the VPS and CLOSED at
-commit 967ed3d** — new internal-only app apps.pilot (2 models
-PilotDryRun / PilotDecision; migration pilot.0001_initial; pure CreateModel).
+Current operational baseline is **Phase 16G — Internal Pilot Control Center /
+Pilot Execution Dashboard, IMPLEMENTED + PUSHED to origin/main (VPS production
+verification pending)** — extends the existing internal-only app apps.pilot
+(3 new models PilotPlan / PilotPlanEvent / PilotPlanReview; migration
+pilot.0002_phase16g_pilot_control; pure CreateModel) + 6 endpoints under
+/api/v1/pilot/ (control/summary, plans list/create, plan detail/update, plan
+transition, plan review, plan events) + page /operations/pilot-control. A
+Director/Admin pilot-management + observability layer: create / configure /
+internally approve / start / pause / resume / complete / cancel / review a
+controlled pilot plan via the internal status flow draft → ready_for_review →
+approved_internal → running_internal → paused → completed | cancelled. A
+transition changes ONLY the internal record — provider_actions_allowed stays
+False and provider_actions_blocked stays True at every state INCLUDING
+running_internal (live execution is a future separately-gated phase). Reuses the
+Phase 16F build_readiness() gate matrix + Phase 16E payment/logistics readiness
+for the per-plan gate checklist; linked imported campaign / dataset / order /
+dry-run rows are referenced/observed, never mutated. NO WhatsApp / Meta Cloud /
+Vapi / AI / Razorpay / PayU / Delhivery live action, NO payment link, NO AWB,
+NO Celery enqueue, NO RuntimeKillSwitch / SandboxState change (asserted by a
+defensive test across the full lifecycle). Permissions: create / update /
+transition / review = director/admin/superuser; reads = auth. Verification:
+backend 19 Phase 16G + 16 16F + 13 16E + 22 16D + 17 16C + 30 16B = 117 passed;
+makemigrations --check + manage.py check clean; frontend 347/347 (+11); lint 0;
+build green. Docs say implemented/pushed; VPS production verification (deploy +
+browser validation) is pending. Phase 16G ADDS migration
+pilot.0002_phase16g_pilot_control → VPS deploy requires migrate. Next planned
+work: Phase 16H — NOT started; requires a separate written Director directive.
+Commit: feat: phase 16g pilot control center.
+
+Phase 16F — Controlled Internal Pilot Readiness + End-to-End Dry Run is
+PRODUCTION VERIFIED on the VPS and CLOSED at commit 967ed3d — internal-only app
+apps.pilot (2 models PilotDryRun / PilotDecision; migration pilot.0001_initial;
+pure CreateModel).
 Four endpoints under /api/v1/pilot/ (readiness, dry-runs list/create,
 dry-run detail, dry-run review) + page /operations/pilot-readiness. The dry-run
 engine is DB-only and REUSES the Phase 16E readiness services +
@@ -39,8 +68,8 @@ no live side effect). Observed warning (risk, NOT a blocker): gate matrix showed
 remain locked behind a future Director live gate. Terminal: migrate --noinput →
 "No migrations to apply."; regression suite + targeted tests/test_phase16f_pilot_readiness.py
 → [100%]; GET /api/healthz/ → {"status": "ok", "service": "nirogidhara-backend"}.
-Phase 16F is CLOSED. Next planned work: Phase 16G — NOT started; requires a
-separate written Director directive.
+Phase 16F is CLOSED and is the previous verified baseline (Phase 16G has since
+shipped + been pushed, VPS verification pending).
 
 Phase 16E — Payment / Logistics Integration Hardening (PRODUCTION VERIFIED on
 the VPS + CLOSED, commit 36395f6; new internal-only app apps.integration_hardening
@@ -58,11 +87,11 @@ Read these for current truth:
   - nd.md                                  (canonical source of truth)
   - docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md (Phase 15 safety-shell freeze
                                             rule + smoke checklist + rollback)
-  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16F" headers)
+  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16G" headers)
   - docs/RUNBOOK.md                        (operator playbooks, includes
-                                            Phase 16F Pilot Readiness)
+                                            Phase 16G Pilot Control)
 
-Next planned work: Phase 16G (NOT started; separate Director directive
+Next planned work: Phase 16H (NOT started; separate Director directive
 required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".

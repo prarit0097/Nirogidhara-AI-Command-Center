@@ -3057,6 +3057,79 @@ export const api = {
         createdAt: new Date().toISOString(),
       }),
     ),
+
+  // ---------- Phase 16G — Internal Pilot Control Center ----------
+  // Internal control records only. No provider call, no live payment/courier/
+  // WhatsApp/Vapi/AI. Transitions change only the internal pilot-plan state.
+
+  getPilotControlSummary: () =>
+    safeFetch<import("@/types/domain").PilotControlSummary>(
+      "/v1/pilot/control/summary/",
+      () => M.PILOT_CONTROL_SUMMARY as import("@/types/domain").PilotControlSummary,
+    ),
+
+  getPilotPlans: (limit: number = 50) =>
+    safeFetch<import("@/types/domain").PilotPlansResponse>(
+      `/v1/pilot/plans/?limit=${limit}`,
+      () => M.PILOT_PLANS as import("@/types/domain").PilotPlansResponse,
+    ),
+
+  getPilotPlan: (id: number) =>
+    safeFetch<import("@/types/domain").PilotPlan>(
+      `/v1/pilot/plans/${id}/`,
+      () => (M.PILOT_PLANS as import("@/types/domain").PilotPlansResponse).items[0],
+    ),
+
+  createPilotPlan: (payload: import("@/types/domain").CreatePilotPlanPayload) =>
+    safeMutate<import("@/types/domain").PilotPlan>(
+      "/v1/pilot/plans/",
+      "POST",
+      payload,
+      () => ({
+        ...(M.PILOT_PLANS as import("@/types/domain").PilotPlansResponse).items[0],
+        id: Date.now(),
+        name: payload.name,
+        pilotType: payload.pilotType,
+        status: "draft",
+        providerActionsAllowed: false,
+        providerActionsBlocked: true,
+      }),
+    ),
+
+  transitionPilotPlan: (
+    planId: number,
+    payload: import("@/types/domain").TransitionPilotPlanPayload,
+  ) =>
+    safeMutate<import("@/types/domain").PilotPlan>(
+      `/v1/pilot/plans/${planId}/transition/`,
+      "POST",
+      payload,
+      () => (M.PILOT_PLANS as import("@/types/domain").PilotPlansResponse).items[0],
+    ),
+
+  reviewPilotPlan: (
+    planId: number,
+    payload: import("@/types/domain").ReviewPilotPlanPayload,
+  ) =>
+    safeMutate<import("@/types/domain").PilotPlanReview>(
+      `/v1/pilot/plans/${planId}/review/`,
+      "POST",
+      payload,
+      () => ({
+        id: Date.now(),
+        pilotPlanId: planId,
+        decision: payload.decision,
+        note: payload.note ?? "",
+        decidedBy: "you",
+        createdAt: new Date().toISOString(),
+      }),
+    ),
+
+  getPilotPlanEvents: (planId: number) =>
+    safeFetch<{ items: import("@/types/domain").PilotPlanEvent[] }>(
+      `/v1/pilot/plans/${planId}/events/`,
+      () => ({ items: [] }),
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

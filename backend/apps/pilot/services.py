@@ -364,3 +364,294 @@ def evaluate_dry_run(dry_run) -> dict[str, Any]:
         "blockedGateCount": len(blocked),
         "warningGateCount": len(warnings),
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 16G — Internal Pilot Control Center services
+# ---------------------------------------------------------------------------
+#
+# These functions create / update / transition pilot-plan records and derive
+# read-only gate status + metrics. **None of them call a provider, enqueue a
+# provider Celery job, or mutate the Phase 15 safety shell.** A plan's
+# `provider_actions_allowed` stays False and `provider_actions_blocked` stays
+# True at every state — including running_internal — because live execution is
+# a future, separately-gated phase.
+
+
+class PilotPlanStateError(Exception):
+    """Raised when an invalid pilot-plan transition is requested."""
+
+
+# action -> (allowed from-states, target status, event_type)
+_PILOT_TRANSITIONS: dict[str, tuple[set[str], str, str]] = {
+    "mark_ready": ({"draft"}, "ready_for_review", "ready_for_review"),
+    "approve_internal": ({"ready_for_review"}, "approved_internal", "approved_internal"),
+    "start_internal": ({"approved_internal"}, "running_internal", "started_internal"),
+    "pause": ({"running_internal"}, "paused", "paused"),
+    "resume_internal": ({"paused"}, "running_internal", "resumed_internal"),
+    "complete": ({"running_internal", "paused"}, "completed", "completed"),
+    "cancel": (
+        {"draft", "ready_for_review", "approved_internal", "running_internal", "paused"},
+        "cancelled",
+        "cancelled",
+    ),
+}
+
+PILOT_ACTIONS = tuple(_PILOT_TRANSITIONS.keys())
+
+
+def _record_event(plan, event_type: str, *, actor=None, note: str = "") -> None:
+    from .models import PilotPlanEvent
+
+    PilotPlanEvent.objects.create(
+        pilot_plan=plan,
+        event_type=event_type,
+        note=str(note or "")[:4000],
+        actor=actor if (actor and getattr(actor, "is_authenticated", False)) else None,
+        safety_snapshot=safety_snapshot(),
+    )
+
+
+def create_pilot_plan(*, name: str, pilot_type: str, created_by=None, **fields) -> Any:
+    """Create a draft pilot plan + a 'created' event. No provider call."""
+    from .models import PilotPlan
+
+    actor = created_by if (created_by and getattr(created_by, "is_authenticated", False)) else None
+    plan = PilotPlan.objects.create(
+        name=str(name or "").strip()[:160],
+        pilot_type=pilot_type,
+        status=PilotPlan.Status.DRAFT,
+        owner_user=fields.get("owner_user"),
+        owner_team=str(fields.get("owner_team", "") or "")[:64],
+        problem_category=str(fields.get("problem_category", "") or "")[:120],
+        product_category=str(fields.get("product_category", "") or "")[:120],
+        objective=str(fields.get("objective", "") or ""),
+        risk_note=str(fields.get("risk_note", "") or ""),
+        allowed_list_note=str(fields.get("allowed_list_note", "") or ""),
+        max_contacts=int(fields.get("max_contacts") or 0),
+        planned_start_at=fields.get("planned_start_at"),
+        planned_end_at=fields.get("planned_end_at"),
+        linked_import_campaign_id=fields.get("linked_import_campaign_id"),
+        linked_dataset_id=fields.get("linked_dataset_id"),
+        linked_order_id=fields.get("linked_order_id"),
+        linked_dry_run_id=fields.get("linked_dry_run_id"),
+        safety_acknowledged=bool(fields.get("safety_acknowledged", False)),
+        provider_actions_allowed=False,
+        provider_actions_attempted=False,
+        provider_actions_blocked=True,
+        created_by=actor,
+        updated_by=actor,
+    )
+    _record_event(plan, "created", actor=actor, note="Pilot plan created (internal).")
+    return plan
+
+
+_EDITABLE_FIELDS = {
+    "name", "pilot_type", "owner_team", "problem_category", "product_category",
+    "objective", "risk_note", "allowed_list_note", "max_contacts",
+    "planned_start_at", "planned_end_at", "owner_user", "safety_acknowledged",
+    "linked_import_campaign_id", "linked_dataset_id", "linked_order_id",
+    "linked_dry_run_id",
+}
+
+
+def update_pilot_plan(plan, *, updated_by=None, **fields) -> Any:
+    """Update editable config fields. Never flips the provider-lock contract."""
+    changed: list[str] = []
+    for key, value in fields.items():
+        if key not in _EDITABLE_FIELDS:
+            continue
+        if key == "name":
+            value = str(value or "").strip()[:160]
+        elif key in {"owner_team"}:
+            value = str(value or "")[:64]
+        elif key in {"problem_category", "product_category"}:
+            value = str(value or "")[:120]
+        elif key == "max_contacts":
+            value = int(value or 0)
+        elif key == "safety_acknowledged":
+            value = bool(value)
+        setattr(plan, key, value)
+        changed.append(key)
+    # The provider-lock contract is immutable here.
+    plan.provider_actions_allowed = False
+    plan.provider_actions_attempted = False
+    plan.provider_actions_blocked = True
+    if updated_by and getattr(updated_by, "is_authenticated", False):
+        plan.updated_by = updated_by
+    plan.save()
+    return plan
+
+
+def transition_pilot_plan(plan, action: str, *, actor=None, note: str = "") -> Any:
+    """Move a pilot plan's internal status. No provider call, ever."""
+    from .models import PilotPlan
+
+    rule = _PILOT_TRANSITIONS.get(action)
+    if rule is None:
+        raise PilotPlanStateError(f"unknown_action:{action}")
+    from_states, target, event_type = rule
+    if plan.status not in from_states:
+        raise PilotPlanStateError(
+            f"invalid_transition:{plan.status}->{target} via {action}"
+        )
+
+    plan.status = target
+    # Locked contract holds at every status, including running_internal.
+    plan.provider_actions_allowed = False
+    plan.provider_actions_attempted = False
+    plan.provider_actions_blocked = True
+    if actor and getattr(actor, "is_authenticated", False):
+        plan.updated_by = actor
+    plan.save(
+        update_fields=[
+            "status", "provider_actions_allowed", "provider_actions_attempted",
+            "provider_actions_blocked", "updated_by", "updated_at",
+        ]
+    )
+    _record_event(plan, event_type, actor=actor, note=note)
+    return plan
+
+
+def record_pilot_review(plan, *, decision: str, note: str = "", decided_by=None) -> Any:
+    """Record an internal Director review (record-only; no status change)."""
+    from .models import PilotPlanReview
+
+    actor = decided_by if (decided_by and getattr(decided_by, "is_authenticated", False)) else None
+    review = PilotPlanReview.objects.create(
+        pilot_plan=plan,
+        decision=decision,
+        note=str(note or "")[:4000],
+        decided_by=actor,
+    )
+    _record_event(plan, "note_added", actor=actor, note=f"Review: {decision}")
+    return review
+
+
+def get_pilot_gate_status(plan) -> list[dict[str, Any]]:
+    """Derive the internal pilot gate checklist (read-only)."""
+    readiness = build_readiness()
+    gate_by_key = {g["key"]: g for g in readiness["gates"]}
+
+    def _gate_status(key: str) -> str:
+        return gate_by_key.get(key, {}).get("status", WARNING)
+
+    has_director_approval = (
+        plan.status in {"approved_internal", "running_internal", "paused", "completed"}
+        or plan.reviews.filter(decision="approved_internal").exists()
+    )
+    dry_run_ok = bool(
+        plan.linked_dry_run_id
+        and getattr(plan.linked_dry_run, "status", None) in {"passed", "warning"}
+    )
+    data_selected = bool(
+        plan.linked_import_campaign_id or plan.linked_dataset_id or plan.linked_order_id
+    )
+
+    def _item(key: str, label: str, ok: bool, detail: str) -> dict[str, Any]:
+        return {"key": key, "label": label, "status": PASS if ok else WARNING, "detail": detail}
+
+    payment_blocked = _gate_status("payment_readiness") == BLOCKED
+    shipment_blocked = _gate_status("shipment_readiness") == BLOCKED
+    whatsapp_blocked = _gate_status("whatsapp_automation") == BLOCKED
+    vapi_blocked = _gate_status("vapi_ai_calling") == BLOCKED
+
+    return [
+        _item("team_assigned", "Team assigned",
+              bool(plan.owner_user_id or plan.owner_team),
+              "Owner user or team set." if (plan.owner_user_id or plan.owner_team) else "No owner assigned."),
+        _item("data_selected", "Data selected", data_selected,
+              "Campaign / dataset / order linked." if data_selected else "No data source linked."),
+        _item("call_script_approved", "Call script approved",
+              bool(plan.objective), "Objective recorded." if plan.objective else "No objective recorded."),
+        _item("claim_vault_reviewed", "Claim Vault reviewed",
+              _gate_status("claim_vault_seed") == PASS,
+              readiness["claimVault"]["message"]),
+        # These four must be BLOCKED (locked) for a safe pilot — "ok" = locked.
+        {"key": "payment_live_gate_blocked", "label": "Payment live gate blocked",
+         "status": PASS if payment_blocked else WARNING,
+         "detail": "Live payment blocked (Director live gate required)." if payment_blocked
+         else "Payment gate not in safe blocked state — review."},
+        {"key": "shipment_live_gate_blocked", "label": "Shipment live gate blocked",
+         "status": PASS if shipment_blocked else WARNING,
+         "detail": "Live shipment blocked (Director live gate required)." if shipment_blocked
+         else "Shipment gate not in safe blocked state — review."},
+        {"key": "whatsapp_blocked", "label": "WhatsApp blocked",
+         "status": PASS if whatsapp_blocked else WARNING,
+         "detail": "WhatsApp live automation blocked." if whatsapp_blocked
+         else "WhatsApp automation appears enabled — review before pilot."},
+        {"key": "vapi_ai_blocked", "label": "Vapi / AI calling blocked",
+         "status": PASS if vapi_blocked else WARNING,
+         "detail": "Vapi / AI calling blocked." if vapi_blocked
+         else "AI calling appears enabled — review before pilot."},
+        _item("dry_run_completed", "Dry-run completed", dry_run_ok,
+              "Linked dry-run passed/warning." if dry_run_ok else "No completed dry-run linked."),
+        _item("director_internal_approval", "Director internal approval recorded",
+              has_director_approval,
+              "Internal approval recorded." if has_director_approval else "Not yet approved internally."),
+    ]
+
+
+def get_pilot_metrics(plan) -> dict[str, Any]:
+    """Read-only internal metrics for a pilot plan. No provider call."""
+    readiness = build_readiness()
+    campaign = plan.linked_import_campaign
+    dataset = plan.linked_dataset
+
+    campaign_metrics = None
+    if campaign is not None:
+        campaign_metrics = {
+            "name": campaign.name,
+            "totalContacts": campaign.total_contacts,
+            "pending": campaign.pending_count,
+            "completed": campaign.completed_count,
+            "interested": campaign.interested_count,
+            "notInterested": campaign.not_interested_count,
+            "callback": campaign.callback_count,
+            "wrongNumber": campaign.wrong_number_count,
+            "ordersCreated": campaign.order_created_count,
+        }
+
+    dataset_metrics = None
+    if dataset is not None:
+        dataset_metrics = {
+            "name": dataset.name,
+            "totalRows": dataset.total_rows,
+            "validRows": dataset.valid_rows,
+            "duplicateRows": dataset.duplicate_rows,
+            "invalidRows": dataset.invalid_rows,
+        }
+
+    return {
+        "campaign": campaign_metrics,
+        "dataset": dataset_metrics,
+        "linkedOrderId": plan.linked_order_id,
+        "linkedDryRunId": plan.linked_dry_run_id,
+        "dryRunStatus": getattr(plan.linked_dry_run, "status", None) if plan.linked_dry_run_id else None,
+        "paymentReadinessStatus": readiness["paymentReadiness"].get("status"),
+        "shipmentReadinessStatus": readiness["logisticsReadiness"].get("status"),
+        "blockedLiveActions": readiness["blockedLiveActions"],
+    }
+
+
+def get_pilot_summary() -> dict[str, Any]:
+    """Control-center summary: status counts + gate snapshot + safety."""
+    from django.db.models import Count
+
+    from .models import PilotPlan
+
+    counts = {choice: 0 for choice, _ in PilotPlan.Status.choices}
+    for row in PilotPlan.objects.values("status").annotate(n=Count("id")):
+        counts[row["status"]] = row["n"]
+
+    readiness = build_readiness()
+    return {
+        "statusCounts": counts,
+        "totalPlans": sum(counts.values()),
+        "activePlans": counts.get("running_internal", 0) + counts.get("paused", 0),
+        "safety": readiness["safety"],
+        "gates": readiness["gates"],
+        "blockedLiveActions": readiness["blockedLiveActions"],
+        "noSideEffect": True,
+        "generatedByProvider": False,
+    }

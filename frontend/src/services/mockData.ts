@@ -7288,3 +7288,106 @@ export const PILOT_DRY_RUNS = {
   ],
   total: 1,
 };
+
+// ---------- Phase 16G — Internal Pilot Control Center ----------
+
+const PILOT_PLAN_SAFETY = {
+  aiPaused: true,
+  sandboxOn: false,
+  syncLive: true,
+  providerLiveActionsLocked: true,
+  phase15ShellFrozen: true,
+  phase: "16G",
+};
+
+export const PILOT_PLANS = {
+  items: [
+    {
+      id: 1,
+      name: "Joint pain internal pilot",
+      pilotType: "full_lifecycle",
+      status: "draft",
+      ownerUser: "director",
+      ownerTeam: "director_admin",
+      problemCategory: "Joint pain",
+      productCategory: "Joint Care",
+      objective: "Rehearse the full internal lifecycle for 25 contacts.",
+      riskNote: "Internal-only; no live provider action.",
+      allowedListNote: "Internal staff numbers only.",
+      maxContacts: 25,
+      plannedStartAt: null,
+      plannedEndAt: null,
+      linkedImportCampaignId: null,
+      linkedDatasetId: null,
+      linkedOrderId: null,
+      linkedDryRunId: null,
+      safetyAcknowledged: true,
+      providerActionsAllowed: false,
+      providerActionsAttempted: false,
+      providerActionsBlocked: true,
+      createdBy: "director",
+      updatedBy: "director",
+      createdAt: "2026-06-01T08:00:00Z",
+      updatedAt: "2026-06-01T08:00:00Z",
+      events: [
+        {
+          id: 1,
+          pilotPlanId: 1,
+          eventType: "created",
+          note: "Pilot plan created (internal).",
+          actor: "director",
+          createdAt: "2026-06-01T08:00:00Z",
+        },
+      ],
+      reviews: [],
+      gateStatus: [
+        { key: "team_assigned", label: "Team assigned", status: "pass", detail: "Owner user or team set." },
+        { key: "data_selected", label: "Data selected", status: "warning", detail: "No data source linked." },
+        { key: "payment_live_gate_blocked", label: "Payment live gate blocked", status: "pass", detail: "Live payment blocked (Director live gate required)." },
+        { key: "shipment_live_gate_blocked", label: "Shipment live gate blocked", status: "pass", detail: "Live shipment blocked (Director live gate required)." },
+        { key: "whatsapp_blocked", label: "WhatsApp blocked", status: "pass", detail: "WhatsApp live automation blocked." },
+        { key: "vapi_ai_blocked", label: "Vapi / AI calling blocked", status: "pass", detail: "Vapi / AI calling blocked." },
+        { key: "director_internal_approval", label: "Director internal approval recorded", status: "warning", detail: "Not yet approved internally." },
+      ],
+      metrics: {
+        campaign: null,
+        dataset: null,
+        linkedOrderId: null,
+        linkedDryRunId: null,
+        dryRunStatus: null,
+        paymentReadinessStatus: "blocked",
+        shipmentReadinessStatus: "ready",
+        blockedLiveActions: [
+          "Live Razorpay/PayU payment link / capture / refund — blocked (Director live gate required).",
+          "Live Delhivery AWB booking / shipment — blocked (Director live gate required).",
+        ],
+      },
+    },
+  ],
+  total: 1,
+};
+
+export const PILOT_CONTROL_SUMMARY = {
+  statusCounts: {
+    draft: 1,
+    ready_for_review: 0,
+    approved_internal: 0,
+    running_internal: 0,
+    paused: 0,
+    completed: 0,
+    cancelled: 0,
+  },
+  totalPlans: 1,
+  activePlans: 0,
+  safety: PILOT_PLAN_SAFETY,
+  gates: (PILOT_READINESS as { gates: unknown[] }).gates,
+  blockedLiveActions: [
+    "Live Razorpay/PayU payment link / capture / refund — blocked (Director live gate required).",
+    "Live Delhivery AWB booking / shipment — blocked (Director live gate required).",
+    "WhatsApp / Meta Cloud send — blocked (broad automation OFF).",
+    "Vapi / voice calling — blocked (AI calling disabled).",
+    "AI/LLM provider calls — not invoked in any pilot path.",
+  ],
+  noSideEffect: true,
+  generatedByProvider: false,
+};
