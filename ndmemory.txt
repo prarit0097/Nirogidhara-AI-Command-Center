@@ -11,8 +11,8 @@ was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 16D / 16E / 16F / 16G / 16H / 16I.
 
 Current operational baseline is **Phase 16I — AI Copilot Enablement + Human
-Approval Workflow, IMPLEMENTED + PUSHED to origin/main (VPS production
-verification pending)** — new internal-only app apps.ai_copilot (2 models
+Approval Workflow, PRODUCTION VERIFIED on the VPS and CLOSED at commit
+0f91f6b** — new internal-only app apps.ai_copilot (2 models
 AiCopilotSuggestion / AiCopilotReviewEvent; migration ai_copilot.0001_phase16i_ai_copilot;
 pure CreateModel) + 5 endpoints under /api/v1/ai-copilot/ (status, suggestions
 list, suggestions/generate, suggestion detail, suggestion review) + page
@@ -38,11 +38,20 @@ generate → approve → apply_internal over all 11 suggestion types). Permissio
 generate/review = director/admin/superuser; reads = auth. Verification: backend
 19 Phase 16I + 19 16H + 19 16G + 16 16F + 13 16E + 22 16D + 17 16C + 30 16B = 155
 passed; makemigrations --check + manage.py check clean; frontend 367/367 (+10);
-lint 0; build green. Docs say implemented/pushed; VPS production verification
-(deploy + browser validation) is pending. Phase 16I ADDS migration
-ai_copilot.0001_phase16i_ai_copilot → VPS deploy requires migrate. Next planned
-work: Phase 16J — NOT started; requires a separate written Director directive.
-Commit: feat: phase 16i ai copilot approval workflow.
+lint 0; build green. VPS production verification PASSED: browser validation of
+/operations/ai-copilot (AI Copilot Center; sidebar AI Copilot; safety shell AI
+Paused / Sandbox OFF / Sync Live; AI Mode mock / Live Autonomous Locked / Live
+Provider unavailable / Provider disabled / Human Approval Required / Provider
+Call None; suggestion generated → pending review → approved internally + another
+rejected internally; external action allowed/taken + provider call false; no live
+side effect). Terminal: makemigrations --check → "No changes detected"; manage.py
+check → "0 issues"; pytest tests/test_phase16i_ai_copilot.py → 19 passed [100%];
+regression (16H/16G/16F/16E) → 67 passed [100%]; GET /api/healthz/ →
+{"status": "ok", "service": "nirogidhara-backend"}. Phase 16I ADDS migration
+ai_copilot.0001_phase16i_ai_copilot → a fresh VPS deploy requires migrate
+(already applied on the VPS). Phase 16I is CLOSED. Next planned work: Phase 16J —
+NOT started; requires a separate written Director directive.
+Commit: 0f91f6b (feat: phase 16i ai copilot approval workflow).
 
 Phase 16H — Internal Pilot Execution Workbench + Role-Based Task Queues,
 PRODUCTION VERIFIED on the VPS and CLOSED at commit d733cf0 — extends the
@@ -78,8 +87,8 @@ detected"; manage.py check → "0 issues"; pytest tests/test_phase16h_pilot_exec
 → 19 passed [100%]; GET /api/healthz/ → {"status": "ok", "service": "nirogidhara-backend"}.
 Phase 16H ADDS migration pilot.0003_phase16h_pilot_execution → a fresh VPS deploy
 requires migrate (already applied on the VPS). Phase 16H is CLOSED and is the
-previous verified baseline (Phase 16I has since shipped + been pushed, VPS
-verification pending; the current next-planned work is Phase 16J).
+previous verified baseline (Phase 16I has since shipped and is PRODUCTION
+VERIFIED + CLOSED at 0f91f6b; the current next-planned work is Phase 16J).
 Commit: d733cf0 (feat: phase 16h pilot execution workbench).
 
 Phase 16G — Internal Pilot Control Center / Pilot Execution Dashboard is
