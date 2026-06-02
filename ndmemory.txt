@@ -8,11 +8,44 @@ ndmemory.txt — Nirogidhara AI Command Center · Master Handoff
 This file is the Phase 14B Doc Sync v3 frozen snapshot. Since this file
 was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C /
-16D / 16E / 16F / 16G / 16H / 16I.
+16D / 16E / 16F / 16G / 16H / 16I / 16J.
 
-Current operational baseline is **Phase 16I — AI Copilot Enablement + Human
+Current operational baseline is **Phase 16J — AI-Approved Internal Action Queue
++ Work Execution Bridge, IMPLEMENTED + PUSHED to origin/main (VPS production
+verification pending)** — extends the existing internal-only app apps.ai_copilot
+with 2 additive models (AiApprovedAction, AiApprovedActionEvent; migration
+ai_copilot.0002_phase16j_ai_action_queue; pure CreateModel) + 7 endpoints under
+/api/v1/ai-copilot/ (actions/, actions/from-suggestion/, actions/summary/,
+actions/<id>/, actions/<id>/apply/, actions/<id>/reject/, actions/<id>/cancel/) +
+an Approved action queue section on /operations/ai-copilot. It converts an
+APPROVED Phase 16I suggestion into a tracked internal-only work item — 10 action
+types (create_calling_followup_task / create_qa_review_task / create_pilot_task /
+create_customer_note / create_order_note / create_callback_item /
+create_rto_review_task / create_payment_followup_task / create_dispatch_review_task
+/ create_director_review_item); status pending_internal_action → applied_internal
+| rejected | cancelled | failed. ONLY an approved suggestion can become an action
+(else HTTP 409 suggestion_not_approved); applying is DB-only (may create an
+internal PilotTask via the Phase 16H safe create_pilot_task when the source is a
+resolvable pilot plan, else records an internal result_payload). NO WhatsApp/Meta
+Cloud, NO Vapi, NO Razorpay/PayU live or payment link, NO live Delhivery AWB, NO
+AI/LLM provider, NO auto-confirm/cancel order, NO auto-apply discount, NO business
+Celery enqueue, NO RuntimeKillSwitch/SandboxState change — every action keeps
+provider_action_attempted / provider_action_taken / external_action_allowed /
+external_action_taken = false (asserted by a defensive test across create → apply
+over 9 safe action types). Permissions: create/apply/reject/cancel =
+director/admin/superuser; reads = auth. Verification: backend 16 Phase 16J + 19
+16I + 19 16H + 19 16G + 16 16F + 13 16E = 102 passed (targeted); makemigrations
+--check + manage.py check clean; frontend 374/374 (+7); lint 0; build green.
+DOCS SAY IMPLEMENTED/PUSHED — VPS production verification (deploy + browser
+validation) is PENDING; do NOT mark production verified until after VPS checks.
+Phase 16J ADDS migration ai_copilot.0002_phase16j_ai_action_queue → the VPS
+deploy requires migrate. Next planned work: Phase 16K — NOT started; requires a
+separate written Director directive. Phase 16I (0f91f6b) is the previous verified
+baseline. Commit: feat: phase 16j ai internal action queue.
+
+Phase 16I — AI Copilot Enablement + Human
 Approval Workflow, PRODUCTION VERIFIED on the VPS and CLOSED at commit
-0f91f6b** — new internal-only app apps.ai_copilot (2 models
+0f91f6b — new internal-only app apps.ai_copilot (2 models
 AiCopilotSuggestion / AiCopilotReviewEvent; migration ai_copilot.0001_phase16i_ai_copilot;
 pure CreateModel) + 5 endpoints under /api/v1/ai-copilot/ (status, suggestions
 list, suggestions/generate, suggestion detail, suggestion review) + page
@@ -49,8 +82,9 @@ check → "0 issues"; pytest tests/test_phase16i_ai_copilot.py → 19 passed [10
 regression (16H/16G/16F/16E) → 67 passed [100%]; GET /api/healthz/ →
 {"status": "ok", "service": "nirogidhara-backend"}. Phase 16I ADDS migration
 ai_copilot.0001_phase16i_ai_copilot → a fresh VPS deploy requires migrate
-(already applied on the VPS). Phase 16I is CLOSED. Next planned work: Phase 16J —
-NOT started; requires a separate written Director directive.
+(already applied on the VPS). Phase 16I is CLOSED. (Historical close-state: Phase
+16J was next at 16I close — it has since shipped and is IMPLEMENTED + PUSHED, VPS
+verification pending; the current next-planned work is Phase 16K.)
 Commit: 0f91f6b (feat: phase 16i ai copilot approval workflow).
 
 Phase 16H — Internal Pilot Execution Workbench + Role-Based Task Queues,
@@ -88,7 +122,8 @@ detected"; manage.py check → "0 issues"; pytest tests/test_phase16h_pilot_exec
 Phase 16H ADDS migration pilot.0003_phase16h_pilot_execution → a fresh VPS deploy
 requires migrate (already applied on the VPS). Phase 16H is CLOSED and is the
 previous verified baseline (Phase 16I has since shipped and is PRODUCTION
-VERIFIED + CLOSED at 0f91f6b; the current next-planned work is Phase 16J).
+VERIFIED + CLOSED at 0f91f6b, and Phase 16J is IMPLEMENTED + PUSHED [VPS
+verification pending]; the current next-planned work is Phase 16K).
 Commit: d733cf0 (feat: phase 16h pilot execution workbench).
 
 Phase 16G — Internal Pilot Control Center / Pilot Execution Dashboard is
@@ -177,11 +212,12 @@ Read these for current truth:
   - nd.md                                  (canonical source of truth)
   - docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md (Phase 15 safety-shell freeze
                                             rule + smoke checklist + rollback)
-  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16I" headers)
+  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16J" headers)
   - docs/RUNBOOK.md                        (operator playbooks, includes
+                                            Phase 16J AI action queue +
                                             Phase 16I AI Copilot)
 
-Next planned work: Phase 16J (NOT started; separate Director directive
+Next planned work: Phase 16K (NOT started; separate Director directive
 required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".

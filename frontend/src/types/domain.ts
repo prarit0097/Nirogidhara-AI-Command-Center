@@ -8207,3 +8207,89 @@ export interface ReviewAiCopilotPayload {
   action: AiCopilotReviewAction;
   note?: string;
 }
+
+// ---------- Phase 16J — AI-Approved Internal Action Queue ----------
+
+export type AiActionType =
+  | "create_calling_followup_task"
+  | "create_qa_review_task"
+  | "create_pilot_task"
+  | "create_customer_note"
+  | "create_order_note"
+  | "create_callback_item"
+  | "create_rto_review_task"
+  | "create_payment_followup_task"
+  | "create_dispatch_review_task"
+  | "create_director_review_item";
+
+export type AiActionStatus =
+  | "pending_internal_action"
+  | "applied_internal"
+  | "rejected"
+  | "cancelled"
+  | "failed";
+
+export type AiActionPriority = "low" | "normal" | "high" | "urgent";
+
+export interface AiApprovedActionEvent {
+  id: number;
+  actionId: number;
+  eventType: string;
+  note: string;
+  actor: string | null;
+  createdAt: string;
+}
+
+export interface AiApprovedAction {
+  id: number;
+  sourceSuggestionId: number;
+  actionType: AiActionType;
+  sourceType: AiCopilotSourceType;
+  sourceId: string;
+  title: string;
+  description: string;
+  assignedTeam: string;
+  priority: AiActionPriority;
+  status: AiActionStatus;
+  providerActionAttempted: boolean;
+  providerActionTaken: boolean;
+  externalActionAllowed: boolean;
+  externalActionTaken: boolean;
+  failureReason: string;
+  approvedBy: string | null;
+  appliedBy: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  appliedAt: string | null;
+  resultPayload?: Record<string, unknown>;
+  safetySnapshot?: Record<string, unknown>;
+  events?: AiApprovedActionEvent[];
+}
+
+export interface AiActionQueueResponse {
+  items: AiApprovedAction[];
+  total?: number;
+}
+
+export interface AiActionSummary {
+  statusCounts: Record<string, number>;
+  total: number;
+  providerActionsLocked: boolean;
+  liveAutonomousExecutionLocked: boolean;
+  noProviderActionTaken: boolean;
+  phase: string;
+}
+
+export interface CreateAiActionPayload {
+  suggestionId: number;
+  actionType: AiActionType;
+  title?: string;
+  description?: string;
+  assignedTeam?: string;
+  priority?: AiActionPriority;
+}
+
+export interface AiActionTransitionPayload {
+  note?: string;
+}

@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, isApiError } from "@/services/api";
 import type {
+  AiActionType,
+  AiApprovedAction,
   AiCopilotSourceType,
   AiCopilotStatusResponse,
   AiCopilotSuggestion,
@@ -12,6 +14,7 @@ import {
   AlertTriangle,
   Bot,
   CheckCircle2,
+  ListTodo,
   Lock,
   ShieldCheck,
   Sparkles,
@@ -51,6 +54,27 @@ const SOURCE_TYPES: { value: AiCopilotSourceType; label: string }[] = [
   { value: "pilot_task", label: "Pilot task" },
 ];
 
+const ACTION_TYPES: { value: AiActionType; label: string }[] = [
+  { value: "create_calling_followup_task", label: "Calling follow-up task" },
+  { value: "create_qa_review_task", label: "QA / compliance review task" },
+  { value: "create_pilot_task", label: "Pilot task" },
+  { value: "create_customer_note", label: "Customer note" },
+  { value: "create_order_note", label: "Order note" },
+  { value: "create_callback_item", label: "Callback reminder item" },
+  { value: "create_rto_review_task", label: "RTO review task" },
+  { value: "create_payment_followup_task", label: "Payment follow-up task" },
+  { value: "create_dispatch_review_task", label: "Dispatch review task" },
+  { value: "create_director_review_item", label: "Director review item" },
+];
+
+const ACTION_STATUS_STYLES: Record<string, string> = {
+  pending_internal_action: "bg-warning/20 text-warning",
+  applied_internal: "bg-success/15 text-success",
+  rejected: "bg-destructive/15 text-destructive",
+  cancelled: "bg-muted text-muted-foreground",
+  failed: "bg-destructive/15 text-destructive",
+};
+
 export default function AiCopilot() {
   const [status, setStatus] = useState<AiCopilotStatusResponse | null>(null);
   const [suggestions, setSuggestions] = useState<AiCopilotSuggestion[]>([]);
@@ -61,6 +85,15 @@ export default function AiCopilot() {
   const [sourceType, setSourceType] = useState<AiCopilotSourceType>("manual");
   const [sourceId, setSourceId] = useState("");
   const [text, setText] = useState("");
+  const [actions, setActions] = useState<AiApprovedAction[]>([]);
+  const [actionType, setActionType] = useState<AiActionType>("create_qa_review_task");
+
+  const loadActions = () => {
+    api
+      .getAiActionQueue()
+      .then((r) => setActions(r.items))
+      .catch(() => setActions([]));
+  };
 
   const load = () => {
     setLoading(true);
@@ -70,12 +103,64 @@ export default function AiCopilot() {
         .getAiCopilotSuggestions()
         .then((r) => setSuggestions(r.items))
         .catch(() => setSuggestions([])),
+      api
+        .getAiActionQueue()
+        .then((r) => setActions(r.items))
+        .catch(() => setActions([])),
     ])
       .catch(() => {
         setStatus(null);
         setErrored(true);
       })
       .finally(() => setLoading(false));
+  };
+
+  const handleCreateAction = async (suggestion: AiCopilotSuggestion) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.createAiActionFromSuggestion({
+        suggestionId: suggestion.id,
+        actionType,
+      });
+      toast.success("Internal action queued (no external action).");
+      loadActions();
+    } catch (err) {
+      if (isApiError(err)) {
+        toast.error(
+          err.httpStatus === 409
+            ? "Only an approved suggestion can become an internal action."
+            : `Create action failed (HTTP ${err.httpStatus}).`,
+        );
+      } else {
+        toast.error("Create action failed. Please retry.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleActionTransition = async (
+    action: AiApprovedAction,
+    kind: "apply" | "reject" | "cancel",
+  ) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (kind === "apply") await api.applyAiAction(action.id);
+      else if (kind === "reject") await api.rejectAiAction(action.id);
+      else await api.cancelAiAction(action.id);
+      toast.success(`Internal action ${kind === "apply" ? "applied (internal only)" : kind + "ed"}.`);
+      loadActions();
+    } catch (err) {
+      if (isApiError(err)) {
+        toast.error(`Action ${kind} failed (HTTP ${err.httpStatus}).`);
+      } else {
+        toast.error(`Action ${kind} failed. Please retry.`);
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   useEffect(load, []);
@@ -143,6 +228,8 @@ export default function AiCopilot() {
       </div>
     );
   }
+
+  const approvedSuggestions = suggestions.filter((s) => s.status === "approved");
 
   return (
     <div data-testid="ai-copilot-page">
@@ -301,6 +388,106 @@ export default function AiCopilot() {
                 )}
                 <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
                   <Lock className="h-3 w-3" /> External action allowed: {String(s.externalActionAllowed)} · taken: {String(s.externalActionTaken)} · provider call: {String(s.providerCallMade)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Phase 16J — Approved Action Queue */}
+      <div className="surface-elevated p-6 mt-6" data-testid="ai-action-queue-section">
+        <h3 className="font-display text-lg font-semibold flex items-center gap-2 mb-2">
+          <ListTodo className="h-5 w-5 text-accent" /> Approved action queue
+        </h3>
+        <p
+          data-testid="ai-action-safety-copy"
+          className="text-[12px] text-muted-foreground mb-4"
+        >
+          Applying internal actions does not send WhatsApp, create payment links,
+          book shipments, call customers, or invoke live AI providers. Every action
+          is internal/DB-only.
+        </p>
+
+        {/* Create internal action from an approved suggestion */}
+        <div className="rounded-lg border border-border bg-muted/20 px-4 py-3 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Action type</label>
+            <select
+              data-testid="ai-action-type"
+              aria-label="Action type"
+              value={actionType}
+              onChange={(e) => setActionType(e.target.value as AiActionType)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-[13px]"
+            >
+              {ACTION_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+          {approvedSuggestions.length === 0 ? (
+            <p data-testid="ai-action-no-approved" className="text-[13px] text-muted-foreground">
+              No approved suggestions yet. Approve a suggestion above to create an internal action.
+            </p>
+          ) : (
+            <div className="space-y-1.5" data-testid="ai-action-approved-list">
+              {approvedSuggestions.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-2 flex-wrap text-[13px]">
+                  <span className="min-w-0 truncate">{s.title} <span className="text-muted-foreground">({s.suggestionType.replace(/_/g, " ")})</span></span>
+                  <Button
+                    data-testid={`ai-action-create-${s.id}`}
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => handleCreateAction(s)}
+                  >
+                    Create internal action
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* The internal action queue */}
+        {actions.length === 0 ? (
+          <p data-testid="ai-action-empty" className="text-muted-foreground text-[14px]">
+            No internal actions yet.
+          </p>
+        ) : (
+          <div className="space-y-3" data-testid="ai-action-list">
+            {actions.map((a) => (
+              <div
+                key={a.id}
+                data-testid={`ai-action-${a.id}`}
+                className="rounded-lg border border-border bg-muted/20 px-4 py-3"
+              >
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="font-medium">{a.title}</div>
+                    <div className="text-[12px] text-muted-foreground">
+                      {a.actionType.replace(/_/g, " ")} · {a.assignedTeam || "unassigned"} · {a.priority}
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${ACTION_STATUS_STYLES[a.status] ?? ACTION_STATUS_STYLES.cancelled}`}>
+                    {a.status.replace(/_/g, " ")}
+                  </span>
+                </div>
+                {a.status === "pending_internal_action" && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    <Button data-testid={`ai-action-apply-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => handleActionTransition(a, "apply")}>
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Apply internal action
+                    </Button>
+                    <Button data-testid={`ai-action-reject-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => handleActionTransition(a, "reject")}>
+                      <XCircle className="h-3.5 w-3.5 mr-1" /> Reject action
+                    </Button>
+                    <Button data-testid={`ai-action-cancel-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => handleActionTransition(a, "cancel")}>
+                      Cancel action
+                    </Button>
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
+                  <Lock className="h-3 w-3" /> external action allowed: {String(a.externalActionAllowed)} · provider action taken: {String(a.providerActionTaken)}
                 </p>
               </div>
             ))}

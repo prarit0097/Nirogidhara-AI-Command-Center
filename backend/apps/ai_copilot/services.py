@@ -497,3 +497,244 @@ def review_ai_suggestion(suggestion, *, action: str, note: str = "", reviewed_by
         note=str(note or "")[:4000],
     )
     return suggestion
+
+
+# ---------------------------------------------------------------------------
+# Phase 16J — AI-Approved Internal Action Queue + Work Execution Bridge
+# ---------------------------------------------------------------------------
+#
+# Convert an APPROVED AI suggestion into a safe, internal-only work item, and
+# apply it WITHOUT any provider/external action. Applying an action may create
+# an internal DB object (a pilot task, or an internal note/result record) but
+# NEVER sends WhatsApp, places a call, creates a payment link, books a shipment,
+# calls a live AI/LLM provider, mutates order/payment/shipment state, or changes
+# `RuntimeKillSwitch` / `SandboxState`. Every action keeps
+# `provider_action_attempted=False` + `provider_action_taken=False` +
+# `external_action_allowed=False` + `external_action_taken=False`.
+
+
+class AiActionError(Exception):
+    """Raised on an invalid AI-action-queue operation."""
+
+
+# action_type → the PilotTeamRole used when materialising a pilot task.
+_ACTION_TEAM_ROLE = {
+    "create_calling_followup_task": "calling_agent",
+    "create_qa_review_task": "qa_compliance",
+    "create_pilot_task": "director_admin",
+    "create_callback_item": "calling_agent",
+    "create_rto_review_task": "delivery_rto",
+    "create_payment_followup_task": "finance_accounts",
+    "create_dispatch_review_task": "warehouse_dispatch",
+    "create_director_review_item": "director_admin",
+    "create_customer_note": "qa_compliance",
+    "create_order_note": "qa_compliance",
+}
+
+
+def _action_actor(user):
+    return user if (user and getattr(user, "is_authenticated", False)) else None
+
+
+def _record_action_event(action, event_type: str, *, actor=None, note: str = "") -> None:
+    from .models import AiApprovedActionEvent
+
+    AiApprovedActionEvent.objects.create(
+        action=action, event_type=event_type, actor=_action_actor(actor),
+        note=str(note or "")[:4000],
+    )
+
+
+def create_action_from_approved_suggestion(
+    *, suggestion, action_type: str, title: str = "", description: str = "",
+    assigned_team: str = "", priority: str = "normal", created_by=None,
+):
+    """Queue an internal action from an APPROVED suggestion. No provider call."""
+    from .models import AiApprovedAction, AiCopilotSuggestion
+
+    valid_types = {c for c, _ in AiApprovedAction.ActionType.choices}
+    if action_type not in valid_types:
+        raise AiActionError(f"unknown_action_type:{action_type}")
+    if suggestion.status != AiCopilotSuggestion.Status.APPROVED:
+        # Only an approved suggestion may become an action. draft / pending /
+        # rejected / applied_internal are refused.
+        raise AiActionError(f"suggestion_not_approved:{suggestion.status}")
+
+    valid_priority = {c for c, _ in AiApprovedAction.Priority.choices}
+    if priority not in valid_priority:
+        priority = AiApprovedAction.Priority.NORMAL
+
+    actor = _action_actor(created_by)
+    action = AiApprovedAction.objects.create(
+        source_suggestion=suggestion,
+        action_type=action_type,
+        source_type=suggestion.source_type,
+        source_id=suggestion.source_id,
+        title=(title or suggestion.title)[:200],
+        description=description or suggestion.recommendation,
+        assigned_team=str(assigned_team or "")[:64],
+        priority=priority,
+        status=AiApprovedAction.Status.PENDING_INTERNAL_ACTION,
+        provider_action_attempted=False,
+        provider_action_taken=False,
+        external_action_allowed=False,
+        external_action_taken=False,
+        safety_snapshot=_safety_snapshot_for_action(),
+        approved_by=suggestion.reviewed_by,
+        created_by=actor,
+    )
+    _record_action_event(action, "created", actor=actor, note="Queued from approved AI suggestion.")
+    return action
+
+
+def _safety_snapshot_for_action() -> dict[str, Any]:
+    try:
+        from apps.integration_hardening import services as hardening
+
+        s = hardening.safety_summary()
+        return {
+            "aiPaused": s["aiPaused"],
+            "sandboxOn": s["sandboxOn"],
+            "providerLiveActionsLocked": True,
+            "liveAutonomousExecutionLocked": True,
+            "capturedAt": "internal",
+        }
+    except Exception:  # noqa: BLE001
+        return {"providerLiveActionsLocked": True, "liveAutonomousExecutionLocked": True}
+
+
+def _materialise_pilot_task(action) -> dict[str, Any] | None:
+    """Best-effort create an internal PilotTask for a resolvable pilot plan.
+
+    Returns a result dict on success, or None if no pilot plan applies (the
+    caller then falls back to a record-only internal result).
+    """
+    if action.source_type != "pilot_plan" or not action.source_id:
+        return None
+    try:
+        from apps.pilot.models import PilotPlan, PilotTeamRole
+        from apps.pilot.services import create_pilot_task
+
+        plan = PilotPlan.objects.filter(pk=action.source_id).first()
+        if plan is None:
+            return None
+        valid_roles = {c for c, _ in PilotTeamRole.choices}
+        team_role = _ACTION_TEAM_ROLE.get(action.action_type, "director_admin")
+        if team_role not in valid_roles:
+            team_role = "director_admin"
+        task = create_pilot_task(
+            plan, team_role=team_role,
+            title=f"[AI] {action.title}"[:200],
+            created_by=action.applied_by or action.created_by,
+            description=action.description,
+            priority="normal",
+            assigned_team_label=action.assigned_team,
+        )
+        return {
+            "kind": "pilot_task",
+            "pilotTaskId": task.pk,
+            "pilotPlanId": plan.pk,
+            "teamRole": team_role,
+            "providerActionsBlocked": True,
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def apply_internal_action(action, *, applied_by=None, note: str = ""):
+    """Apply an internal action (DB-only). NEVER calls a provider."""
+    from django.utils import timezone
+
+    from .models import AiApprovedAction
+
+    if action.status != AiApprovedAction.Status.PENDING_INTERNAL_ACTION:
+        raise AiActionError(f"invalid_status:{action.status}")
+
+    actor = _action_actor(applied_by)
+    action.applied_by = actor
+
+    # Try to materialise a real internal pilot task when the action targets a
+    # pilot plan; otherwise record an internal-only result payload.
+    result = _materialise_pilot_task(action)
+    if result is None:
+        result = {
+            "kind": "internal_action_record",
+            "actionType": action.action_type,
+            "assignedTeam": action.assigned_team,
+            "priority": action.priority,
+            "note": "Recorded as an internal work item (no external action, no provider call).",
+            "providerActionsBlocked": True,
+        }
+
+    # Locked contract — always re-asserted, regardless of result.
+    action.provider_action_attempted = False
+    action.provider_action_taken = False
+    action.external_action_allowed = False
+    action.external_action_taken = False
+    action.result_payload = result
+    action.status = AiApprovedAction.Status.APPLIED_INTERNAL
+    action.applied_at = timezone.now()
+    action.save()
+    _record_action_event(action, "applied_internal", actor=actor, note=note or result.get("kind", ""))
+    return action
+
+
+def reject_internal_action(action, *, actor=None, note: str = ""):
+    from .models import AiApprovedAction
+
+    if action.status not in {
+        AiApprovedAction.Status.PENDING_INTERNAL_ACTION,
+    }:
+        raise AiActionError(f"invalid_status:{action.status}")
+    action.status = AiApprovedAction.Status.REJECTED
+    action.external_action_allowed = False
+    action.external_action_taken = False
+    action.provider_action_taken = False
+    action.save()
+    _record_action_event(action, "rejected", actor=actor, note=note)
+    return action
+
+
+def cancel_internal_action(action, *, actor=None, note: str = ""):
+    from .models import AiApprovedAction
+
+    if action.status not in {
+        AiApprovedAction.Status.PENDING_INTERNAL_ACTION,
+    }:
+        raise AiActionError(f"invalid_status:{action.status}")
+    action.status = AiApprovedAction.Status.CANCELLED
+    action.external_action_allowed = False
+    action.external_action_taken = False
+    action.provider_action_taken = False
+    action.save()
+    _record_action_event(action, "cancelled", actor=actor, note=note)
+    return action
+
+
+def list_ai_action_queue(*, status: str = "", action_type: str = "", limit: int = 100):
+    from .models import AiApprovedAction
+
+    qs = AiApprovedAction.objects.all().order_by("-created_at")
+    if status:
+        qs = qs.filter(status=status)
+    if action_type:
+        qs = qs.filter(action_type=action_type)
+    return qs[: max(1, min(200, int(limit or 100)))]
+
+
+def get_ai_action_summary() -> dict[str, Any]:
+    from django.db.models import Count
+
+    from .models import AiApprovedAction
+
+    counts = {c: 0 for c, _ in AiApprovedAction.Status.choices}
+    for row in AiApprovedAction.objects.values("status").annotate(n=Count("id")):
+        counts[row["status"]] = row["n"]
+    return {
+        "statusCounts": counts,
+        "total": sum(counts.values()),
+        "providerActionsLocked": True,
+        "liveAutonomousExecutionLocked": True,
+        "noProviderActionTaken": True,
+        "phase": "16J",
+    }

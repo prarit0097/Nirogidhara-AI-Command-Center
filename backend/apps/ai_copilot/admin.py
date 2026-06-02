@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from django.contrib import admin
 
-from .models import AiCopilotReviewEvent, AiCopilotSuggestion
+from .models import (
+    AiApprovedAction,
+    AiApprovedActionEvent,
+    AiCopilotReviewEvent,
+    AiCopilotSuggestion,
+)
 
 
 @admin.register(AiCopilotSuggestion)
@@ -23,4 +28,25 @@ class AiCopilotSuggestionAdmin(admin.ModelAdmin):
 class AiCopilotReviewEventAdmin(admin.ModelAdmin):
     list_display = ("id", "suggestion", "action", "actor", "created_at")
     list_filter = ("action",)
+    readonly_fields = ("created_at",)
+
+
+@admin.register(AiApprovedAction)
+class AiApprovedActionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id", "action_type", "source_type", "status", "priority",
+        "external_action_taken", "provider_action_taken", "created_at",
+    )
+    list_filter = (
+        "action_type", "source_type", "status", "priority",
+        "external_action_taken", "provider_action_taken",
+    )
+    search_fields = ("title", "source_id", "assigned_team")
+    readonly_fields = ("created_at", "updated_at", "applied_at")
+
+
+@admin.register(AiApprovedActionEvent)
+class AiApprovedActionEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "action", "event_type", "actor", "created_at")
+    list_filter = ("event_type",)
     readonly_fields = ("created_at",)

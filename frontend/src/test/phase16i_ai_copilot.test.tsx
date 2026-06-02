@@ -14,6 +14,13 @@ vi.mock("@/services/api", async (importOriginal) => {
       getAiCopilotSuggestions: vi.fn(),
       generateAiCopilotSuggestion: vi.fn(),
       reviewAiCopilotSuggestion: vi.fn(),
+      // Phase 16J action-queue methods (the page now loads the queue too).
+      getAiActionQueue: vi.fn(),
+      getAiActionSummary: vi.fn(),
+      createAiActionFromSuggestion: vi.fn(),
+      applyAiAction: vi.fn(),
+      rejectAiAction: vi.fn(),
+      cancelAiAction: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -85,6 +92,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   (api.getAiCopilotStatus as any).mockResolvedValue(STATUS);
   (api.getAiCopilotSuggestions as any).mockResolvedValue(SUGGESTIONS);
+  (api.getAiActionQueue as any).mockResolvedValue({ items: [], total: 0 });
+  (api.getAiActionSummary as any).mockResolvedValue({ statusCounts: {}, total: 0, providerActionsLocked: true, liveAutonomousExecutionLocked: true, noProviderActionTaken: true, phase: "16J" });
   (api.generateAiCopilotSuggestion as any).mockResolvedValue(SUGGESTIONS.items[0]);
   (api.reviewAiCopilotSuggestion as any).mockResolvedValue({
     ...SUGGESTIONS.items[0],

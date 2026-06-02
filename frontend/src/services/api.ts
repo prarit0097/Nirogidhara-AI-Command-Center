@@ -3265,6 +3265,69 @@ export const api = {
       payload,
       () => (M.AI_COPILOT_SUGGESTIONS as import("@/types/domain").AiCopilotSuggestionsResponse).items[0],
     ),
+
+  // ---------- Phase 16J — AI-Approved Internal Action Queue ----------
+  // Internal-only execution bridge. No provider call, no external action.
+
+  getAiActionQueue: (limit: number = 50) =>
+    safeFetch<import("@/types/domain").AiActionQueueResponse>(
+      `/v1/ai-copilot/actions/?limit=${limit}`,
+      () => M.AI_ACTION_QUEUE as import("@/types/domain").AiActionQueueResponse,
+    ),
+
+  getAiActionSummary: () =>
+    safeFetch<import("@/types/domain").AiActionSummary>(
+      "/v1/ai-copilot/actions/summary/",
+      () => M.AI_ACTION_SUMMARY as import("@/types/domain").AiActionSummary,
+    ),
+
+  getAiAction: (id: number) =>
+    safeFetch<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/`,
+      () => (M.AI_ACTION_QUEUE as import("@/types/domain").AiActionQueueResponse).items[0],
+    ),
+
+  createAiActionFromSuggestion: (
+    payload: import("@/types/domain").CreateAiActionPayload,
+  ) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      "/v1/ai-copilot/actions/from-suggestion/",
+      "POST",
+      payload,
+      () => ({
+        ...(M.AI_ACTION_QUEUE as import("@/types/domain").AiActionQueueResponse).items[0],
+        id: Date.now(),
+        actionType: payload.actionType,
+        status: "pending_internal_action",
+        externalActionAllowed: false,
+        externalActionTaken: false,
+        providerActionTaken: false,
+      }),
+    ),
+
+  applyAiAction: (id: number, payload: import("@/types/domain").AiActionTransitionPayload = {}) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/apply/`,
+      "POST",
+      payload,
+      () => (M.AI_ACTION_QUEUE as import("@/types/domain").AiActionQueueResponse).items[0],
+    ),
+
+  rejectAiAction: (id: number, payload: import("@/types/domain").AiActionTransitionPayload = {}) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/reject/`,
+      "POST",
+      payload,
+      () => (M.AI_ACTION_QUEUE as import("@/types/domain").AiActionQueueResponse).items[0],
+    ),
+
+  cancelAiAction: (id: number, payload: import("@/types/domain").AiActionTransitionPayload = {}) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/cancel/`,
+      "POST",
+      payload,
+      () => (M.AI_ACTION_QUEUE as import("@/types/domain").AiActionQueueResponse).items[0],
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------
