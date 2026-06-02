@@ -3214,6 +3214,57 @@ export const api = {
       `/v1/pilot/tasks/${taskId}/events/`,
       () => ({ items: [] }),
     ),
+
+  // ---------- Phase 16I — AI Copilot Enablement + Human Approval ----------
+  // Deterministic/mock suggestions only. No live AI provider call, no external
+  // action — every suggestion is human-reviewed and internal-only.
+
+  getAiCopilotStatus: () =>
+    safeFetch<import("@/types/domain").AiCopilotStatusResponse>(
+      "/v1/ai-copilot/status/",
+      () => M.AI_COPILOT_STATUS as import("@/types/domain").AiCopilotStatusResponse,
+    ),
+
+  getAiCopilotSuggestions: (limit: number = 50) =>
+    safeFetch<import("@/types/domain").AiCopilotSuggestionsResponse>(
+      `/v1/ai-copilot/suggestions/?limit=${limit}`,
+      () => M.AI_COPILOT_SUGGESTIONS as import("@/types/domain").AiCopilotSuggestionsResponse,
+    ),
+
+  getAiCopilotSuggestion: (id: number) =>
+    safeFetch<import("@/types/domain").AiCopilotSuggestion>(
+      `/v1/ai-copilot/suggestions/${id}/`,
+      () => (M.AI_COPILOT_SUGGESTIONS as import("@/types/domain").AiCopilotSuggestionsResponse).items[0],
+    ),
+
+  generateAiCopilotSuggestion: (
+    payload: import("@/types/domain").GenerateAiCopilotPayload,
+  ) =>
+    safeMutate<import("@/types/domain").AiCopilotSuggestion>(
+      "/v1/ai-copilot/suggestions/generate/",
+      "POST",
+      payload,
+      () => ({
+        ...(M.AI_COPILOT_SUGGESTIONS as import("@/types/domain").AiCopilotSuggestionsResponse).items[0],
+        id: Date.now(),
+        suggestionType: payload.suggestionType,
+        status: "pending_review",
+        providerCallMade: false,
+        externalActionAllowed: false,
+        externalActionTaken: false,
+      }),
+    ),
+
+  reviewAiCopilotSuggestion: (
+    id: number,
+    payload: import("@/types/domain").ReviewAiCopilotPayload,
+  ) =>
+    safeMutate<import("@/types/domain").AiCopilotSuggestion>(
+      `/v1/ai-copilot/suggestions/${id}/review/`,
+      "POST",
+      payload,
+      () => (M.AI_COPILOT_SUGGESTIONS as import("@/types/domain").AiCopilotSuggestionsResponse).items[0],
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

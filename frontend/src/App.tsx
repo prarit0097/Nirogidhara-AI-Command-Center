@@ -40,6 +40,7 @@ import PaymentLogisticsPage from "./pages/PaymentLogistics";
 import PilotReadinessPage from "./pages/PilotReadiness";
 import PilotControlPage from "./pages/PilotControl";
 import PilotWorkbenchPage from "./pages/PilotWorkbench";
+import AiCopilotPage from "./pages/AiCopilot";
 import Login from "@/pages/Login";
 import RequireAuth from "@/components/RequireAuth";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -139,6 +140,10 @@ const App = () => (
             <Route
               path="/operations/pilot-workbench"
               element={<PilotWorkbenchPage />}
+            />
+            <Route
+              path="/operations/ai-copilot"
+              element={<AiCopilotPage />}
             />
             <Route path="/team-roles" element={<TeamRolesPage />} />
             <Route path="/settings" element={<SettingsPage />} />

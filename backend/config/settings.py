@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     "apps.data_imports",
     "apps.integration_hardening",
     "apps.pilot",
+    "apps.ai_copilot",
 ]
 
 MIDDLEWARE = [

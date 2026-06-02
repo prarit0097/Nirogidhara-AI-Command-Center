@@ -7481,3 +7481,84 @@ export const PILOT_EXECUTION_SUMMARY = {
   noSideEffect: true,
   generatedByProvider: false,
 };
+
+// ---------- Phase 16I — AI Copilot Enablement + Human Approval ----------
+
+export const AI_COPILOT_STATUS = {
+  aiPaused: true,
+  sandboxOn: false,
+  syncLive: true,
+  providerLiveActionsLocked: true,
+  liveAutonomousExecutionLocked: true,
+  phase15ShellFrozen: true,
+  aiMode: "mock",
+  liveProviderStatus: "unavailable",
+  aiProvider: "disabled",
+  humanApprovalRequired: true,
+  noProviderCallMade: true,
+  phase: "16I",
+};
+
+export const AI_COPILOT_SUGGESTIONS = {
+  items: [
+    {
+      id: 1,
+      suggestionType: "director_briefing",
+      sourceType: "manual",
+      sourceId: "",
+      title: "Director briefing recommendation",
+      summary:
+        "Safety: AI Paused, Sandbox OFF, live actions locked. Pilot: overall 1/14 tasks done.",
+      recommendation:
+        "Review pilot bottlenecks internally; keep live provider actions locked.",
+      riskFlags: ["blocked_tasks_present"],
+      confidenceScore: 0.6,
+      aiMode: "mock",
+      status: "pending_review",
+      reviewerNote: "",
+      providerCallMade: false,
+      externalActionAllowed: false,
+      externalActionTaken: false,
+      createdBy: "director",
+      reviewedBy: null,
+      createdAt: "2026-06-01T10:00:00Z",
+      updatedAt: "2026-06-01T10:00:00Z",
+      detail: {},
+      events: [
+        {
+          id: 1,
+          suggestionId: 1,
+          action: "generated",
+          note: "Generated deterministically (mode=mock).",
+          actor: "director",
+          createdAt: "2026-06-01T10:00:00Z",
+        },
+      ],
+    },
+    {
+      id: 2,
+      suggestionType: "compliance_risk",
+      sourceType: "manual",
+      sourceId: "",
+      title: "Compliance risk review — review_required",
+      summary: "2 risk signal(s) detected; human compliance review required.",
+      recommendation:
+        "Route to QA/Compliance; do NOT use until approved. Replace any claim with Claim Vault content.",
+      riskFlags: ["unapproved_claim_risk", "tone_risk"],
+      confidenceScore: 0.75,
+      aiMode: "mock",
+      status: "approved",
+      reviewerNote: "Reviewed by QA.",
+      providerCallMade: false,
+      externalActionAllowed: false,
+      externalActionTaken: false,
+      createdBy: "director",
+      reviewedBy: "director",
+      createdAt: "2026-06-01T09:30:00Z",
+      updatedAt: "2026-06-01T09:45:00Z",
+      detail: { verdict: "review_required", signalCount: 2 },
+      events: [],
+    },
+  ],
+  total: 2,
+};

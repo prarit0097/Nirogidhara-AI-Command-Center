@@ -8103,3 +8103,107 @@ export interface AssignPilotTaskPayload {
   assigneeId?: number;
   teamLabel?: string;
 }
+
+// ---------- Phase 16I — AI Copilot Enablement + Human Approval ----------
+
+export type AiCopilotSuggestionType =
+  | "lead_summary"
+  | "call_priority"
+  | "call_script"
+  | "objection_handling"
+  | "compliance_risk"
+  | "pilot_recommendation"
+  | "task_recommendation"
+  | "director_briefing"
+  | "whatsapp_draft"
+  | "payment_followup_draft"
+  | "rto_rescue_draft";
+
+export type AiCopilotSourceType =
+  | "lead"
+  | "customer"
+  | "order"
+  | "imported_queue_item"
+  | "pilot_plan"
+  | "pilot_task"
+  | "manual";
+
+export type AiCopilotMode = "mock" | "sandbox" | "live_gated" | "unavailable";
+
+export type AiCopilotStatus =
+  | "draft"
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "applied_internal";
+
+export type AiCopilotReviewAction =
+  | "approve"
+  | "reject"
+  | "comment"
+  | "apply_internal";
+
+export interface AiCopilotStatusResponse {
+  aiPaused: boolean;
+  sandboxOn: boolean;
+  syncLive: boolean;
+  providerLiveActionsLocked: boolean;
+  liveAutonomousExecutionLocked: boolean;
+  phase15ShellFrozen: boolean;
+  aiMode: AiCopilotMode;
+  liveProviderStatus: AiCopilotMode;
+  aiProvider: string;
+  humanApprovalRequired: boolean;
+  noProviderCallMade: boolean;
+  phase: string;
+}
+
+export interface AiCopilotReviewEvent {
+  id: number;
+  suggestionId: number;
+  action: string;
+  note: string;
+  actor: string | null;
+  createdAt: string;
+}
+
+export interface AiCopilotSuggestion {
+  id: number;
+  suggestionType: AiCopilotSuggestionType;
+  sourceType: AiCopilotSourceType;
+  sourceId: string;
+  title: string;
+  summary: string;
+  recommendation: string;
+  riskFlags: string[];
+  confidenceScore: number;
+  aiMode: AiCopilotMode;
+  status: AiCopilotStatus;
+  reviewerNote: string;
+  providerCallMade: boolean;
+  externalActionAllowed: boolean;
+  externalActionTaken: boolean;
+  createdBy: string | null;
+  reviewedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  detail?: Record<string, unknown>;
+  events?: AiCopilotReviewEvent[];
+}
+
+export interface AiCopilotSuggestionsResponse {
+  items: AiCopilotSuggestion[];
+  total?: number;
+}
+
+export interface GenerateAiCopilotPayload {
+  suggestionType: AiCopilotSuggestionType;
+  sourceType?: AiCopilotSourceType;
+  sourceId?: string;
+  text?: string;
+}
+
+export interface ReviewAiCopilotPayload {
+  action: AiCopilotReviewAction;
+  note?: string;
+}
