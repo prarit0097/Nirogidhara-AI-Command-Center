@@ -11,8 +11,8 @@ was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 16D / 16E / 16F / 16G / 16H / 16I / 16J / 16K.
 
 Current operational baseline is **Phase 16K — Department Action Workboard +
-Ownership / SLA Execution Layer, IMPLEMENTED and PUSHED to origin/main (VPS
-production verification pending)** — makes the Phase 16J AI-approved internal
+Ownership / SLA Execution Layer, PRODUCTION VERIFIED on the VPS and CLOSED at
+commit efea751** — makes the Phase 16J AI-approved internal
 actions operational for real internal departments (ownership / assignment /
 SLA-overdue / blocked / completed / Director attention). Extends the existing
 internal-only app apps.ai_copilot (no second action queue): AiApprovedAction
@@ -46,13 +46,20 @@ overdue + unassigned-high/urgent-priority actions. Permissions: all workboard
 mutations require director/admin/superuser; reads = auth. Verification: backend
 23 Phase 16K + 16 16J + 19 16I + 19 16H + 19 16G + 16 16F + 13 16E = 125 passed
 (targeted); makemigrations --check + manage.py check clean; frontend 385/385
-(+11); lint 0; build green. DOCS SAY IMPLEMENTED/PUSHED — VPS production
-verification (deploy + browser validation) is PENDING; do NOT mark production
-verified until after VPS checks. Phase 16K ADDS migration
-ai_copilot.0003_phase16k_action_workboard → the VPS deploy requires migrate.
-Next planned work: Phase 16L — NOT started; requires a separate written Director
-directive. Phase 16J (aa8cf13) is the previous verified baseline. Commit:
-feat: phase 16k action workboard.
+(+11); lint 0; build green. VPS PRODUCTION VERIFICATION PASSED: browser
+validation of the Department action workboard on /operations/ai-copilot —
+Assign / Claim / Block (Director attention updated) / Unblock / Complete
+internal / Add note all PASSED; external action taken=false / provider action
+taken=false; safety shell unchanged (AI Paused / Sandbox OFF / Sync Live /
+AI Mode mock / Live Autonomous Locked); no live provider / customer-facing
+action; makemigrations --check → No changes detected; manage.py check → 0 issues;
+pytest tests/test_phase16k_action_workboard.py → 23 passed; 16J/16I/16H
+regression → passed; healthz OK. Phase 16K ADDS migration
+ai_copilot.0003_phase16k_action_workboard → a fresh VPS deploy requires migrate
+(already applied on the VPS). Phase 16K is CLOSED. Next planned work: Phase 16L
+— NOT started; requires a separate written Director directive. Phase 16J
+(aa8cf13) is the previous verified baseline. Commit: efea751
+(feat: phase 16k action workboard).
 
 Phase 16J — AI-Approved Internal Action Queue
 + Work Execution Bridge, PRODUCTION VERIFIED on the VPS and CLOSED at commit
@@ -93,7 +100,7 @@ tests/test_phase16j_ai_action_queue.py → 16 passed; healthz OK. Phase 16J ADDS
 migration ai_copilot.0002_phase16j_ai_action_queue → a fresh VPS deploy requires
 migrate (already applied on the VPS). Phase 16J is CLOSED. (Historical
 close-state: Phase 16K was next at 16J close — it has since shipped and is
-IMPLEMENTED + PUSHED, VPS verification pending; the current next-planned work is
+PRODUCTION VERIFIED + CLOSED at efea751; the current next-planned work is
 Phase 16L.) Phase
 16I (implementation 0f91f6b, docs finalization 80dfe17) is the previous verified
 baseline. Commit: aa8cf13 (feat: phase 16j ai internal action queue).
