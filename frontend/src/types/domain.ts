@@ -8265,6 +8265,17 @@ export interface AiApprovedAction {
   resultPayload?: Record<string, unknown>;
   safetySnapshot?: Record<string, unknown>;
   events?: AiApprovedActionEvent[];
+  // Phase 16K — department workboard / ownership / SLA
+  department?: string;
+  workStatus?: AiActionWorkStatus;
+  assigneeUser?: string | null;
+  dueAt?: string | null;
+  slaStatus?: AiActionSlaStatus;
+  blockerReason?: string;
+  completedBy?: string | null;
+  completedAt?: string | null;
+  lastActivityAt?: string | null;
+  workEvents?: AiActionWorkEvent[];
 }
 
 export interface AiActionQueueResponse {
@@ -8292,4 +8303,90 @@ export interface CreateAiActionPayload {
 
 export interface AiActionTransitionPayload {
   note?: string;
+}
+
+// ---------- Phase 16K — Department Action Workboard + Ownership / SLA ----------
+
+export type AiActionDepartment =
+  | "calling"
+  | "confirmation"
+  | "qa_compliance"
+  | "finance_accounts"
+  | "dispatch_warehouse"
+  | "delivery_rto"
+  | "director_office"
+  | "data_ops"
+  | "ai_governance";
+
+export type AiActionWorkStatus =
+  | "unassigned"
+  | "assigned"
+  | "in_progress"
+  | "blocked"
+  | "completed_internal"
+  | "rejected"
+  | "cancelled";
+
+export type AiActionSlaStatus =
+  | "no_due_date"
+  | "on_track"
+  | "due_soon"
+  | "overdue";
+
+export interface AiActionWorkEvent {
+  id: number;
+  actionId: number;
+  eventType: string;
+  note: string;
+  actor: string | null;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AiWorkboardResponse {
+  items: AiApprovedAction[];
+  total: number;
+  departments: string[];
+  workStatuses: string[];
+}
+
+export interface AiWorkboardSummary {
+  total: number;
+  unassigned: number;
+  assigned: number;
+  inProgress: number;
+  blocked: number;
+  completedInternal: number;
+  overdue: number;
+  directorAttention: number;
+  byWorkStatus: Record<string, number>;
+  byDepartment: Record<string, number>;
+  providerActionsLocked: boolean;
+  liveAutonomousExecutionLocked: boolean;
+  noProviderActionTaken: boolean;
+  phase: string;
+}
+
+export interface AiWorkboardAttentionItem extends AiApprovedAction {
+  attentionReason: string;
+}
+
+export interface AiWorkboardAttentionResponse {
+  items: AiWorkboardAttentionItem[];
+  total: number;
+}
+
+export interface AiActionAssignPayload {
+  department?: AiActionDepartment | "";
+  assigneeUserId?: number;
+  dueAt?: string;
+  note?: string;
+}
+
+export interface AiActionWorkboardPayload {
+  note?: string;
+  reason?: string;
+  department?: AiActionDepartment | "";
+  assigneeUserId?: number;
+  directorReview?: boolean;
 }

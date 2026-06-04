@@ -3328,6 +3328,93 @@ export const api = {
       payload,
       () => (M.AI_ACTION_QUEUE as import("@/types/domain").AiActionQueueResponse).items[0],
     ),
+
+  // ---------- Phase 16K — Department Action Workboard / Ownership / SLA ----------
+  // Internal-only execution tracker. No provider call, no external action.
+
+  getAiWorkboard: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return safeFetch<import("@/types/domain").AiWorkboardResponse>(
+      `/v1/ai-copilot/workboard/${qs ? `?${qs}` : ""}`,
+      () => M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse,
+    );
+  },
+
+  getAiWorkboardSummary: () =>
+    safeFetch<import("@/types/domain").AiWorkboardSummary>(
+      "/v1/ai-copilot/workboard/summary/",
+      () => M.AI_WORKBOARD_SUMMARY as import("@/types/domain").AiWorkboardSummary,
+    ),
+
+  getAiWorkboardDirectorAttention: () =>
+    safeFetch<import("@/types/domain").AiWorkboardAttentionResponse>(
+      "/v1/ai-copilot/workboard/director-attention/",
+      () => M.AI_WORKBOARD_ATTENTION as import("@/types/domain").AiWorkboardAttentionResponse,
+    ),
+
+  assignAiAction: (id: number, payload: import("@/types/domain").AiActionAssignPayload) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/assign/`,
+      "POST",
+      payload,
+      () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
+    ),
+
+  claimAiAction: (id: number, payload: import("@/types/domain").AiActionWorkboardPayload = {}) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/claim/`,
+      "POST",
+      payload,
+      () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
+    ),
+
+  startAiAction: (id: number, payload: import("@/types/domain").AiActionWorkboardPayload = {}) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/start/`,
+      "POST",
+      payload,
+      () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
+    ),
+
+  blockAiAction: (id: number, payload: import("@/types/domain").AiActionWorkboardPayload) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/block/`,
+      "POST",
+      payload,
+      () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
+    ),
+
+  unblockAiAction: (id: number, payload: import("@/types/domain").AiActionWorkboardPayload = {}) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/unblock/`,
+      "POST",
+      payload,
+      () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
+    ),
+
+  completeInternalAiAction: (id: number, payload: import("@/types/domain").AiActionWorkboardPayload = {}) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/complete-internal/`,
+      "POST",
+      payload,
+      () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
+    ),
+
+  reassignAiAction: (id: number, payload: import("@/types/domain").AiActionWorkboardPayload) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/reassign/`,
+      "POST",
+      payload,
+      () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
+    ),
+
+  addAiActionNote: (id: number, payload: import("@/types/domain").AiActionWorkboardPayload) =>
+    safeMutate<import("@/types/domain").AiApprovedAction>(
+      `/v1/ai-copilot/actions/${id}/notes/`,
+      "POST",
+      payload,
+      () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

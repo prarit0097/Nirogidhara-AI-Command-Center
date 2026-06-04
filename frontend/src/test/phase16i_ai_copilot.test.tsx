@@ -21,6 +21,10 @@ vi.mock("@/services/api", async (importOriginal) => {
       applyAiAction: vi.fn(),
       rejectAiAction: vi.fn(),
       cancelAiAction: vi.fn(),
+      // Phase 16K workboard methods (the page now loads the workboard too).
+      getAiWorkboard: vi.fn(),
+      getAiWorkboardSummary: vi.fn(),
+      getAiWorkboardDirectorAttention: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -94,6 +98,9 @@ beforeEach(() => {
   (api.getAiCopilotSuggestions as any).mockResolvedValue(SUGGESTIONS);
   (api.getAiActionQueue as any).mockResolvedValue({ items: [], total: 0 });
   (api.getAiActionSummary as any).mockResolvedValue({ statusCounts: {}, total: 0, providerActionsLocked: true, liveAutonomousExecutionLocked: true, noProviderActionTaken: true, phase: "16J" });
+  (api.getAiWorkboard as any).mockResolvedValue({ items: [], total: 0, departments: [], workStatuses: [] });
+  (api.getAiWorkboardSummary as any).mockResolvedValue({ total: 0, unassigned: 0, assigned: 0, inProgress: 0, blocked: 0, completedInternal: 0, overdue: 0, directorAttention: 0, byWorkStatus: {}, byDepartment: {}, providerActionsLocked: true, liveAutonomousExecutionLocked: true, noProviderActionTaken: true, phase: "16K" });
+  (api.getAiWorkboardDirectorAttention as any).mockResolvedValue({ items: [], total: 0 });
   (api.generateAiCopilotSuggestion as any).mockResolvedValue(SUGGESTIONS.items[0]);
   (api.reviewAiCopilotSuggestion as any).mockResolvedValue({
     ...SUGGESTIONS.items[0],

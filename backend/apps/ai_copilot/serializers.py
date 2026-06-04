@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from .models import (
+    AiActionWorkEvent,
     AiApprovedAction,
     AiApprovedActionEvent,
     AiCopilotReviewEvent,
@@ -81,6 +82,16 @@ def serialize_action(a: AiApprovedAction, *, detail: bool = False) -> dict[str, 
         "createdAt": a.created_at,
         "updatedAt": a.updated_at,
         "appliedAt": a.applied_at,
+        # Phase 16K — department workboard / ownership / SLA
+        "department": a.department,
+        "workStatus": a.work_status,
+        "assigneeUser": a.assignee_user.username if a.assignee_user_id else None,
+        "dueAt": a.due_at,
+        "slaStatus": _sla_status(a),
+        "blockerReason": a.blocker_reason,
+        "completedBy": a.completed_by.username if a.completed_by_id else None,
+        "completedAt": a.completed_at,
+        "lastActivityAt": a.last_activity_at,
     }
     if detail:
         out["resultPayload"] = dict(a.result_payload or {})
@@ -89,7 +100,29 @@ def serialize_action(a: AiApprovedAction, *, detail: bool = False) -> dict[str, 
             serialize_action_event(e)
             for e in a.events.all().order_by("-created_at")[:50]
         ]
+        out["workEvents"] = [
+            serialize_work_event(e)
+            for e in a.work_events.all().order_by("-created_at")[:50]
+        ]
     return out
+
+
+def _sla_status(a: AiApprovedAction) -> str:
+    from . import services
+
+    return services.compute_sla_status(a)
+
+
+def serialize_work_event(e: AiActionWorkEvent) -> dict[str, Any]:
+    return {
+        "id": e.pk,
+        "actionId": e.action_id,
+        "eventType": e.event_type,
+        "note": e.note,
+        "actor": e.actor.username if e.actor_id else None,
+        "metadata": dict(e.metadata or {}),
+        "createdAt": e.created_at,
+    }
 
 
 def serialize_action_event(e: AiApprovedActionEvent) -> dict[str, Any]:

@@ -17,6 +17,10 @@ vi.mock("@/services/api", async (importOriginal) => {
       applyAiAction: vi.fn(),
       rejectAiAction: vi.fn(),
       cancelAiAction: vi.fn(),
+      // Phase 16K workboard methods (the page loads the workboard too).
+      getAiWorkboard: vi.fn(),
+      getAiWorkboardSummary: vi.fn(),
+      getAiWorkboardDirectorAttention: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -80,6 +84,14 @@ beforeEach(() => {
   (api.applyAiAction as any).mockResolvedValue({ ...ACTION, status: "applied_internal" });
   (api.rejectAiAction as any).mockResolvedValue({ ...ACTION, status: "rejected" });
   (api.cancelAiAction as any).mockResolvedValue({ ...ACTION, status: "cancelled" });
+  (api.getAiWorkboard as any).mockResolvedValue({ items: [], total: 0, departments: [], workStatuses: [] });
+  (api.getAiWorkboardSummary as any).mockResolvedValue({
+    total: 0, unassigned: 0, assigned: 0, inProgress: 0, blocked: 0,
+    completedInternal: 0, overdue: 0, directorAttention: 0,
+    byWorkStatus: {}, byDepartment: {}, providerActionsLocked: true,
+    liveAutonomousExecutionLocked: true, noProviderActionTaken: true, phase: "16K",
+  });
+  (api.getAiWorkboardDirectorAttention as any).mockResolvedValue({ items: [], total: 0 });
 });
 
 describe("Phase 16J — AI action queue section", () => {

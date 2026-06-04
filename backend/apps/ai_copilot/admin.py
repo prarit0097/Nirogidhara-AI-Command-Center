@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.contrib import admin
 
 from .models import (
+    AiActionWorkEvent,
     AiApprovedAction,
     AiApprovedActionEvent,
     AiCopilotReviewEvent,
@@ -34,12 +35,13 @@ class AiCopilotReviewEventAdmin(admin.ModelAdmin):
 @admin.register(AiApprovedAction)
 class AiApprovedActionAdmin(admin.ModelAdmin):
     list_display = (
-        "id", "action_type", "source_type", "status", "priority",
-        "external_action_taken", "provider_action_taken", "created_at",
+        "id", "action_type", "source_type", "status", "work_status",
+        "department", "priority", "external_action_taken",
+        "provider_action_taken", "created_at",
     )
     list_filter = (
-        "action_type", "source_type", "status", "priority",
-        "external_action_taken", "provider_action_taken",
+        "action_type", "source_type", "status", "work_status", "department",
+        "priority", "external_action_taken", "provider_action_taken",
     )
     search_fields = ("title", "source_id", "assigned_team")
     readonly_fields = ("created_at", "updated_at", "applied_at")
@@ -47,6 +49,13 @@ class AiApprovedActionAdmin(admin.ModelAdmin):
 
 @admin.register(AiApprovedActionEvent)
 class AiApprovedActionEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "action", "event_type", "actor", "created_at")
+    list_filter = ("event_type",)
+    readonly_fields = ("created_at",)
+
+
+@admin.register(AiActionWorkEvent)
+class AiActionWorkEventAdmin(admin.ModelAdmin):
     list_display = ("id", "action", "event_type", "actor", "created_at")
     list_filter = ("event_type",)
     readonly_fields = ("created_at",)

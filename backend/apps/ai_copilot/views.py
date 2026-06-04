@@ -24,6 +24,8 @@ from .serializers import (
 
 _VALID_ACTION_TYPES = {c for c, _ in AiApprovedAction.ActionType.choices}
 _VALID_ACTION_STATUSES = {c for c, _ in AiApprovedAction.Status.choices}
+_VALID_DEPARTMENTS = {c for c, _ in AiApprovedAction.Department.choices if c}
+_VALID_WORK_STATUSES = {c for c, _ in AiApprovedAction.WorkStatus.choices}
 
 _VALID_TYPES = set(services.SUGGESTION_TYPES)
 _VALID_SOURCE_TYPES = {c for c, _ in AiCopilotSuggestion.SourceType.choices}
@@ -321,3 +323,178 @@ class AiActionSummaryView(APIView):
 
     def get(self, request):
         return Response(services.get_ai_action_summary())
+
+
+# ===========================================================================
+# Phase 16K — Department Action Workboard + Ownership / SLA Execution Layer
+# ===========================================================================
+
+
+def _resolve_user(raw):
+    if not raw:
+        return None
+    try:
+        from apps.accounts.models import User
+
+        return User.objects.filter(pk=raw).first()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _parse_due_at(raw):
+    if not raw:
+        return None
+    try:
+        from django.utils.dateparse import parse_datetime
+
+        return parse_datetime(str(raw))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+class AiWorkboardView(APIView):
+    """``GET /api/v1/ai-copilot/workboard/`` — department action workboard."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        q = request.query_params
+        limit = _parse_int(q.get("limit"), 200, lo=1, hi=500)
+        rows = services.list_department_workboard(
+            department=q.get("department") or "",
+            work_status=q.get("workStatus") or "",
+            priority=q.get("priority") or "",
+            sla_status=q.get("slaStatus") or "",
+            assignee=q.get("assignee") or "",
+            search=q.get("search") or "",
+            limit=limit,
+        )
+        return Response({
+            "items": [serialize_action(a) for a in rows],
+            "total": AiApprovedAction.objects.count(),
+            "departments": sorted(_VALID_DEPARTMENTS),
+            "workStatuses": sorted(_VALID_WORK_STATUSES),
+        })
+
+
+class AiWorkboardSummaryView(APIView):
+    """``GET /api/v1/ai-copilot/workboard/summary/`` — workboard counts."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        return Response(services.get_department_summary())
+
+
+class AiWorkboardDirectorAttentionView(APIView):
+    """``GET /api/v1/ai-copilot/workboard/director-attention/``."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        items = [
+            {**serialize_action(a), "attentionReason": reason}
+            for a, reason in services.get_director_attention_queue()
+        ]
+        return Response({"items": items, "total": len(items)})
+
+
+class _AiWorkboardTransitionBase(APIView):
+    """Shared base for internal workboard transitions (director/admin only)."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+    _kind = ""
+
+    def post(self, request, pk: int):
+        a = AiApprovedAction.objects.filter(pk=pk).first()
+        if a is None:
+            return Response({"detail": "not_found"}, status=404)
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            self._run(a, data=data, user=request.user)
+        except services.AiActionError as exc:
+            return Response({"detail": "workboard_action_failed", "reason": str(exc)}, status=409)
+        write_event(
+            kind=self._kind,
+            text=f"AI workboard action #{a.pk} → {a.work_status}",
+            payload={
+                "action_id": a.pk, "work_status": a.work_status,
+                "department": a.department,
+                "external_action_taken": False, "provider_action_taken": False,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        a.refresh_from_db()
+        return Response(serialize_action(a, detail=True))
+
+    def _run(self, action, *, data, user):  # pragma: no cover - overridden
+        raise NotImplementedError
+
+
+class AiActionAssignView(_AiWorkboardTransitionBase):
+    _kind = "ai_copilot.workboard.assigned"
+
+    def _run(self, action, *, data, user):
+        services.assign_action(
+            action, department=str(data.get("department", "") or ""),
+            assignee=_resolve_user(data.get("assigneeUserId")),
+            due_at=_parse_due_at(data.get("dueAt")),
+            actor=user, note=str(data.get("note", "") or ""),
+        )
+
+
+class AiActionClaimView(_AiWorkboardTransitionBase):
+    _kind = "ai_copilot.workboard.claimed"
+
+    def _run(self, action, *, data, user):
+        services.claim_action(action, user=user, note=str(data.get("note", "") or ""))
+
+
+class AiActionStartView(_AiWorkboardTransitionBase):
+    _kind = "ai_copilot.workboard.started"
+
+    def _run(self, action, *, data, user):
+        services.start_action(action, actor=user, note=str(data.get("note", "") or ""))
+
+
+class AiActionBlockView(_AiWorkboardTransitionBase):
+    _kind = "ai_copilot.workboard.blocked"
+
+    def _run(self, action, *, data, user):
+        services.block_action(action, reason=str(data.get("reason", "") or ""), actor=user)
+
+
+class AiActionUnblockView(_AiWorkboardTransitionBase):
+    _kind = "ai_copilot.workboard.unblocked"
+
+    def _run(self, action, *, data, user):
+        services.unblock_action(action, actor=user, note=str(data.get("note", "") or ""))
+
+
+class AiActionCompleteInternalView(_AiWorkboardTransitionBase):
+    _kind = "ai_copilot.workboard.completed_internal"
+
+    def _run(self, action, *, data, user):
+        services.complete_internal_action(action, actor=user, note=str(data.get("note", "") or ""))
+
+
+class AiActionReassignView(_AiWorkboardTransitionBase):
+    _kind = "ai_copilot.workboard.reassigned"
+
+    def _run(self, action, *, data, user):
+        services.reassign_action(
+            action, department=str(data.get("department", "") or ""),
+            assignee=_resolve_user(data.get("assigneeUserId")),
+            actor=user, note=str(data.get("note", "") or ""),
+        )
+
+
+class AiActionNotesView(_AiWorkboardTransitionBase):
+    _kind = "ai_copilot.workboard.note_added"
+
+    def _run(self, action, *, data, user):
+        services.add_action_note(
+            action, note=str(data.get("note", "") or ""),
+            actor=user, director_review=bool(data.get("directorReview", False)),
+        )

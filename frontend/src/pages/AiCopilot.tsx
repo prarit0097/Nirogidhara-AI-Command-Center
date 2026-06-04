@@ -9,11 +9,16 @@ import type {
   AiCopilotStatusResponse,
   AiCopilotSuggestion,
   AiCopilotSuggestionType,
+  AiWorkboardAttentionItem,
+  AiWorkboardSummary,
 } from "@/types/domain";
 import {
+  AlertCircle,
   AlertTriangle,
   Bot,
   CheckCircle2,
+  ClipboardList,
+  Clock,
   ListTodo,
   Lock,
   ShieldCheck,
@@ -75,6 +80,40 @@ const ACTION_STATUS_STYLES: Record<string, string> = {
   failed: "bg-destructive/15 text-destructive",
 };
 
+// ---------- Phase 16K — Department Action Workboard ----------
+
+const DEPARTMENTS: { value: string; label: string }[] = [
+  { value: "calling", label: "Calling" },
+  { value: "confirmation", label: "Confirmation" },
+  { value: "qa_compliance", label: "QA / Compliance" },
+  { value: "finance_accounts", label: "Finance / Accounts" },
+  { value: "dispatch_warehouse", label: "Dispatch / Warehouse" },
+  { value: "delivery_rto", label: "Delivery / RTO" },
+  { value: "director_office", label: "Director Office" },
+  { value: "data_ops", label: "Data Ops" },
+  { value: "ai_governance", label: "AI Governance" },
+];
+
+const WORK_STATUS_STYLES: Record<string, string> = {
+  unassigned: "bg-muted text-muted-foreground",
+  assigned: "bg-primary/15 text-primary",
+  in_progress: "bg-accent/15 text-accent",
+  blocked: "bg-destructive/15 text-destructive",
+  completed_internal: "bg-success/15 text-success",
+  rejected: "bg-destructive/15 text-destructive",
+  cancelled: "bg-muted text-muted-foreground",
+};
+
+const SLA_STYLES: Record<string, string> = {
+  no_due_date: "bg-muted text-muted-foreground",
+  on_track: "bg-success/15 text-success",
+  due_soon: "bg-warning/20 text-warning",
+  overdue: "bg-destructive/15 text-destructive",
+};
+
+type WorkboardVerb =
+  | "claim" | "start" | "unblock" | "complete";
+
 export default function AiCopilot() {
   const [status, setStatus] = useState<AiCopilotStatusResponse | null>(null);
   const [suggestions, setSuggestions] = useState<AiCopilotSuggestion[]>([]);
@@ -88,11 +127,33 @@ export default function AiCopilot() {
   const [actions, setActions] = useState<AiApprovedAction[]>([]);
   const [actionType, setActionType] = useState<AiActionType>("create_qa_review_task");
 
+  // Phase 16K — department workboard
+  const [workboard, setWorkboard] = useState<AiApprovedAction[]>([]);
+  const [wbSummary, setWbSummary] = useState<AiWorkboardSummary | null>(null);
+  const [attention, setAttention] = useState<AiWorkboardAttentionItem[]>([]);
+  const [wbDept, setWbDept] = useState("");
+  const [wbStatus, setWbStatus] = useState("");
+  const [wbPriority, setWbPriority] = useState("");
+  const [wbSla, setWbSla] = useState("");
+  const [wbSearch, setWbSearch] = useState("");
+
   const loadActions = () => {
     api
       .getAiActionQueue()
       .then((r) => setActions(r.items))
       .catch(() => setActions([]));
+  };
+
+  const loadWorkboard = () => {
+    const params: Record<string, string> = {};
+    if (wbDept) params.department = wbDept;
+    if (wbStatus) params.workStatus = wbStatus;
+    if (wbPriority) params.priority = wbPriority;
+    if (wbSla) params.slaStatus = wbSla;
+    if (wbSearch.trim()) params.search = wbSearch.trim();
+    api.getAiWorkboard(params).then((r) => setWorkboard(r.items)).catch(() => setWorkboard([]));
+    api.getAiWorkboardSummary().then(setWbSummary).catch(() => setWbSummary(null));
+    api.getAiWorkboardDirectorAttention().then((r) => setAttention(r.items)).catch(() => setAttention([]));
   };
 
   const load = () => {
@@ -107,12 +168,119 @@ export default function AiCopilot() {
         .getAiActionQueue()
         .then((r) => setActions(r.items))
         .catch(() => setActions([])),
+      api.getAiWorkboard().then((r) => setWorkboard(r.items)).catch(() => setWorkboard([])),
+      api.getAiWorkboardSummary().then(setWbSummary).catch(() => setWbSummary(null)),
+      api
+        .getAiWorkboardDirectorAttention()
+        .then((r) => setAttention(r.items))
+        .catch(() => setAttention([])),
     ])
       .catch(() => {
         setStatus(null);
         setErrored(true);
       })
       .finally(() => setLoading(false));
+  };
+
+  const refreshWorkboard = () => {
+    loadWorkboard();
+  };
+
+  const handleWorkboardError = (err: unknown, label: string) => {
+    if (isApiError(err)) {
+      toast.error(`${label} failed (HTTP ${err.httpStatus}).`);
+    } else {
+      toast.error(`${label} failed. Please retry.`);
+    }
+  };
+
+  const handleAssign = async (action: AiApprovedAction, department: string) => {
+    if (busy) return;
+    if (!department) {
+      toast.error("Pick a department to assign.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.assignAiAction(action.id, { department: department as never });
+      toast.success("Assigned (internal only).");
+      refreshWorkboard();
+    } catch (err) {
+      handleWorkboardError(err, "Assign");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReassign = async (action: AiApprovedAction, department: string) => {
+    if (busy) return;
+    if (!department) {
+      toast.error("Pick a department to reassign.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.reassignAiAction(action.id, { department: department as never });
+      toast.success("Reassigned (internal only).");
+      refreshWorkboard();
+    } catch (err) {
+      handleWorkboardError(err, "Reassign");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleBlock = async (action: AiApprovedAction, reason: string) => {
+    if (busy) return;
+    if (!reason.trim()) {
+      toast.error("A blocker reason is required.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.blockAiAction(action.id, { reason: reason.trim() });
+      toast.success("Blocked (internal only).");
+      refreshWorkboard();
+    } catch (err) {
+      handleWorkboardError(err, "Block");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleNote = async (action: AiApprovedAction, note: string) => {
+    if (busy) return;
+    if (!note.trim()) {
+      toast.error("Enter a note.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.addAiActionNote(action.id, { note: note.trim() });
+      toast.success("Note added (internal only).");
+      refreshWorkboard();
+    } catch (err) {
+      handleWorkboardError(err, "Add note");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleWorkboardVerb = async (action: AiApprovedAction, verb: WorkboardVerb) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (verb === "claim") await api.claimAiAction(action.id);
+      else if (verb === "start") await api.startAiAction(action.id);
+      else if (verb === "unblock") await api.unblockAiAction(action.id);
+      else await api.completeInternalAiAction(action.id);
+      toast.success(`Action ${verb === "complete" ? "completed (internal only)" : verb + "ed"}.`);
+      refreshWorkboard();
+    } catch (err) {
+      handleWorkboardError(err, `Action ${verb}`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleCreateAction = async (suggestion: AiCopilotSuggestion) => {
@@ -494,6 +662,202 @@ export default function AiCopilot() {
           </div>
         )}
       </div>
+
+      {/* Phase 16K — Department Action Workboard */}
+      <div className="surface-elevated p-6 mt-6" data-testid="ai-workboard-section">
+        <h3 className="font-display text-lg font-semibold flex items-center gap-2 mb-2">
+          <ClipboardList className="h-5 w-5 text-accent" /> Department action workboard
+        </h3>
+        <p
+          data-testid="ai-workboard-safety-copy"
+          className="text-[12px] text-muted-foreground mb-4"
+        >
+          Completing or updating a workboard action never sends WhatsApp, creates
+          payment links, books shipments, calls customers, invokes Vapi, or calls a
+          live AI provider. This is an internal execution tracker only.
+        </p>
+
+        {/* Summary cards */}
+        {wbSummary && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" data-testid="ai-workboard-summary">
+            <SummaryCard label="Total" value={wbSummary.total} />
+            <SummaryCard label="Unassigned" value={wbSummary.unassigned} />
+            <SummaryCard label="Assigned" value={wbSummary.assigned} />
+            <SummaryCard label="In progress" value={wbSummary.inProgress} tone="accent" />
+            <SummaryCard label="Blocked" value={wbSummary.blocked} tone={wbSummary.blocked ? "danger" : undefined} />
+            <SummaryCard label="Overdue" value={wbSummary.overdue} tone={wbSummary.overdue ? "danger" : undefined} />
+            <SummaryCard label="Completed" value={wbSummary.completedInternal} tone="success" />
+            <SummaryCard label="Director attention" value={wbSummary.directorAttention} tone={wbSummary.directorAttention ? "warning" : undefined} />
+          </div>
+        )}
+
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2 items-end mb-4" data-testid="ai-workboard-filters">
+          <select aria-label="Filter department" data-testid="ai-workboard-filter-department" value={wbDept} onChange={(e) => setWbDept(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-[13px]">
+            <option value="">All departments</option>
+            {DEPARTMENTS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </select>
+          <select aria-label="Filter status" data-testid="ai-workboard-filter-status" value={wbStatus} onChange={(e) => setWbStatus(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-[13px]">
+            <option value="">All statuses</option>
+            {["unassigned", "assigned", "in_progress", "blocked", "completed_internal"].map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+          </select>
+          <select aria-label="Filter priority" data-testid="ai-workboard-filter-priority" value={wbPriority} onChange={(e) => setWbPriority(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-[13px]">
+            <option value="">All priorities</option>
+            {["low", "normal", "high", "urgent"].map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <select aria-label="Filter SLA" data-testid="ai-workboard-filter-sla" value={wbSla} onChange={(e) => setWbSla(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-[13px]">
+            <option value="">All SLA</option>
+            {["no_due_date", "on_track", "due_soon", "overdue"].map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+          </select>
+          <Input data-testid="ai-workboard-search" value={wbSearch} onChange={(e) => setWbSearch(e.target.value)} placeholder="Search title" className="h-9 w-40" />
+          <Button data-testid="ai-workboard-apply-filters" variant="outline" size="sm" onClick={refreshWorkboard} disabled={busy}>Apply</Button>
+        </div>
+
+        {/* Director attention */}
+        {attention.length > 0 && (
+          <div className="rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 mb-4" data-testid="ai-workboard-attention">
+            <div className="flex items-center gap-2 text-[13px] font-semibold text-warning mb-2">
+              <AlertCircle className="h-4 w-4" /> Director attention ({attention.length})
+            </div>
+            <div className="space-y-1.5">
+              {attention.map((a) => (
+                <div key={a.id} data-testid={`ai-workboard-attention-${a.id}`} className="flex items-center justify-between gap-2 flex-wrap text-[13px]">
+                  <span className="min-w-0 truncate">{a.title}</span>
+                  <span className="rounded-full bg-warning/15 text-warning px-2 py-0.5 text-[11px] font-semibold uppercase">{a.attentionReason.replace(/_/g, " ")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Workboard list */}
+        {workboard.length === 0 ? (
+          <p data-testid="ai-workboard-empty" className="text-muted-foreground text-[14px]">
+            No workboard actions match the current filters.
+          </p>
+        ) : (
+          <div className="space-y-3" data-testid="ai-workboard-list">
+            {workboard.map((a) => (
+              <WorkboardRow
+                key={a.id}
+                action={a}
+                busy={busy}
+                onAssign={handleAssign}
+                onReassign={handleReassign}
+                onBlock={handleBlock}
+                onNote={handleNote}
+                onVerb={handleWorkboardVerb}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: "success" | "warning" | "danger" | "accent" }) {
+  const toneClass =
+    tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "danger" ? "text-destructive" : tone === "accent" ? "text-accent" : "text-foreground";
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`text-[18px] font-semibold ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function WorkboardRow({
+  action: a,
+  busy,
+  onAssign,
+  onReassign,
+  onBlock,
+  onNote,
+  onVerb,
+}: {
+  action: AiApprovedAction;
+  busy: boolean;
+  onAssign: (a: AiApprovedAction, dept: string) => void;
+  onReassign: (a: AiApprovedAction, dept: string) => void;
+  onBlock: (a: AiApprovedAction, reason: string) => void;
+  onNote: (a: AiApprovedAction, note: string) => void;
+  onVerb: (a: AiApprovedAction, verb: WorkboardVerb) => void;
+}) {
+  const [dept, setDept] = useState("");
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const ws = a.workStatus ?? "unassigned";
+  const terminal = ws === "completed_internal" || ws === "rejected" || ws === "cancelled";
+
+  return (
+    <div data-testid={`ai-workboard-item-${a.id}`} className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="font-medium">{a.title}</div>
+          <div className="text-[12px] text-muted-foreground">
+            {a.actionType.replace(/_/g, " ")} · {a.department || "no dept"} · {a.assigneeUser || "unassigned"} · {a.priority}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${WORK_STATUS_STYLES[ws] ?? WORK_STATUS_STYLES.unassigned}`}>
+            {ws.replace(/_/g, " ")}
+          </span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${SLA_STYLES[a.slaStatus ?? "no_due_date"]}`}>
+            <Clock className="h-3 w-3" /> {(a.slaStatus ?? "no_due_date").replace(/_/g, " ")}
+          </span>
+        </div>
+      </div>
+
+      {a.blockerReason && (
+        <p className="text-[12px] text-destructive mt-1">Blocked: {a.blockerReason}</p>
+      )}
+      <p className="text-[11px] text-muted-foreground mt-1">
+        Source suggestion #{a.sourceSuggestionId}
+      </p>
+
+      {!terminal && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-3">
+          {ws === "unassigned" && (
+            <>
+              <select aria-label="Assign department" data-testid={`ai-workboard-dept-${a.id}`} value={dept} onChange={(e) => setDept(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-[12px]">
+                <option value="">Pick dept…</option>
+                {DEPARTMENTS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+              <Button data-testid={`ai-workboard-assign-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onAssign(a, dept)}>Assign</Button>
+              <Button data-testid={`ai-workboard-claim-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "claim")}>Claim</Button>
+            </>
+          )}
+          {ws === "assigned" && (
+            <Button data-testid={`ai-workboard-start-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "start")}>Start</Button>
+          )}
+          {(ws === "assigned" || ws === "in_progress") && (
+            <>
+              <Input data-testid={`ai-workboard-reason-${a.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Blocker reason" className="h-8 w-40" />
+              <Button data-testid={`ai-workboard-block-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onBlock(a, reason)}>Block</Button>
+            </>
+          )}
+          {ws === "blocked" && (
+            <Button data-testid={`ai-workboard-unblock-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "unblock")}>Unblock</Button>
+          )}
+          {(ws === "assigned" || ws === "in_progress" || ws === "blocked") && (
+            <Button data-testid={`ai-workboard-complete-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "complete")}>
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Complete internal
+            </Button>
+          )}
+          <select aria-label="Reassign department" data-testid={`ai-workboard-reassign-dept-${a.id}`} value={dept} onChange={(e) => setDept(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-[12px]">
+            <option value="">Reassign to…</option>
+            {DEPARTMENTS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </select>
+          <Button data-testid={`ai-workboard-reassign-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onReassign(a, dept)}>Reassign</Button>
+          <Input data-testid={`ai-workboard-note-input-${a.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add note" className="h-8 w-32" />
+          <Button data-testid={`ai-workboard-note-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onNote(a, note)}>Add note</Button>
+        </div>
+      )}
+
+      <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
+        <Lock className="h-3 w-3" /> external action taken: {String(a.externalActionTaken)} · provider action taken: {String(a.providerActionTaken)}
+      </p>
     </div>
   );
 }

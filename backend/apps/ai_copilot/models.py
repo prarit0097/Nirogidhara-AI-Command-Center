@@ -204,6 +204,28 @@ class AiApprovedAction(models.Model):
         CANCELLED = "cancelled", "Cancelled"
         FAILED = "failed", "Failed"
 
+    # ----- Phase 16K — Department Workboard + Ownership / SLA layer -----
+    class Department(models.TextChoices):
+        UNASSIGNED = "", "Unassigned"
+        CALLING = "calling", "Calling"
+        CONFIRMATION = "confirmation", "Confirmation"
+        QA_COMPLIANCE = "qa_compliance", "QA / Compliance"
+        FINANCE_ACCOUNTS = "finance_accounts", "Finance / Accounts"
+        DISPATCH_WAREHOUSE = "dispatch_warehouse", "Dispatch / Warehouse"
+        DELIVERY_RTO = "delivery_rto", "Delivery / RTO"
+        DIRECTOR_OFFICE = "director_office", "Director Office"
+        DATA_OPS = "data_ops", "Data Ops"
+        AI_GOVERNANCE = "ai_governance", "AI Governance"
+
+    class WorkStatus(models.TextChoices):
+        UNASSIGNED = "unassigned", "Unassigned"
+        ASSIGNED = "assigned", "Assigned"
+        IN_PROGRESS = "in_progress", "In progress"
+        BLOCKED = "blocked", "Blocked"
+        COMPLETED_INTERNAL = "completed_internal", "Completed (internal only)"
+        REJECTED = "rejected", "Rejected"
+        CANCELLED = "cancelled", "Cancelled"
+
     source_suggestion = models.ForeignKey(
         AiCopilotSuggestion, on_delete=models.CASCADE, related_name="approved_actions",
     )
@@ -238,6 +260,32 @@ class AiApprovedAction(models.Model):
     result_payload = models.JSONField(default=dict, blank=True)
     failure_reason = models.CharField(max_length=200, blank=True, default="")
 
+    # ----- Phase 16K — Department Workboard + Ownership / SLA layer -----
+    # `work_status` is the INTERNAL execution tracker, independent of the
+    # Phase 16J queue `status` (pending/applied/rejected/cancelled). It never
+    # authorises a provider or external action — completing a workboard item is
+    # internal-only. `sla_status` is computed at read time from `due_at`.
+    department = models.CharField(
+        max_length=24, choices=Department.choices, blank=True, default="",
+        db_index=True,
+    )
+    assignee_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="ai_actions_assigned",
+    )
+    work_status = models.CharField(
+        max_length=20, choices=WorkStatus.choices,
+        default=WorkStatus.UNASSIGNED, db_index=True,
+    )
+    due_at = models.DateTimeField(null=True, blank=True)
+    blocker_reason = models.CharField(max_length=300, blank=True, default="")
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="ai_actions_completed",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    last_activity_at = models.DateTimeField(null=True, blank=True)
+
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="ai_actions_approved",
@@ -265,6 +313,8 @@ class AiApprovedAction(models.Model):
             models.Index(fields=["status"], name="ai_act_status_idx"),
             models.Index(fields=["action_type"], name="ai_act_type_idx"),
             models.Index(fields=["source_type"], name="ai_act_source_idx"),
+            models.Index(fields=["work_status"], name="ai_act_workstatus_idx"),
+            models.Index(fields=["department"], name="ai_act_dept_idx"),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
@@ -304,3 +354,53 @@ class AiApprovedActionEvent(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"AiApprovedActionEvent #{self.pk} ({self.event_type})"
+
+
+# ---------------------------------------------------------------------------
+# Phase 16K — Department Action Workboard + Ownership / SLA Execution Layer
+# ---------------------------------------------------------------------------
+#
+# An `AiActionWorkEvent` records an INTERNAL workboard transition on an
+# `AiApprovedAction` (assign / claim / start / block / unblock / complete /
+# reassign / note / director-review-requested). It NEVER calls a provider,
+# never sends a customer-facing message, and never changes the Phase 15 safety
+# shell. It is a department-execution audit trail only (no PII).
+
+
+class AiActionWorkEvent(models.Model):
+    """An internal department-workboard lifecycle event (no PII)."""
+
+    class EventType(models.TextChoices):
+        ASSIGNED = "assigned", "Assigned"
+        CLAIMED = "claimed", "Claimed"
+        STARTED = "started", "Started"
+        BLOCKED = "blocked", "Blocked"
+        UNBLOCKED = "unblocked", "Unblocked"
+        COMPLETED_INTERNAL = "completed_internal", "Completed (internal only)"
+        REASSIGNED = "reassigned", "Reassigned"
+        NOTE_ADDED = "note_added", "Note added"
+        DIRECTOR_REVIEW_REQUESTED = "director_review_requested", "Director review requested"
+
+    action = models.ForeignKey(
+        AiApprovedAction, on_delete=models.CASCADE, related_name="work_events",
+    )
+    event_type = models.CharField(
+        max_length=28, choices=EventType.choices, db_index=True,
+    )
+    note = models.TextField(blank=True, default="")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at"], name="ai_act_work_created_idx"),
+            models.Index(fields=["event_type"], name="ai_act_work_type_idx"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"AiActionWorkEvent #{self.pk} ({self.event_type})"

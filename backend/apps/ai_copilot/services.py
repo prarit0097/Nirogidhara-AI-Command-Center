@@ -738,3 +738,332 @@ def get_ai_action_summary() -> dict[str, Any]:
         "noProviderActionTaken": True,
         "phase": "16J",
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 16K — Department Action Workboard + Ownership / SLA Execution Layer
+# ---------------------------------------------------------------------------
+#
+# Make an existing AI-approved internal action assignable, ownable, trackable
+# and closeable across internal departments. Every transition is INTERNAL/
+# DB-only: it NEVER sends WhatsApp/Meta Cloud, places a Vapi call, calls
+# Razorpay/PayU/Delhivery, creates a payment link / AWB, mutates an
+# `Order` / `Payment` / `Shipment` / `Customer` / `Lead`, or changes the
+# Phase 15 safety shell. Completing a workboard item is internal-only. Every
+# touched action keeps `provider_action_attempted=False` +
+# `provider_action_taken=False` + `external_action_allowed=False` +
+# `external_action_taken=False`.
+
+_SLA_DUE_SOON_SECONDS = 24 * 3600
+
+
+def compute_sla_status(action, *, now=None) -> str:
+    """Service-level SLA indicator from ``due_at`` (no DB column).
+
+    Returns one of ``no_due_date`` / ``on_track`` / ``due_soon`` / ``overdue``.
+    Closed work items (completed/rejected/cancelled) are never ``overdue``.
+    """
+    from django.utils import timezone
+
+    from .models import AiApprovedAction
+
+    if action.due_at is None:
+        return "no_due_date"
+    terminal = {
+        AiApprovedAction.WorkStatus.COMPLETED_INTERNAL,
+        AiApprovedAction.WorkStatus.REJECTED,
+        AiApprovedAction.WorkStatus.CANCELLED,
+    }
+    if action.work_status in terminal:
+        return "on_track"
+    now = now or timezone.now()
+    delta = (action.due_at - now).total_seconds()
+    if delta < 0:
+        return "overdue"
+    if delta <= _SLA_DUE_SOON_SECONDS:
+        return "due_soon"
+    return "on_track"
+
+
+def _valid_department(value: str) -> str:
+    from .models import AiApprovedAction
+
+    allowed = {c for c, _ in AiApprovedAction.Department.choices if c}
+    return value if value in allowed else ""
+
+
+def _record_work_event(action, event_type: str, *, actor=None, note: str = "", metadata=None) -> None:
+    from .models import AiActionWorkEvent
+
+    AiActionWorkEvent.objects.create(
+        action=action, event_type=event_type, actor=_action_actor(actor),
+        note=str(note or "")[:4000], metadata=dict(metadata or {}),
+    )
+
+
+def _reassert_locked_contract(action) -> None:
+    """A workboard transition NEVER flips any provider/external flag true."""
+    action.provider_action_attempted = False
+    action.provider_action_taken = False
+    action.external_action_allowed = False
+    action.external_action_taken = False
+
+
+def _assert_workable(action, *, allowed_from: set[str]) -> None:
+    """Guard a workboard transition.
+
+    Refuses if the Phase 16J queue status is terminal (rejected/cancelled) or
+    the current ``work_status`` is not an allowed source state. This prevents
+    accidentally re-opening a closed item.
+    """
+    from .models import AiApprovedAction
+
+    if action.status in {
+        AiApprovedAction.Status.REJECTED,
+        AiApprovedAction.Status.CANCELLED,
+    }:
+        raise AiActionError(f"action_queue_terminal:{action.status}")
+    if action.work_status not in allowed_from:
+        raise AiActionError(f"invalid_work_status:{action.work_status}")
+
+
+def _save_workboard(action, fields: list[str]) -> None:
+    from django.utils import timezone
+
+    _reassert_locked_contract(action)
+    action.last_activity_at = timezone.now()
+    base = [
+        "provider_action_attempted", "provider_action_taken",
+        "external_action_allowed", "external_action_taken", "last_activity_at",
+    ]
+    action.save(update_fields=list(dict.fromkeys(fields + base)))
+
+
+_WS = None  # lazy alias for AiApprovedAction.WorkStatus
+
+
+def _ws():
+    global _WS
+    if _WS is None:
+        from .models import AiApprovedAction
+
+        _WS = AiApprovedAction.WorkStatus
+    return _WS
+
+
+def assign_action(action, *, department: str = "", assignee=None, actor=None, due_at=None, note: str = ""):
+    """Assign an action to a department (+ optional assignee). Internal-only."""
+    ws = _ws()
+    _assert_workable(action, allowed_from={ws.UNASSIGNED, ws.ASSIGNED, ws.IN_PROGRESS, ws.BLOCKED})
+    dept = _valid_department(str(department or ""))
+    if not dept and not action.department:
+        raise AiActionError("department_required")
+    if dept:
+        action.department = dept
+        action.assigned_team = dept  # keep the legacy free-text label in sync
+    if assignee is not None:
+        action.assignee_user = _action_actor(assignee)
+    if due_at is not None:
+        action.due_at = due_at
+    action.work_status = ws.ASSIGNED
+    _save_workboard(action, ["department", "assigned_team", "assignee_user", "due_at", "work_status"])
+    _record_work_event(action, "assigned", actor=actor, note=note,
+                        metadata={"department": action.department})
+    return action
+
+
+def claim_action(action, *, user=None, note: str = ""):
+    """Claim an unassigned action for the current user. Internal-only."""
+    ws = _ws()
+    _assert_workable(action, allowed_from={ws.UNASSIGNED, ws.ASSIGNED})
+    action.assignee_user = _action_actor(user)
+    action.work_status = ws.ASSIGNED
+    _save_workboard(action, ["assignee_user", "work_status"])
+    _record_work_event(action, "claimed", actor=user, note=note)
+    return action
+
+
+def start_action(action, *, actor=None, note: str = ""):
+    """Move an assigned action to in_progress. Internal-only."""
+    ws = _ws()
+    _assert_workable(action, allowed_from={ws.ASSIGNED})
+    action.work_status = ws.IN_PROGRESS
+    _save_workboard(action, ["work_status"])
+    _record_work_event(action, "started", actor=actor, note=note)
+    return action
+
+
+def block_action(action, *, reason: str = "", actor=None):
+    """Block an assigned/in-progress action (requires a reason). Internal-only."""
+    ws = _ws()
+    _assert_workable(action, allowed_from={ws.ASSIGNED, ws.IN_PROGRESS})
+    reason = str(reason or "").strip()
+    if not reason:
+        raise AiActionError("blocker_reason_required")
+    action.work_status = ws.BLOCKED
+    action.blocker_reason = reason[:300]
+    _save_workboard(action, ["work_status", "blocker_reason"])
+    _record_work_event(action, "blocked", actor=actor, note=reason)
+    return action
+
+
+def unblock_action(action, *, actor=None, note: str = ""):
+    """Unblock a blocked action back to in_progress. Internal-only."""
+    ws = _ws()
+    _assert_workable(action, allowed_from={ws.BLOCKED})
+    action.work_status = ws.IN_PROGRESS
+    action.blocker_reason = ""
+    _save_workboard(action, ["work_status", "blocker_reason"])
+    _record_work_event(action, "unblocked", actor=actor, note=note)
+    return action
+
+
+def complete_internal_action(action, *, actor=None, note: str = ""):
+    """Mark a workboard item completed (internal-only — NEVER calls a provider)."""
+    from django.utils import timezone
+
+    ws = _ws()
+    _assert_workable(action, allowed_from={ws.ASSIGNED, ws.IN_PROGRESS, ws.BLOCKED})
+    action.work_status = ws.COMPLETED_INTERNAL
+    action.completed_by = _action_actor(actor)
+    action.completed_at = timezone.now()
+    action.blocker_reason = ""
+    _save_workboard(action, ["work_status", "completed_by", "completed_at", "blocker_reason"])
+    _record_work_event(action, "completed_internal", actor=actor, note=note,
+                        metadata={"providerActionsBlocked": True})
+    return action
+
+
+def reassign_action(action, *, department: str = "", assignee=None, actor=None, note: str = ""):
+    """Reassign an active action to another department/owner. Internal-only."""
+    ws = _ws()
+    _assert_workable(action, allowed_from={ws.UNASSIGNED, ws.ASSIGNED, ws.IN_PROGRESS, ws.BLOCKED})
+    dept = _valid_department(str(department or ""))
+    if dept:
+        action.department = dept
+        action.assigned_team = dept
+    action.assignee_user = _action_actor(assignee)
+    action.work_status = ws.ASSIGNED
+    _save_workboard(action, ["department", "assigned_team", "assignee_user", "work_status"])
+    _record_work_event(action, "reassigned", actor=actor, note=note,
+                        metadata={"department": action.department})
+    return action
+
+
+def add_action_note(action, *, note: str = "", actor=None, director_review: bool = False):
+    """Add an internal workboard note (and optionally flag for Director review)."""
+    note = str(note or "").strip()
+    if not note and not director_review:
+        raise AiActionError("note_required")
+    event_type = "director_review_requested" if director_review else "note_added"
+    _save_workboard(action, [])
+    _record_work_event(action, event_type, actor=actor, note=note)
+    return action
+
+
+def list_department_workboard(
+    *, department: str = "", work_status: str = "", priority: str = "",
+    sla_status: str = "", assignee: str = "", search: str = "", limit: int = 200,
+):
+    """Read-only workboard query over AI-approved internal actions."""
+    from .models import AiApprovedAction
+
+    qs = AiApprovedAction.objects.all().select_related(
+        "assignee_user", "completed_by", "approved_by"
+    ).order_by("-created_at")
+    if department:
+        qs = qs.filter(department=department)
+    if work_status:
+        qs = qs.filter(work_status=work_status)
+    if priority:
+        qs = qs.filter(priority=priority)
+    if assignee:
+        qs = qs.filter(assignee_user__username=assignee)
+    if search:
+        qs = qs.filter(title__icontains=search)
+    rows = list(qs[: max(1, min(500, int(limit or 200)))])
+    if sla_status:
+        rows = [a for a in rows if compute_sla_status(a) == sla_status]
+    return rows
+
+
+def get_department_summary() -> dict[str, Any]:
+    """Read-only workboard counts by work_status / department / SLA."""
+    from django.db.models import Count
+
+    from .models import AiApprovedAction
+
+    ws = _ws()
+    status_counts = {c: 0 for c, _ in AiApprovedAction.WorkStatus.choices}
+    for row in AiApprovedAction.objects.values("work_status").annotate(n=Count("id")):
+        status_counts[row["work_status"]] = row["n"]
+
+    dept_counts: dict[str, int] = {}
+    for row in AiApprovedAction.objects.values("department").annotate(n=Count("id")):
+        dept_counts[row["department"] or "unassigned"] = row["n"]
+
+    # Overdue is SLA-derived → compute in Python over non-terminal rows with a due date.
+    terminal = {ws.COMPLETED_INTERNAL, ws.REJECTED, ws.CANCELLED}
+    overdue = 0
+    for a in AiApprovedAction.objects.exclude(due_at=None).exclude(work_status__in=terminal):
+        if compute_sla_status(a) == "overdue":
+            overdue += 1
+
+    director_attention = len(get_director_attention_queue())
+    total = sum(status_counts.values())
+    return {
+        "total": total,
+        "unassigned": status_counts.get(ws.UNASSIGNED, 0),
+        "assigned": status_counts.get(ws.ASSIGNED, 0),
+        "inProgress": status_counts.get(ws.IN_PROGRESS, 0),
+        "blocked": status_counts.get(ws.BLOCKED, 0),
+        "completedInternal": status_counts.get(ws.COMPLETED_INTERNAL, 0),
+        "overdue": overdue,
+        "directorAttention": director_attention,
+        "byWorkStatus": status_counts,
+        "byDepartment": dept_counts,
+        "providerActionsLocked": True,
+        "liveAutonomousExecutionLocked": True,
+        "noProviderActionTaken": True,
+        "phase": "16K",
+    }
+
+
+def get_director_attention_queue(*, limit: int = 100) -> list:
+    """Read-only list of actions that need Director attention.
+
+    Includes: blocked actions, overdue actions, and unassigned high/urgent
+    priority actions. Each entry carries a ``reason`` for the surfacing. Closed
+    (completed/rejected/cancelled) work items are excluded. Returns a list of
+    ``(action, reason)`` tuples (the view serializes them).
+    """
+    from .models import AiApprovedAction
+
+    ws = _ws()
+    terminal = {ws.COMPLETED_INTERNAL, ws.REJECTED, ws.CANCELLED}
+    out: list[tuple] = []
+    seen: set[int] = set()
+
+    def _add(action, reason: str) -> None:
+        if action.pk in seen:
+            return
+        seen.add(action.pk)
+        out.append((action, reason))
+
+    qs = AiApprovedAction.objects.exclude(
+        status__in=[AiApprovedAction.Status.REJECTED, AiApprovedAction.Status.CANCELLED]
+    ).exclude(work_status__in=terminal).select_related("assignee_user")
+
+    for a in qs:
+        if a.work_status == ws.BLOCKED:
+            _add(a, "blocked")
+    for a in qs:
+        if a.due_at is not None and compute_sla_status(a) == "overdue":
+            _add(a, "overdue")
+    for a in qs:
+        if a.work_status == ws.UNASSIGNED and a.priority in {
+            AiApprovedAction.Priority.HIGH, AiApprovedAction.Priority.URGENT
+        }:
+            _add(a, "unassigned_high_priority")
+
+    return out[: max(1, min(200, int(limit or 100)))]

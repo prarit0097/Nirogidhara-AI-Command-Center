@@ -8,9 +8,53 @@ ndmemory.txt — Nirogidhara AI Command Center · Master Handoff
 This file is the Phase 14B Doc Sync v3 frozen snapshot. Since this file
 was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C /
-16D / 16E / 16F / 16G / 16H / 16I / 16J.
+16D / 16E / 16F / 16G / 16H / 16I / 16J / 16K.
 
-Current operational baseline is **Phase 16J — AI-Approved Internal Action Queue
+Current operational baseline is **Phase 16K — Department Action Workboard +
+Ownership / SLA Execution Layer, IMPLEMENTED and PUSHED to origin/main (VPS
+production verification pending)** — makes the Phase 16J AI-approved internal
+actions operational for real internal departments (ownership / assignment /
+SLA-overdue / blocked / completed / Director attention). Extends the existing
+internal-only app apps.ai_copilot (no second action queue): AiApprovedAction
+gains 8 additive workboard fields (department [9 internal teams: calling /
+confirmation / qa_compliance / finance_accounts / dispatch_warehouse /
+delivery_rto / director_office / data_ops / ai_governance], assignee_user,
+work_status [unassigned → assigned → in_progress → blocked → completed_internal,
+plus rejected / cancelled], due_at, blocker_reason, completed_by, completed_at,
+last_activity_at) + a new model AiActionWorkEvent (assign / claim / start /
+block / unblock / completed_internal / reassign / note_added /
+director_review_requested); migration ai_copilot.0003_phase16k_action_workboard
+(pure CreateModel + AddField + AddIndex, no existing table altered, no
+RunPython). sla_status (no_due_date / on_track / due_soon / overdue) is computed
+at read time from due_at (no DB column). 12 new endpoints under
+/api/v1/ai-copilot/ (workboard/, workboard/summary/, workboard/director-attention/,
+actions/<id>/{assign,claim,start,block,unblock,complete-internal,reassign,notes}/);
+new Department action workboard section on /operations/ai-copilot. Every
+transition is INTERNAL/DB-only — never sends WhatsApp/Meta Cloud, places a Vapi
+call, calls Razorpay/PayU live or creates a payment link, books a live Delhivery
+AWB, calls any AI/LLM provider, auto-confirms/cancels an order, auto-applies a
+discount, enqueues a business Celery job, or mutates RuntimeKillSwitch /
+SandboxState; the locked contract provider_action_attempted=false +
+provider_action_taken=false + external_action_allowed=false +
+external_action_taken=false is re-asserted on every transition (defensive test
+patches all 5 provider entrypoints → assert_not_called across the full assign →
+start → block → unblock → reassign → note → complete + claim flow, with
+kill-switch/sandbox/row-counts unchanged). Guards: queue-terminal actions
+(Phase 16J status rejected/cancelled) cannot be worked; closed work items cannot
+be re-opened; blocking requires a reason. Director attention surfaces blocked +
+overdue + unassigned-high/urgent-priority actions. Permissions: all workboard
+mutations require director/admin/superuser; reads = auth. Verification: backend
+23 Phase 16K + 16 16J + 19 16I + 19 16H + 19 16G + 16 16F + 13 16E = 125 passed
+(targeted); makemigrations --check + manage.py check clean; frontend 385/385
+(+11); lint 0; build green. DOCS SAY IMPLEMENTED/PUSHED — VPS production
+verification (deploy + browser validation) is PENDING; do NOT mark production
+verified until after VPS checks. Phase 16K ADDS migration
+ai_copilot.0003_phase16k_action_workboard → the VPS deploy requires migrate.
+Next planned work: Phase 16L — NOT started; requires a separate written Director
+directive. Phase 16J (aa8cf13) is the previous verified baseline. Commit:
+feat: phase 16k action workboard.
+
+Phase 16J — AI-Approved Internal Action Queue
 + Work Execution Bridge, PRODUCTION VERIFIED on the VPS and CLOSED at commit
 aa8cf13** — extends the existing internal-only app apps.ai_copilot
 with 2 additive models (AiApprovedAction, AiApprovedActionEvent; migration
@@ -47,8 +91,10 @@ WhatsApp / Razorpay / PayU / Delhivery / Vapi / live-AI / payment-link / AWB /
 customer-facing action; migrate --noinput → "No migrations to apply"; pytest
 tests/test_phase16j_ai_action_queue.py → 16 passed; healthz OK. Phase 16J ADDS
 migration ai_copilot.0002_phase16j_ai_action_queue → a fresh VPS deploy requires
-migrate (already applied on the VPS). Phase 16J is CLOSED. Next planned work:
-Phase 16K — NOT started; requires a separate written Director directive. Phase
+migrate (already applied on the VPS). Phase 16J is CLOSED. (Historical
+close-state: Phase 16K was next at 16J close — it has since shipped and is
+IMPLEMENTED + PUSHED, VPS verification pending; the current next-planned work is
+Phase 16L.) Phase
 16I (implementation 0f91f6b, docs finalization 80dfe17) is the previous verified
 baseline. Commit: aa8cf13 (feat: phase 16j ai internal action queue).
 
@@ -93,7 +139,7 @@ regression (16H/16G/16F/16E) → 67 passed [100%]; GET /api/healthz/ →
 ai_copilot.0001_phase16i_ai_copilot → a fresh VPS deploy requires migrate
 (already applied on the VPS). Phase 16I is CLOSED. (Historical close-state: Phase
 16J was next at 16I close — it has since shipped and is PRODUCTION VERIFIED +
-CLOSED at aa8cf13; the current next-planned work is Phase 16K.)
+CLOSED at aa8cf13; the current next-planned work is Phase 16L.)
 Commit: 0f91f6b (feat: phase 16i ai copilot approval workflow).
 
 Phase 16H — Internal Pilot Execution Workbench + Role-Based Task Queues,
@@ -132,7 +178,7 @@ Phase 16H ADDS migration pilot.0003_phase16h_pilot_execution → a fresh VPS dep
 requires migrate (already applied on the VPS). Phase 16H is CLOSED and is the
 previous verified baseline (Phase 16I has since shipped and is PRODUCTION
 VERIFIED + CLOSED at 0f91f6b, and Phase 16J is PRODUCTION VERIFIED + CLOSED at
-aa8cf13; the current next-planned work is Phase 16K).
+aa8cf13; the current next-planned work is Phase 16L).
 Commit: d733cf0 (feat: phase 16h pilot execution workbench).
 
 Phase 16G — Internal Pilot Control Center / Pilot Execution Dashboard is
@@ -204,7 +250,7 @@ remain locked behind a future Director live gate. Terminal: migrate --noinput �
 → [100%]; GET /api/healthz/ → {"status": "ok", "service": "nirogidhara-backend"}.
 Phase 16F is CLOSED and is the previous verified baseline (Phase 16G/16H/16I/16J
 have since shipped and are PRODUCTION VERIFIED + CLOSED at 38e8dc8 / d733cf0 /
-0f91f6b / aa8cf13; the current next-planned work is Phase 16K).
+0f91f6b / aa8cf13; the current next-planned work is Phase 16L).
 
 Phase 16E — Payment / Logistics Integration Hardening (PRODUCTION VERIFIED on
 the VPS + CLOSED, commit 36395f6; new internal-only app apps.integration_hardening
@@ -222,12 +268,13 @@ Read these for current truth:
   - nd.md                                  (canonical source of truth)
   - docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md (Phase 15 safety-shell freeze
                                             rule + smoke checklist + rollback)
-  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16J" headers)
+  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16K" headers)
   - docs/RUNBOOK.md                        (operator playbooks, includes
+                                            Phase 16K Department workboard +
                                             Phase 16J AI action queue +
                                             Phase 16I AI Copilot)
 
-Next planned work: Phase 16K (NOT started; separate Director directive
+Next planned work: Phase 16L (NOT started; separate Director directive
 required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".
