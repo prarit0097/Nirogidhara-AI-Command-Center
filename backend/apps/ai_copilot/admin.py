@@ -8,6 +8,7 @@ from .models import (
     AiApprovedActionEvent,
     AiCopilotReviewEvent,
     AiCopilotSuggestion,
+    AiWorkboardDepartmentMember,
 )
 
 
@@ -59,3 +60,14 @@ class AiActionWorkEventAdmin(admin.ModelAdmin):
     list_display = ("id", "action", "event_type", "actor", "created_at")
     list_filter = ("event_type",)
     readonly_fields = ("created_at",)
+
+
+@admin.register(AiWorkboardDepartmentMember)
+class AiWorkboardDepartmentMemberAdmin(admin.ModelAdmin):
+    list_display = (
+        "id", "user", "department", "is_active", "can_claim", "can_work",
+        "can_complete", "created_at",
+    )
+    list_filter = ("department", "is_active", "can_claim", "can_work", "can_complete")
+    search_fields = ("user__username",)
+    readonly_fields = ("created_at", "updated_at")

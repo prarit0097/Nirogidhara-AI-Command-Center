@@ -1029,6 +1029,256 @@ def get_department_summary() -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Phase 16L — Scoped Team Member Work Permissions + My Work Queue
+# ---------------------------------------------------------------------------
+#
+# Decide who may CLAIM / WORK an already-created internal action, and surface a
+# per-user "My Work" view. Director/Admin/Superuser keep full control; a
+# non-admin may only work an action they are assigned to, or claim an
+# unassigned action in a department they hold active membership for. Nothing
+# here calls a provider, changes the safety shell, or takes an external action.
+
+
+class WorkPermissionError(Exception):
+    """Raised when a user is not permitted to perform a scoped workboard op."""
+
+
+def _is_admin_like(user) -> bool:
+    # Reuse the single source of truth from the permissions module.
+    from .permissions import _is_admin_like as _admin
+
+    return _admin(user)
+
+
+def _active_membership(user, department: str):
+    """The user's active membership for a department, or None."""
+    from .models import AiWorkboardDepartmentMember
+
+    uid = getattr(user, "id", None)
+    if not uid or not department:
+        return None
+    return (
+        AiWorkboardDepartmentMember.objects.filter(
+            user_id=uid, department=department, is_active=True
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _is_terminal_action(action) -> bool:
+    """A queue-terminal (rejected/cancelled) or closed work item cannot be worked."""
+    from .models import AiApprovedAction
+
+    ws = _ws()
+    if action.status in {AiApprovedAction.Status.REJECTED, AiApprovedAction.Status.CANCELLED}:
+        return True
+    return action.work_status in {ws.COMPLETED_INTERNAL, ws.REJECTED, ws.CANCELLED}
+
+
+def can_user_claim_action(user, action) -> tuple[bool, str]:
+    """Whether ``user`` may claim ``action`` (admin, or active dept member)."""
+    ws = _ws()
+    if _is_admin_like(user):
+        return (True, "admin")
+    if _is_terminal_action(action):
+        return (False, "action_terminal_or_closed")
+    if not action.department:
+        return (False, "no_department")
+    if action.work_status not in {ws.UNASSIGNED, ws.ASSIGNED}:
+        return (False, "not_claimable_state")
+    # Only unclaimed (no current owner) work can be claimed by a member.
+    if action.assignee_user_id is not None:
+        return (False, "already_assigned")
+    membership = _active_membership(user, action.department)
+    if membership is None:
+        return (False, "no_active_membership")
+    if not membership.can_claim:
+        return (False, "membership_cannot_claim")
+    return (True, "department_member")
+
+
+def can_user_work_action(user, action, operation: str) -> tuple[bool, str]:
+    """Whether ``user`` may perform ``operation`` on ``action``.
+
+    operation ∈ {claim, start, block, unblock, complete, note, assign, reassign}.
+    """
+    if _is_admin_like(user):
+        return (True, "admin")
+    if operation in {"assign", "reassign"}:
+        return (False, "admin_required")
+    if operation == "claim":
+        return can_user_claim_action(user, action)
+    if _is_terminal_action(action):
+        return (False, "action_terminal_or_closed")
+    # start / block / unblock / complete / note — must be the directly assigned user.
+    if action.assignee_user_id != getattr(user, "id", None):
+        return (False, "not_assignee")
+    membership = _active_membership(user, action.department)
+    if operation == "complete":
+        if membership is not None and not membership.can_complete:
+            return (False, "membership_cannot_complete")
+        return (True, "assignee")
+    # start / block / unblock / note
+    if membership is not None and not membership.can_work:
+        return (False, "membership_cannot_work")
+    return (True, "assignee")
+
+
+def action_permission_booleans(user, action) -> dict[str, bool]:
+    """Safe per-action permission booleans for the frontend (no PII)."""
+    from .models import AiApprovedAction
+
+    ws = _ws()
+    admin = _is_admin_like(user)
+    terminal = _is_terminal_action(action)
+    queue_terminal = action.status in {
+        AiApprovedAction.Status.REJECTED, AiApprovedAction.Status.CANCELLED,
+    }
+    return {
+        "canClaim": can_user_claim_action(user, action)[0],
+        "canStart": action.work_status == ws.ASSIGNED
+        and can_user_work_action(user, action, "start")[0],
+        "canBlock": action.work_status in {ws.ASSIGNED, ws.IN_PROGRESS}
+        and can_user_work_action(user, action, "block")[0],
+        "canUnblock": action.work_status == ws.BLOCKED
+        and can_user_work_action(user, action, "unblock")[0],
+        "canCompleteInternal": action.work_status
+        in {ws.ASSIGNED, ws.IN_PROGRESS, ws.BLOCKED}
+        and can_user_work_action(user, action, "complete")[0],
+        "canAddNote": (not terminal) and can_user_work_action(user, action, "note")[0],
+        "canAssign": admin and not queue_terminal,
+        "canReassign": admin and not terminal,
+    }
+
+
+def get_user_work_permissions(user) -> dict[str, Any]:
+    """Global, safe permission summary for the current user."""
+    from .models import AiWorkboardDepartmentMember
+
+    admin = _is_admin_like(user)
+    departments = []
+    if not admin:
+        for m in AiWorkboardDepartmentMember.objects.filter(
+            user_id=getattr(user, "id", None), is_active=True
+        ).order_by("department"):
+            departments.append({
+                "department": m.department,
+                "canClaim": m.can_claim,
+                "canWork": m.can_work,
+                "canComplete": m.can_complete,
+            })
+    return {
+        "isAdmin": admin,
+        "canViewWorkboard": True,
+        "canAssign": admin,
+        "canReassign": admin,
+        "canManageMembership": admin,
+        "departments": departments,
+        "providerActionsLocked": True,
+        "liveAutonomousExecutionLocked": True,
+        "phase": "16L",
+    }
+
+
+# ----- Department membership management (Director/Admin only at the view) -----
+
+
+def create_department_membership(
+    *, user, department: str, created_by=None,
+    can_claim: bool = True, can_work: bool = True, can_complete: bool = True,
+):
+    """Create (or reactivate) a scoped department membership for a user."""
+    from .models import AiApprovedAction, AiWorkboardDepartmentMember
+
+    valid = {c for c, _ in AiApprovedAction.Department.choices if c}
+    if department not in valid:
+        raise WorkPermissionError(f"invalid_department:{department}")
+    if user is None:
+        raise WorkPermissionError("user_required")
+
+    existing = AiWorkboardDepartmentMember.objects.filter(
+        user=user, department=department, is_active=True
+    ).first()
+    if existing is not None:
+        existing.can_claim = bool(can_claim)
+        existing.can_work = bool(can_work)
+        existing.can_complete = bool(can_complete)
+        existing.save(update_fields=["can_claim", "can_work", "can_complete", "updated_at"])
+        return existing, False
+    member = AiWorkboardDepartmentMember.objects.create(
+        user=user, department=department,
+        can_claim=bool(can_claim), can_work=bool(can_work), can_complete=bool(can_complete),
+        created_by=_action_actor(created_by), is_active=True,
+    )
+    return member, True
+
+
+def deactivate_department_membership(member):
+    member.is_active = False
+    member.save(update_fields=["is_active", "updated_at"])
+    return member
+
+
+def activate_department_membership(member):
+    member.is_active = True
+    member.save(update_fields=["is_active", "updated_at"])
+    return member
+
+
+# ----- My Work queue -----
+
+
+def list_my_work(user, *, work_status: str = "", limit: int = 200):
+    """Internal actions assigned to ``user`` (the user's own work)."""
+    from .models import AiApprovedAction
+
+    uid = getattr(user, "id", None)
+    if not uid:
+        return []
+    qs = AiApprovedAction.objects.filter(assignee_user_id=uid).select_related(
+        "assignee_user", "completed_by"
+    ).order_by("-created_at")
+    if work_status:
+        qs = qs.filter(work_status=work_status)
+    return list(qs[: max(1, min(500, int(limit or 200)))])
+
+
+def get_my_work_summary(user) -> dict[str, Any]:
+    """Counts over the current user's assigned work (+ SLA breakdown)."""
+    from .models import AiApprovedAction
+
+    ws = _ws()
+    uid = getattr(user, "id", None)
+    counts = {c: 0 for c, _ in AiApprovedAction.WorkStatus.choices}
+    due_soon = 0
+    overdue = 0
+    if uid:
+        rows = AiApprovedAction.objects.filter(assignee_user_id=uid)
+        for a in rows:
+            counts[a.work_status] = counts.get(a.work_status, 0) + 1
+            sla = compute_sla_status(a)
+            if sla == "due_soon":
+                due_soon += 1
+            elif sla == "overdue":
+                overdue += 1
+    total = sum(counts.values())
+    return {
+        "total": total,
+        "assigned": counts.get(ws.ASSIGNED, 0),
+        "inProgress": counts.get(ws.IN_PROGRESS, 0),
+        "blocked": counts.get(ws.BLOCKED, 0),
+        "completedInternal": counts.get(ws.COMPLETED_INTERNAL, 0),
+        "dueSoon": due_soon,
+        "overdue": overdue,
+        "byWorkStatus": counts,
+        "providerActionsLocked": True,
+        "noProviderActionTaken": True,
+        "phase": "16L",
+    }
+
+
 def get_director_attention_queue(*, limit: int = 100) -> list:
     """Read-only list of actions that need Director attention.
 

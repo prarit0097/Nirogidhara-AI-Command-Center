@@ -29,6 +29,10 @@ vi.mock("@/services/api", async (importOriginal) => {
       completeInternalAiAction: vi.fn(),
       reassignAiAction: vi.fn(),
       addAiActionNote: vi.fn(),
+      // Phase 16L My Work methods (the page loads these too).
+      getAiMyWork: vi.fn(),
+      getAiMyWorkSummary: vi.fn(),
+      getAiMyWorkPermissions: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -106,6 +110,8 @@ beforeEach(() => {
   });
   (api.getAiWorkboardSummary as any).mockResolvedValue(SUMMARY);
   (api.getAiWorkboardDirectorAttention as any).mockResolvedValue(ATTENTION);
+  (api.getAiMyWork as any).mockResolvedValue({ items: [], total: 0, myPermissions: { isAdmin: true, canViewWorkboard: true, canAssign: true, canReassign: true, canManageMembership: true, departments: [], providerActionsLocked: true, liveAutonomousExecutionLocked: true, phase: "16L" } });
+  (api.getAiMyWorkSummary as any).mockResolvedValue({ total: 0, assigned: 0, inProgress: 0, blocked: 0, completedInternal: 0, dueSoon: 0, overdue: 0, byWorkStatus: {}, providerActionsLocked: true, noProviderActionTaken: true, phase: "16L" });
   (api.assignAiAction as any).mockResolvedValue({ ...UNASSIGNED, workStatus: "assigned" });
   (api.startAiAction as any).mockResolvedValue({ ...ASSIGNED, workStatus: "in_progress" });
   (api.blockAiAction as any).mockResolvedValue({ ...IN_PROGRESS, workStatus: "blocked" });

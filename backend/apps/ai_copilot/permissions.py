@@ -31,3 +31,19 @@ class AuthenticatedReadAdminWrite(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return _is_admin_like(user)
+
+
+class IsDirectorAdmin(BasePermission):
+    """Every method (read + write) requires director/admin/superuser.
+
+    Phase 16L — used for the scoped department-membership management surface,
+    which is Director/Admin-only even for reads.
+    """
+
+    message = "Director/Admin role required for this action."
+
+    def has_permission(self, request, view) -> bool:  # type: ignore[override]
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        return _is_admin_like(user)

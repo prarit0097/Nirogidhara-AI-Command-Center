@@ -8,11 +8,58 @@ ndmemory.txt — Nirogidhara AI Command Center · Master Handoff
 This file is the Phase 14B Doc Sync v3 frozen snapshot. Since this file
 was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C /
-16D / 16E / 16F / 16G / 16H / 16I / 16J / 16K.
+16D / 16E / 16F / 16G / 16H / 16I / 16J / 16K / 16L.
 
-Current operational baseline is **Phase 16K — Department Action Workboard +
+Current operational baseline is **Phase 16L — Scoped Team Member Work
+Permissions + My Work Queue, IMPLEMENTED and PUSHED to origin/main (VPS
+production verification pending)** — lets real internal team members safely work
+their own assigned internal actions (and claim eligible department work) WITHOUT
+broad Director/Admin power. Extends the existing internal-only app
+apps.ai_copilot (no duplicate app, no second action queue) with 1 additive model
+AiWorkboardDepartmentMember (user FK, department [the same 9 Phase 16K teams:
+calling / confirmation / qa_compliance / finance_accounts / dispatch_warehouse /
+delivery_rto / director_office / data_ops / ai_governance], is_active, can_claim,
+can_work, can_complete, created_by FK, timestamps; partial-unique active
+membership per (user, department); indexes on user/department/is_active);
+migration ai_copilot.0004_phase16l_workboard_department_member (pure CreateModel,
+no existing table altered, no RunPython). Scoped rules (decided centrally in
+services.can_user_work_action / can_user_claim_action): Director/Admin/Superuser
+keep full control; a non-admin may CLAIM an unclaimed non-terminal action only
+when it has a department and the user holds an active membership with
+can_claim=true; the directly ASSIGNED user may start/block(reason)/unblock/
+complete-internal/add-note their own action (per-dept can_work / can_complete=false
+further restricts); assign/reassign + department-membership management stay
+Director/Admin-only; viewers read-only; non-assignee/non-member → 403
+work_permission_denied; terminal queue actions + closed work items stay protected
+exactly as Phase 16K. 7 new endpoints under /api/v1/ai-copilot/ (workboard/my/,
+workboard/my/summary/, workboard/my-permissions/, workboard/department-members/
+GET+POST, .../<id>/activate/, .../deactivate/); the 6 Phase 16K scoped transitions
+(actions/<id>/{claim,start,block,unblock,complete-internal,notes}/) now run
+IsAuthenticated + service scoped checks instead of admin-only. Every workboard /
+My Work response carries safe per-action permissions booleans (canClaim /
+canStart / canBlock / canUnblock / canCompleteInternal / canAddNote / canAssign /
+canReassign); new My work queue section on /operations/ai-copilot with
+permission-gated buttons + assign/reassign hidden from non-admins. INTERNAL/
+DB-only — never sends WhatsApp/Meta Cloud, places a Vapi call, calls
+Razorpay/PayU live or creates a payment link, books a live Delhivery AWB, calls
+any AI/LLM provider, auto-confirms/cancels an order, auto-applies a discount,
+enqueues a business Celery job, mutates RuntimeKillSwitch/SandboxState, or
+broadens operations users to full admin; provider_action_* / external_action_*
+stay false on every transition (defensive test patches all 5 provider entrypoints
+→ assert_not_called across member-claim → start → block → unblock → note →
+complete, with kill-switch/sandbox/row-counts unchanged). Verification: backend 24
+Phase 16L + 23 16K + 16 16J + 19 16I = 82 passed (targeted); makemigrations
+--check + manage.py check clean; frontend 398/398 (+13); lint 0; build green. DOCS
+SAY IMPLEMENTED/PUSHED — VPS production verification (deploy + browser validation)
+is PENDING; do NOT mark production verified until after VPS checks. Phase 16L ADDS
+migration ai_copilot.0004_phase16l_workboard_department_member → the VPS deploy
+requires migrate. Next planned work: Phase 16M — NOT started; requires a separate
+written Director directive. Phase 16K (efea751) is the previous verified baseline.
+Commit: feat: phase 16l scoped work permissions.
+
+Phase 16K — Department Action Workboard +
 Ownership / SLA Execution Layer, PRODUCTION VERIFIED on the VPS and CLOSED at
-commit efea751** — makes the Phase 16J AI-approved internal
+commit efea751 — makes the Phase 16J AI-approved internal
 actions operational for real internal departments (ownership / assignment /
 SLA-overdue / blocked / completed / Director attention). Extends the existing
 internal-only app apps.ai_copilot (no second action queue): AiApprovedAction
@@ -56,9 +103,10 @@ action; makemigrations --check → No changes detected; manage.py check → 0 is
 pytest tests/test_phase16k_action_workboard.py → 23 passed; 16J/16I/16H
 regression → passed; healthz OK. Phase 16K ADDS migration
 ai_copilot.0003_phase16k_action_workboard → a fresh VPS deploy requires migrate
-(already applied on the VPS). Phase 16K is CLOSED. Next planned work: Phase 16L
-— NOT started; requires a separate written Director directive. Phase 16J
-(aa8cf13) is the previous verified baseline. Commit: efea751
+(already applied on the VPS). Phase 16K is CLOSED. (Historical close-state:
+Phase 16L was next at 16K close — it has since shipped and is IMPLEMENTED +
+PUSHED, VPS verification pending; the current next-planned work is Phase 16M.)
+Phase 16J (aa8cf13) is the previous verified baseline. Commit: efea751
 (feat: phase 16k action workboard).
 
 Phase 16J — AI-Approved Internal Action Queue
@@ -146,7 +194,7 @@ regression (16H/16G/16F/16E) → 67 passed [100%]; GET /api/healthz/ →
 ai_copilot.0001_phase16i_ai_copilot → a fresh VPS deploy requires migrate
 (already applied on the VPS). Phase 16I is CLOSED. (Historical close-state: Phase
 16J was next at 16I close — it has since shipped and is PRODUCTION VERIFIED +
-CLOSED at aa8cf13; the current next-planned work is Phase 16L.)
+CLOSED at aa8cf13; the current next-planned work is Phase 16M.)
 Commit: 0f91f6b (feat: phase 16i ai copilot approval workflow).
 
 Phase 16H — Internal Pilot Execution Workbench + Role-Based Task Queues,
@@ -185,7 +233,7 @@ Phase 16H ADDS migration pilot.0003_phase16h_pilot_execution → a fresh VPS dep
 requires migrate (already applied on the VPS). Phase 16H is CLOSED and is the
 previous verified baseline (Phase 16I has since shipped and is PRODUCTION
 VERIFIED + CLOSED at 0f91f6b, and Phase 16J is PRODUCTION VERIFIED + CLOSED at
-aa8cf13; the current next-planned work is Phase 16L).
+aa8cf13; the current next-planned work is Phase 16M).
 Commit: d733cf0 (feat: phase 16h pilot execution workbench).
 
 Phase 16G — Internal Pilot Control Center / Pilot Execution Dashboard is
@@ -257,7 +305,7 @@ remain locked behind a future Director live gate. Terminal: migrate --noinput �
 → [100%]; GET /api/healthz/ → {"status": "ok", "service": "nirogidhara-backend"}.
 Phase 16F is CLOSED and is the previous verified baseline (Phase 16G/16H/16I/16J
 have since shipped and are PRODUCTION VERIFIED + CLOSED at 38e8dc8 / d733cf0 /
-0f91f6b / aa8cf13; the current next-planned work is Phase 16L).
+0f91f6b / aa8cf13; the current next-planned work is Phase 16M).
 
 Phase 16E — Payment / Logistics Integration Hardening (PRODUCTION VERIFIED on
 the VPS + CLOSED, commit 36395f6; new internal-only app apps.integration_hardening
@@ -275,13 +323,14 @@ Read these for current truth:
   - nd.md                                  (canonical source of truth)
   - docs/PHASE_15M_DIRECTOR_SIGNOFF_PACK.md (Phase 15 safety-shell freeze
                                             rule + smoke checklist + rollback)
-  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16K" headers)
+  - AGENTS.md / CLAUDE.md / README.md      ("post Phase 16L" headers)
   - docs/RUNBOOK.md                        (operator playbooks, includes
+                                            Phase 16L scoped work permissions +
                                             Phase 16K Department workboard +
                                             Phase 16J AI action queue +
                                             Phase 16I AI Copilot)
 
-Next planned work: Phase 16L (NOT started; separate Director directive
+Next planned work: Phase 16M (NOT started; separate Director directive
 required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".

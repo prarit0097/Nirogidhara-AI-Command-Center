@@ -3415,6 +3415,61 @@ export const api = {
       payload,
       () => (M.AI_WORKBOARD as import("@/types/domain").AiWorkboardResponse).items[0],
     ),
+
+  // ---------- Phase 16L — Scoped Team Member Work Permissions / My Work ----------
+  // Internal-only. No provider call, no external action.
+
+  getAiMyWork: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return safeFetch<import("@/types/domain").AiMyWorkResponse>(
+      `/v1/ai-copilot/workboard/my/${qs ? `?${qs}` : ""}`,
+      () => M.AI_MY_WORK as import("@/types/domain").AiMyWorkResponse,
+    );
+  },
+
+  getAiMyWorkSummary: () =>
+    safeFetch<import("@/types/domain").AiMyWorkSummary>(
+      "/v1/ai-copilot/workboard/my/summary/",
+      () => M.AI_MY_WORK_SUMMARY as import("@/types/domain").AiMyWorkSummary,
+    ),
+
+  getAiMyWorkPermissions: () =>
+    safeFetch<import("@/types/domain").AiWorkPermissions>(
+      "/v1/ai-copilot/workboard/my-permissions/",
+      () => M.AI_MY_WORK_PERMISSIONS as import("@/types/domain").AiWorkPermissions,
+    ),
+
+  getAiDepartmentMembers: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return safeFetch<import("@/types/domain").AiDepartmentMembersResponse>(
+      `/v1/ai-copilot/workboard/department-members/${qs ? `?${qs}` : ""}`,
+      () => M.AI_DEPARTMENT_MEMBERS as import("@/types/domain").AiDepartmentMembersResponse,
+    );
+  },
+
+  createAiDepartmentMember: (payload: import("@/types/domain").CreateAiDepartmentMemberPayload) =>
+    safeMutate<import("@/types/domain").AiWorkboardDepartmentMember>(
+      "/v1/ai-copilot/workboard/department-members/",
+      "POST",
+      payload,
+      () => (M.AI_DEPARTMENT_MEMBERS as import("@/types/domain").AiDepartmentMembersResponse).items[0],
+    ),
+
+  activateAiDepartmentMember: (id: number) =>
+    safeMutate<import("@/types/domain").AiWorkboardDepartmentMember>(
+      `/v1/ai-copilot/workboard/department-members/${id}/activate/`,
+      "POST",
+      {},
+      () => (M.AI_DEPARTMENT_MEMBERS as import("@/types/domain").AiDepartmentMembersResponse).items[0],
+    ),
+
+  deactivateAiDepartmentMember: (id: number) =>
+    safeMutate<import("@/types/domain").AiWorkboardDepartmentMember>(
+      `/v1/ai-copilot/workboard/department-members/${id}/deactivate/`,
+      "POST",
+      {},
+      () => (M.AI_DEPARTMENT_MEMBERS as import("@/types/domain").AiDepartmentMembersResponse).items[0],
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

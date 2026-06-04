@@ -8276,6 +8276,19 @@ export interface AiApprovedAction {
   completedAt?: string | null;
   lastActivityAt?: string | null;
   workEvents?: AiActionWorkEvent[];
+  // Phase 16L — per-action permission booleans for the current viewer
+  permissions?: AiActionPermissions;
+}
+
+export interface AiActionPermissions {
+  canClaim: boolean;
+  canStart: boolean;
+  canBlock: boolean;
+  canUnblock: boolean;
+  canCompleteInternal: boolean;
+  canAddNote: boolean;
+  canAssign: boolean;
+  canReassign: boolean;
 }
 
 export interface AiActionQueueResponse {
@@ -8348,6 +8361,7 @@ export interface AiWorkboardResponse {
   total: number;
   departments: string[];
   workStatuses: string[];
+  myPermissions?: AiWorkPermissions;
 }
 
 export interface AiWorkboardSummary {
@@ -8389,4 +8403,72 @@ export interface AiActionWorkboardPayload {
   department?: AiActionDepartment | "";
   assigneeUserId?: number;
   directorReview?: boolean;
+}
+
+// ---------- Phase 16L — Scoped Team Member Work Permissions + My Work ----------
+
+export interface AiWorkPermissionsDepartment {
+  department: string;
+  canClaim: boolean;
+  canWork: boolean;
+  canComplete: boolean;
+}
+
+export interface AiWorkPermissions {
+  isAdmin: boolean;
+  canViewWorkboard: boolean;
+  canAssign: boolean;
+  canReassign: boolean;
+  canManageMembership: boolean;
+  departments: AiWorkPermissionsDepartment[];
+  providerActionsLocked: boolean;
+  liveAutonomousExecutionLocked: boolean;
+  phase: string;
+}
+
+export interface AiMyWorkResponse {
+  items: AiApprovedAction[];
+  total: number;
+  myPermissions?: AiWorkPermissions;
+}
+
+export interface AiMyWorkSummary {
+  total: number;
+  assigned: number;
+  inProgress: number;
+  blocked: number;
+  completedInternal: number;
+  dueSoon: number;
+  overdue: number;
+  byWorkStatus: Record<string, number>;
+  providerActionsLocked: boolean;
+  noProviderActionTaken: boolean;
+  phase: string;
+}
+
+export interface AiWorkboardDepartmentMember {
+  id: number;
+  username: string | null;
+  userId: number | null;
+  department: string;
+  isActive: boolean;
+  canClaim: boolean;
+  canWork: boolean;
+  canComplete: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiDepartmentMembersResponse {
+  items: AiWorkboardDepartmentMember[];
+  departments: string[];
+}
+
+export interface CreateAiDepartmentMemberPayload {
+  userId: number;
+  department: string;
+  canClaim?: boolean;
+  canWork?: boolean;
+  canComplete?: boolean;
 }

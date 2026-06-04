@@ -8,16 +8,22 @@ stay False on every suggestion.
 """
 from __future__ import annotations
 
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.signals import write_event
 
 from . import services
-from .models import AiApprovedAction, AiCopilotSuggestion
-from .permissions import AuthenticatedReadAdminWrite
+from .models import (
+    AiApprovedAction,
+    AiCopilotSuggestion,
+    AiWorkboardDepartmentMember,
+)
+from .permissions import AuthenticatedReadAdminWrite, IsDirectorAdmin
 from .serializers import (
     serialize_action,
+    serialize_department_member,
     serialize_review_event,
     serialize_suggestion,
 )
@@ -370,10 +376,11 @@ class AiWorkboardView(APIView):
             limit=limit,
         )
         return Response({
-            "items": [serialize_action(a) for a in rows],
+            "items": [serialize_action(a, viewer=request.user) for a in rows],
             "total": AiApprovedAction.objects.count(),
             "departments": sorted(_VALID_DEPARTMENTS),
             "workStatuses": sorted(_VALID_WORK_STATUSES),
+            "myPermissions": services.get_user_work_permissions(request.user),
         })
 
 
@@ -393,17 +400,171 @@ class AiWorkboardDirectorAttentionView(APIView):
 
     def get(self, request):
         items = [
-            {**serialize_action(a), "attentionReason": reason}
+            {**serialize_action(a, viewer=request.user), "attentionReason": reason}
             for a, reason in services.get_director_attention_queue()
         ]
         return Response({"items": items, "total": len(items)})
 
 
-class _AiWorkboardTransitionBase(APIView):
-    """Shared base for internal workboard transitions (director/admin only)."""
+# --- Phase 16L — My Work queue (any authenticated user) ---
+
+
+class AiMyWorkView(APIView):
+    """``GET /api/v1/ai-copilot/workboard/my/`` — the current user's own work."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        q = request.query_params
+        limit = _parse_int(q.get("limit"), 200, lo=1, hi=500)
+        rows = services.list_my_work(
+            request.user, work_status=q.get("workStatus") or "", limit=limit
+        )
+        return Response({
+            "items": [serialize_action(a, viewer=request.user) for a in rows],
+            "total": len(rows),
+            "myPermissions": services.get_user_work_permissions(request.user),
+        })
+
+
+class AiMyWorkSummaryView(APIView):
+    """``GET /api/v1/ai-copilot/workboard/my/summary/``."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(services.get_my_work_summary(request.user))
+
+
+class AiMyWorkPermissionsView(APIView):
+    """``GET /api/v1/ai-copilot/workboard/my-permissions/``."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(services.get_user_work_permissions(request.user))
+
+
+# --- Phase 16L — department membership management (Director/Admin only) ---
+
+
+class AiDepartmentMembersView(APIView):
+    """``GET`` list / ``POST`` create scoped department memberships."""
+
+    permission_classes = [IsDirectorAdmin]
+
+    def get(self, request):
+        qs = AiWorkboardDepartmentMember.objects.select_related("user", "created_by")
+        dept = request.query_params.get("department")
+        if dept:
+            qs = qs.filter(department=dept)
+        active = request.query_params.get("active")
+        if active in {"true", "false"}:
+            qs = qs.filter(is_active=(active == "true"))
+        qs = qs.order_by("-created_at")[: _parse_int(request.query_params.get("limit"), 200)]
+        return Response({
+            "items": [serialize_department_member(m) for m in qs],
+            "departments": sorted(_VALID_DEPARTMENTS),
+        })
+
+    def post(self, request):
+        data = request.data if isinstance(request.data, dict) else {}
+        target = _resolve_user(data.get("userId"))
+        if target is None:
+            return Response({"detail": "user_not_found", "field": "userId"}, status=400)
+        department = str(data.get("department", "") or "")
+        if department not in _VALID_DEPARTMENTS:
+            return Response(
+                {"detail": "invalid_department", "field": "department",
+                 "allowed": sorted(_VALID_DEPARTMENTS)}, status=400,
+            )
+        try:
+            member, created = services.create_department_membership(
+                user=target, department=department, created_by=request.user,
+                can_claim=bool(data.get("canClaim", True)),
+                can_work=bool(data.get("canWork", True)),
+                can_complete=bool(data.get("canComplete", True)),
+            )
+        except services.WorkPermissionError as exc:
+            return Response({"detail": "membership_create_failed", "reason": str(exc)}, status=400)
+        write_event(
+            kind="ai_copilot.workboard.member_added",
+            text=f"AI workboard membership #{member.pk} ({member.department})",
+            payload={
+                "member_id": member.pk, "department": member.department,
+                "target_user": target.username, "created": created,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        return Response(serialize_department_member(member), status=201 if created else 200)
+
+
+class _AiMemberStateBase(APIView):
+    """Activate / deactivate a department membership (Director/Admin only)."""
+
+    permission_classes = [IsDirectorAdmin]
+    _active = True
+    _kind = ""
+
+    def post(self, request, pk: int):
+        member = AiWorkboardDepartmentMember.objects.filter(pk=pk).first()
+        if member is None:
+            return Response({"detail": "not_found"}, status=404)
+        if self._active:
+            services.activate_department_membership(member)
+        else:
+            services.deactivate_department_membership(member)
+        write_event(
+            kind=self._kind,
+            text=f"AI workboard membership #{member.pk} {'activated' if self._active else 'deactivated'}",
+            payload={
+                "member_id": member.pk, "department": member.department,
+                "is_active": member.is_active, "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        return Response(serialize_department_member(member))
+
+
+class AiDepartmentMemberActivateView(_AiMemberStateBase):
+    _active = True
+    _kind = "ai_copilot.workboard.member_activated"
+
+
+class AiDepartmentMemberDeactivateView(_AiMemberStateBase):
+    _active = False
+    _kind = "ai_copilot.workboard.member_deactivated"
+
+
+# --- Workboard transitions ---
+
+
+class _AiWorkboardTransitionMixin:
+    """Shared audit + response logic for workboard transitions."""
+
+    _kind = ""
+
+    def _finish(self, request, action):
+        write_event(
+            kind=self._kind,
+            text=f"AI workboard action #{action.pk} → {action.work_status}",
+            payload={
+                "action_id": action.pk, "work_status": action.work_status,
+                "department": action.department,
+                "external_action_taken": False, "provider_action_taken": False,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        action.refresh_from_db()
+        return Response(serialize_action(action, detail=True, viewer=request.user))
+
+
+class _AiWorkboardTransitionBase(APIView, _AiWorkboardTransitionMixin):
+    """Admin-only workboard transition base (assign / reassign)."""
 
     permission_classes = [AuthenticatedReadAdminWrite]
-    _kind = ""
 
     def post(self, request, pk: int):
         a = AiApprovedAction.objects.filter(pk=pk).first()
@@ -414,19 +575,36 @@ class _AiWorkboardTransitionBase(APIView):
             self._run(a, data=data, user=request.user)
         except services.AiActionError as exc:
             return Response({"detail": "workboard_action_failed", "reason": str(exc)}, status=409)
-        write_event(
-            kind=self._kind,
-            text=f"AI workboard action #{a.pk} → {a.work_status}",
-            payload={
-                "action_id": a.pk, "work_status": a.work_status,
-                "department": a.department,
-                "external_action_taken": False, "provider_action_taken": False,
-                "by": getattr(request.user, "username", ""),
-            },
-            user=request.user,
-        )
-        a.refresh_from_db()
-        return Response(serialize_action(a, detail=True))
+        return self._finish(request, a)
+
+    def _run(self, action, *, data, user):  # pragma: no cover - overridden
+        raise NotImplementedError
+
+
+class _AiWorkboardScopedTransitionBase(APIView, _AiWorkboardTransitionMixin):
+    """Scoped transition base — any authenticated user, gated by service rules.
+
+    Director/Admin pass through; a non-admin must be the assignee (or an active
+    department member for ``claim``). The real authorization decision lives in
+    ``services.can_user_work_action`` so the rule is unit-tested in one place.
+    """
+
+    permission_classes = [IsAuthenticated]
+    _operation = ""
+
+    def post(self, request, pk: int):
+        a = AiApprovedAction.objects.filter(pk=pk).first()
+        if a is None:
+            return Response({"detail": "not_found"}, status=404)
+        allowed, reason = services.can_user_work_action(request.user, a, self._operation)
+        if not allowed:
+            return Response({"detail": "work_permission_denied", "reason": reason}, status=403)
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            self._run(a, data=data, user=request.user)
+        except services.AiActionError as exc:
+            return Response({"detail": "workboard_action_failed", "reason": str(exc)}, status=409)
+        return self._finish(request, a)
 
     def _run(self, action, *, data, user):  # pragma: no cover - overridden
         raise NotImplementedError
@@ -444,41 +622,6 @@ class AiActionAssignView(_AiWorkboardTransitionBase):
         )
 
 
-class AiActionClaimView(_AiWorkboardTransitionBase):
-    _kind = "ai_copilot.workboard.claimed"
-
-    def _run(self, action, *, data, user):
-        services.claim_action(action, user=user, note=str(data.get("note", "") or ""))
-
-
-class AiActionStartView(_AiWorkboardTransitionBase):
-    _kind = "ai_copilot.workboard.started"
-
-    def _run(self, action, *, data, user):
-        services.start_action(action, actor=user, note=str(data.get("note", "") or ""))
-
-
-class AiActionBlockView(_AiWorkboardTransitionBase):
-    _kind = "ai_copilot.workboard.blocked"
-
-    def _run(self, action, *, data, user):
-        services.block_action(action, reason=str(data.get("reason", "") or ""), actor=user)
-
-
-class AiActionUnblockView(_AiWorkboardTransitionBase):
-    _kind = "ai_copilot.workboard.unblocked"
-
-    def _run(self, action, *, data, user):
-        services.unblock_action(action, actor=user, note=str(data.get("note", "") or ""))
-
-
-class AiActionCompleteInternalView(_AiWorkboardTransitionBase):
-    _kind = "ai_copilot.workboard.completed_internal"
-
-    def _run(self, action, *, data, user):
-        services.complete_internal_action(action, actor=user, note=str(data.get("note", "") or ""))
-
-
 class AiActionReassignView(_AiWorkboardTransitionBase):
     _kind = "ai_copilot.workboard.reassigned"
 
@@ -490,8 +633,49 @@ class AiActionReassignView(_AiWorkboardTransitionBase):
         )
 
 
-class AiActionNotesView(_AiWorkboardTransitionBase):
+class AiActionClaimView(_AiWorkboardScopedTransitionBase):
+    _kind = "ai_copilot.workboard.claimed"
+    _operation = "claim"
+
+    def _run(self, action, *, data, user):
+        services.claim_action(action, user=user, note=str(data.get("note", "") or ""))
+
+
+class AiActionStartView(_AiWorkboardScopedTransitionBase):
+    _kind = "ai_copilot.workboard.started"
+    _operation = "start"
+
+    def _run(self, action, *, data, user):
+        services.start_action(action, actor=user, note=str(data.get("note", "") or ""))
+
+
+class AiActionBlockView(_AiWorkboardScopedTransitionBase):
+    _kind = "ai_copilot.workboard.blocked"
+    _operation = "block"
+
+    def _run(self, action, *, data, user):
+        services.block_action(action, reason=str(data.get("reason", "") or ""), actor=user)
+
+
+class AiActionUnblockView(_AiWorkboardScopedTransitionBase):
+    _kind = "ai_copilot.workboard.unblocked"
+    _operation = "unblock"
+
+    def _run(self, action, *, data, user):
+        services.unblock_action(action, actor=user, note=str(data.get("note", "") or ""))
+
+
+class AiActionCompleteInternalView(_AiWorkboardScopedTransitionBase):
+    _kind = "ai_copilot.workboard.completed_internal"
+    _operation = "complete"
+
+    def _run(self, action, *, data, user):
+        services.complete_internal_action(action, actor=user, note=str(data.get("note", "") or ""))
+
+
+class AiActionNotesView(_AiWorkboardScopedTransitionBase):
     _kind = "ai_copilot.workboard.note_added"
+    _operation = "note"
 
     def _run(self, action, *, data, user):
         services.add_action_note(

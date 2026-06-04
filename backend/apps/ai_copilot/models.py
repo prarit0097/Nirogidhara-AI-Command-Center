@@ -404,3 +404,59 @@ class AiActionWorkEvent(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"AiActionWorkEvent #{self.pk} ({self.event_type})"
+
+
+# ---------------------------------------------------------------------------
+# Phase 16L — Scoped Team Member Work Permissions + My Work Queue
+# ---------------------------------------------------------------------------
+#
+# A minimal, additive department-membership layer scoped strictly to the
+# Phase 16K AI workboard. It lets a non-admin team member safely CLAIM and WORK
+# internal actions in a department they belong to — WITHOUT granting any broad
+# Director/Admin power. This is NOT an HR / user-management system: it only
+# governs who may work an already-created internal `AiApprovedAction`. It never
+# touches a provider, never changes the Phase 15 safety shell, and never
+# authorises a customer-facing/live action.
+
+
+class AiWorkboardDepartmentMember(models.Model):
+    """Scoped membership granting a user the right to work one department's queue."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="ai_workboard_memberships",
+    )
+    # Reuses the same 9 internal departments as Phase 16K (the empty
+    # "Unassigned" choice is rejected at the service layer).
+    department = models.CharField(
+        max_length=24, choices=AiApprovedAction.Department.choices, db_index=True,
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
+    can_claim = models.BooleanField(default=True)
+    can_work = models.BooleanField(default=True)
+    can_complete = models.BooleanField(default=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="ai_workboard_memberships_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user"], name="ai_wb_member_user_idx"),
+            models.Index(fields=["department"], name="ai_wb_member_dept_idx"),
+            models.Index(fields=["is_active"], name="ai_wb_member_active_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "department"],
+                condition=models.Q(is_active=True),
+                name="ai_wb_member_unique_active_user_dept",
+            ),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"AiWorkboardDepartmentMember #{self.pk} ({self.user_id}/{self.department})"

@@ -9,8 +9,10 @@ import type {
   AiCopilotStatusResponse,
   AiCopilotSuggestion,
   AiCopilotSuggestionType,
+  AiMyWorkSummary,
   AiWorkboardAttentionItem,
   AiWorkboardSummary,
+  AiWorkPermissions,
 } from "@/types/domain";
 import {
   AlertCircle,
@@ -23,6 +25,7 @@ import {
   Lock,
   ShieldCheck,
   Sparkles,
+  UserCheck,
   XCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -137,11 +140,24 @@ export default function AiCopilot() {
   const [wbSla, setWbSla] = useState("");
   const [wbSearch, setWbSearch] = useState("");
 
+  // Phase 16L — scoped permissions + My Work queue
+  const [myPerms, setMyPerms] = useState<AiWorkPermissions | null>(null);
+  const [myWork, setMyWork] = useState<AiApprovedAction[]>([]);
+  const [myWorkSummary, setMyWorkSummary] = useState<AiMyWorkSummary | null>(null);
+
   const loadActions = () => {
     api
       .getAiActionQueue()
       .then((r) => setActions(r.items))
       .catch(() => setActions([]));
+  };
+
+  const loadMyWork = () => {
+    api.getAiMyWork().then((r) => {
+      setMyWork(r.items);
+      if (r.myPermissions) setMyPerms(r.myPermissions);
+    }).catch(() => setMyWork([]));
+    api.getAiMyWorkSummary().then(setMyWorkSummary).catch(() => setMyWorkSummary(null));
   };
 
   const loadWorkboard = () => {
@@ -151,9 +167,13 @@ export default function AiCopilot() {
     if (wbPriority) params.priority = wbPriority;
     if (wbSla) params.slaStatus = wbSla;
     if (wbSearch.trim()) params.search = wbSearch.trim();
-    api.getAiWorkboard(params).then((r) => setWorkboard(r.items)).catch(() => setWorkboard([]));
+    api.getAiWorkboard(params).then((r) => {
+      setWorkboard(r.items);
+      if (r.myPermissions) setMyPerms(r.myPermissions);
+    }).catch(() => setWorkboard([]));
     api.getAiWorkboardSummary().then(setWbSummary).catch(() => setWbSummary(null));
     api.getAiWorkboardDirectorAttention().then((r) => setAttention(r.items)).catch(() => setAttention([]));
+    loadMyWork();
   };
 
   const load = () => {
@@ -168,12 +188,20 @@ export default function AiCopilot() {
         .getAiActionQueue()
         .then((r) => setActions(r.items))
         .catch(() => setActions([])),
-      api.getAiWorkboard().then((r) => setWorkboard(r.items)).catch(() => setWorkboard([])),
+      api.getAiWorkboard().then((r) => {
+        setWorkboard(r.items);
+        if (r.myPermissions) setMyPerms(r.myPermissions);
+      }).catch(() => setWorkboard([])),
       api.getAiWorkboardSummary().then(setWbSummary).catch(() => setWbSummary(null)),
       api
         .getAiWorkboardDirectorAttention()
         .then((r) => setAttention(r.items))
         .catch(() => setAttention([])),
+      api.getAiMyWork().then((r) => {
+        setMyWork(r.items);
+        if (r.myPermissions) setMyPerms(r.myPermissions);
+      }).catch(() => setMyWork([])),
+      api.getAiMyWorkSummary().then(setMyWorkSummary).catch(() => setMyWorkSummary(null)),
     ])
       .catch(() => {
         setStatus(null);
@@ -752,6 +780,132 @@ export default function AiCopilot() {
           </div>
         )}
       </div>
+
+      {/* Phase 16L — My Work Queue */}
+      <div className="surface-elevated p-6 mt-6" data-testid="ai-my-work-section">
+        <h3 className="font-display text-lg font-semibold flex items-center gap-2 mb-2">
+          <UserCheck className="h-5 w-5 text-accent" /> My work queue
+          {myPerms && (
+            <span className="text-[11px] font-normal text-muted-foreground">
+              ({myPerms.isAdmin ? "Director/Admin" : myPerms.departments.length
+                ? `member: ${myPerms.departments.map((d) => d.department).join(", ")}`
+                : "no department membership"})
+            </span>
+          )}
+        </h3>
+        <p
+          data-testid="ai-my-work-safety-copy"
+          className="text-[12px] text-muted-foreground mb-4"
+        >
+          Team members can only update internal workboard records they are assigned
+          to or allowed to claim by department membership. These actions never send
+          WhatsApp, create payment links, book shipments, call customers, invoke
+          Vapi, or call a live AI provider.
+        </p>
+
+        {myWorkSummary && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" data-testid="ai-my-work-summary">
+            <SummaryCard label="My total" value={myWorkSummary.total} />
+            <SummaryCard label="Assigned" value={myWorkSummary.assigned} />
+            <SummaryCard label="In progress" value={myWorkSummary.inProgress} tone="accent" />
+            <SummaryCard label="Blocked" value={myWorkSummary.blocked} tone={myWorkSummary.blocked ? "danger" : undefined} />
+            <SummaryCard label="Due soon" value={myWorkSummary.dueSoon} tone={myWorkSummary.dueSoon ? "warning" : undefined} />
+            <SummaryCard label="Overdue" value={myWorkSummary.overdue} tone={myWorkSummary.overdue ? "danger" : undefined} />
+            <SummaryCard label="Completed" value={myWorkSummary.completedInternal} tone="success" />
+          </div>
+        )}
+
+        {myWork.length === 0 ? (
+          <p data-testid="ai-my-work-empty" className="text-muted-foreground text-[14px]">
+            No work assigned to you yet. {myPerms && !myPerms.isAdmin && myPerms.departments.length === 0
+              ? "Ask a Director/Admin to add you to a department."
+              : "Claim eligible work from the Department action workboard above."}
+          </p>
+        ) : (
+          <div className="space-y-3" data-testid="ai-my-work-list">
+            {myWork.map((a) => (
+              <MyWorkRow
+                key={a.id}
+                action={a}
+                busy={busy}
+                onBlock={handleBlock}
+                onNote={handleNote}
+                onVerb={handleWorkboardVerb}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MyWorkRow({
+  action: a,
+  busy,
+  onBlock,
+  onNote,
+  onVerb,
+}: {
+  action: AiApprovedAction;
+  busy: boolean;
+  onBlock: (a: AiApprovedAction, reason: string) => void;
+  onNote: (a: AiApprovedAction, note: string) => void;
+  onVerb: (a: AiApprovedAction, verb: WorkboardVerb) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const p = a.permissions;
+  const ws = a.workStatus ?? "unassigned";
+  return (
+    <div data-testid={`ai-my-work-item-${a.id}`} className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="font-medium">{a.title}</div>
+          <div className="text-[12px] text-muted-foreground">
+            {a.actionType.replace(/_/g, " ")} · {a.department || "no dept"} · {a.priority}
+            {a.sourceSuggestionId ? ` · src #${a.sourceSuggestionId}` : ""}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${WORK_STATUS_STYLES[ws] ?? WORK_STATUS_STYLES.unassigned}`}>
+            {ws.replace(/_/g, " ")}
+          </span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${SLA_STYLES[a.slaStatus ?? "no_due_date"]}`}>
+            <Clock className="h-3 w-3" /> {(a.slaStatus ?? "no_due_date").replace(/_/g, " ")}
+          </span>
+        </div>
+      </div>
+      {a.blockerReason && <p className="text-[12px] text-destructive mt-1">Blocked: {a.blockerReason}</p>}
+
+      <div className="flex flex-wrap items-center gap-1.5 mt-3">
+        {p?.canStart && (
+          <Button data-testid={`ai-my-work-start-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "start")}>Start</Button>
+        )}
+        {p?.canBlock && (
+          <>
+            <Input data-testid={`ai-my-work-reason-${a.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Blocker reason" className="h-8 w-40" />
+            <Button data-testid={`ai-my-work-block-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onBlock(a, reason)}>Block</Button>
+          </>
+        )}
+        {p?.canUnblock && (
+          <Button data-testid={`ai-my-work-unblock-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "unblock")}>Unblock</Button>
+        )}
+        {p?.canCompleteInternal && (
+          <Button data-testid={`ai-my-work-complete-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "complete")}>
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Complete internal
+          </Button>
+        )}
+        {p?.canAddNote && (
+          <>
+            <Input data-testid={`ai-my-work-note-input-${a.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add note" className="h-8 w-32" />
+            <Button data-testid={`ai-my-work-note-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onNote(a, note)}>Add note</Button>
+          </>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
+        <Lock className="h-3 w-3" /> external action taken: {String(a.externalActionTaken)} · provider action taken: {String(a.providerActionTaken)}
+      </p>
     </div>
   );
 }
@@ -789,6 +943,11 @@ function WorkboardRow({
   const [note, setNote] = useState("");
   const ws = a.workStatus ?? "unassigned";
   const terminal = ws === "completed_internal" || ws === "rejected" || ws === "cancelled";
+  // Phase 16L — gate buttons by per-action permissions when present; when the
+  // backend did not attach permissions (older payloads), fall back to showing all.
+  const p = a.permissions;
+  const allow = (key: keyof NonNullable<AiApprovedAction["permissions"]>): boolean =>
+    !p || Boolean(p[key]);
 
   return (
     <div data-testid={`ai-workboard-item-${a.id}`} className="rounded-lg border border-border bg-muted/20 px-4 py-3">
@@ -818,40 +977,50 @@ function WorkboardRow({
 
       {!terminal && (
         <div className="flex flex-wrap items-center gap-1.5 mt-3">
-          {ws === "unassigned" && (
+          {ws === "unassigned" && allow("canAssign") && (
             <>
               <select aria-label="Assign department" data-testid={`ai-workboard-dept-${a.id}`} value={dept} onChange={(e) => setDept(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-[12px]">
                 <option value="">Pick dept…</option>
                 {DEPARTMENTS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
               <Button data-testid={`ai-workboard-assign-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onAssign(a, dept)}>Assign</Button>
-              <Button data-testid={`ai-workboard-claim-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "claim")}>Claim</Button>
             </>
           )}
-          {ws === "assigned" && (
+          {ws === "unassigned" && allow("canClaim") && (
+            <Button data-testid={`ai-workboard-claim-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "claim")}>Claim</Button>
+          )}
+          {ws === "assigned" && allow("canStart") && (
             <Button data-testid={`ai-workboard-start-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "start")}>Start</Button>
           )}
-          {(ws === "assigned" || ws === "in_progress") && (
+          {(ws === "assigned" || ws === "in_progress") && allow("canBlock") && (
             <>
               <Input data-testid={`ai-workboard-reason-${a.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Blocker reason" className="h-8 w-40" />
               <Button data-testid={`ai-workboard-block-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onBlock(a, reason)}>Block</Button>
             </>
           )}
-          {ws === "blocked" && (
+          {ws === "blocked" && allow("canUnblock") && (
             <Button data-testid={`ai-workboard-unblock-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "unblock")}>Unblock</Button>
           )}
-          {(ws === "assigned" || ws === "in_progress" || ws === "blocked") && (
+          {(ws === "assigned" || ws === "in_progress" || ws === "blocked") && allow("canCompleteInternal") && (
             <Button data-testid={`ai-workboard-complete-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onVerb(a, "complete")}>
               <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Complete internal
             </Button>
           )}
-          <select aria-label="Reassign department" data-testid={`ai-workboard-reassign-dept-${a.id}`} value={dept} onChange={(e) => setDept(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-[12px]">
-            <option value="">Reassign to…</option>
-            {DEPARTMENTS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
-          </select>
-          <Button data-testid={`ai-workboard-reassign-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onReassign(a, dept)}>Reassign</Button>
-          <Input data-testid={`ai-workboard-note-input-${a.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add note" className="h-8 w-32" />
-          <Button data-testid={`ai-workboard-note-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onNote(a, note)}>Add note</Button>
+          {allow("canReassign") && (
+            <>
+              <select aria-label="Reassign department" data-testid={`ai-workboard-reassign-dept-${a.id}`} value={dept} onChange={(e) => setDept(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-[12px]">
+                <option value="">Reassign to…</option>
+                {DEPARTMENTS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+              <Button data-testid={`ai-workboard-reassign-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onReassign(a, dept)}>Reassign</Button>
+            </>
+          )}
+          {allow("canAddNote") && (
+            <>
+              <Input data-testid={`ai-workboard-note-input-${a.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add note" className="h-8 w-32" />
+              <Button data-testid={`ai-workboard-note-${a.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onNote(a, note)}>Add note</Button>
+            </>
+          )}
         </div>
       )}
 

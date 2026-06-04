@@ -9,6 +9,7 @@ from .models import (
     AiApprovedActionEvent,
     AiCopilotReviewEvent,
     AiCopilotSuggestion,
+    AiWorkboardDepartmentMember,
 )
 
 
@@ -59,7 +60,7 @@ def serialize_review_event(e: AiCopilotReviewEvent) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def serialize_action(a: AiApprovedAction, *, detail: bool = False) -> dict[str, Any]:
+def serialize_action(a: AiApprovedAction, *, detail: bool = False, viewer=None) -> dict[str, Any]:
     out: dict[str, Any] = {
         "id": a.pk,
         "sourceSuggestionId": a.source_suggestion_id,
@@ -93,6 +94,11 @@ def serialize_action(a: AiApprovedAction, *, detail: bool = False) -> dict[str, 
         "completedAt": a.completed_at,
         "lastActivityAt": a.last_activity_at,
     }
+    if viewer is not None:
+        # Phase 16L — safe per-action permission booleans for the frontend.
+        from . import services
+
+        out["permissions"] = services.action_permission_booleans(viewer, a)
     if detail:
         out["resultPayload"] = dict(a.result_payload or {})
         out["safetySnapshot"] = dict(a.safety_snapshot or {})
@@ -111,6 +117,27 @@ def _sla_status(a: AiApprovedAction) -> str:
     from . import services
 
     return services.compute_sla_status(a)
+
+
+# ---------------------------------------------------------------------------
+# Phase 16L — department membership serializer
+# ---------------------------------------------------------------------------
+
+
+def serialize_department_member(m: AiWorkboardDepartmentMember) -> dict[str, Any]:
+    return {
+        "id": m.pk,
+        "username": m.user.username if m.user_id else None,
+        "userId": m.user_id,
+        "department": m.department,
+        "isActive": m.is_active,
+        "canClaim": m.can_claim,
+        "canWork": m.can_work,
+        "canComplete": m.can_complete,
+        "createdBy": m.created_by.username if m.created_by_id else None,
+        "createdAt": m.created_at,
+        "updatedAt": m.updated_at,
+    }
 
 
 def serialize_work_event(e: AiActionWorkEvent) -> dict[str, Any]:

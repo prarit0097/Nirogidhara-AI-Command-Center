@@ -7754,3 +7754,61 @@ export const AI_WORKBOARD_ATTENTION = {
   items: [{ ..._WORKBOARD_ITEMS[1], attentionReason: "blocked" }],
   total: 1,
 };
+
+// ---------- Phase 16L — Scoped Team Member Work Permissions / My Work ----------
+
+const _MEMBER_PERMS = {
+  canClaim: true, canStart: true, canBlock: true, canUnblock: true,
+  canCompleteInternal: true, canAddNote: true, canAssign: false, canReassign: false,
+};
+
+export const AI_MY_WORK_PERMISSIONS = {
+  isAdmin: false,
+  canViewWorkboard: true,
+  canAssign: false,
+  canReassign: false,
+  canManageMembership: false,
+  departments: [
+    { department: "calling", canClaim: true, canWork: true, canComplete: true },
+  ],
+  providerActionsLocked: true,
+  liveAutonomousExecutionLocked: true,
+  phase: "16L",
+};
+
+export const AI_MY_WORK = {
+  items: [
+    { ..._WORKBOARD_ITEMS[0], permissions: { ..._MEMBER_PERMS, canStart: false } },
+    { ..._WORKBOARD_ITEMS[1], permissions: { ..._MEMBER_PERMS, canStart: false, canBlock: false, canUnblock: true } },
+  ],
+  total: 2,
+  myPermissions: AI_MY_WORK_PERMISSIONS,
+};
+
+export const AI_MY_WORK_SUMMARY = {
+  total: 2,
+  assigned: 0,
+  inProgress: 1,
+  blocked: 1,
+  completedInternal: 0,
+  dueSoon: 0,
+  overdue: 1,
+  byWorkStatus: { unassigned: 0, assigned: 0, in_progress: 1, blocked: 1, completed_internal: 0, rejected: 0, cancelled: 0 },
+  providerActionsLocked: true,
+  noProviderActionTaken: true,
+  phase: "16L",
+};
+
+export const AI_DEPARTMENT_MEMBERS = {
+  items: [
+    {
+      id: 1, username: "ops", userId: 5, department: "calling", isActive: true,
+      canClaim: true, canWork: true, canComplete: true, createdBy: "director",
+      createdAt: "2026-06-04T10:00:00Z", updatedAt: "2026-06-04T10:00:00Z",
+    },
+  ],
+  departments: [
+    "ai_governance", "calling", "confirmation", "data_ops", "delivery_rto",
+    "director_office", "dispatch_warehouse", "finance_accounts", "qa_compliance",
+  ],
+};
