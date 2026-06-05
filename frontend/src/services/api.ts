@@ -3470,6 +3470,17 @@ export const api = {
       {},
       () => (M.AI_DEPARTMENT_MEMBERS as import("@/types/domain").AiDepartmentMembersResponse).items[0],
     ),
+
+  // ---------- Phase 16M — Workboard Analytics + SLA Throughput (read-only) ----------
+  // Read-only analytics. No provider call, no mutation, no external action.
+
+  getAiWorkboardAnalytics: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return safeFetch<import("@/types/domain").AiWorkboardAnalytics>(
+      `/v1/ai-copilot/workboard/analytics/${qs ? `?${qs}` : ""}`,
+      () => M.AI_WORKBOARD_ANALYTICS as import("@/types/domain").AiWorkboardAnalytics,
+    );
+  },
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

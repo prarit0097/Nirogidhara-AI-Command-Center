@@ -406,6 +406,29 @@ class AiWorkboardDirectorAttentionView(APIView):
         return Response({"items": items, "total": len(items)})
 
 
+# ===========================================================================
+# Phase 16M — Workboard Analytics + SLA Throughput Dashboard
+# ===========================================================================
+
+
+class AiWorkboardAnalyticsView(APIView):
+    """``GET /api/v1/ai-copilot/workboard/analytics/`` — read-only analytics.
+
+    Derives summary / department / member / SLA / blocker / throughput
+    analytics from the existing workboard data. GET-only; never mutates a row,
+    never calls a provider, never takes an external action. POST/PATCH/DELETE
+    are not implemented → DRF returns 405.
+    """
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        window_days = _parse_int(
+            request.query_params.get("windowDays"), 14, lo=1, hi=90
+        )
+        return Response(services.get_workboard_analytics(window_days=window_days))
+
+
 # --- Phase 16L — My Work queue (any authenticated user) ---
 
 

@@ -30,6 +30,7 @@ from .views import (
     AiMyWorkPermissionsView,
     AiMyWorkSummaryView,
     AiMyWorkView,
+    AiWorkboardAnalyticsView,
     AiWorkboardDirectorAttentionView,
     AiWorkboardSummaryView,
     AiWorkboardView,
@@ -74,6 +75,12 @@ urlpatterns = [
         "workboard/director-attention/",
         AiWorkboardDirectorAttentionView.as_view(),
         name="workboard-director-attention",
+    ),
+    # Phase 16M — workboard analytics + SLA throughput dashboard (read-only)
+    path(
+        "workboard/analytics/",
+        AiWorkboardAnalyticsView.as_view(),
+        name="workboard-analytics",
     ),
     # Phase 16L — scoped team member work permissions + My Work queue
     path("workboard/my/", AiMyWorkView.as_view(), name="workboard-my"),

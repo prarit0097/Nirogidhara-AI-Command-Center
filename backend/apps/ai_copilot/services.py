@@ -1317,3 +1317,317 @@ def get_director_attention_queue(*, limit: int = 100) -> list:
             _add(a, "unassigned_high_priority")
 
     return out[: max(1, min(200, int(limit or 100)))]
+
+
+# ---------------------------------------------------------------------------
+# Phase 16M — Workboard Analytics + SLA Throughput Dashboard
+# ---------------------------------------------------------------------------
+#
+# A READ-ONLY analytics layer over the existing Phase 16J/16K/16L workboard
+# data. It NEVER writes any row, NEVER imports/queues a provider, NEVER sends
+# WhatsApp/Meta Cloud, places a Vapi call, calls Razorpay/PayU/Delhivery, creates
+# a payment link / AWB, mutates an `Order` / `Payment` / `Shipment` / `Customer`
+# / `Lead`, enqueues a business Celery job, or changes the Phase 15 safety shell
+# (`RuntimeKillSwitch` / `SandboxState`). Every value is derived from existing
+# fields on `AiApprovedAction` / `AiActionWorkEvent` / `AiApprovedActionEvent`.
+
+_ANALYTICS_BLOCKER_REASON_MAX = 80
+_ANALYTICS_TOP_BLOCKERS = 8
+
+
+def _hours_between(earlier, later) -> float | None:
+    """Whole-ish hours between two aware datetimes (1 dp), or None."""
+    if earlier is None or later is None:
+        return None
+    delta = (later - earlier).total_seconds()
+    if delta < 0:
+        return 0.0
+    return round(delta / 3600.0, 1)
+
+
+def _avg(values: list[float]) -> float | None:
+    return round(sum(values) / len(values), 1) if values else None
+
+
+def get_workboard_analytics(*, window_days: int = 14) -> dict[str, Any]:
+    """Read-only workboard analytics + SLA throughput (no mutation, no provider).
+
+    Derives summary / per-department / per-member / SLA / blocker / throughput
+    analytics from the existing AI-approved internal action workboard. Safe to
+    call by any authenticated user; it only reads rows.
+    """
+    from django.utils import timezone
+
+    from .models import AiActionWorkEvent, AiApprovedAction
+
+    window_days = max(1, min(90, int(window_days or 14)))
+    ws = _ws()
+    now = timezone.now()
+    window_start = now - timezone.timedelta(days=window_days)
+
+    terminal_ws = {ws.COMPLETED_INTERNAL, ws.REJECTED, ws.CANCELLED}
+    queue_terminal = {
+        AiApprovedAction.Status.REJECTED, AiApprovedAction.Status.CANCELLED,
+    }
+    dept_label = {c: lbl for c, lbl in AiApprovedAction.Department.choices}
+
+    actions = list(
+        AiApprovedAction.objects.select_related("assignee_user").all()
+    )
+
+    # ----- per-action SLA cache (one compute per row) -----
+    sla_of = {a.pk: compute_sla_status(a, now=now) for a in actions}
+
+    def _dept_key(a) -> str:
+        return a.department or "unassigned"
+
+    def _is_open(a) -> bool:
+        return a.work_status not in terminal_ws and a.status not in queue_terminal
+
+    # ----- summary -----
+    status_counts = {c: 0 for c, _ in AiApprovedAction.WorkStatus.choices}
+    sla_counts = {"overdue": 0, "due_soon": 0, "on_track": 0, "no_due_date": 0}
+    completion_hours_all: list[float] = []
+    closed = 0
+    for a in actions:
+        status_counts[a.work_status] = status_counts.get(a.work_status, 0) + 1
+        sla_counts[sla_of[a.pk]] = sla_counts.get(sla_of[a.pk], 0) + 1
+        if a.work_status in terminal_ws or a.status in queue_terminal:
+            closed += 1
+        if a.work_status == ws.COMPLETED_INTERNAL and a.completed_at:
+            h = _hours_between(a.created_at, a.completed_at)
+            if h is not None:
+                completion_hours_all.append(h)
+
+    open_actions = sum(1 for a in actions if _is_open(a))
+    director_attention = len(get_director_attention_queue())
+
+    summary = {
+        "total": len(actions),
+        "openActions": open_actions,
+        "unassigned": status_counts.get(ws.UNASSIGNED, 0),
+        "assigned": status_counts.get(ws.ASSIGNED, 0),
+        "inProgress": status_counts.get(ws.IN_PROGRESS, 0),
+        "blocked": status_counts.get(ws.BLOCKED, 0),
+        "completedInternal": status_counts.get(ws.COMPLETED_INTERNAL, 0),
+        "overdue": sla_counts["overdue"],
+        "dueSoon": sla_counts["due_soon"],
+        "noDueDate": sla_counts["no_due_date"],
+        "directorAttention": director_attention,
+        "closed": closed,
+        "avgCompletionHours": _avg(completion_hours_all),
+    }
+
+    # ----- per-department analytics -----
+    dept_acc: dict[str, dict[str, Any]] = {}
+
+    def _dept(key: str) -> dict[str, Any]:
+        if key not in dept_acc:
+            dept_acc[key] = {
+                "department": key,
+                "label": dept_label.get("" if key == "unassigned" else key, key),
+                "total": 0, "open": 0, "assigned": 0, "inProgress": 0,
+                "blocked": 0, "completedInternal": 0, "overdue": 0,
+                "dueSoon": 0, "noDueDate": 0,
+                "_completionHours": [], "_oldestOpenAge": None,
+            }
+        return dept_acc[key]
+
+    for a in actions:
+        d = _dept(_dept_key(a))
+        d["total"] += 1
+        if a.work_status == ws.ASSIGNED:
+            d["assigned"] += 1
+        elif a.work_status == ws.IN_PROGRESS:
+            d["inProgress"] += 1
+        elif a.work_status == ws.BLOCKED:
+            d["blocked"] += 1
+        elif a.work_status == ws.COMPLETED_INTERNAL:
+            d["completedInternal"] += 1
+        sla = sla_of[a.pk]
+        if sla == "overdue":
+            d["overdue"] += 1
+        elif sla == "due_soon":
+            d["dueSoon"] += 1
+        elif sla == "no_due_date":
+            d["noDueDate"] += 1
+        if _is_open(a):
+            d["open"] += 1
+            age = _hours_between(a.created_at, now)
+            if age is not None and (d["_oldestOpenAge"] is None or age > d["_oldestOpenAge"]):
+                d["_oldestOpenAge"] = age
+        if a.work_status == ws.COMPLETED_INTERNAL and a.completed_at:
+            h = _hours_between(a.created_at, a.completed_at)
+            if h is not None:
+                d["_completionHours"].append(h)
+
+    departments = []
+    for d in dept_acc.values():
+        comp = d["completedInternal"]
+        rate = round(comp / d["total"], 2) if d["total"] else 0.0
+        departments.append({
+            "department": d["department"], "label": d["label"],
+            "total": d["total"], "open": d["open"], "assigned": d["assigned"],
+            "inProgress": d["inProgress"], "blocked": d["blocked"],
+            "completedInternal": comp, "overdue": d["overdue"],
+            "dueSoon": d["dueSoon"], "noDueDate": d["noDueDate"],
+            "completionRate": rate,
+            "avgCompletionHours": _avg(d["_completionHours"]),
+            "oldestOpenAgeHours": d["_oldestOpenAge"],
+        })
+    departments.sort(key=lambda x: (-x["open"], -x["total"], x["department"]))
+
+    # ----- per-member workload analytics -----
+    member_acc: dict[int, dict[str, Any]] = {}
+    for a in actions:
+        uid = a.assignee_user_id
+        if not uid:
+            continue
+        m = member_acc.get(uid)
+        if m is None:
+            m = member_acc[uid] = {
+                "userId": uid,
+                "username": a.assignee_user.username if a.assignee_user_id else None,
+                "_departments": set(), "assignedOpen": 0, "inProgress": 0,
+                "blocked": 0, "overdue": 0, "completedInternalRecent": 0,
+                "_completionHours": [],
+            }
+        if a.department:
+            m["_departments"].add(a.department)
+        if a.work_status == ws.ASSIGNED and _is_open(a):
+            m["assignedOpen"] += 1
+        elif a.work_status == ws.IN_PROGRESS:
+            m["inProgress"] += 1
+        elif a.work_status == ws.BLOCKED:
+            m["blocked"] += 1
+        if sla_of[a.pk] == "overdue":
+            m["overdue"] += 1
+        if a.work_status == ws.COMPLETED_INTERNAL and a.completed_at:
+            if a.completed_at >= window_start:
+                m["completedInternalRecent"] += 1
+            h = _hours_between(a.created_at, a.completed_at)
+            if h is not None:
+                m["_completionHours"].append(h)
+
+    members = []
+    for m in member_acc.values():
+        members.append({
+            "userId": m["userId"], "username": m["username"],
+            "departments": sorted(m["_departments"]),
+            "assignedOpen": m["assignedOpen"], "inProgress": m["inProgress"],
+            "blocked": m["blocked"], "overdue": m["overdue"],
+            "completedInternalRecent": m["completedInternalRecent"],
+            "avgCompletionHours": _avg(m["_completionHours"]),
+        })
+    members.sort(key=lambda x: (-(x["assignedOpen"] + x["inProgress"] + x["blocked"]),
+                                x["username"] or ""))
+
+    # ----- SLA analytics -----
+    overdue_by_dept: dict[str, int] = {}
+    due_soon_by_dept: dict[str, int] = {}
+    for a in actions:
+        sla = sla_of[a.pk]
+        if sla == "overdue":
+            overdue_by_dept[_dept_key(a)] = overdue_by_dept.get(_dept_key(a), 0) + 1
+        elif sla == "due_soon":
+            due_soon_by_dept[_dept_key(a)] = due_soon_by_dept.get(_dept_key(a), 0) + 1
+    highest_risk = max(overdue_by_dept, key=overdue_by_dept.get) if overdue_by_dept else (
+        max(due_soon_by_dept, key=due_soon_by_dept.get) if due_soon_by_dept else ""
+    )
+    sla = {
+        "overdue": sla_counts["overdue"], "dueSoon": sla_counts["due_soon"],
+        "onTrack": sla_counts["on_track"], "noDueDate": sla_counts["no_due_date"],
+        "overdueByDepartment": overdue_by_dept,
+        "dueSoonByDepartment": due_soon_by_dept,
+        "highestRiskDepartment": highest_risk,
+    }
+
+    # ----- blocker analytics -----
+    reason_counts: dict[str, int] = {}
+    blocked_by_dept: dict[str, int] = {}
+    oldest_blocked_age = None
+    blocked_count = 0
+    for a in actions:
+        if a.work_status != ws.BLOCKED:
+            continue
+        blocked_count += 1
+        blocked_by_dept[_dept_key(a)] = blocked_by_dept.get(_dept_key(a), 0) + 1
+        reason = (a.blocker_reason or "(no reason)").strip()[:_ANALYTICS_BLOCKER_REASON_MAX]
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        age = _hours_between(a.last_activity_at or a.created_at, now)
+        if age is not None and (oldest_blocked_age is None or age > oldest_blocked_age):
+            oldest_blocked_age = age
+    top_reasons = [
+        {"reason": r, "count": c}
+        for r, c in sorted(reason_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    ][:_ANALYTICS_TOP_BLOCKERS]
+    blockers = {
+        "blockedCount": blocked_count, "topBlockerReasons": top_reasons,
+        "blockedByDepartment": blocked_by_dept,
+        "oldestBlockedAgeHours": oldest_blocked_age,
+    }
+
+    # ----- throughput trend (daily buckets, last window_days) -----
+    day_keys = [
+        (timezone.localtime(now) - timezone.timedelta(days=i)).date().isoformat()
+        for i in range(window_days - 1, -1, -1)
+    ]
+    day_index = {k: i for i, k in enumerate(day_keys)}
+    buckets = [
+        {"date": k, "created": 0, "assigned": 0, "started": 0,
+         "blocked": 0, "completedInternal": 0}
+        for k in day_keys
+    ]
+
+    def _bucket_for(dt):
+        if dt is None or dt < window_start:
+            return None
+        key = timezone.localtime(dt).date().isoformat()
+        idx = day_index.get(key)
+        return buckets[idx] if idx is not None else None
+
+    total_events = 0
+    for a in actions:
+        b = _bucket_for(a.created_at)
+        if b is not None:
+            b["created"] += 1
+            total_events += 1
+
+    _EVENT_FIELD = {
+        AiActionWorkEvent.EventType.ASSIGNED: "assigned",
+        AiActionWorkEvent.EventType.STARTED: "started",
+        AiActionWorkEvent.EventType.BLOCKED: "blocked",
+        AiActionWorkEvent.EventType.COMPLETED_INTERNAL: "completedInternal",
+    }
+    for ev in AiActionWorkEvent.objects.filter(
+        created_at__gte=window_start, event_type__in=list(_EVENT_FIELD)
+    ).only("event_type", "created_at"):
+        b = _bucket_for(ev.created_at)
+        if b is not None:
+            b[_EVENT_FIELD[ev.event_type]] += 1
+            total_events += 1
+
+    trend = {
+        "windowDays": window_days,
+        "hasData": total_events > 0,
+        "reason": "" if total_events > 0 else "insufficient_event_data",
+        "days": buckets,
+    }
+
+    return {
+        "summary": summary,
+        "departments": departments,
+        "members": members,
+        "sla": sla,
+        "blockers": blockers,
+        "trend": trend,
+        "generatedAt": now,
+        "windowDays": window_days,
+        "readonly": True,
+        "internalOnly": True,
+        "providerActionAttempted": False,
+        "providerActionTaken": False,
+        "externalActionAllowed": False,
+        "externalActionTaken": False,
+        "phase": "16M",
+    }

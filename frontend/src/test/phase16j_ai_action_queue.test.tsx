@@ -25,6 +25,8 @@ vi.mock("@/services/api", async (importOriginal) => {
       getAiMyWork: vi.fn(),
       getAiMyWorkSummary: vi.fn(),
       getAiMyWorkPermissions: vi.fn(),
+      // Phase 16M analytics method (the page loads this too).
+      getAiWorkboardAnalytics: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -98,6 +100,7 @@ beforeEach(() => {
   (api.getAiWorkboardDirectorAttention as any).mockResolvedValue({ items: [], total: 0 });
   (api.getAiMyWork as any).mockResolvedValue({ items: [], total: 0, myPermissions: { isAdmin: true, canViewWorkboard: true, canAssign: true, canReassign: true, canManageMembership: true, departments: [], providerActionsLocked: true, liveAutonomousExecutionLocked: true, phase: "16L" } });
   (api.getAiMyWorkSummary as any).mockResolvedValue({ total: 0, assigned: 0, inProgress: 0, blocked: 0, completedInternal: 0, dueSoon: 0, overdue: 0, byWorkStatus: {}, providerActionsLocked: true, noProviderActionTaken: true, phase: "16L" });
+  (api.getAiWorkboardAnalytics as any).mockResolvedValue(null);
 });
 
 describe("Phase 16J — AI action queue section", () => {

@@ -8472,3 +8472,107 @@ export interface CreateAiDepartmentMemberPayload {
   canWork?: boolean;
   canComplete?: boolean;
 }
+
+// ---------- Phase 16M — Workboard Analytics + SLA Throughput Dashboard ----------
+// Read-only analytics over the existing workboard. No provider call, no mutation.
+
+export interface AiAnalyticsSummary {
+  total: number;
+  openActions: number;
+  unassigned: number;
+  assigned: number;
+  inProgress: number;
+  blocked: number;
+  completedInternal: number;
+  overdue: number;
+  dueSoon: number;
+  noDueDate: number;
+  directorAttention: number;
+  closed: number;
+  avgCompletionHours: number | null;
+}
+
+export interface AiAnalyticsDepartment {
+  department: string;
+  label: string;
+  total: number;
+  open: number;
+  assigned: number;
+  inProgress: number;
+  blocked: number;
+  completedInternal: number;
+  overdue: number;
+  dueSoon: number;
+  noDueDate: number;
+  completionRate: number;
+  avgCompletionHours: number | null;
+  oldestOpenAgeHours: number | null;
+}
+
+export interface AiAnalyticsMember {
+  userId: number;
+  username: string | null;
+  departments: string[];
+  assignedOpen: number;
+  inProgress: number;
+  blocked: number;
+  overdue: number;
+  completedInternalRecent: number;
+  avgCompletionHours: number | null;
+}
+
+export interface AiAnalyticsSla {
+  overdue: number;
+  dueSoon: number;
+  onTrack: number;
+  noDueDate: number;
+  overdueByDepartment: Record<string, number>;
+  dueSoonByDepartment: Record<string, number>;
+  highestRiskDepartment: string;
+}
+
+export interface AiAnalyticsBlockerReason {
+  reason: string;
+  count: number;
+}
+
+export interface AiAnalyticsBlockers {
+  blockedCount: number;
+  topBlockerReasons: AiAnalyticsBlockerReason[];
+  blockedByDepartment: Record<string, number>;
+  oldestBlockedAgeHours: number | null;
+}
+
+export interface AiAnalyticsTrendDay {
+  date: string;
+  created: number;
+  assigned: number;
+  started: number;
+  blocked: number;
+  completedInternal: number;
+}
+
+export interface AiAnalyticsTrend {
+  windowDays: number;
+  hasData: boolean;
+  reason: string;
+  days: AiAnalyticsTrendDay[];
+}
+
+export interface AiWorkboardAnalytics {
+  summary: AiAnalyticsSummary;
+  departments: AiAnalyticsDepartment[];
+  members: AiAnalyticsMember[];
+  sla: AiAnalyticsSla;
+  blockers: AiAnalyticsBlockers;
+  trend: AiAnalyticsTrend;
+  generatedAt: string;
+  windowDays: number;
+  readonly: boolean;
+  internalOnly: boolean;
+  providerActionAttempted: boolean;
+  providerActionTaken: boolean;
+  externalActionAllowed: boolean;
+  externalActionTaken: boolean;
+  phase: string;
+}

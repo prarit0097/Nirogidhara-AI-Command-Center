@@ -7812,3 +7812,59 @@ export const AI_DEPARTMENT_MEMBERS = {
     "director_office", "dispatch_warehouse", "finance_accounts", "qa_compliance",
   ],
 };
+
+// ---------- Phase 16M — Workboard Analytics + SLA Throughput (read-only) ----------
+
+export const AI_WORKBOARD_ANALYTICS = {
+  summary: {
+    total: 2, openActions: 2, unassigned: 0, assigned: 0, inProgress: 1,
+    blocked: 1, completedInternal: 0, overdue: 1, dueSoon: 0, noDueDate: 0,
+    directorAttention: 1, closed: 0, avgCompletionHours: null,
+  },
+  departments: [
+    {
+      department: "calling", label: "Calling", total: 1, open: 1, assigned: 0,
+      inProgress: 0, blocked: 1, completedInternal: 0, overdue: 1, dueSoon: 0,
+      noDueDate: 0, completionRate: 0.0, avgCompletionHours: null, oldestOpenAgeHours: 48.0,
+    },
+    {
+      department: "qa_compliance", label: "QA / Compliance", total: 1, open: 1,
+      assigned: 0, inProgress: 1, blocked: 0, completedInternal: 0, overdue: 0,
+      dueSoon: 0, noDueDate: 0, completionRate: 0.0, avgCompletionHours: null,
+      oldestOpenAgeHours: 50.0,
+    },
+  ],
+  members: [
+    {
+      userId: 5, username: "director", departments: ["calling", "qa_compliance"],
+      assignedOpen: 0, inProgress: 1, blocked: 1, overdue: 1,
+      completedInternalRecent: 0, avgCompletionHours: null,
+    },
+  ],
+  sla: {
+    overdue: 1, dueSoon: 0, onTrack: 1, noDueDate: 0,
+    overdueByDepartment: { calling: 1 }, dueSoonByDepartment: {},
+    highestRiskDepartment: "calling",
+  },
+  blockers: {
+    blockedCount: 1,
+    topBlockerReasons: [{ reason: "Awaiting customer callback", count: 1 }],
+    blockedByDepartment: { calling: 1 }, oldestBlockedAgeHours: 30.0,
+  },
+  trend: {
+    windowDays: 14, hasData: true, reason: "",
+    days: [
+      { date: "2026-06-04", created: 2, assigned: 2, started: 1, blocked: 1, completedInternal: 0 },
+      { date: "2026-06-05", created: 0, assigned: 0, started: 0, blocked: 0, completedInternal: 0 },
+    ],
+  },
+  generatedAt: "2026-06-05T12:00:00Z",
+  windowDays: 14,
+  readonly: true,
+  internalOnly: true,
+  providerActionAttempted: false,
+  providerActionTaken: false,
+  externalActionAllowed: false,
+  externalActionTaken: false,
+  phase: "16M",
+};

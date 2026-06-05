@@ -10,6 +10,7 @@ import type {
   AiCopilotSuggestion,
   AiCopilotSuggestionType,
   AiMyWorkSummary,
+  AiWorkboardAnalytics,
   AiWorkboardAttentionItem,
   AiWorkboardSummary,
   AiWorkPermissions,
@@ -17,6 +18,7 @@ import type {
 import {
   AlertCircle,
   AlertTriangle,
+  BarChart3,
   Bot,
   CheckCircle2,
   ClipboardList,
@@ -145,6 +147,9 @@ export default function AiCopilot() {
   const [myWork, setMyWork] = useState<AiApprovedAction[]>([]);
   const [myWorkSummary, setMyWorkSummary] = useState<AiMyWorkSummary | null>(null);
 
+  // Phase 16M — workboard analytics + SLA throughput (read-only)
+  const [analytics, setAnalytics] = useState<AiWorkboardAnalytics | null>(null);
+
   const loadActions = () => {
     api
       .getAiActionQueue()
@@ -158,6 +163,10 @@ export default function AiCopilot() {
       if (r.myPermissions) setMyPerms(r.myPermissions);
     }).catch(() => setMyWork([]));
     api.getAiMyWorkSummary().then(setMyWorkSummary).catch(() => setMyWorkSummary(null));
+  };
+
+  const loadAnalytics = () => {
+    api.getAiWorkboardAnalytics().then(setAnalytics).catch(() => setAnalytics(null));
   };
 
   const loadWorkboard = () => {
@@ -174,6 +183,7 @@ export default function AiCopilot() {
     api.getAiWorkboardSummary().then(setWbSummary).catch(() => setWbSummary(null));
     api.getAiWorkboardDirectorAttention().then((r) => setAttention(r.items)).catch(() => setAttention([]));
     loadMyWork();
+    loadAnalytics();
   };
 
   const load = () => {
@@ -202,6 +212,7 @@ export default function AiCopilot() {
         if (r.myPermissions) setMyPerms(r.myPermissions);
       }).catch(() => setMyWork([])),
       api.getAiMyWorkSummary().then(setMyWorkSummary).catch(() => setMyWorkSummary(null)),
+      api.getAiWorkboardAnalytics().then(setAnalytics).catch(() => setAnalytics(null)),
     ])
       .catch(() => {
         setStatus(null);
@@ -836,7 +847,224 @@ export default function AiCopilot() {
           </div>
         )}
       </div>
+
+      {/* Phase 16M — Workboard Analytics + SLA Throughput */}
+      <div className="surface-elevated p-6 mt-6" data-testid="ai-workboard-analytics-section">
+        <h3 className="font-display text-lg font-semibold flex items-center gap-2 mb-2">
+          <BarChart3 className="h-5 w-5 text-accent" /> Workboard Analytics + SLA Throughput
+        </h3>
+        <p
+          data-testid="ai-analytics-safety-copy"
+          className="text-[12px] text-muted-foreground mb-4"
+        >
+          Read-only analytics only — this dashboard never sends WhatsApp, creates
+          payment links, books shipments, calls customers, invokes Vapi, calls a
+          live AI provider, changes work items, or mutates business data.
+        </p>
+
+        {!analytics ? (
+          <p data-testid="ai-analytics-empty" className="text-muted-foreground text-[14px]">
+            Analytics are unavailable right now. Please retry.
+          </p>
+        ) : (
+          <>
+            {/* Summary cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" data-testid="ai-analytics-summary">
+              <SummaryCard label="Open work" value={analytics.summary.openActions} />
+              <SummaryCard label="Overdue" value={analytics.summary.overdue} tone={analytics.summary.overdue ? "danger" : undefined} />
+              <SummaryCard label="Due soon" value={analytics.summary.dueSoon} tone={analytics.summary.dueSoon ? "warning" : undefined} />
+              <SummaryCard label="Blocked" value={analytics.summary.blocked} tone={analytics.summary.blocked ? "danger" : undefined} />
+              <SummaryCard label="Completed internal" value={analytics.summary.completedInternal} tone="success" />
+              <Chip label="Avg completion" value={fmtHours(analytics.summary.avgCompletionHours)} tone="success" />
+              <Chip label="Highest-risk dept" value={deptLabel(analytics, analytics.sla.highestRiskDepartment)} tone={analytics.sla.highestRiskDepartment ? "warning" : "success"} />
+              <SummaryCard label="Director attention" value={analytics.summary.directorAttention} tone={analytics.summary.directorAttention ? "warning" : undefined} />
+            </div>
+
+            {/* Department workload table */}
+            <div className="mb-5">
+              <h4 className="text-[13px] font-semibold mb-2">Department workload</h4>
+              {analytics.departments.length === 0 ? (
+                <p data-testid="ai-analytics-dept-empty" className="text-[13px] text-muted-foreground">No department data yet.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border" data-testid="ai-analytics-dept-table">
+                  <table className="w-full text-[13px] min-w-[640px]">
+                    <thead className="bg-muted/40 text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="px-3 py-2 font-medium">Department</th>
+                        <th className="px-3 py-2 font-medium">Open</th>
+                        <th className="px-3 py-2 font-medium">In progress</th>
+                        <th className="px-3 py-2 font-medium">Blocked</th>
+                        <th className="px-3 py-2 font-medium">Overdue</th>
+                        <th className="px-3 py-2 font-medium">Due soon</th>
+                        <th className="px-3 py-2 font-medium">Completed</th>
+                        <th className="px-3 py-2 font-medium">Avg completion</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.departments.map((d) => (
+                        <tr key={d.department || "unassigned"} data-testid={`ai-analytics-dept-${d.department || "unassigned"}`} className="border-t border-border">
+                          <td className="px-3 py-2">{d.label || d.department || "Unassigned"}</td>
+                          <td className="px-3 py-2">{d.open}</td>
+                          <td className="px-3 py-2">{d.inProgress}</td>
+                          <td className={`px-3 py-2 ${d.blocked ? "text-destructive" : ""}`}>{d.blocked}</td>
+                          <td className={`px-3 py-2 ${d.overdue ? "text-destructive" : ""}`}>{d.overdue}</td>
+                          <td className="px-3 py-2">{d.dueSoon}</td>
+                          <td className="px-3 py-2 text-success">{d.completedInternal}</td>
+                          <td className="px-3 py-2">{fmtHours(d.avgCompletionHours)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Member workload table */}
+            <div className="mb-5">
+              <h4 className="text-[13px] font-semibold mb-2">Member workload</h4>
+              {analytics.members.length === 0 ? (
+                <p data-testid="ai-analytics-member-empty" className="text-[13px] text-muted-foreground">No assigned members yet.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border" data-testid="ai-analytics-member-table">
+                  <table className="w-full text-[13px] min-w-[560px]">
+                    <thead className="bg-muted/40 text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="px-3 py-2 font-medium">Member</th>
+                        <th className="px-3 py-2 font-medium">Department</th>
+                        <th className="px-3 py-2 font-medium">Assigned/open</th>
+                        <th className="px-3 py-2 font-medium">In progress</th>
+                        <th className="px-3 py-2 font-medium">Blocked</th>
+                        <th className="px-3 py-2 font-medium">Overdue</th>
+                        <th className="px-3 py-2 font-medium">Completed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.members.map((m) => (
+                        <tr key={m.userId} data-testid={`ai-analytics-member-${m.userId}`} className="border-t border-border">
+                          <td className="px-3 py-2">{m.username ?? `#${m.userId}`}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{m.departments.join(", ") || "—"}</td>
+                          <td className="px-3 py-2">{m.assignedOpen}</td>
+                          <td className="px-3 py-2">{m.inProgress}</td>
+                          <td className={`px-3 py-2 ${m.blocked ? "text-destructive" : ""}`}>{m.blocked}</td>
+                          <td className={`px-3 py-2 ${m.overdue ? "text-destructive" : ""}`}>{m.overdue}</td>
+                          <td className="px-3 py-2 text-success">{m.completedInternalRecent}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* SLA / blocker panel */}
+            <div className="grid md:grid-cols-3 gap-3 mb-5" data-testid="ai-analytics-sla-panel">
+              <div className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+                <div className="text-[12px] font-semibold mb-2 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 text-warning" /> Top blocker reasons</div>
+                {analytics.blockers.topBlockerReasons.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground">No blocked items.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {analytics.blockers.topBlockerReasons.map((b, i) => (
+                      <li key={i} className="flex items-center justify-between gap-2 text-[12px]">
+                        <span className="min-w-0 truncate">{b.reason}</span>
+                        <span className="rounded-full bg-destructive/15 text-destructive px-2 py-0.5 text-[11px] font-semibold">{b.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+                <div className="text-[12px] font-semibold mb-2">Overdue by department</div>
+                <DeptCountList analytics={analytics} map={analytics.sla.overdueByDepartment} tone="danger" />
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+                <div className="text-[12px] font-semibold mb-2">Due soon by department</div>
+                <DeptCountList analytics={analytics} map={analytics.sla.dueSoonByDepartment} tone="warning" />
+              </div>
+            </div>
+
+            {/* Throughput trend */}
+            <div data-testid="ai-analytics-trend">
+              <h4 className="text-[13px] font-semibold mb-2">Throughput trend (last {analytics.trend.windowDays} days)</h4>
+              {!analytics.trend.hasData ? (
+                <p data-testid="ai-analytics-trend-empty" className="text-[13px] text-muted-foreground">
+                  No throughput activity in this window yet ({analytics.trend.reason || "insufficient_event_data"}).
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-[13px] min-w-[560px]">
+                    <thead className="bg-muted/40 text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="px-3 py-2 font-medium">Date</th>
+                        <th className="px-3 py-2 font-medium">Created</th>
+                        <th className="px-3 py-2 font-medium">Assigned</th>
+                        <th className="px-3 py-2 font-medium">Started</th>
+                        <th className="px-3 py-2 font-medium">Blocked</th>
+                        <th className="px-3 py-2 font-medium">Completed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.trend.days.map((d) => (
+                        <tr key={d.date} className="border-t border-border">
+                          <td className="px-3 py-2 text-muted-foreground">{d.date}</td>
+                          <td className="px-3 py-2">{d.created}</td>
+                          <td className="px-3 py-2">{d.assigned}</td>
+                          <td className="px-3 py-2">{d.started}</td>
+                          <td className={`px-3 py-2 ${d.blocked ? "text-destructive" : ""}`}>{d.blocked}</td>
+                          <td className="px-3 py-2 text-success">{d.completedInternal}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] text-muted-foreground mt-4 flex items-center gap-1.5">
+              <Lock className="h-3 w-3" /> read-only: {String(analytics.readonly)} · provider action taken: {String(analytics.providerActionTaken)} · external action taken: {String(analytics.externalActionTaken)}
+            </p>
+          </>
+        )}
+      </div>
     </div>
+  );
+}
+
+function fmtHours(value: number | null): string {
+  return value === null || value === undefined ? "—" : `${value}h`;
+}
+
+function deptLabel(analytics: AiWorkboardAnalytics, key: string): string {
+  if (!key) return "None";
+  const found = analytics.departments.find((d) => d.department === key);
+  return found?.label || key.replace(/_/g, " ");
+}
+
+function DeptCountList({
+  analytics,
+  map,
+  tone,
+}: {
+  analytics: AiWorkboardAnalytics;
+  map: Record<string, number>;
+  tone: "danger" | "warning";
+}) {
+  const entries = Object.entries(map);
+  if (entries.length === 0) {
+    return <p className="text-[12px] text-muted-foreground">None.</p>;
+  }
+  const badge = tone === "danger" ? "bg-destructive/15 text-destructive" : "bg-warning/15 text-warning";
+  return (
+    <ul className="space-y-1">
+      {entries
+        .sort((a, b) => b[1] - a[1])
+        .map(([dept, count]) => (
+          <li key={dept} className="flex items-center justify-between gap-2 text-[12px]">
+            <span className="min-w-0 truncate">{dept === "unassigned" ? "Unassigned" : deptLabel(analytics, dept)}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge}`}>{count}</span>
+          </li>
+        ))}
+    </ul>
   );
 }
 
