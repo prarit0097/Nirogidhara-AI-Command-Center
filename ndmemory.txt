@@ -11,8 +11,8 @@ was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 16D / 16E / 16F / 16G / 16H / 16I / 16J / 16K / 16L.
 
 Current operational baseline is **Phase 16L — Scoped Team Member Work
-Permissions + My Work Queue, IMPLEMENTED and PUSHED to origin/main (VPS
-production verification pending)** — lets real internal team members safely work
+Permissions + My Work Queue, PRODUCTION VERIFIED on the VPS and CLOSED at commit
+9d144f5** — lets real internal team members safely work
 their own assigned internal actions (and claim eligible department work) WITHOUT
 broad Director/Admin power. Extends the existing internal-only app
 apps.ai_copilot (no duplicate app, no second action queue) with 1 additive model
@@ -49,13 +49,27 @@ stay false on every transition (defensive test patches all 5 provider entrypoint
 → assert_not_called across member-claim → start → block → unblock → note →
 complete, with kill-switch/sandbox/row-counts unchanged). Verification: backend 24
 Phase 16L + 23 16K + 16 16J + 19 16I = 82 passed (targeted); makemigrations
---check + manage.py check clean; frontend 398/398 (+13); lint 0; build green. DOCS
-SAY IMPLEMENTED/PUSHED — VPS production verification (deploy + browser validation)
-is PENDING; do NOT mark production verified until after VPS checks. Phase 16L ADDS
-migration ai_copilot.0004_phase16l_workboard_department_member → the VPS deploy
-requires migrate. Next planned work: Phase 16M — NOT started; requires a separate
-written Director directive. Phase 16K (efea751) is the previous verified baseline.
-Commit: feat: phase 16l scoped work permissions.
+--check + manage.py check clean; frontend 398/398 (+13); lint 0; build green. VPS
+PRODUCTION VERIFICATION PASSED (2026-06-05): at /opt/nirogidhara-command HEAD
+confirmed 9d144f5; pre-deploy backup phase16l_pre_deploy_2026-06-05_072806.sql;
+docker compose ... up -d --build healthy (backend / nginx / db / redis + worker /
+beat); backend entrypoint applied ai_copilot.0004_phase16l_workboard_department_member
+... OK (manual migrate → "No migrations to apply"); makemigrations --check
+--dry-run → "No changes detected"; manage.py check → "0 issues"; pytest
+tests/test_phase16l_workboard_permissions.py + 16K/16J/16I regression → [100%];
+nginx restarted; http://127.0.0.1:18020/api/healthz/ → 200 and
+https://ai.nirogidhara.com/api/healthz/ → 200 {"status": "ok", "service":
+"nirogidhara-backend"} (transient 502 during the Docker nginx restart cleared on
+the next check — non-blocking; host nginx -t passed, host nginx active). Director
+browser validation of /operations/ai-copilot (AI Copilot Center + Approved action
+queue + Department action workboard + My work queue) + /operations/pilot-workbench
+PASSED with the safety shell unchanged (AI Paused / Sandbox OFF / Briefing STALE /
+Sync Live) and provider/external flags false; scoped-member/viewer login was not
+visually exercised (backend tests cover that permission matrix). Phase 16L ADDS
+migration ai_copilot.0004_phase16l_workboard_department_member (applied on the
+VPS). Phase 16L is CLOSED. Next planned work: Phase 16M — NOT started; requires a
+separate written Director directive. Phase 16K (efea751) is the previous verified
+baseline. Commit: 9d144f5 (feat: phase 16l scoped work permissions).
 
 Phase 16K — Department Action Workboard +
 Ownership / SLA Execution Layer, PRODUCTION VERIFIED on the VPS and CLOSED at
@@ -104,8 +118,8 @@ pytest tests/test_phase16k_action_workboard.py → 23 passed; 16J/16I/16H
 regression → passed; healthz OK. Phase 16K ADDS migration
 ai_copilot.0003_phase16k_action_workboard → a fresh VPS deploy requires migrate
 (already applied on the VPS). Phase 16K is CLOSED. (Historical close-state:
-Phase 16L was next at 16K close — it has since shipped and is IMPLEMENTED +
-PUSHED, VPS verification pending; the current next-planned work is Phase 16M.)
+Phase 16L was next at 16K close — it has since shipped and is PRODUCTION
+VERIFIED + CLOSED at 9d144f5; the current next-planned work is Phase 16M.)
 Phase 16J (aa8cf13) is the previous verified baseline. Commit: efea751
 (feat: phase 16k action workboard).
 
