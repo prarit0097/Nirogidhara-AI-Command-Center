@@ -11,8 +11,8 @@ was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 16D / 16E / 16F / 16G / 16H / 16I / 16J / 16K / 16L.
 
 Current operational baseline is **Phase 16N — Director AI Daily Briefing Real
-Data Wiring + Safe Recommendation Pack, implemented and pushed to origin/main;
-VPS production verification pending** — a READ-ONLY / INTERNAL-ONLY decision
+Data Wiring + Safe Recommendation Pack, PRODUCTION VERIFIED on the VPS and CLOSED at commit
+8c168db** — a READ-ONLY / INTERNAL-ONLY decision
 layer that turns the existing Phase 16I/16J/16K/16L/16M workboard data into a
 Director-facing, deterministic ("mock") AI briefing pack. It extends the
 existing internal-only app apps.ai_copilot with NO new model and NO migration:
@@ -58,11 +58,15 @@ backend 17 Phase 16N + 15 16M + 24 16L + 23 16K + 16 16J + 19 16I = 114 passed
 manage.py check -> "0 issues"; frontend 423/423 (+13); lint 0 errors; build
 green. Current safety state remains AI Paused / Sandbox OFF / Sync Live; the
 Phase 15 safety shell remains FROZEN at code commit eefd8b3. Phase 16N is
-implemented and pushed, VPS production verification pending -- do NOT mark it
-production verified until a VPS deploy + Director browser validation pass. Phase
+PRODUCTION VERIFIED on the VPS and CLOSED at commit 8c168db (VPS browser
+validation of /operations/ai-copilot passed: Director AI Briefing section +
+executive summary + attention items + safe recommendations + blocked-live-actions
++ read-only safety copy all visible; provider_action_taken=false /
+external_action_taken=false; safety shell unchanged; no
+WhatsApp/payment/courier/Vapi/live-AI side effect). Phase
 16O is NOT started and requires a separate written Director directive. No live
 provider/customer-facing action is approved. Commit:
-feat: phase 16n director ai briefing (pushed to origin/main).
+8c168db (feat: phase 16n director ai briefing).
 
 The previous verified baseline is **Phase 16M — Workboard Analytics + SLA
 Throughput Dashboard, PRODUCTION VERIFIED on the VPS and CLOSED at commit
@@ -453,7 +457,7 @@ Read these for current truth:
                                             Phase 16J AI action queue +
                                             Phase 16I AI Copilot)
 
-Phase 16N is implemented and pushed (VPS verification pending); next planned: Phase 16O (NOT started; separate Director directive
+Phase 16N is PRODUCTION VERIFIED + CLOSED at 8c168db; next planned: Phase 16O (NOT started; separate Director directive
 required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".
