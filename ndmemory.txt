@@ -11,8 +11,8 @@ was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 16D / 16E / 16F / 16G / 16H / 16I / 16J / 16K / 16L.
 
 Current operational baseline is **Phase 16M — Workboard Analytics + SLA
-Throughput Dashboard, implemented and pushed to origin/main; VPS production
-verification pending** — a READ-ONLY / INTERNAL-ONLY analytics layer over the
+Throughput Dashboard, PRODUCTION VERIFIED on the VPS and CLOSED at commit
+a992207** — a READ-ONLY / INTERNAL-ONLY analytics layer over the
 existing Phase 16J/16K/16L workboard. It extends the existing internal-only app
 apps.ai_copilot with NO new model and NO migration: 1 read-only service
 get_workboard_analytics(window_days=14) + 1 read-only endpoint
@@ -51,11 +51,19 @@ unchanged). Verification: backend 15 Phase 16M + 24 16L + 23 16K + 16 16J + 19
 migration); manage.py check -> "0 issues"; frontend 410/410 (+12); lint 0
 errors; build green. Current safety state remains AI Paused / Sandbox OFF / Sync
 Live; the Phase 15 safety shell remains FROZEN at code commit eefd8b3. Phase 16M
-is implemented and pushed, VPS production verification pending -- do NOT mark it
-production verified until a VPS deploy + Director browser validation pass. Phase
+is PRODUCTION VERIFIED on the VPS and CLOSED at commit a992207 (VPS browser
+validation of /operations/ai-copilot passed: AI Copilot Center + Approved action
+queue + Department action workboard + My work queue + Workboard Analytics + SLA
+Throughput section all visible; summary / department / member / SLA / throughput
+analytics + read-only safety copy visible; provider_action_taken=false /
+external_action_taken=false; safety shell unchanged AI Paused / Sandbox OFF /
+Sync Live / AI Mode mock / Live Autonomous Locked; makemigrations --check -> No
+changes detected; manage.py check -> 0 issues; 16M + 16L/16K/16J/16I tests
+[100%]; healthz {"status": "ok", "service": "nirogidhara-backend"}; no
+WhatsApp/payment/courier/Vapi/live-AI side effect). Phase
 16N is NOT started and requires a separate written Director directive. No live
 provider/customer-facing action is approved. Commit:
-feat: phase 16m workboard analytics dashboard (pushed to origin/main).
+a992207 (feat: phase 16m workboard analytics dashboard).
 
 The previous verified baseline is **Phase 16L — Scoped Team Member Work
 Permissions + My Work Queue, PRODUCTION VERIFIED on the VPS and CLOSED at commit
