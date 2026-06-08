@@ -460,3 +460,123 @@ class AiWorkboardDepartmentMember(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"AiWorkboardDepartmentMember #{self.pk} ({self.user_id}/{self.department})"
+
+
+# ---------------------------------------------------------------------------
+# Phase 16O — Director Briefing Snapshot History + Acknowledgement Trail
+# ---------------------------------------------------------------------------
+#
+# An `AiDirectorBriefingSnapshot` is an INTERNAL, point-in-time saved copy of a
+# Phase 16N Director AI briefing (composed deterministically from existing
+# workboard data). It lets the Director review / acknowledge / follow-up /
+# archive / annotate briefings over time. Saving or transitioning a snapshot is
+# DB-only: it NEVER calls a live AI/LLM provider, sends WhatsApp/Meta Cloud,
+# places a Vapi call, calls Razorpay/PayU/Delhivery, creates a payment link /
+# AWB, mutates an `Order` / `Payment` / `Shipment` / `Customer` / `Lead` /
+# `AiApprovedAction`, or changes the Phase 15 safety shell. Every snapshot
+# preserves the locked safety flags (`provider_call_made=False` +
+# `external_action_taken=False` + `internal_only=True` + `readonly=True` +
+# `live_autonomous_locked=True`) and the sanitized briefing payload (no raw
+# prompts, secrets, full phones, addresses, or customer PII).
+
+
+class AiDirectorBriefingSnapshot(models.Model):
+    """An internal, saved Director AI briefing for review / acknowledgement."""
+
+    class Status(models.TextChoices):
+        UNREVIEWED = "unreviewed", "Unreviewed"
+        ACKNOWLEDGED = "acknowledged", "Acknowledged"
+        NEEDS_FOLLOW_UP = "needs_follow_up", "Needs follow-up"
+        ARCHIVED = "archived", "Archived"
+
+    title = models.CharField(max_length=200)
+    window_days = models.IntegerField(default=7)
+
+    # Sanitized Phase 16N briefing payload + its top-level sections (stored
+    # separately so the history UI can render without re-deriving).
+    briefing_payload = models.JSONField(default=dict, blank=True)
+    executive_summary = models.JSONField(default=list, blank=True)
+    attention_items = models.JSONField(default=dict, blank=True)
+    recommendations = models.JSONField(default=list, blank=True)
+    blocked_live_actions = models.JSONField(default=list, blank=True)
+    safety_snapshot = models.JSONField(default=dict, blank=True)
+
+    ai_mode = models.CharField(max_length=12, default="mock")
+
+    # Locked safety contract — a briefing snapshot never authorises a provider
+    # or external action.
+    readonly = models.BooleanField(default=True)
+    internal_only = models.BooleanField(default=True)
+    provider_call_made = models.BooleanField(default=False)
+    external_action_taken = models.BooleanField(default=False)
+    live_autonomous_locked = models.BooleanField(default=True)
+
+    status = models.CharField(
+        max_length=20, choices=Status.choices,
+        default=Status.UNREVIEWED, db_index=True,
+    )
+    director_note = models.TextField(blank=True, default="")
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="ai_briefing_snapshots_created",
+    )
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="ai_briefing_snapshots_acknowledged",
+    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    organization = models.ForeignKey(
+        "saas.Organization", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status"], name="ai_brf_snap_status_idx"),
+            models.Index(fields=["-created_at"], name="ai_brf_snap_created_idx"),
+            models.Index(fields=["acknowledged_at"], name="ai_brf_snap_ack_idx"),
+            models.Index(fields=["created_by"], name="ai_brf_snap_creator_idx"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"AiDirectorBriefingSnapshot #{self.pk} ({self.status})"
+
+
+class AiDirectorBriefingSnapshotEvent(models.Model):
+    """An internal review-trail event for a briefing snapshot (no PII)."""
+
+    class EventType(models.TextChoices):
+        CREATED = "created", "Created"
+        ACKNOWLEDGED = "acknowledged", "Acknowledged"
+        MARKED_NEEDS_FOLLOW_UP = "marked_needs_follow_up", "Marked needs follow-up"
+        ARCHIVED = "archived", "Archived"
+        NOTE_ADDED = "note_added", "Note added"
+        VIEWED = "viewed", "Viewed"
+
+    snapshot = models.ForeignKey(
+        AiDirectorBriefingSnapshot, on_delete=models.CASCADE, related_name="events",
+    )
+    event_type = models.CharField(
+        max_length=28, choices=EventType.choices, db_index=True,
+    )
+    note = models.TextField(blank=True, default="")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at"], name="ai_brf_snap_evt_crt_idx"),
+            models.Index(fields=["event_type"], name="ai_brf_snap_evt_type_idx"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"AiDirectorBriefingSnapshotEvent #{self.pk} ({self.event_type})"

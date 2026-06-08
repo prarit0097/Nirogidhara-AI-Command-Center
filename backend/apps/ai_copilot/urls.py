@@ -31,6 +31,14 @@ from .views import (
     AiMyWorkSummaryView,
     AiMyWorkView,
     AiDirectorBriefingRecommendationsView,
+    AiDirectorBriefingSnapshotAcknowledgeView,
+    AiDirectorBriefingSnapshotArchiveView,
+    AiDirectorBriefingSnapshotDetailView,
+    AiDirectorBriefingSnapshotNeedsFollowUpView,
+    AiDirectorBriefingSnapshotNotesView,
+    AiDirectorBriefingSnapshotSafeTextView,
+    AiDirectorBriefingSnapshotsView,
+    AiDirectorBriefingSnapshotSummaryView,
     AiDirectorBriefingSummaryView,
     AiDirectorBriefingView,
     AiWorkboardAnalyticsView,
@@ -100,6 +108,47 @@ urlpatterns = [
         "director-briefing/recommendations/",
         AiDirectorBriefingRecommendationsView.as_view(),
         name="director-briefing-recommendations",
+    ),
+    # Phase 16O — Director briefing snapshot history + acknowledgement trail
+    path(
+        "director-briefing/snapshots/",
+        AiDirectorBriefingSnapshotsView.as_view(),
+        name="director-briefing-snapshots",
+    ),
+    path(
+        "director-briefing/snapshots/summary/",
+        AiDirectorBriefingSnapshotSummaryView.as_view(),
+        name="director-briefing-snapshots-summary",
+    ),
+    path(
+        "director-briefing/snapshots/<int:pk>/",
+        AiDirectorBriefingSnapshotDetailView.as_view(),
+        name="director-briefing-snapshot-detail",
+    ),
+    path(
+        "director-briefing/snapshots/<int:pk>/acknowledge/",
+        AiDirectorBriefingSnapshotAcknowledgeView.as_view(),
+        name="director-briefing-snapshot-acknowledge",
+    ),
+    path(
+        "director-briefing/snapshots/<int:pk>/needs-follow-up/",
+        AiDirectorBriefingSnapshotNeedsFollowUpView.as_view(),
+        name="director-briefing-snapshot-needs-follow-up",
+    ),
+    path(
+        "director-briefing/snapshots/<int:pk>/archive/",
+        AiDirectorBriefingSnapshotArchiveView.as_view(),
+        name="director-briefing-snapshot-archive",
+    ),
+    path(
+        "director-briefing/snapshots/<int:pk>/notes/",
+        AiDirectorBriefingSnapshotNotesView.as_view(),
+        name="director-briefing-snapshot-notes",
+    ),
+    path(
+        "director-briefing/snapshots/<int:pk>/safe-text/",
+        AiDirectorBriefingSnapshotSafeTextView.as_view(),
+        name="director-briefing-snapshot-safe-text",
     ),
     # Phase 16L — scoped team member work permissions + My Work queue
     path("workboard/my/", AiMyWorkView.as_view(), name="workboard-my"),

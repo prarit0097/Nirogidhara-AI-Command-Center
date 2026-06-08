@@ -8,6 +8,8 @@ from .models import (
     AiApprovedActionEvent,
     AiCopilotReviewEvent,
     AiCopilotSuggestion,
+    AiDirectorBriefingSnapshot,
+    AiDirectorBriefingSnapshotEvent,
     AiWorkboardDepartmentMember,
 )
 
@@ -71,3 +73,22 @@ class AiWorkboardDepartmentMemberAdmin(admin.ModelAdmin):
     list_filter = ("department", "is_active", "can_claim", "can_work", "can_complete")
     search_fields = ("user__username",)
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AiDirectorBriefingSnapshot)
+class AiDirectorBriefingSnapshotAdmin(admin.ModelAdmin):
+    list_display = (
+        "id", "title", "status", "window_days", "ai_mode",
+        "provider_call_made", "external_action_taken", "created_by",
+        "acknowledged_by", "acknowledged_at", "created_at",
+    )
+    list_filter = ("status", "ai_mode", "provider_call_made", "external_action_taken")
+    search_fields = ("title",)
+    readonly_fields = ("created_at", "updated_at", "acknowledged_at")
+
+
+@admin.register(AiDirectorBriefingSnapshotEvent)
+class AiDirectorBriefingSnapshotEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "snapshot", "event_type", "actor", "created_at")
+    list_filter = ("event_type",)
+    readonly_fields = ("created_at",)

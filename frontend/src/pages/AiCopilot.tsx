@@ -5,6 +5,8 @@ import { api, isApiError } from "@/services/api";
 import type {
   AiActionType,
   AiApprovedAction,
+  AiBriefingSnapshot,
+  AiBriefingSnapshotSummary,
   AiCopilotSourceType,
   AiCopilotStatusResponse,
   AiCopilotSuggestion,
@@ -19,11 +21,13 @@ import type {
 import {
   AlertCircle,
   AlertTriangle,
+  Archive,
   BarChart3,
   Bot,
   CheckCircle2,
   ClipboardList,
   Clock,
+  History,
   ListTodo,
   Lock,
   NotebookPen,
@@ -155,6 +159,13 @@ export default function AiCopilot() {
   // Phase 16N — Director AI daily briefing (read-only / internal-only)
   const [briefing, setBriefing] = useState<AiDirectorBriefing | null>(null);
 
+  // Phase 16O — Director briefing snapshot history (internal-only)
+  const [snapshots, setSnapshots] = useState<AiBriefingSnapshot[]>([]);
+  const [snapSummary, setSnapSummary] = useState<AiBriefingSnapshotSummary | null>(null);
+  const [snapStatusFilter, setSnapStatusFilter] = useState("");
+  const [snapWindowDays, setSnapWindowDays] = useState("7");
+  const [snapDetail, setSnapDetail] = useState<AiBriefingSnapshot | null>(null);
+
   const loadActions = () => {
     api
       .getAiActionQueue()
@@ -176,6 +187,13 @@ export default function AiCopilot() {
 
   const loadBriefing = () => {
     api.getAiDirectorBriefing().then(setBriefing).catch(() => setBriefing(null));
+  };
+
+  const loadSnapshots = () => {
+    const params: Record<string, string> = {};
+    if (snapStatusFilter) params.status = snapStatusFilter;
+    api.getAiDirectorBriefingSnapshots(params).then((r) => setSnapshots(r.items)).catch(() => setSnapshots([]));
+    api.getAiDirectorBriefingSnapshotSummary().then(setSnapSummary).catch(() => setSnapSummary(null));
   };
 
   const loadWorkboard = () => {
@@ -224,6 +242,8 @@ export default function AiCopilot() {
       api.getAiMyWorkSummary().then(setMyWorkSummary).catch(() => setMyWorkSummary(null)),
       api.getAiWorkboardAnalytics().then(setAnalytics).catch(() => setAnalytics(null)),
       api.getAiDirectorBriefing().then(setBriefing).catch(() => setBriefing(null)),
+      api.getAiDirectorBriefingSnapshots().then((r) => setSnapshots(r.items)).catch(() => setSnapshots([])),
+      api.getAiDirectorBriefingSnapshotSummary().then(setSnapSummary).catch(() => setSnapSummary(null)),
     ])
       .catch(() => {
         setStatus(null);
@@ -420,6 +440,74 @@ export default function AiCopilot() {
       } else {
         toast.error("Review failed. Please retry.");
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Phase 16O — Director briefing snapshot history handlers (internal-only).
+  const refreshSnapshotDetail = (id: number) => {
+    api.getAiDirectorBriefingSnapshot(id).then(setSnapDetail).catch(() => {});
+  };
+
+  const handleSaveSnapshot = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.createAiDirectorBriefingSnapshot({ windowDays: Number(snapWindowDays) || 7 });
+      toast.success("Briefing snapshot saved (internal record only).");
+      loadSnapshots();
+    } catch (err) {
+      toast.error(isApiError(err) ? `Save snapshot failed (HTTP ${err.httpStatus}).` : "Save snapshot failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleViewSnapshot = (id: number) => {
+    if (snapDetail?.id === id) {
+      setSnapDetail(null);
+      return;
+    }
+    api.getAiDirectorBriefingSnapshot(id).then(setSnapDetail).catch(() => {
+      toast.error("Could not load snapshot detail.");
+    });
+  };
+
+  const handleSnapshotAction = async (
+    snapshot: AiBriefingSnapshot,
+    kind: "acknowledge" | "needs-follow-up" | "archive",
+  ) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (kind === "acknowledge") await api.acknowledgeAiDirectorBriefingSnapshot(snapshot.id);
+      else if (kind === "needs-follow-up") await api.markAiDirectorBriefingSnapshotNeedsFollowUp(snapshot.id);
+      else await api.archiveAiDirectorBriefingSnapshot(snapshot.id);
+      toast.success(`Snapshot ${kind === "needs-follow-up" ? "marked needs follow-up" : kind + "d"} (internal only).`);
+      loadSnapshots();
+      if (snapDetail?.id === snapshot.id) refreshSnapshotDetail(snapshot.id);
+    } catch (err) {
+      toast.error(isApiError(err) ? `Action failed (HTTP ${err.httpStatus}).` : "Action failed. Please retry.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSnapshotNote = async (snapshot: AiBriefingSnapshot, note: string) => {
+    if (busy) return;
+    if (!note.trim()) {
+      toast.error("Enter a note.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.addAiDirectorBriefingSnapshotNote(snapshot.id, { note: note.trim() });
+      toast.success("Internal note added.");
+      loadSnapshots();
+      if (snapDetail?.id === snapshot.id) refreshSnapshotDetail(snapshot.id);
+    } catch (err) {
+      toast.error(isApiError(err) ? `Add note failed (HTTP ${err.httpStatus}).` : "Add note failed.");
     } finally {
       setBusy(false);
     }
@@ -629,6 +717,72 @@ export default function AiCopilot() {
               <Lock className="h-3 w-3" /> readonly: {String(briefing.readonly)} · provider call made: {String(briefing.providerCallMade)} · external action taken: {String(briefing.externalActionTaken)} · live autonomous locked: {String(briefing.liveAutonomousLocked)}
             </p>
           </>
+        )}
+      </div>
+
+      {/* Phase 16O — Director Briefing History */}
+      <div className="surface-elevated p-6 mb-6" data-testid="ai-briefing-history-section">
+        <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+          <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+            <History className="h-5 w-5 text-accent" /> Director Briefing History
+          </h2>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select aria-label="Snapshot window days" data-testid="ai-briefing-history-window" value={snapWindowDays} onChange={(e) => setSnapWindowDays(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-[13px]">
+              {["1", "7", "14", "30"].map((d) => <option key={d} value={d}>{d}d window</option>)}
+            </select>
+            <Button data-testid="ai-briefing-snapshot-save" variant="outline" size="sm" onClick={handleSaveSnapshot} disabled={busy}>
+              Save current briefing snapshot
+            </Button>
+            <select aria-label="Filter snapshot status" data-testid="ai-briefing-history-filter" value={snapStatusFilter} onChange={(e) => setSnapStatusFilter(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-[13px]">
+              <option value="">All statuses</option>
+              {["unreviewed", "acknowledged", "needs_follow_up", "archived"].map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+            </select>
+            <Button data-testid="ai-briefing-history-refresh" variant="outline" size="sm" onClick={loadSnapshots} disabled={busy}>Refresh history</Button>
+          </div>
+        </div>
+        <p
+          data-testid="ai-briefing-history-safety-copy"
+          className="text-[12px] text-muted-foreground mb-4"
+        >
+          Briefing snapshots are internal records only. Saving or acknowledging a
+          briefing never sends WhatsApp, creates payment links, books shipments,
+          calls customers, invokes Vapi, or calls a live AI provider.
+        </p>
+
+        {snapSummary && (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5" data-testid="ai-briefing-history-summary">
+            <SummaryCard label="Total" value={snapSummary.total} />
+            <SummaryCard label="Unreviewed" value={snapSummary.unreviewed} tone={snapSummary.unreviewed ? "warning" : undefined} />
+            <SummaryCard label="Acknowledged" value={snapSummary.acknowledged} tone="success" />
+            <SummaryCard label="Needs follow-up" value={snapSummary.needsFollowUp} tone={snapSummary.needsFollowUp ? "danger" : undefined} />
+            <SummaryCard label="Archived" value={snapSummary.archived} />
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Last snapshot</div>
+              <div className="text-[12px] font-semibold text-foreground truncate">
+                {snapSummary.lastSnapshotAt ? new Date(snapSummary.lastSnapshotAt).toLocaleString() : "—"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {snapshots.length === 0 ? (
+          <p data-testid="ai-briefing-history-empty" className="text-muted-foreground text-[14px]">
+            No briefing snapshots yet. Save the current Director AI briefing to start a history.
+          </p>
+        ) : (
+          <div className="space-y-3" data-testid="ai-briefing-history-list">
+            {snapshots.map((s) => (
+              <SnapshotRow
+                key={s.id}
+                snapshot={s}
+                busy={busy}
+                detail={snapDetail?.id === s.id ? snapDetail : null}
+                onView={handleViewSnapshot}
+                onAction={handleSnapshotAction}
+                onNote={handleSnapshotNote}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -1425,6 +1579,129 @@ function Chip({ label, value, tone }: { label: string; value: string; tone?: "su
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
       <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={`text-[14px] font-semibold ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+const SNAPSHOT_STATUS_STYLES: Record<string, string> = {
+  unreviewed: "bg-warning/20 text-warning",
+  acknowledged: "bg-success/15 text-success",
+  needs_follow_up: "bg-destructive/15 text-destructive",
+  archived: "bg-muted text-muted-foreground",
+};
+
+function SnapshotRow({
+  snapshot: s,
+  busy,
+  detail,
+  onView,
+  onAction,
+  onNote,
+}: {
+  snapshot: AiBriefingSnapshot;
+  busy: boolean;
+  detail: AiBriefingSnapshot | null;
+  onView: (id: number) => void;
+  onAction: (s: AiBriefingSnapshot, kind: "acknowledge" | "needs-follow-up" | "archive") => void;
+  onNote: (s: AiBriefingSnapshot, note: string) => void;
+}) {
+  const [note, setNote] = useState("");
+  const archived = s.status === "archived";
+  return (
+    <div data-testid={`ai-briefing-snapshot-${s.id}`} className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="font-medium">{s.title}</div>
+          <div className="text-[12px] text-muted-foreground">
+            {s.windowDays}d window · created {new Date(s.createdAt).toLocaleString()} · by {s.createdBy || "—"}
+            {s.acknowledgedAt ? ` · acked ${new Date(s.acknowledgedAt).toLocaleString()} by ${s.acknowledgedBy || "—"}` : ""}
+          </div>
+        </div>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${SNAPSHOT_STATUS_STYLES[s.status] ?? SNAPSHOT_STATUS_STYLES.archived}`}>
+          {s.status.replace(/_/g, " ")}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 mt-3">
+        <Button data-testid={`ai-briefing-snapshot-view-${s.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onView(s.id)}>
+          {detail ? "Hide details" : "View details"}
+        </Button>
+        {!archived && (
+          <>
+            <Button data-testid={`ai-briefing-snapshot-acknowledge-${s.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onAction(s, "acknowledge")}>
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Acknowledge
+            </Button>
+            <Button data-testid={`ai-briefing-snapshot-follow-up-${s.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onAction(s, "needs-follow-up")}>
+              Mark needs follow-up
+            </Button>
+            <Button data-testid={`ai-briefing-snapshot-archive-${s.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onAction(s, "archive")}>
+              <Archive className="h-3.5 w-3.5 mr-1" /> Archive
+            </Button>
+            <Input data-testid={`ai-briefing-snapshot-note-input-${s.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add internal note" className="h-8 w-40" />
+            <Button data-testid={`ai-briefing-snapshot-note-${s.id}`} variant="outline" size="sm" disabled={busy} onClick={() => onNote(s, note)}>Add note</Button>
+          </>
+        )}
+      </div>
+
+      {s.directorNote && (
+        <p className="text-[12px] text-muted-foreground mt-2 whitespace-pre-line"><span className="font-semibold">Director note:</span> {s.directorNote}</p>
+      )}
+
+      {detail && (
+        <div data-testid={`ai-briefing-snapshot-detail-${s.id}`} className="mt-3 rounded-lg border border-border bg-background/60 px-3 py-3 space-y-3">
+          <div>
+            <h5 className="text-[12px] font-semibold mb-1">Executive summary</h5>
+            <ul className="space-y-1">
+              {(detail.executiveSummary ?? []).map((line, i) => (
+                <li key={i} className="flex items-start gap-2 text-[12px] text-muted-foreground">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" /><span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {detail.attentionItems && (
+            <p className="text-[12px] text-muted-foreground">
+              Attention — blocked {detail.attentionItems.blockedCount}, overdue {detail.attentionItems.overdueCount}, due soon {detail.attentionItems.dueSoonCount}, pending suggestions {detail.attentionItems.pendingSuggestions}, SLA risk {detail.attentionItems.slaRiskCount}.
+            </p>
+          )}
+          <div>
+            <h5 className="text-[12px] font-semibold mb-1">Safe recommendations</h5>
+            <div className="space-y-1.5">
+              {(detail.recommendations ?? []).map((r, i) => (
+                <div key={i} className="text-[12px] text-muted-foreground">
+                  <span className="font-semibold">[{r.priority}] {r.recommendationType.replace(/_/g, " ")}</span> — {r.reason} (next: {r.permittedAction.replace(/_/g, " ")})
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(detail.blockedLiveActions ?? []).map((b) => (
+              <span key={b.channel} className="inline-flex items-center gap-1 rounded-full bg-success/10 text-success px-2 py-0.5 text-[11px] font-semibold">
+                <Lock className="h-3 w-3" /> {b.label} — locked
+              </span>
+            ))}
+          </div>
+          {detail.events && detail.events.length > 0 && (
+            <div data-testid={`ai-briefing-snapshot-events-${s.id}`}>
+              <h5 className="text-[12px] font-semibold mb-1">Event history</h5>
+              <ul className="space-y-1">
+                {detail.events.map((e) => (
+                  <li key={e.id} className="text-[11px] text-muted-foreground">
+                    {new Date(e.createdAt).toLocaleString()} · {e.eventType.replace(/_/g, " ")} · {e.actor || "—"}{e.note ? ` — ${e.note}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <Lock className="h-3 w-3" /> readonly: {String(detail.readonly)} · provider call made: {String(detail.providerCallMade)} · external action taken: {String(detail.externalActionTaken)} · live autonomous locked: {String(detail.liveAutonomousLocked)}
+          </p>
+        </div>
+      )}
+
+      <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
+        <Lock className="h-3 w-3" /> internal-only · provider call made: {String(s.providerCallMade)} · external action taken: {String(s.externalActionTaken)}
+      </p>
     </div>
   );
 }

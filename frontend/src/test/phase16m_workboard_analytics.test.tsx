@@ -34,6 +34,8 @@ vi.mock("@/services/api", async (importOriginal) => {
       // Phase 16M.
       getAiWorkboardAnalytics: vi.fn(),
       getAiDirectorBriefing: vi.fn(),
+      getAiDirectorBriefingSnapshots: vi.fn(),
+      getAiDirectorBriefingSnapshotSummary: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -145,6 +147,8 @@ beforeEach(() => {
   });
   (api.getAiWorkboardAnalytics as any).mockResolvedValue(ANALYTICS);
   (api.getAiDirectorBriefing as any).mockResolvedValue(null);
+  (api.getAiDirectorBriefingSnapshots as any).mockResolvedValue({ items: [], total: 0, statuses: [] });
+  (api.getAiDirectorBriefingSnapshotSummary as any).mockResolvedValue(null);
 });
 
 describe("Phase 16M — Workboard Analytics + SLA Throughput Dashboard", () => {

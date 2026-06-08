@@ -35,6 +35,8 @@ vi.mock("@/services/api", async (importOriginal) => {
       // Phase 16M analytics (the page loads this too).
       getAiWorkboardAnalytics: vi.fn(),
       getAiDirectorBriefing: vi.fn(),
+      getAiDirectorBriefingSnapshots: vi.fn(),
+      getAiDirectorBriefingSnapshotSummary: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -134,6 +136,8 @@ beforeEach(() => {
   (api.getAiMyWorkSummary as any).mockResolvedValue(MY_SUMMARY);
   (api.getAiWorkboardAnalytics as any).mockResolvedValue(null);
   (api.getAiDirectorBriefing as any).mockResolvedValue(null);
+  (api.getAiDirectorBriefingSnapshots as any).mockResolvedValue({ items: [], total: 0, statuses: [] });
+  (api.getAiDirectorBriefingSnapshotSummary as any).mockResolvedValue(null);
   (api.startAiAction as any).mockResolvedValue({ ...MY_ASSIGNED, workStatus: "in_progress" });
   (api.blockAiAction as any).mockResolvedValue({ ...MY_ASSIGNED, workStatus: "blocked" });
   (api.unblockAiAction as any).mockResolvedValue({ ...MY_BLOCKED, workStatus: "in_progress" });

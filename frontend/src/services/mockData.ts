@@ -7935,3 +7935,55 @@ export const AI_DIRECTOR_BRIEFING = {
   liveAutonomousLocked: true,
   phase: "16N",
 };
+
+// ---------- Phase 16O — Director Briefing Snapshot History (internal-only) ----------
+
+const _BRIEFING_SNAPSHOT_1 = {
+  id: 1,
+  title: "Director AI briefing — 2026-06-08 08:00 (last 7d)",
+  windowDays: 7,
+  status: "unreviewed" as const,
+  aiMode: "mock",
+  readonly: true,
+  internalOnly: true,
+  providerCallMade: false,
+  externalActionTaken: false,
+  liveAutonomousLocked: true,
+  directorNote: "",
+  createdBy: "director",
+  acknowledgedBy: null as string | null,
+  acknowledgedAt: null as string | null,
+  createdAt: "2026-06-08T08:00:00Z",
+  updatedAt: "2026-06-08T08:00:00Z",
+  attentionItems: AI_DIRECTOR_BRIEFING.attentionItems,
+  executiveSummary: AI_DIRECTOR_BRIEFING.executiveSummary,
+  recommendations: AI_DIRECTOR_BRIEFING.safeRecommendations,
+  blockedLiveActions: AI_DIRECTOR_BRIEFING.blockedLiveActions,
+  safetySnapshot: AI_DIRECTOR_BRIEFING.safetySnapshot,
+  briefingPayload: AI_DIRECTOR_BRIEFING,
+  events: [
+    { id: 1, snapshotId: 1, eventType: "created", note: "Saved current Director AI briefing.", actor: "director", metadata: {}, createdAt: "2026-06-08T08:00:00Z" },
+  ],
+};
+
+export const AI_BRIEFING_SNAPSHOTS = {
+  items: [_BRIEFING_SNAPSHOT_1],
+  total: 1,
+  statuses: ["unreviewed", "acknowledged", "needs_follow_up", "archived"],
+};
+
+export const AI_BRIEFING_SNAPSHOT_SUMMARY = {
+  total: 1,
+  unreviewed: 1,
+  acknowledged: 0,
+  needsFollowUp: 0,
+  archived: 0,
+  lastSnapshotAt: "2026-06-08T08:00:00Z",
+  byStatus: { unreviewed: 1, acknowledged: 0, needs_follow_up: 0, archived: 0 },
+  readonly: true,
+  internalOnly: true,
+  providerCallMade: false,
+  externalActionTaken: false,
+  liveAutonomousLocked: true,
+  phase: "16O",
+};

@@ -32,6 +32,8 @@ vi.mock("@/services/api", async (importOriginal) => {
       // Phase 16M analytics method (the page now loads this too).
       getAiWorkboardAnalytics: vi.fn(),
       getAiDirectorBriefing: vi.fn(),
+      getAiDirectorBriefingSnapshots: vi.fn(),
+      getAiDirectorBriefingSnapshotSummary: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -112,6 +114,8 @@ beforeEach(() => {
   (api.getAiMyWorkSummary as any).mockResolvedValue({ total: 0, assigned: 0, inProgress: 0, blocked: 0, completedInternal: 0, dueSoon: 0, overdue: 0, byWorkStatus: {}, providerActionsLocked: true, noProviderActionTaken: true, phase: "16L" });
   (api.getAiWorkboardAnalytics as any).mockResolvedValue(null);
   (api.getAiDirectorBriefing as any).mockResolvedValue(null);
+  (api.getAiDirectorBriefingSnapshots as any).mockResolvedValue({ items: [], total: 0, statuses: [] });
+  (api.getAiDirectorBriefingSnapshotSummary as any).mockResolvedValue(null);
   (api.generateAiCopilotSuggestion as any).mockResolvedValue(SUGGESTIONS.items[0]);
   (api.reviewAiCopilotSuggestion as any).mockResolvedValue({
     ...SUGGESTIONS.items[0],

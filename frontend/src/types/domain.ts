@@ -8681,3 +8681,75 @@ export interface AiDirectorBriefing {
   liveAutonomousLocked: boolean;
   phase: string;
 }
+
+// ---------- Phase 16O — Director Briefing Snapshot History + Acknowledgement ----------
+// Internal-only saved briefings with a review/acknowledgement trail. No provider call.
+
+export type AiBriefingSnapshotStatus =
+  | "unreviewed"
+  | "acknowledged"
+  | "needs_follow_up"
+  | "archived";
+
+export interface AiBriefingSnapshotEvent {
+  id: number;
+  snapshotId: number;
+  eventType: string;
+  note: string;
+  actor: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AiBriefingSnapshot {
+  id: number;
+  title: string;
+  windowDays: number;
+  status: AiBriefingSnapshotStatus;
+  aiMode: string;
+  readonly: boolean;
+  internalOnly: boolean;
+  providerCallMade: boolean;
+  externalActionTaken: boolean;
+  liveAutonomousLocked: boolean;
+  directorNote: string;
+  createdBy: string | null;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  attentionItems: AiBriefingAttention;
+  // detail-only:
+  executiveSummary?: string[];
+  recommendations?: AiBriefingRecommendation[];
+  blockedLiveActions?: AiBriefingBlockedLiveAction[];
+  safetySnapshot?: AiBriefingSafetySnapshot;
+  briefingPayload?: AiDirectorBriefing;
+  events?: AiBriefingSnapshotEvent[];
+}
+
+export interface AiBriefingSnapshotsResponse {
+  items: AiBriefingSnapshot[];
+  total: number;
+  statuses: string[];
+}
+
+export interface AiBriefingSnapshotSummary {
+  total: number;
+  unreviewed: number;
+  acknowledged: number;
+  needsFollowUp: number;
+  archived: number;
+  lastSnapshotAt: string | null;
+  byStatus: Record<string, number>;
+  readonly: boolean;
+  internalOnly: boolean;
+  providerCallMade: boolean;
+  externalActionTaken: boolean;
+  liveAutonomousLocked: boolean;
+  phase: string;
+}
+
+export interface AiBriefingSnapshotActionPayload {
+  note?: string;
+}

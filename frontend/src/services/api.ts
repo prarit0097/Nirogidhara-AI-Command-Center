@@ -3504,6 +3504,79 @@ export const api = {
       "/v1/ai-copilot/director-briefing/recommendations/",
       () => M.AI_DIRECTOR_BRIEFING as unknown,
     ),
+
+  // ---------- Phase 16O — Director Briefing Snapshot History (internal-only) ----------
+  // Internal-only saved briefings + review/acknowledgement trail. No provider call.
+
+  getAiDirectorBriefingSnapshots: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return safeFetch<import("@/types/domain").AiBriefingSnapshotsResponse>(
+      `/v1/ai-copilot/director-briefing/snapshots/${qs ? `?${qs}` : ""}`,
+      () => M.AI_BRIEFING_SNAPSHOTS as import("@/types/domain").AiBriefingSnapshotsResponse,
+    );
+  },
+
+  getAiDirectorBriefingSnapshotSummary: () =>
+    safeFetch<import("@/types/domain").AiBriefingSnapshotSummary>(
+      "/v1/ai-copilot/director-briefing/snapshots/summary/",
+      () => M.AI_BRIEFING_SNAPSHOT_SUMMARY as import("@/types/domain").AiBriefingSnapshotSummary,
+    ),
+
+  getAiDirectorBriefingSnapshot: (id: number) =>
+    safeFetch<import("@/types/domain").AiBriefingSnapshot>(
+      `/v1/ai-copilot/director-briefing/snapshots/${id}/`,
+      () => (M.AI_BRIEFING_SNAPSHOTS as import("@/types/domain").AiBriefingSnapshotsResponse).items[0],
+    ),
+
+  createAiDirectorBriefingSnapshot: (
+    payload: { windowDays?: number; title?: string } = {},
+  ) =>
+    safeMutate<import("@/types/domain").AiBriefingSnapshot>(
+      "/v1/ai-copilot/director-briefing/snapshots/",
+      "POST",
+      payload,
+      () => (M.AI_BRIEFING_SNAPSHOTS as import("@/types/domain").AiBriefingSnapshotsResponse).items[0],
+    ),
+
+  acknowledgeAiDirectorBriefingSnapshot: (
+    id: number, payload: import("@/types/domain").AiBriefingSnapshotActionPayload = {},
+  ) =>
+    safeMutate<import("@/types/domain").AiBriefingSnapshot>(
+      `/v1/ai-copilot/director-briefing/snapshots/${id}/acknowledge/`,
+      "POST",
+      payload,
+      () => (M.AI_BRIEFING_SNAPSHOTS as import("@/types/domain").AiBriefingSnapshotsResponse).items[0],
+    ),
+
+  markAiDirectorBriefingSnapshotNeedsFollowUp: (
+    id: number, payload: import("@/types/domain").AiBriefingSnapshotActionPayload = {},
+  ) =>
+    safeMutate<import("@/types/domain").AiBriefingSnapshot>(
+      `/v1/ai-copilot/director-briefing/snapshots/${id}/needs-follow-up/`,
+      "POST",
+      payload,
+      () => (M.AI_BRIEFING_SNAPSHOTS as import("@/types/domain").AiBriefingSnapshotsResponse).items[0],
+    ),
+
+  archiveAiDirectorBriefingSnapshot: (
+    id: number, payload: import("@/types/domain").AiBriefingSnapshotActionPayload = {},
+  ) =>
+    safeMutate<import("@/types/domain").AiBriefingSnapshot>(
+      `/v1/ai-copilot/director-briefing/snapshots/${id}/archive/`,
+      "POST",
+      payload,
+      () => (M.AI_BRIEFING_SNAPSHOTS as import("@/types/domain").AiBriefingSnapshotsResponse).items[0],
+    ),
+
+  addAiDirectorBriefingSnapshotNote: (
+    id: number, payload: import("@/types/domain").AiBriefingSnapshotActionPayload,
+  ) =>
+    safeMutate<import("@/types/domain").AiBriefingSnapshot>(
+      `/v1/ai-copilot/director-briefing/snapshots/${id}/notes/`,
+      "POST",
+      payload,
+      () => (M.AI_BRIEFING_SNAPSHOTS as import("@/types/domain").AiBriefingSnapshotsResponse).items[0],
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

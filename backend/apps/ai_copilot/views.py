@@ -14,15 +14,17 @@ from rest_framework.views import APIView
 
 from apps.audit.signals import write_event
 
-from . import briefing, services
+from . import briefing, briefing_snapshots, services
 from .models import (
     AiApprovedAction,
     AiCopilotSuggestion,
+    AiDirectorBriefingSnapshot,
     AiWorkboardDepartmentMember,
 )
 from .permissions import AuthenticatedReadAdminWrite, IsDirectorAdmin
 from .serializers import (
     serialize_action,
+    serialize_briefing_snapshot,
     serialize_department_member,
     serialize_review_event,
     serialize_suggestion,
@@ -476,6 +478,157 @@ class AiDirectorBriefingRecommendationsView(APIView):
         return Response(
             briefing.get_director_ai_briefing_recommendations(window_days=window_days)
         )
+
+
+# ===========================================================================
+# Phase 16O — Director Briefing Snapshot History + Acknowledgement Trail
+# ===========================================================================
+
+
+class AiDirectorBriefingSnapshotsView(APIView):
+    """``GET`` list / ``POST`` save a Director briefing snapshot.
+
+    GET = any authenticated user (internal read); POST = director/admin only
+    (write). Saving a snapshot reuses the Phase 16N briefing service — DB-only,
+    no provider call, no business mutation.
+    """
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        q = request.query_params
+        limit = _parse_int(q.get("limit"), 100, lo=1, hi=200)
+        rows = briefing_snapshots.list_director_briefing_snapshots(
+            status=q.get("status") or "",
+            created_by=q.get("createdBy") or "",
+            limit=limit,
+        )
+        return Response({
+            "items": [serialize_briefing_snapshot(s) for s in rows],
+            "total": AiDirectorBriefingSnapshot.objects.count(),
+            "statuses": [c for c, _ in AiDirectorBriefingSnapshot.Status.choices],
+        })
+
+    def post(self, request):
+        data = request.data if isinstance(request.data, dict) else {}
+        window_days = _parse_int(data.get("windowDays"), 7, lo=1, hi=30)
+        snapshot = briefing_snapshots.create_director_briefing_snapshot(
+            user=request.user, window_days=window_days,
+            title=str(data.get("title", "") or ""),
+        )
+        write_event(
+            kind="ai_copilot.briefing_snapshot.created",
+            text=f"Director briefing snapshot #{snapshot.pk} saved",
+            payload={
+                "snapshot_id": snapshot.pk, "window_days": snapshot.window_days,
+                "provider_call_made": False, "external_action_taken": False,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        return Response(serialize_briefing_snapshot(snapshot, detail=True), status=201)
+
+
+class AiDirectorBriefingSnapshotSummaryView(APIView):
+    """``GET /api/v1/ai-copilot/director-briefing/snapshots/summary/``."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        return Response(briefing_snapshots.get_director_briefing_snapshot_summary())
+
+
+class AiDirectorBriefingSnapshotDetailView(APIView):
+    """``GET /api/v1/ai-copilot/director-briefing/snapshots/<id>/`` — detail + events."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request, pk: int):
+        s = briefing_snapshots.get_director_briefing_snapshot(pk)
+        if s is None:
+            return Response({"detail": "not_found"}, status=404)
+        return Response(serialize_briefing_snapshot(s, detail=True))
+
+
+class AiDirectorBriefingSnapshotSafeTextView(APIView):
+    """``GET .../snapshots/<id>/safe-text/`` — sanitized internal-only text."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request, pk: int):
+        s = briefing_snapshots.get_director_briefing_snapshot(pk)
+        if s is None:
+            return Response({"detail": "not_found"}, status=404)
+        return Response({
+            "id": s.pk,
+            "safeText": briefing_snapshots.build_safe_text(s),
+            "readonly": True,
+            "internalOnly": True,
+            "providerCallMade": False,
+            "externalActionTaken": False,
+            "phase": "16O",
+        })
+
+
+class _AiBriefingSnapshotTransitionBase(APIView):
+    """Director/Admin-only internal review-state transition base."""
+
+    permission_classes = [IsDirectorAdmin]
+    _kind = ""
+
+    def post(self, request, pk: int):
+        s = briefing_snapshots.get_director_briefing_snapshot(pk)
+        if s is None:
+            return Response({"detail": "not_found"}, status=404)
+        data = request.data if isinstance(request.data, dict) else {}
+        note = str(data.get("note", "") or "")
+        try:
+            self._run(s, note=note, user=request.user)
+        except briefing_snapshots.BriefingSnapshotError as exc:
+            return Response({"detail": "snapshot_action_failed", "reason": str(exc)}, status=409)
+        write_event(
+            kind=self._kind,
+            text=f"Director briefing snapshot #{s.pk} → {s.status}",
+            payload={
+                "snapshot_id": s.pk, "status": s.status,
+                "provider_call_made": False, "external_action_taken": False,
+                "by": getattr(request.user, "username", ""),
+            },
+            user=request.user,
+        )
+        s.refresh_from_db()
+        return Response(serialize_briefing_snapshot(s, detail=True))
+
+    def _run(self, snapshot, *, note, user):  # pragma: no cover - overridden
+        raise NotImplementedError
+
+
+class AiDirectorBriefingSnapshotAcknowledgeView(_AiBriefingSnapshotTransitionBase):
+    _kind = "ai_copilot.briefing_snapshot.acknowledged"
+
+    def _run(self, snapshot, *, note, user):
+        briefing_snapshots.acknowledge_director_briefing_snapshot(snapshot, user=user, note=note)
+
+
+class AiDirectorBriefingSnapshotNeedsFollowUpView(_AiBriefingSnapshotTransitionBase):
+    _kind = "ai_copilot.briefing_snapshot.needs_follow_up"
+
+    def _run(self, snapshot, *, note, user):
+        briefing_snapshots.mark_briefing_needs_follow_up(snapshot, user=user, note=note)
+
+
+class AiDirectorBriefingSnapshotArchiveView(_AiBriefingSnapshotTransitionBase):
+    _kind = "ai_copilot.briefing_snapshot.archived"
+
+    def _run(self, snapshot, *, note, user):
+        briefing_snapshots.archive_director_briefing_snapshot(snapshot, user=user, note=note)
+
+
+class AiDirectorBriefingSnapshotNotesView(_AiBriefingSnapshotTransitionBase):
+    _kind = "ai_copilot.briefing_snapshot.note_added"
+
+    def _run(self, snapshot, *, note, user):
+        briefing_snapshots.add_director_briefing_note(snapshot, user=user, note=note)
 
 
 # --- Phase 16L — My Work queue (any authenticated user) ---

@@ -9,6 +9,8 @@ from .models import (
     AiApprovedActionEvent,
     AiCopilotReviewEvent,
     AiCopilotSuggestion,
+    AiDirectorBriefingSnapshot,
+    AiDirectorBriefingSnapshotEvent,
     AiWorkboardDepartmentMember,
 )
 
@@ -161,3 +163,54 @@ def serialize_action_event(e: AiApprovedActionEvent) -> dict[str, Any]:
         "actor": e.actor.username if e.actor_id else None,
         "createdAt": e.created_at,
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 16O — Director Briefing Snapshot serializers
+# ---------------------------------------------------------------------------
+
+
+def serialize_briefing_snapshot_event(e: AiDirectorBriefingSnapshotEvent) -> dict[str, Any]:
+    return {
+        "id": e.pk,
+        "snapshotId": e.snapshot_id,
+        "eventType": e.event_type,
+        "note": e.note,
+        "actor": e.actor.username if e.actor_id else None,
+        "metadata": dict(e.metadata or {}),
+        "createdAt": e.created_at,
+    }
+
+
+def serialize_briefing_snapshot(s: AiDirectorBriefingSnapshot, *, detail: bool = False) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "id": s.pk,
+        "title": s.title,
+        "windowDays": s.window_days,
+        "status": s.status,
+        "aiMode": s.ai_mode,
+        "readonly": s.readonly,
+        "internalOnly": s.internal_only,
+        "providerCallMade": s.provider_call_made,
+        "externalActionTaken": s.external_action_taken,
+        "liveAutonomousLocked": s.live_autonomous_locked,
+        "directorNote": s.director_note,
+        "createdBy": s.created_by.username if s.created_by_id else None,
+        "acknowledgedBy": s.acknowledged_by.username if s.acknowledged_by_id else None,
+        "acknowledgedAt": s.acknowledged_at,
+        "createdAt": s.created_at,
+        "updatedAt": s.updated_at,
+        # Lightweight headline counts (always present for the list view).
+        "attentionItems": dict(s.attention_items or {}),
+    }
+    if detail:
+        out["executiveSummary"] = list(s.executive_summary or [])
+        out["recommendations"] = list(s.recommendations or [])
+        out["blockedLiveActions"] = list(s.blocked_live_actions or [])
+        out["safetySnapshot"] = dict(s.safety_snapshot or {})
+        out["briefingPayload"] = dict(s.briefing_payload or {})
+        out["events"] = [
+            serialize_briefing_snapshot_event(e)
+            for e in s.events.all().order_by("-created_at")[:100]
+        ]
+    return out
