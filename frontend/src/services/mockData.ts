@@ -7868,3 +7868,70 @@ export const AI_WORKBOARD_ANALYTICS = {
   externalActionTaken: false,
   phase: "16M",
 };
+
+// ---------- Phase 16N — Director AI Daily Briefing (read-only / internal-only) ----------
+
+export const AI_DIRECTOR_BRIEFING = {
+  briefingStatus: {
+    generatedAt: "2026-06-08T08:00:00Z", windowDays: 7, aiMode: "mock",
+    internalOnly: true, readonly: true, providerCallMade: false,
+    externalActionTaken: false, liveAutonomousLocked: true, phase: "16N",
+  },
+  executiveSummary: [
+    "2 open internal action(s): 1 overdue, 1 blocked, 0 due soon.",
+    "1 AI suggestion(s) await human review; 0 internal action(s) pending.",
+    "Highest internal load: Calling (1 open, 1 blocked, 1 overdue).",
+    "All live/customer-facing automation remains LOCKED (AI Paused, Sandbox OFF, Live Autonomous Locked); this briefing is internal-only and read-only.",
+  ],
+  attentionItems: {
+    total: 2, blockedCount: 1, overdueCount: 1, dueSoonCount: 0,
+    unassignedHighPriority: 0, pendingSuggestions: 1, pendingInternalActions: 0,
+    slaRiskCount: 1,
+    blocked: [{ id: 2, title: "Calling follow-up", department: "calling", workStatus: "blocked", priority: "urgent", slaStatus: "overdue", assigneeUser: "director", reason: "blocked" }],
+    overdue: [{ id: 2, title: "Calling follow-up", department: "calling", workStatus: "blocked", priority: "urgent", slaStatus: "overdue", assigneeUser: "director", reason: "overdue" }],
+    unassignedHigh: [],
+    items: [
+      { id: 2, title: "Calling follow-up", department: "calling", workStatus: "blocked", priority: "urgent", slaStatus: "overdue", assigneeUser: "director", reason: "blocked" },
+      { id: 2, title: "Calling follow-up", department: "calling", workStatus: "blocked", priority: "urgent", slaStatus: "overdue", assigneeUser: "director", reason: "overdue" },
+    ],
+  },
+  departmentSummary: [
+    { department: "calling", label: "Calling", open: 1, assigned: 0, inProgress: 0, blocked: 1, overdue: 1, dueSoon: 0, completedInternal: 0, recommendedFocus: "Clear 1 overdue item(s)." },
+    { department: "qa_compliance", label: "QA / Compliance", open: 1, assigned: 0, inProgress: 1, blocked: 0, overdue: 0, dueSoon: 0, completedInternal: 0, recommendedFocus: "Progress 1 open item(s)." },
+  ],
+  memberSummary: [
+    { userId: 5, username: "director", departments: ["calling", "qa_compliance"], assignedOpen: 0, inProgress: 1, blocked: 1, overdue: 1, completedInternalRecent: 0, avgCompletionHours: null },
+  ],
+  safeRecommendations: [
+    { recommendationType: "review_blocked_actions", priority: "high", reason: "1 internal action(s) are blocked and stopping work (top reason: Awaiting customer callback).", linkedMetric: "blockers.blockedCount", permittedAction: "review_blocker" },
+    { recommendationType: "review_overdue_actions", priority: "medium", reason: "1 internal action(s) are overdue (highest risk: calling).", linkedMetric: "summary.overdue", permittedAction: "internal_review" },
+    { recommendationType: "review_pending_ai_suggestions", priority: "medium", reason: "1 AI suggestion(s) await human review before any internal action is created.", linkedMetric: "suggestions.pendingReview", permittedAction: "internal_review" },
+  ],
+  slaSummary: {
+    overdue: 1, dueSoon: 0, onTrack: 1, noDueDate: 0,
+    overdueByDepartment: { calling: 1 }, dueSoonByDepartment: {}, highestRiskDepartment: "calling",
+  },
+  blockedLiveActions: [
+    { channel: "whatsapp", label: "WhatsApp / Meta Cloud", locked: true, reason: "Customer messaging is not approved; no send path is invoked." },
+    { channel: "payment", label: "Razorpay / PayU payment", locked: true, reason: "No live payment, payment link, capture or refund is performed." },
+    { channel: "courier", label: "Delhivery courier / AWB", locked: true, reason: "No live shipment or AWB is booked." },
+    { channel: "vapi", label: "Vapi / voice call", locked: true, reason: "No outbound voice call is placed." },
+    { channel: "live_ai", label: "Live AI / LLM provider", locked: true, reason: "Briefing text is deterministic; no live AI/LLM provider is called." },
+  ],
+  safetySnapshot: {
+    aiPaused: true, sandboxOn: false, syncLive: true, aiMode: "mock",
+    liveAutonomousExecutionLocked: true, providerLiveActionsLocked: true,
+    humanApprovalRequired: true, providerCallMade: false, externalActionTaken: false,
+    phase15ShellFrozen: true, phase15ShellFrozenCommit: "eefd8b3",
+  },
+  generatedAt: "2026-06-08T08:00:00Z",
+  windowDays: 7,
+  readonly: true,
+  internalOnly: true,
+  providerCallMade: false,
+  providerActionTaken: false,
+  externalActionAllowed: false,
+  externalActionTaken: false,
+  liveAutonomousLocked: true,
+  phase: "16N",
+};

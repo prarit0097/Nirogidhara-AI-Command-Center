@@ -30,6 +30,9 @@ from .views import (
     AiMyWorkPermissionsView,
     AiMyWorkSummaryView,
     AiMyWorkView,
+    AiDirectorBriefingRecommendationsView,
+    AiDirectorBriefingSummaryView,
+    AiDirectorBriefingView,
     AiWorkboardAnalyticsView,
     AiWorkboardDirectorAttentionView,
     AiWorkboardSummaryView,
@@ -81,6 +84,22 @@ urlpatterns = [
         "workboard/analytics/",
         AiWorkboardAnalyticsView.as_view(),
         name="workboard-analytics",
+    ),
+    # Phase 16N — Director AI daily briefing + safe recommendation pack (read-only)
+    path(
+        "director-briefing/",
+        AiDirectorBriefingView.as_view(),
+        name="director-briefing",
+    ),
+    path(
+        "director-briefing/summary/",
+        AiDirectorBriefingSummaryView.as_view(),
+        name="director-briefing-summary",
+    ),
+    path(
+        "director-briefing/recommendations/",
+        AiDirectorBriefingRecommendationsView.as_view(),
+        name="director-briefing-recommendations",
     ),
     # Phase 16L — scoped team member work permissions + My Work queue
     path("workboard/my/", AiMyWorkView.as_view(), name="workboard-my"),

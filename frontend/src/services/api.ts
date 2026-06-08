@@ -3481,6 +3481,29 @@ export const api = {
       () => M.AI_WORKBOARD_ANALYTICS as import("@/types/domain").AiWorkboardAnalytics,
     );
   },
+
+  // ---------- Phase 16N — Director AI Daily Briefing (read-only / internal-only) ----------
+  // Read-only briefing over the existing workboard data. No provider call, no mutation.
+
+  getAiDirectorBriefing: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return safeFetch<import("@/types/domain").AiDirectorBriefing>(
+      `/v1/ai-copilot/director-briefing/${qs ? `?${qs}` : ""}`,
+      () => M.AI_DIRECTOR_BRIEFING as import("@/types/domain").AiDirectorBriefing,
+    );
+  },
+
+  getAiDirectorBriefingSummary: () =>
+    safeFetch<unknown>(
+      "/v1/ai-copilot/director-briefing/summary/",
+      () => M.AI_DIRECTOR_BRIEFING as unknown,
+    ),
+
+  getAiDirectorBriefingRecommendations: () =>
+    safeFetch<unknown>(
+      "/v1/ai-copilot/director-briefing/recommendations/",
+      () => M.AI_DIRECTOR_BRIEFING as unknown,
+    ),
 };
 
 // ---------- Optimistic mock builders for offline fallback ----------

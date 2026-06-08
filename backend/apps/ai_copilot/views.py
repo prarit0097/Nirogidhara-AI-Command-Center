@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 
 from apps.audit.signals import write_event
 
-from . import services
+from . import briefing, services
 from .models import (
     AiApprovedAction,
     AiCopilotSuggestion,
@@ -427,6 +427,55 @@ class AiWorkboardAnalyticsView(APIView):
             request.query_params.get("windowDays"), 14, lo=1, hi=90
         )
         return Response(services.get_workboard_analytics(window_days=window_days))
+
+
+# ===========================================================================
+# Phase 16N — Director AI Daily Briefing + Safe Recommendation Pack
+# ===========================================================================
+
+
+class AiDirectorBriefingView(APIView):
+    """``GET /api/v1/ai-copilot/director-briefing/`` — full read-only briefing.
+
+    Composes the Phase 16M analytics + Phase 16K director-attention queue +
+    pending suggestion/action counts into a deterministic, internal-only
+    Director AI briefing. GET-only; never mutates a row, never calls a provider,
+    never takes an external action. POST/PATCH/DELETE → 405.
+    """
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        window_days = _parse_int(
+            request.query_params.get("windowDays"), 7, lo=1, hi=30
+        )
+        return Response(briefing.get_director_ai_briefing(window_days=window_days))
+
+
+class AiDirectorBriefingSummaryView(APIView):
+    """``GET /api/v1/ai-copilot/director-briefing/summary/`` — status + summary + counts."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        window_days = _parse_int(
+            request.query_params.get("windowDays"), 7, lo=1, hi=30
+        )
+        return Response(briefing.get_director_ai_briefing_summary(window_days=window_days))
+
+
+class AiDirectorBriefingRecommendationsView(APIView):
+    """``GET /api/v1/ai-copilot/director-briefing/recommendations/`` — safe recs only."""
+
+    permission_classes = [AuthenticatedReadAdminWrite]
+
+    def get(self, request):
+        window_days = _parse_int(
+            request.query_params.get("windowDays"), 7, lo=1, hi=30
+        )
+        return Response(
+            briefing.get_director_ai_briefing_recommendations(window_days=window_days)
+        )
 
 
 # --- Phase 16L — My Work queue (any authenticated user) ---

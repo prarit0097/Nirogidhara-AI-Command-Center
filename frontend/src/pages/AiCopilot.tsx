@@ -9,6 +9,7 @@ import type {
   AiCopilotStatusResponse,
   AiCopilotSuggestion,
   AiCopilotSuggestionType,
+  AiDirectorBriefing,
   AiMyWorkSummary,
   AiWorkboardAnalytics,
   AiWorkboardAttentionItem,
@@ -25,6 +26,7 @@ import {
   Clock,
   ListTodo,
   Lock,
+  NotebookPen,
   ShieldCheck,
   Sparkles,
   UserCheck,
@@ -150,6 +152,9 @@ export default function AiCopilot() {
   // Phase 16M — workboard analytics + SLA throughput (read-only)
   const [analytics, setAnalytics] = useState<AiWorkboardAnalytics | null>(null);
 
+  // Phase 16N — Director AI daily briefing (read-only / internal-only)
+  const [briefing, setBriefing] = useState<AiDirectorBriefing | null>(null);
+
   const loadActions = () => {
     api
       .getAiActionQueue()
@@ -169,6 +174,10 @@ export default function AiCopilot() {
     api.getAiWorkboardAnalytics().then(setAnalytics).catch(() => setAnalytics(null));
   };
 
+  const loadBriefing = () => {
+    api.getAiDirectorBriefing().then(setBriefing).catch(() => setBriefing(null));
+  };
+
   const loadWorkboard = () => {
     const params: Record<string, string> = {};
     if (wbDept) params.department = wbDept;
@@ -184,6 +193,7 @@ export default function AiCopilot() {
     api.getAiWorkboardDirectorAttention().then((r) => setAttention(r.items)).catch(() => setAttention([]));
     loadMyWork();
     loadAnalytics();
+    loadBriefing();
   };
 
   const load = () => {
@@ -213,6 +223,7 @@ export default function AiCopilot() {
       }).catch(() => setMyWork([])),
       api.getAiMyWorkSummary().then(setMyWorkSummary).catch(() => setMyWorkSummary(null)),
       api.getAiWorkboardAnalytics().then(setAnalytics).catch(() => setAnalytics(null)),
+      api.getAiDirectorBriefing().then(setBriefing).catch(() => setBriefing(null)),
     ])
       .catch(() => {
         setStatus(null);
@@ -471,6 +482,154 @@ export default function AiCopilot() {
         <Chip label="Provider" value={status.aiProvider} tone="warning" />
         <Chip label="Human approval" value={status.humanApprovalRequired ? "Required" : "Off"} tone="success" />
         <Chip label="Provider call" value={status.noProviderCallMade ? "None" : "Made"} tone={status.noProviderCallMade ? "success" : "danger"} />
+      </div>
+
+      {/* Phase 16N — Director AI Briefing */}
+      <div className="surface-elevated p-6 mb-6" data-testid="ai-director-briefing-section">
+        <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+          <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+            <NotebookPen className="h-5 w-5 text-accent" /> Director AI Briefing
+          </h2>
+          <Button data-testid="ai-briefing-refresh" variant="outline" size="sm" onClick={loadBriefing} disabled={busy}>
+            Refresh briefing
+          </Button>
+        </div>
+        <p
+          data-testid="ai-briefing-safety-copy"
+          className="text-[12px] text-muted-foreground mb-4"
+        >
+          Read-only internal briefing only — this AI briefing is generated
+          deterministically from existing internal workboard data. It never sends
+          WhatsApp, creates payment links, books shipments, calls customers, invokes
+          Vapi, calls a live AI provider, resumes AI, or mutates any business data.
+          Human approval is required before any action.
+        </p>
+
+        {!briefing ? (
+          <p data-testid="ai-briefing-empty" className="text-muted-foreground text-[14px]">
+            No urgent briefing items yet.
+          </p>
+        ) : (
+          <>
+            {/* Briefing cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" data-testid="ai-briefing-cards">
+              <SummaryCard label="Overdue" value={briefing.attentionItems.overdueCount} tone={briefing.attentionItems.overdueCount ? "danger" : undefined} />
+              <SummaryCard label="Blocked" value={briefing.attentionItems.blockedCount} tone={briefing.attentionItems.blockedCount ? "danger" : undefined} />
+              <SummaryCard label="Due soon" value={briefing.attentionItems.dueSoonCount} tone={briefing.attentionItems.dueSoonCount ? "warning" : undefined} />
+              <SummaryCard label="Pending AI suggestions" value={briefing.attentionItems.pendingSuggestions} tone={briefing.attentionItems.pendingSuggestions ? "warning" : undefined} />
+              <SummaryCard label="Pending actions" value={briefing.attentionItems.pendingInternalActions} tone={briefing.attentionItems.pendingInternalActions ? "warning" : undefined} />
+              <SummaryCard label="Unassigned high-pri" value={briefing.attentionItems.unassignedHighPriority} tone={briefing.attentionItems.unassignedHighPriority ? "danger" : undefined} />
+              <SummaryCard label="SLA risk" value={briefing.attentionItems.slaRiskCount} tone={briefing.attentionItems.slaRiskCount ? "warning" : undefined} />
+              <SummaryCard label="Director attention" value={briefing.attentionItems.total} tone={briefing.attentionItems.total ? "warning" : "success"} />
+            </div>
+
+            {/* Executive summary */}
+            <div className="mb-5">
+              <h4 className="text-[13px] font-semibold mb-2">Executive summary</h4>
+              <ul className="space-y-1.5" data-testid="ai-briefing-summary">
+                {briefing.executiveSummary.map((line, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[13px] text-muted-foreground">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Attention items */}
+            {briefing.attentionItems.total === 0 ? (
+              <p data-testid="ai-briefing-attention-empty" className="text-[13px] text-muted-foreground mb-5">
+                No items currently need Director attention.
+              </p>
+            ) : (
+              <div className="mb-5" data-testid="ai-briefing-attention">
+                <h4 className="text-[13px] font-semibold mb-2">Needs attention ({briefing.attentionItems.total})</h4>
+                <div className="space-y-1.5">
+                  {briefing.attentionItems.items.map((item, i) => (
+                    <div key={`${item.id}-${item.reason}-${i}`} data-testid={`ai-briefing-attention-${item.id}-${item.reason}`} className="flex items-center justify-between gap-2 flex-wrap rounded-lg border border-border bg-muted/20 px-3 py-2 text-[13px]">
+                      <span className="min-w-0 truncate">
+                        {item.title} <span className="text-muted-foreground">· {item.department} · {item.priority}</span>
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${item.reason === "blocked" || item.reason === "overdue" ? "bg-destructive/15 text-destructive" : "bg-warning/15 text-warning"}`}>
+                        {item.reason.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Safe recommendations */}
+            <div className="mb-5">
+              <h4 className="text-[13px] font-semibold mb-2">Safe internal recommendations</h4>
+              <div className="space-y-2" data-testid="ai-briefing-recommendations">
+                {briefing.safeRecommendations.map((r, i) => (
+                  <div key={i} data-testid={`ai-briefing-rec-${r.recommendationType}`} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-medium text-[13px]">{r.recommendationType.replace(/_/g, " ")}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${r.priority === "high" ? "bg-destructive/15 text-destructive" : r.priority === "medium" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>
+                        {r.priority}
+                      </span>
+                    </div>
+                    <p className="text-[12px] text-muted-foreground mt-1">{r.reason}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      metric: <span className="font-mono">{r.linkedMetric}</span> · next step: <span className="font-semibold">{r.permittedAction.replace(/_/g, " ")}</span> (internal-only)
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Department focus */}
+            {briefing.departmentSummary.length > 0 && (
+              <div className="mb-5">
+                <h4 className="text-[13px] font-semibold mb-2">Department focus</h4>
+                <div className="overflow-x-auto rounded-lg border border-border" data-testid="ai-briefing-departments">
+                  <table className="w-full text-[13px] min-w-[560px]">
+                    <thead className="bg-muted/40 text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="px-3 py-2 font-medium">Department</th>
+                        <th className="px-3 py-2 font-medium">Open</th>
+                        <th className="px-3 py-2 font-medium">Blocked</th>
+                        <th className="px-3 py-2 font-medium">Overdue</th>
+                        <th className="px-3 py-2 font-medium">Recommended focus</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {briefing.departmentSummary.map((d) => (
+                        <tr key={d.department || "unassigned"} className="border-t border-border">
+                          <td className="px-3 py-2">{d.label || d.department || "Unassigned"}</td>
+                          <td className="px-3 py-2">{d.open}</td>
+                          <td className={`px-3 py-2 ${d.blocked ? "text-destructive" : ""}`}>{d.blocked}</td>
+                          <td className={`px-3 py-2 ${d.overdue ? "text-destructive" : ""}`}>{d.overdue}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{d.recommendedFocus}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Blocked live actions */}
+            <div data-testid="ai-briefing-blocked-live">
+              <h4 className="text-[13px] font-semibold mb-2 flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5" /> Blocked live actions
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {briefing.blockedLiveActions.map((b) => (
+                  <span key={b.channel} data-testid={`ai-briefing-locked-${b.channel}`} className="inline-flex items-center gap-1 rounded-full bg-success/10 text-success px-2.5 py-1 text-[11px] font-semibold">
+                    <Lock className="h-3 w-3" /> {b.label} — locked
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground mt-4 flex items-center gap-1.5">
+              <Lock className="h-3 w-3" /> readonly: {String(briefing.readonly)} · provider call made: {String(briefing.providerCallMade)} · external action taken: {String(briefing.externalActionTaken)} · live autonomous locked: {String(briefing.liveAutonomousLocked)}
+            </p>
+          </>
+        )}
       </div>
 
       {/* Generate */}

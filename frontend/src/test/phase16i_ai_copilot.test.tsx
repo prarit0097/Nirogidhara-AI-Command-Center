@@ -31,6 +31,7 @@ vi.mock("@/services/api", async (importOriginal) => {
       getAiMyWorkPermissions: vi.fn(),
       // Phase 16M analytics method (the page now loads this too).
       getAiWorkboardAnalytics: vi.fn(),
+      getAiDirectorBriefing: vi.fn(),
       // Representative provider/business methods — must never be called here.
       createImportOrder: vi.fn(),
       transitionPilotTask: vi.fn(),
@@ -110,6 +111,7 @@ beforeEach(() => {
   (api.getAiMyWork as any).mockResolvedValue({ items: [], total: 0, myPermissions: { isAdmin: true, canViewWorkboard: true, canAssign: true, canReassign: true, canManageMembership: true, departments: [], providerActionsLocked: true, liveAutonomousExecutionLocked: true, phase: "16L" } });
   (api.getAiMyWorkSummary as any).mockResolvedValue({ total: 0, assigned: 0, inProgress: 0, blocked: 0, completedInternal: 0, dueSoon: 0, overdue: 0, byWorkStatus: {}, providerActionsLocked: true, noProviderActionTaken: true, phase: "16L" });
   (api.getAiWorkboardAnalytics as any).mockResolvedValue(null);
+  (api.getAiDirectorBriefing as any).mockResolvedValue(null);
   (api.generateAiCopilotSuggestion as any).mockResolvedValue(SUGGESTIONS.items[0]);
   (api.reviewAiCopilotSuggestion as any).mockResolvedValue({
     ...SUGGESTIONS.items[0],

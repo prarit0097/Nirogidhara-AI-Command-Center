@@ -8576,3 +8576,108 @@ export interface AiWorkboardAnalytics {
   externalActionTaken: boolean;
   phase: string;
 }
+
+// ---------- Phase 16N — Director AI Daily Briefing + Safe Recommendation Pack ----------
+// Read-only / internal-only briefing over the existing workboard data. No provider call.
+
+export interface AiBriefingStatus {
+  generatedAt: string;
+  windowDays: number;
+  aiMode: string;
+  internalOnly: boolean;
+  readonly: boolean;
+  providerCallMade: boolean;
+  externalActionTaken: boolean;
+  liveAutonomousLocked: boolean;
+  phase: string;
+}
+
+export interface AiBriefingAttentionItem {
+  id: number;
+  title: string;
+  department: string;
+  workStatus: string;
+  priority: string;
+  slaStatus: string;
+  assigneeUser: string | null;
+  reason: string;
+}
+
+export interface AiBriefingAttention {
+  total: number;
+  blockedCount: number;
+  overdueCount: number;
+  dueSoonCount: number;
+  unassignedHighPriority: number;
+  pendingSuggestions: number;
+  pendingInternalActions: number;
+  slaRiskCount: number;
+  blocked: AiBriefingAttentionItem[];
+  overdue: AiBriefingAttentionItem[];
+  unassignedHigh: AiBriefingAttentionItem[];
+  items: AiBriefingAttentionItem[];
+}
+
+export interface AiBriefingDepartment {
+  department: string;
+  label: string;
+  open: number;
+  assigned: number;
+  inProgress: number;
+  blocked: number;
+  overdue: number;
+  dueSoon: number;
+  completedInternal: number;
+  recommendedFocus: string;
+}
+
+export interface AiBriefingRecommendation {
+  recommendationType: string;
+  priority: "low" | "medium" | "high";
+  reason: string;
+  linkedMetric: string;
+  permittedAction: string;
+}
+
+export interface AiBriefingBlockedLiveAction {
+  channel: string;
+  label: string;
+  locked: boolean;
+  reason: string;
+}
+
+export interface AiBriefingSafetySnapshot {
+  aiPaused: boolean;
+  sandboxOn: boolean;
+  syncLive: boolean;
+  aiMode: string;
+  liveAutonomousExecutionLocked: boolean;
+  providerLiveActionsLocked: boolean;
+  humanApprovalRequired: boolean;
+  providerCallMade: boolean;
+  externalActionTaken: boolean;
+  phase15ShellFrozen: boolean;
+  phase15ShellFrozenCommit: string;
+}
+
+export interface AiDirectorBriefing {
+  briefingStatus: AiBriefingStatus;
+  executiveSummary: string[];
+  attentionItems: AiBriefingAttention;
+  departmentSummary: AiBriefingDepartment[];
+  memberSummary: AiAnalyticsMember[];
+  safeRecommendations: AiBriefingRecommendation[];
+  slaSummary: AiAnalyticsSla;
+  blockedLiveActions: AiBriefingBlockedLiveAction[];
+  safetySnapshot: AiBriefingSafetySnapshot;
+  generatedAt: string;
+  windowDays: number;
+  readonly: boolean;
+  internalOnly: boolean;
+  providerCallMade: boolean;
+  providerActionTaken: boolean;
+  externalActionAllowed: boolean;
+  externalActionTaken: boolean;
+  liveAutonomousLocked: boolean;
+  phase: string;
+}

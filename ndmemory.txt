@@ -10,7 +10,61 @@ was written, the repo has shipped Phase 14C / 14D / 14E / 14E-Hotfix-1 /
 14F / 15A–15M / 16A / 16B (+ Hotfix-1 superseded, Hotfix-2 final) / 16C /
 16D / 16E / 16F / 16G / 16H / 16I / 16J / 16K / 16L.
 
-Current operational baseline is **Phase 16M — Workboard Analytics + SLA
+Current operational baseline is **Phase 16N — Director AI Daily Briefing Real
+Data Wiring + Safe Recommendation Pack, implemented and pushed to origin/main;
+VPS production verification pending** — a READ-ONLY / INTERNAL-ONLY decision
+layer that turns the existing Phase 16I/16J/16K/16L/16M workboard data into a
+Director-facing, deterministic ("mock") AI briefing pack. It extends the
+existing internal-only app apps.ai_copilot with NO new model and NO migration:
+a new module apps.ai_copilot.briefing (get_director_ai_briefing(window_days=7) +
+get_director_ai_briefing_summary + get_director_ai_briefing_recommendations)
+composing the Phase 16M get_workboard_analytics + the Phase 16K
+get_director_attention_queue + pending AI-suggestion / pending internal-action
+counts, exposed by 3 read-only endpoints GET /api/v1/ai-copilot/
+director-briefing/ + .../summary/ + .../recommendations/
+(AuthenticatedReadAdminWrite, read = any authenticated user; GET-only,
+POST/PATCH/DELETE -> 405; ?windowDays=N clamped 1-30). Output: briefingStatus +
+executiveSummary (3-8 deterministic internal-only bullets) + attentionItems
+(blocked / overdue / unassigned-high lists + pending-suggestions /
+pending-internal-actions / SLA-risk counts; each item carries only safe fields -
+internal task title / department / workStatus / priority / slaStatus / assignee
+username / reason - no customer PII) + departmentSummary (load +
+recommendedFocus) + memberSummary (reuses the Phase 16M per-member workload -
+username + userId only) + safeRecommendations (each with recommendationType /
+priority / reason / linkedMetric / permittedAction in {internal_review,
+assign_internal, create_internal_action, review_blocker, no_external_action}) +
+blockedLiveActions (WhatsApp / payment / courier / Vapi / live-AI all
+locked=true) + safetySnapshot (AI Paused / Sandbox OFF / Sync Live / AI Mode
+mock / Live Autonomous Locked / providerCallMade=false / externalActionTaken=
+false / Phase 15 shell frozen at eefd8b3). The page /operations/ai-copilot gains
+a "Director AI Briefing" section (read-only safety banner, briefing cards,
+executive summary, attention items, safe recommendations, department focus,
+blocked-live-actions chips, a "No urgent briefing items yet." empty state, and a
+Refresh-briefing button that calls the read-only GET only) with NO Send WhatsApp
+/ Create live payment link / Book shipment / Call customer / Run live AI / Auto
+execute / Resume AI button anywhere. Every Phase 16N path is READ-ONLY /
+INTERNAL-ONLY: it NEVER calls a live AI/LLM provider, sends WhatsApp/Meta Cloud,
+places a Vapi call, calls Razorpay/PayU/Delhivery, creates a payment link / AWB,
+auto-confirms/cancels an order, auto-applies a discount, enqueues a business
+Celery job, mutates any business / workboard row (Order / Payment / Lead /
+Customer / Shipment / AiApprovedAction), broadens operations users to admin, or
+touches RuntimeKillSwitch / SandboxState (asserted by a defensive test that
+patches queue_template_message / send_freeform_text_message /
+trigger_call_for_lead / razorpay_client.create_payment_link /
+delhivery_client.create_awb -> assert_not_called, with row counts + kill-switch
++ sandbox unchanged and no AiApprovedAction created/mutated). Verification:
+backend 17 Phase 16N + 15 16M + 24 16L + 23 16K + 16 16J + 19 16I = 114 passed
+(targeted); makemigrations --check -> "No changes detected" (NO migration);
+manage.py check -> "0 issues"; frontend 423/423 (+13); lint 0 errors; build
+green. Current safety state remains AI Paused / Sandbox OFF / Sync Live; the
+Phase 15 safety shell remains FROZEN at code commit eefd8b3. Phase 16N is
+implemented and pushed, VPS production verification pending -- do NOT mark it
+production verified until a VPS deploy + Director browser validation pass. Phase
+16O is NOT started and requires a separate written Director directive. No live
+provider/customer-facing action is approved. Commit:
+feat: phase 16n director ai briefing (pushed to origin/main).
+
+The previous verified baseline is **Phase 16M — Workboard Analytics + SLA
 Throughput Dashboard, PRODUCTION VERIFIED on the VPS and CLOSED at commit
 a992207** — a READ-ONLY / INTERNAL-ONLY analytics layer over the
 existing Phase 16J/16K/16L workboard. It extends the existing internal-only app
@@ -122,7 +176,7 @@ PASSED with the safety shell unchanged (AI Paused / Sandbox OFF / Briefing STALE
 Sync Live) and provider/external flags false; scoped-member/viewer login was not
 visually exercised (backend tests cover that permission matrix). Phase 16L ADDS
 migration ai_copilot.0004_phase16l_workboard_department_member (applied on the
-VPS). Phase 16L is CLOSED. Next planned work: Phase 16N — NOT started; requires a
+VPS). Phase 16L is CLOSED. Next planned work: Phase 16O — NOT started; requires a
 separate written Director directive. Phase 16K (efea751) is the previous verified
 baseline. Commit: 9d144f5 (feat: phase 16l scoped work permissions).
 
@@ -174,7 +228,7 @@ regression → passed; healthz OK. Phase 16K ADDS migration
 ai_copilot.0003_phase16k_action_workboard → a fresh VPS deploy requires migrate
 (already applied on the VPS). Phase 16K is CLOSED. (Historical close-state:
 Phase 16L was next at 16K close — it has since shipped and is PRODUCTION
-VERIFIED + CLOSED at 9d144f5; the current next-planned work is Phase 16N.)
+VERIFIED + CLOSED at 9d144f5; the current next-planned work is Phase 16O.)
 Phase 16J (aa8cf13) is the previous verified baseline. Commit: efea751
 (feat: phase 16k action workboard).
 
@@ -263,7 +317,7 @@ regression (16H/16G/16F/16E) → 67 passed [100%]; GET /api/healthz/ →
 ai_copilot.0001_phase16i_ai_copilot → a fresh VPS deploy requires migrate
 (already applied on the VPS). Phase 16I is CLOSED. (Historical close-state: Phase
 16J was next at 16I close — it has since shipped and is PRODUCTION VERIFIED +
-CLOSED at aa8cf13; the current next-planned work is Phase 16N.)
+CLOSED at aa8cf13; the current next-planned work is Phase 16O.)
 Commit: 0f91f6b (feat: phase 16i ai copilot approval workflow).
 
 Phase 16H — Internal Pilot Execution Workbench + Role-Based Task Queues,
@@ -399,7 +453,7 @@ Read these for current truth:
                                             Phase 16J AI action queue +
                                             Phase 16I AI Copilot)
 
-Next planned work: Phase 16N (NOT started; separate Director directive
+Phase 16N is implemented and pushed (VPS verification pending); next planned: Phase 16O (NOT started; separate Director directive
 required). Phase 15 safety shell is frozen —
 no new "Phase 15X" sub-phases unless P0 blocker, P1 security/compliance
 defect, or explicit Director directive that names "Phase 15M freeze override".
