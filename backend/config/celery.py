@@ -32,6 +32,18 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # Auto-discover tasks across every installed app.
 app.autodiscover_tasks()
 
+# Agent task modules live inside nested packages, so they must be
+# explicitly included in Celery task autodiscovery.
+NESTED_AGENT_TASK_PACKAGES = (
+    "apps.agents.customer_success",
+    "apps.agents.rto_prevention",
+    "apps.agents.cfo",
+    "apps.agents.data_analyst",
+    "apps.agents.calling_team_leader",
+    "apps.agents.ceo_orchestration",
+)
+app.autodiscover_tasks(NESTED_AGENT_TASK_PACKAGES)
+
 
 def build_beat_schedule() -> dict:
     """Read the Phase 3C briefing schedule from settings.
